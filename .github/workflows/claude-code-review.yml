@@ -2,28 +2,17 @@ name: Claude Code Review
 
 on:
   pull_request:
-    types: [opened, synchronize, ready_for_review, reopened]
-    # Optional: Only run on specific file changes
-    # paths:
-    #   - "src/**/*.ts"
-    #   - "src/**/*.tsx"
-    #   - "src/**/*.js"
-    #   - "src/**/*.jsx"
+    types: [opened, synchronize]
 
 jobs:
   claude-review:
-    # Optional: Filter by PR author
-    # if: |
-    #   github.event.pull_request.user.login == 'external-contributor' ||
-    #   github.event.pull_request.user.login == 'new-developer' ||
-    #   github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR'
-
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: read
+      pull-requests: write
       issues: read
       id-token: write
+      actions: read # Required for Claude to read CI results on PRs
 
     steps:
       - name: Checkout repository
@@ -36,9 +25,100 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
-          plugins: 'code-review@claude-code-plugins'
-          prompt: '/code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
-          # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
-          # or https://code.claude.com/docs/en/cli-reference for available options
+          show_full_output: true
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
 
+            Please perform a comprehensive code review with the following focus areas:
+
+            1. **Code Quality**
+               - Clean code principles and best practices
+               - Proper error handling and edge cases
+               - Code readability and maintainability
+
+            2. **Security**
+               - Check for potential security vulnerabilities
+               - Validate input sanitization
+               - Review authentication/authorization logic
+
+            3. **Performance**
+               - Identify potential performance bottlenecks
+               - Review database queries for efficiency
+               - Check for memory leaks or resource issues
+
+            4. **Testing**
+               - Verify adequate test coverage
+               - Review test quality and edge cases
+               - Check for missing test scenarios
+
+            5. **Documentation**
+               - Ensure code is properly documented
+               - Verify README updates for new features
+               - Check API documentation accuracy
+
+            Use the repository's CLAUDE.md for guidance on style and conventions. Be constructive and helpful in your feedback.
+
+            ## Output Instructions
+
+            1. Review all changed files in the PR thoroughly.
+            2. Post exactly ONE top-level comment using `gh pr comment` containing ALL findings.
+            3. Do NOT use `gh pr review` with inline comments.
+            4. Do NOT post multiple comments. Everything must be in a SINGLE `gh pr comment`.
+
+            ## Comment Format
+
+            The comment must follow this exact structure:
+            ```markdown
+            ## Code Review Summary
+
+            <2-3 sentence overall assessment>
+
+            ## Actionable Fixes
+
+            Copy everything below the line and pass it to Claude Code:
+
+            ---
+
+            In this repository, please make the following changes:
+
+            1. **[P0] [SECURITY]** File `path/to/file.py`, line 42: <specific instruction>
+            2. **[P0] [BUG]** File `path/to/file.py`, line 87: <specific instruction>
+            3. **[P1] [PERFORMANCE]** File `path/to/other.py`, line 15: <specific instruction>
+            4. **[P2] [QUALITY]** File `path/to/file.py`, line 33: <specific instruction>
+            5. **[P2] [TESTING]** File `path/to/test.py`: <specific instruction>
+            6. **[P3] [DOCS]** File `README.md`: <specific instruction>
+
+            After making all changes, run the existing tests to make sure nothing is broken.
+
+            ## Merge Verdict
+
+            **APPROVED** / **CHANGES REQUESTED**
+
+            <1-2 sentence justification for the verdict>
+            ```
+
+            ## Priority Scale
+            - P0 = Must fix before merge (security vulnerabilities, data loss bugs, broken functionality)
+            - P1 = Should fix before merge (performance issues, significant code smells)
+            - P2 = Fix recommended (quality improvements, missing tests, minor issues)
+            - P3 = Nice to have (docs, style, minor suggestions)
+
+            ## Merge Verdict Rules
+            - **APPROVED**: No P0 issues found. P1/P2/P3 issues may exist but are not blockers.
+            - **CHANGES REQUESTED**: Any P0 issue exists, or multiple P1 issues that together pose a significant risk.
+
+            ## Rules
+            - Everything in ONE `gh pr comment` call, no inline comments
+            - Use exact file paths relative to repo root with line numbers from the diff
+            - Each fix must be a specific actionable instruction, not vague advice
+            - Use category tags: [SECURITY], [BUG], [PERFORMANCE], [QUALITY], [TESTING], [DOCS]
+            - Prefix each fix with priority: [P0], [P1], [P2], or [P3]
+            - Order by priority: P0 > P1 > P2 > P3
+            - Skip praise or observations that require no code changes
+            - If no fixes needed, say "No actionable fixes required"
+            - Always end with a Merge Verdict section
+
+          claude_args: |
+            --model claude-sonnet-4-5-20250929
+            --allowed-tools "Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr review:*)"
