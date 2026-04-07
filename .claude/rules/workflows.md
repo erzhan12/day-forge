@@ -2,7 +2,7 @@
 
 ## Run
 ```bash
-uv run python backend/manage.py runserver          # Django dev server on :8000
+uv run python backend/manage.py runserver 8006      # Django dev server on :8006
 ```
 
 ## Lint

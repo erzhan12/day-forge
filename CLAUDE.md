@@ -10,7 +10,7 @@ See `.claude/rules/` for detailed instructions. Review `tasks/lessons.md` at ses
 
 ## Commands
 
-- **Run server:** `uv run python backend/manage.py runserver`
+- **Run server:** `uv run python backend/manage.py runserver 8006`
 - **Lint:** `uv run ruff check backend/`
 - **Test:** `uv run pytest backend/tests/ -v`
 - **Migrate:** `uv run python backend/manage.py migrate`

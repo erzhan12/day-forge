@@ -9,10 +9,10 @@ uv sync
 uv run python backend/manage.py migrate
 uv run python backend/manage.py createsuperuser
 uv run python backend/manage.py seed_templates
-uv run python backend/manage.py runserver
+uv run python backend/manage.py runserver 8006
 ```
 
-Visit http://localhost:8000/admin/ to manage schedules, templates, and rules.
+Visit http://localhost:8006/admin/ to manage schedules, templates, and rules.
 
 ## Quick Start (Docker)
 

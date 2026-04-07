@@ -2,11 +2,11 @@ services:
   web:
     build: .
     ports:
-      - "8000:8000"
+      - "8006:8006"
     volumes:
       - ./backend:/app/backend
       - ./db:/app/db
     environment:
       - DEBUG=1
       - DJANGO_SETTINGS_MODULE=day_forge.settings
-    command: uv run python manage.py runserver 0.0.0.0:8000
+    command: uv run python manage.py runserver 0.0.0.0:8006
