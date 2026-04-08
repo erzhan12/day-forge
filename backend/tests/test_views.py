@@ -265,3 +265,19 @@ class TestBlockDetail:
         )
         resp = auth_client.delete(f"/api/blocks/{block.pk}/")
         assert resp.status_code == 403
+
+    @pytest.mark.django_db
+    def test_patch_without_csrf_token_rejected(self, csrf_client, user, time_block):
+        csrf_client.login(username="testuser", password="testpass123")
+        resp = csrf_client.patch(
+            f"/api/blocks/{time_block.pk}/",
+            json.dumps({"title": "No CSRF"}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 403
+
+    @pytest.mark.django_db
+    def test_delete_without_csrf_token_rejected(self, csrf_client, user, time_block):
+        csrf_client.login(username="testuser", password="testpass123")
+        resp = csrf_client.delete(f"/api/blocks/{time_block.pk}/")
+        assert resp.status_code == 403

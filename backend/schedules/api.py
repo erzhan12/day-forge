@@ -156,8 +156,10 @@ def block_detail(request, pk):
         else:
             block.full_clean()
             block.save()
-    except (ValueError, KeyError) as e:
-        return JsonResponse({"errors": {"fields": str(e)}}, status=400)
+    except ValueError:
+        return JsonResponse({"errors": {"fields": "Invalid field value."}}, status=400)
+    except KeyError as e:
+        return JsonResponse({"errors": {str(e).strip("'\""): "This field is required."}}, status=400)
     except ValidationError as e:
         return JsonResponse({"errors": e.message_dict}, status=400)
 
