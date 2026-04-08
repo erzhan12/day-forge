@@ -7,6 +7,7 @@ function getCsrfToken(): string {
 
 export interface ApiResult {
   ok: boolean
+  data?: Record<string, unknown>
   errors?: Record<string, string | string[]>
 }
 
@@ -24,8 +25,13 @@ async function apiFetch(
     body: body ? JSON.stringify(body) : undefined,
   })
   if (resp.ok) {
+    let data: Record<string, unknown> | undefined
+    const text = await resp.text()
+    if (text) {
+      data = JSON.parse(text)
+    }
     router.reload()
-    return { ok: true }
+    return { ok: true, data }
   }
   try {
     const data = await resp.json()

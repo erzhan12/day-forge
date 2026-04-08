@@ -31,8 +31,8 @@ def csrf_auth_client(user):
 
 
 @pytest.fixture
-def schedule(db):
-    return Schedule.objects.create(date="2026-04-07")
+def schedule(user):
+    return Schedule.objects.create(date="2026-04-07", user=user)
 
 
 @pytest.fixture
@@ -105,6 +105,12 @@ class TestLogoutView:
     @pytest.mark.django_db
     def test_logout_redirects(self, auth_client):
         resp = auth_client.post("/accounts/logout/")
+        assert resp.status_code == 302
+        assert "/accounts/login/" in resp.url
+
+    @pytest.mark.django_db
+    def test_unauthenticated_logout_redirects_to_login(self, client):
+        resp = client.post("/accounts/logout/")
         assert resp.status_code == 302
         assert "/accounts/login/" in resp.url
 
@@ -235,3 +241,27 @@ class TestBlockDetail:
     def test_delete_nonexistent_returns_404(self, auth_client):
         resp = auth_client.delete("/api/blocks/99999/")
         assert resp.status_code == 404
+
+    @pytest.mark.django_db
+    def test_cannot_patch_other_users_block(self, auth_client):
+        other = User.objects.create_user(username="other", password="pass")
+        other_schedule = Schedule.objects.create(date="2026-04-07", user=other)
+        block = TimeBlock.objects.create(
+            schedule=other_schedule, title="X", start_time="09:00", end_time="10:00"
+        )
+        resp = auth_client.patch(
+            f"/api/blocks/{block.pk}/",
+            json.dumps({"title": "Hacked"}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 403
+
+    @pytest.mark.django_db
+    def test_cannot_delete_other_users_block(self, auth_client):
+        other = User.objects.create_user(username="other", password="pass")
+        other_schedule = Schedule.objects.create(date="2026-04-07", user=other)
+        block = TimeBlock.objects.create(
+            schedule=other_schedule, title="X", start_time="09:00", end_time="10:00"
+        )
+        resp = auth_client.delete(f"/api/blocks/{block.pk}/")
+        assert resp.status_code == 403

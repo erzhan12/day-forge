@@ -38,6 +38,7 @@ def login_view(request):
 
 
 @require_http_methods(["POST"])
+@login_required
 def logout_view(request):
     logout(request)
     return redirect("login")
@@ -51,7 +52,7 @@ def schedule_view(request, date):
     except ValueError:
         return HttpResponseBadRequest("Invalid date format. Use YYYY-MM-DD.")
 
-    schedule, _ = Schedule.objects.get_or_create(date=parsed_date)
+    schedule, _ = Schedule.objects.get_or_create(user=request.user, date=parsed_date)
     blocks = TimeBlock.objects.filter(schedule=schedule).order_by(
         "start_time", "sort_order"
     )

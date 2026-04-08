@@ -1,5 +1,6 @@
 import datetime
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 
@@ -12,13 +13,21 @@ class Schedule(models.Model):
         ACTIVE = "active", "Active"
         REVIEWED = "reviewed", "Reviewed"
 
-    date = models.DateField(unique=True)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="schedules",
+    )
+    date = models.DateField()
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.DRAFT)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["-date"]
+        constraints = [
+            models.UniqueConstraint(fields=["user", "date"], name="unique_user_date"),
+        ]
 
     def __str__(self):
         return f"{self.date} ({self.status})"

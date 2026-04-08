@@ -3,6 +3,7 @@ import datetime
 import pytest
 from ai.models import AIInteraction
 from analytics.models import DailyReview
+from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from schedules.models import Schedule, TimeBlock
@@ -10,8 +11,13 @@ from templates_mgr.models import Rule, Template
 
 
 @pytest.fixture
-def schedule(db):
-    return Schedule.objects.create(date=datetime.date(2026, 4, 7))
+def user(db):
+    return User.objects.create_user(username="modeluser", password="pass")
+
+
+@pytest.fixture
+def schedule(user):
+    return Schedule.objects.create(date=datetime.date(2026, 4, 7), user=user)
 
 
 @pytest.fixture
@@ -30,17 +36,21 @@ def time_block(schedule):
 
 @pytest.mark.django_db
 class TestSchedule:
-    def test_create(self):
-        s = Schedule.objects.create(date=datetime.date(2026, 1, 1))
+    def test_create(self, user):
+        s = Schedule.objects.create(date=datetime.date(2026, 1, 1), user=user)
         assert str(s) == "2026-01-01 (draft)"
 
-    def test_unique_date(self, schedule):
+    def test_unique_user_date(self, schedule):
         with pytest.raises(IntegrityError):
-            Schedule.objects.create(date=schedule.date)
+            Schedule.objects.create(date=schedule.date, user=schedule.user)
 
-    def test_ordering(self, db):
-        s1 = Schedule.objects.create(date=datetime.date(2026, 1, 1))
-        s2 = Schedule.objects.create(date=datetime.date(2026, 1, 2))
+    def test_same_date_different_users(self, schedule):
+        other = User.objects.create_user(username="other", password="pass")
+        Schedule.objects.create(date=schedule.date, user=other)  # should not raise
+
+    def test_ordering(self, user):
+        s1 = Schedule.objects.create(date=datetime.date(2026, 1, 1), user=user)
+        s2 = Schedule.objects.create(date=datetime.date(2026, 1, 2), user=user)
         results = list(Schedule.objects.all())
         assert results == [s2, s1]  # newest first
 

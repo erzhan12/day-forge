@@ -39,7 +39,7 @@ def create_block(request, date):
     except json.JSONDecodeError:
         return JsonResponse({"errors": {"body": "Invalid JSON."}}, status=400)
 
-    schedule, _ = Schedule.objects.get_or_create(date=parsed_date)
+    schedule, _ = Schedule.objects.get_or_create(user=request.user, date=parsed_date)
 
     try:
         start = _parse_time(data["start_time"])
@@ -75,9 +75,12 @@ def create_block(request, date):
 @require_http_methods(["PATCH", "DELETE"])
 def block_detail(request, pk):
     try:
-        block = TimeBlock.objects.get(pk=pk)
+        block = TimeBlock.objects.select_related("schedule").get(pk=pk)
     except TimeBlock.DoesNotExist:
         return JsonResponse({"errors": {"detail": "Not found."}}, status=404)
+
+    if block.schedule.user != request.user:
+        return JsonResponse({"errors": {"detail": "Forbidden."}}, status=403)
 
     if request.method == "DELETE":
         block.delete()
