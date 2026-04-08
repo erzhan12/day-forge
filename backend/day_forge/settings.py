@@ -20,6 +20,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "inertia",
     "schedules",
     "templates_mgr",
     "ai",
@@ -28,7 +29,9 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
+    "inertia.middleware.InertiaMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -41,13 +44,14 @@ ROOT_URLCONF = "day_forge.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [BASE_DIR / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "day_forge.context_processors.vite_dev_mode",
             ],
         },
     },
@@ -75,5 +79,19 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = "static/"
+STATICFILES_DIRS = [PROJECT_ROOT / "frontend" / "dist"]
+STATIC_ROOT = PROJECT_ROOT / "staticfiles"
+
+# Inertia
+INERTIA_LAYOUT = "base.html"
+INERTIA_SSR_ENABLED = False
+
+# CSRF for Inertia (X-XSRF-TOKEN header)
+CSRF_COOKIE_NAME = "XSRF-TOKEN"
+CSRF_HEADER_NAME = "HTTP_X_XSRF_TOKEN"
+CSRF_TRUSTED_ORIGINS = ["http://localhost:5173", "http://localhost:8006"]
+
+# Auth
+LOGIN_URL = "/accounts/login/"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

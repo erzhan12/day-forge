@@ -14,3 +14,10 @@ db/
 
 # pytest
 .pytest_cache/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# Django static build output
+staticfiles/

@@ -1,0 +1,19 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Day Forge</title>
+    {% if vite_dev_mode %}
+        <script type="module" src="http://localhost:5173/@vite/client"></script>
+        <script type="module" src="http://localhost:5173/src/app.ts"></script>
+    {% else %}
+        <link rel="stylesheet" href="{% static 'assets/app.css' %}">
+        <script type="module" src="{% static 'assets/app.js' %}"></script>
+    {% endif %}
+</head>
+<body>
+    {% block inertia %}{% endblock %}
+</body>
+</html>
