@@ -51,6 +51,9 @@ class TimeBlock(models.Model):
 
     class Meta:
         ordering = ["start_time", "sort_order"]
+        indexes = [
+            models.Index(fields=["schedule", "start_time", "end_time"]),
+        ]
 
     def __str__(self):
         return f"{self.title} ({self.start_time}-{self.end_time})"

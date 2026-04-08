@@ -41,19 +41,38 @@ def create_block(request, date):
 
     schedule, _ = Schedule.objects.get_or_create(user=request.user, date=parsed_date)
 
+    for field in ("start_time", "end_time"):
+        if field not in data:
+            return JsonResponse(
+                {"errors": {field: f"{field} is required."}}, status=400
+            )
+
     try:
         start = _parse_time(data["start_time"])
+    except ValueError:
+        return JsonResponse(
+            {"errors": {"start_time": "Invalid time format. Use HH:MM."}}, status=400
+        )
+
+    try:
         end = _parse_time(data["end_time"])
-        overlap = TimeBlock.objects.filter(
-            schedule=schedule,
-            start_time__lt=end,
-            end_time__gt=start,
-        ).exists()
-        if overlap:
-            return JsonResponse(
-                {"errors": {"time": "This block overlaps with an existing block."}},
-                status=400,
-            )
+    except ValueError:
+        return JsonResponse(
+            {"errors": {"end_time": "Invalid time format. Use HH:MM."}}, status=400
+        )
+
+    overlap = TimeBlock.objects.filter(
+        schedule=schedule,
+        start_time__lt=end,
+        end_time__gt=start,
+    ).exists()
+    if overlap:
+        return JsonResponse(
+            {"errors": {"time": "This block overlaps with an existing block."}},
+            status=400,
+        )
+
+    try:
         block = TimeBlock(
             schedule=schedule,
             title=data.get("title", ""),
@@ -63,8 +82,6 @@ def create_block(request, date):
         )
         block.full_clean()
         block.save()
-    except (KeyError, ValueError) as e:
-        return JsonResponse({"errors": {"fields": str(e)}}, status=400)
     except ValidationError as e:
         return JsonResponse({"errors": e.message_dict}, status=400)
 

@@ -4,12 +4,14 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 PROJECT_ROOT = BASE_DIR.parent
 
-SECRET_KEY = os.environ.get(
-    "DJANGO_SECRET_KEY",
-    "django-insecure-#1v%z#g3#wg2$qa*711*js(rzvk*m6pzs46*!g6#6f_n@gh%gu",
-)
-
 DEBUG = os.environ.get("DEBUG", "1") == "1"
+
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "")
+if not SECRET_KEY:
+    if DEBUG:
+        SECRET_KEY = "django-insecure-dev-only-key-do-not-use-in-production"
+    else:
+        raise RuntimeError("DJANGO_SECRET_KEY environment variable is required in production.")
 
 ALLOWED_HOSTS = ["*"] if DEBUG else [h for h in os.environ.get("ALLOWED_HOSTS", "").split(",") if h]
 
