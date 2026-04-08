@@ -9,6 +9,8 @@ from django.views.decorators.http import require_http_methods
 
 from schedules.models import Schedule, TimeBlock
 
+VALID_CATEGORIES = {c.value for c in TimeBlock.Category}
+
 
 def _parse_time(value):
     """Parse 'HH:MM' string to datetime.time."""
@@ -67,6 +69,18 @@ def create_block(request, date):
         return JsonResponse(
             {"errors": {"title": "Title is required."}}, status=400
         )
+    if len(title) > 255:
+        return JsonResponse(
+            {"errors": {"title": "Title too long (max 255 characters)."}}, status=400
+        )
+
+    category = data.get("category", "other")
+    if category not in VALID_CATEGORIES:
+        choices = ", ".join(sorted(VALID_CATEGORIES))
+        return JsonResponse(
+            {"errors": {"category": f"Invalid category. Choose from: {choices}."}},
+            status=400,
+        )
 
     if start >= end:
         return JsonResponse(
@@ -90,7 +104,7 @@ def create_block(request, date):
             title=title,
             start_time=start,
             end_time=end,
-            category=data.get("category", "other"),
+            category=category,
         )
         block.full_clean()
         block.save()
@@ -128,9 +142,23 @@ def block_detail(request, pk):
                     {"errors": {"title": "Title must be a string."}}, status=400
                 )
             block.title = data["title"].strip()
+            if not block.title:
+                return JsonResponse(
+                    {"errors": {"title": "Title cannot be empty."}}, status=400
+                )
+            if len(block.title) > 255:
+                return JsonResponse(
+                    {"errors": {"title": "Title too long (max 255 characters)."}}, status=400
+                )
         if "is_completed" in data:
             block.is_completed = data["is_completed"]
         if "category" in data:
+            if data["category"] not in VALID_CATEGORIES:
+                choices = ", ".join(sorted(VALID_CATEGORIES))
+                return JsonResponse(
+                    {"errors": {"category": f"Invalid category. Choose from: {choices}."}},
+                    status=400,
+                )
             block.category = data["category"]
         if "start_time" in data:
             block.start_time = _parse_time(data["start_time"])
@@ -163,7 +191,10 @@ def block_detail(request, pk):
     except ValueError:
         return JsonResponse({"errors": {"fields": "Invalid field value."}}, status=400)
     except KeyError as e:
-        return JsonResponse({"errors": {str(e).strip("'\""): "This field is required."}}, status=400)
+        field = str(e).strip("'\"")
+        return JsonResponse(
+            {"errors": {field: "This field is required."}}, status=400
+        )
     except ValidationError as e:
         return JsonResponse({"errors": e.message_dict}, status=400)
 

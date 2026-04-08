@@ -16,14 +16,19 @@ async function apiFetch(
   method: string,
   body?: Record<string, unknown>,
 ): Promise<ApiResult> {
-  const resp = await fetch(url, {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-      "X-XSRF-TOKEN": getCsrfToken(),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  })
+  let resp: Response
+  try {
+    resp = await fetch(url, {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        "X-XSRF-TOKEN": getCsrfToken(),
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    })
+  } catch {
+    return { ok: false, errors: { detail: "Network error. Please check your connection." } }
+  }
   if (resp.ok) {
     let data: Record<string, unknown> | undefined
     const text = await resp.text()
