@@ -123,7 +123,11 @@ def block_detail(request, pk):
 
     try:
         if "title" in data:
-            block.title = data["title"].strip() if isinstance(data["title"], str) else data["title"]
+            if not isinstance(data["title"], str):
+                return JsonResponse(
+                    {"errors": {"title": "Title must be a string."}}, status=400
+                )
+            block.title = data["title"].strip()
         if "is_completed" in data:
             block.is_completed = data["is_completed"]
         if "category" in data:

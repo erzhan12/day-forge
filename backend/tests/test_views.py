@@ -180,6 +180,21 @@ class TestCreateBlock:
         assert resp.status_code == 302
 
     @pytest.mark.django_db
+    def test_overlapping_block_returns_400(self, auth_client, time_block):
+        resp = auth_client.post(
+            "/api/schedules/2026-04-07/blocks/",
+            json.dumps({
+                "title": "Overlap",
+                "start_time": "09:30",
+                "end_time": "10:30",
+                "category": "work",
+            }),
+            content_type="application/json",
+        )
+        assert resp.status_code == 400
+        assert "overlap" in resp.json()["errors"]["time"].lower()
+
+    @pytest.mark.django_db
     def test_create_with_csrf_token(self, csrf_auth_client, schedule):
         # GET login page to obtain CSRF cookie
         resp = csrf_auth_client.get("/accounts/login/")
