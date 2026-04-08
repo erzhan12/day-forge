@@ -1,4 +1,5 @@
 import datetime
+import json
 
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
@@ -25,8 +26,14 @@ def login_view(request):
     if request.method == "GET":
         return inertia_render(request, "Login", {"errors": {}})
 
-    username = request.POST.get("username", "")
-    password = request.POST.get("password", "")
+    # Inertia may send JSON or form data
+    if request.content_type == "application/json":
+        body = json.loads(request.body)
+        username = body.get("username", "")
+        password = body.get("password", "")
+    else:
+        username = request.POST.get("username", "")
+        password = request.POST.get("password", "")
     user = authenticate(request, username=username, password=password)
     if user is not None:
         login(request, user)

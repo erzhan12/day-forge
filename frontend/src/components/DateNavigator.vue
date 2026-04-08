@@ -54,7 +54,6 @@ function navigate(date: string) {
   justify-content: space-between;
   padding: 16px;
   background: white;
-  border-bottom: 1px solid #e5e7eb;
 }
 
 .nav-btn {
@@ -99,4 +98,5 @@ function navigate(date: string) {
 .today-btn:hover {
   background: #f3f4f6;
 }
+
 </style>

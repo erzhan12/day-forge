@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from "vue"
+import { router } from "@inertiajs/vue3"
 import type { TimeBlock as TimeBlockType, Schedule, RenderItem } from "../types"
 import DateNavigator from "../components/DateNavigator.vue"
 import TimeBlock from "../components/TimeBlock.vue"
@@ -194,6 +195,10 @@ function handleAddHere(payload: { start_time: string; end_time: string }) {
   prefillStart.value = payload.start_time
   prefillEnd.value = payload.end_time
 }
+
+function logout() {
+  router.post("/accounts/logout/")
+}
 </script>
 
 <template>
@@ -260,6 +265,9 @@ function handleAddHere(payload: { start_time: string; end_time: string }) {
       </template>
     </div>
 
+    <div class="logout-footer">
+      <button class="logout-btn" @click="logout">Logout</button>
+    </div>
   </div>
 </template>
 
@@ -286,5 +294,26 @@ function handleAddHere(payload: { start_time: string; end_time: string }) {
   right: 0;
   z-index: 10;
   transform: translateY(-50%);
+}
+
+.logout-footer {
+  padding: 24px 16px;
+  text-align: right;
+}
+
+.logout-btn {
+  font-size: 12px;
+  padding: 4px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: white;
+  color: #6b7280;
+  cursor: pointer;
+}
+
+.logout-btn:hover {
+  background: #fee2e2;
+  color: #dc2626;
+  border-color: #fca5a5;
 }
 </style>
