@@ -3,6 +3,7 @@ import json
 
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
@@ -61,6 +62,17 @@ def create_block(request, date):
             {"errors": {"end_time": "Invalid time format. Use HH:MM."}}, status=400
         )
 
+    title = data.get("title", "").strip()
+    if not title:
+        return JsonResponse(
+            {"errors": {"title": "Title is required."}}, status=400
+        )
+
+    if start >= end:
+        return JsonResponse(
+            {"errors": {"time": "Start time must be before end time."}}, status=400
+        )
+
     overlap = TimeBlock.objects.filter(
         schedule=schedule,
         start_time__lt=end,
@@ -75,7 +87,7 @@ def create_block(request, date):
     try:
         block = TimeBlock(
             schedule=schedule,
-            title=data.get("title", ""),
+            title=title,
             start_time=start,
             end_time=end,
             category=data.get("category", "other"),
@@ -111,7 +123,7 @@ def block_detail(request, pk):
 
     try:
         if "title" in data:
-            block.title = data["title"]
+            block.title = data["title"].strip() if isinstance(data["title"], str) else data["title"]
         if "is_completed" in data:
             block.is_completed = data["is_completed"]
         if "category" in data:
@@ -123,18 +135,27 @@ def block_detail(request, pk):
         if "sort_order" in data:
             block.sort_order = data["sort_order"]
         if "start_time" in data or "end_time" in data:
-            overlap = TimeBlock.objects.filter(
-                schedule=block.schedule,
-                start_time__lt=block.end_time,
-                end_time__gt=block.start_time,
-            ).exclude(pk=block.pk).exists()
-            if overlap:
+            if block.start_time >= block.end_time:
                 return JsonResponse(
-                    {"errors": {"time": "This block overlaps with an existing block."}},
+                    {"errors": {"time": "Start time must be before end time."}},
                     status=400,
                 )
-        block.full_clean()
-        block.save()
+            with transaction.atomic():
+                overlap = TimeBlock.objects.filter(
+                    schedule=block.schedule,
+                    start_time__lt=block.end_time,
+                    end_time__gt=block.start_time,
+                ).exclude(pk=block.pk).exists()
+                if overlap:
+                    return JsonResponse(
+                        {"errors": {"time": "This block overlaps with an existing block."}},
+                        status=400,
+                    )
+                block.full_clean()
+                block.save()
+        else:
+            block.full_clean()
+            block.save()
     except (ValueError, KeyError) as e:
         return JsonResponse({"errors": {"fields": str(e)}}, status=400)
     except ValidationError as e:
