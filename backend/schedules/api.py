@@ -135,6 +135,23 @@ def block_detail(request, pk):
     except json.JSONDecodeError:
         return JsonResponse({"errors": {"body": "Invalid JSON."}}, status=400)
 
+    if "start_time" in data:
+        try:
+            block.start_time = _parse_time(data["start_time"])
+        except ValueError:
+            return JsonResponse(
+                {"errors": {"start_time": "Invalid time format. Use HH:MM."}},
+                status=400,
+            )
+    if "end_time" in data:
+        try:
+            block.end_time = _parse_time(data["end_time"])
+        except ValueError:
+            return JsonResponse(
+                {"errors": {"end_time": "Invalid time format. Use HH:MM."}},
+                status=400,
+            )
+
     try:
         if "title" in data:
             if not isinstance(data["title"], str):
@@ -160,10 +177,6 @@ def block_detail(request, pk):
                     status=400,
                 )
             block.category = data["category"]
-        if "start_time" in data:
-            block.start_time = _parse_time(data["start_time"])
-        if "end_time" in data:
-            block.end_time = _parse_time(data["end_time"])
         if "sort_order" in data:
             block.sort_order = data["sort_order"]
         if "start_time" in data or "end_time" in data:
@@ -188,13 +201,6 @@ def block_detail(request, pk):
         else:
             block.full_clean()
             block.save()
-    except ValueError:
-        return JsonResponse({"errors": {"fields": "Invalid field value."}}, status=400)
-    except KeyError as e:
-        field = str(e).strip("'\"")
-        return JsonResponse(
-            {"errors": {field: "This field is required."}}, status=400
-        )
     except ValidationError as e:
         return JsonResponse({"errors": e.message_dict}, status=400)
 

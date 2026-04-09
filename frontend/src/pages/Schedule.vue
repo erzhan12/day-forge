@@ -40,6 +40,7 @@ function getCurrentMinutes(): number {
 }
 
 onMounted(() => {
+  if (!isToday.value) return
   nowInterval = setInterval(() => {
     nowMinutes.value = getCurrentMinutes()
   }, 60_000)
