@@ -31,6 +31,7 @@ const prefillEnd = ref<string | undefined>()
 const isToday = computed(() => props.date === todayString())
 
 // Reactive current-minute counter so display list recomputes as time passes
+const NOW_UPDATE_INTERVAL_MS = 60_000
 const nowMinutes = ref(getCurrentMinutes())
 let nowInterval: ReturnType<typeof setInterval> | null = null
 
@@ -43,7 +44,7 @@ onMounted(() => {
   if (!isToday.value) return
   nowInterval = setInterval(() => {
     nowMinutes.value = getCurrentMinutes()
-  }, 60_000)
+  }, NOW_UPDATE_INTERVAL_MS)
 })
 
 onUnmounted(() => {

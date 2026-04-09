@@ -35,7 +35,7 @@ async function apiFetch(
     if (text) {
       data = JSON.parse(text)
     }
-    router.reload()
+    router.reload({ only: ["blocks"] })
     return { ok: true, data }
   }
   try {

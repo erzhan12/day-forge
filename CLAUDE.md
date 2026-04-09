@@ -27,6 +27,7 @@ See `.claude/rules/` for detailed instructions. Review `tasks/lessons.md` at ses
 - `tasks/todo.md` — Current work items
 - `tasks/lessons.md` — Corrections and patterns learned (review at session start)
 - `docs/features/` — Feature planning documents (created by planner agent)
+- `docs/api.md` — JSON API reference (endpoints, request/response, errors)
 
 ## Architecture
 

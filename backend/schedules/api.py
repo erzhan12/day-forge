@@ -178,7 +178,18 @@ def block_detail(request, pk):
                 )
             block.category = data["category"]
         if "sort_order" in data:
-            block.sort_order = data["sort_order"]
+            sort_order = data["sort_order"]
+            if not isinstance(sort_order, int) or isinstance(sort_order, bool):
+                return JsonResponse(
+                    {"errors": {"sort_order": "sort_order must be an integer."}},
+                    status=400,
+                )
+            if not (0 <= sort_order <= 10_000):
+                return JsonResponse(
+                    {"errors": {"sort_order": "sort_order must be between 0 and 10000."}},
+                    status=400,
+                )
+            block.sort_order = sort_order
         if "start_time" in data or "end_time" in data:
             if block.start_time >= block.end_time:
                 return JsonResponse(

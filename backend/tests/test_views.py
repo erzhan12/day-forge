@@ -180,6 +180,51 @@ class TestCreateBlock:
         assert resp.status_code == 302
 
     @pytest.mark.django_db
+    def test_spans_midnight_rejected(self, auth_client, schedule):
+        # TimeField has no date component, so 23:00→01:00 fails start<end check
+        resp = auth_client.post(
+            "/api/schedules/2026-04-07/blocks/",
+            json.dumps({
+                "title": "Midnight",
+                "start_time": "23:00",
+                "end_time": "01:00",
+                "category": "other",
+            }),
+            content_type="application/json",
+        )
+        assert resp.status_code == 400
+        assert "time" in resp.json()["errors"]
+
+    @pytest.mark.django_db
+    def test_title_at_max_length_accepted(self, auth_client, schedule):
+        resp = auth_client.post(
+            "/api/schedules/2026-04-07/blocks/",
+            json.dumps({
+                "title": "A" * 255,
+                "start_time": "14:00",
+                "end_time": "15:00",
+                "category": "work",
+            }),
+            content_type="application/json",
+        )
+        assert resp.status_code == 201
+
+    @pytest.mark.django_db
+    def test_title_over_max_length_rejected(self, auth_client, schedule):
+        resp = auth_client.post(
+            "/api/schedules/2026-04-07/blocks/",
+            json.dumps({
+                "title": "A" * 256,
+                "start_time": "14:00",
+                "end_time": "15:00",
+                "category": "work",
+            }),
+            content_type="application/json",
+        )
+        assert resp.status_code == 400
+        assert "title" in resp.json()["errors"]
+
+    @pytest.mark.django_db
     def test_overlapping_block_returns_400(self, auth_client, time_block):
         resp = auth_client.post(
             "/api/schedules/2026-04-07/blocks/",
@@ -296,3 +341,43 @@ class TestBlockDetail:
         csrf_client.login(username="testuser", password="testpass123")
         resp = csrf_client.delete(f"/api/blocks/{time_block.pk}/")
         assert resp.status_code == 403
+
+    @pytest.mark.django_db
+    def test_patch_invalid_category_rejected(self, auth_client, time_block):
+        resp = auth_client.patch(
+            f"/api/blocks/{time_block.pk}/",
+            json.dumps({"category": "not-a-category"}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 400
+        assert "category" in resp.json()["errors"]
+
+    @pytest.mark.django_db
+    def test_patch_sort_order_non_integer_rejected(self, auth_client, time_block):
+        resp = auth_client.patch(
+            f"/api/blocks/{time_block.pk}/",
+            json.dumps({"sort_order": "first"}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 400
+        assert "sort_order" in resp.json()["errors"]
+
+    @pytest.mark.django_db
+    def test_patch_sort_order_out_of_bounds_rejected(self, auth_client, time_block):
+        resp = auth_client.patch(
+            f"/api/blocks/{time_block.pk}/",
+            json.dumps({"sort_order": 2147483647}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 400
+        assert "sort_order" in resp.json()["errors"]
+
+    @pytest.mark.django_db
+    def test_patch_sort_order_valid(self, auth_client, time_block):
+        resp = auth_client.patch(
+            f"/api/blocks/{time_block.pk}/",
+            json.dumps({"sort_order": 5}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 200
+        assert resp.json()["sort_order"] == 5
