@@ -13,7 +13,10 @@ if not SECRET_KEY:
     else:
         raise RuntimeError("DJANGO_SECRET_KEY environment variable is required in production.")
 
-ALLOWED_HOSTS = ["localhost", "127.0.0.1"] if DEBUG else [h for h in os.environ.get("ALLOWED_HOSTS", "").split(",") if h]
+if DEBUG:
+    ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
+else:
+    ALLOWED_HOSTS = [h for h in os.environ.get("ALLOWED_HOSTS", "").split(",") if h]
 
 INSTALLED_APPS = [
     "django.contrib.admin",

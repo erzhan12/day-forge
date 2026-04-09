@@ -28,7 +28,12 @@ def login_view(request):
 
     # Inertia may send JSON or form data
     if request.content_type == "application/json":
-        body = json.loads(request.body)
+        try:
+            body = json.loads(request.body)
+        except json.JSONDecodeError:
+            return inertia_render(
+                request, "Login", {"errors": {"non_field": "Invalid request body."}}
+            )
         username = body.get("username", "")
         password = body.get("password", "")
     else:

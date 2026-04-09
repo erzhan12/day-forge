@@ -87,27 +87,27 @@ def create_block(request, date):
             {"errors": {"time": "Start time must be before end time."}}, status=400
         )
 
-    overlap = TimeBlock.objects.filter(
-        schedule=schedule,
-        start_time__lt=end,
-        end_time__gt=start,
-    ).exists()
-    if overlap:
-        return JsonResponse(
-            {"errors": {"time": "This block overlaps with an existing block."}},
-            status=400,
-        )
-
     try:
-        block = TimeBlock(
-            schedule=schedule,
-            title=title,
-            start_time=start,
-            end_time=end,
-            category=category,
-        )
-        block.full_clean()
-        block.save()
+        with transaction.atomic():
+            overlap = TimeBlock.objects.filter(
+                schedule=schedule,
+                start_time__lt=end,
+                end_time__gt=start,
+            ).exists()
+            if overlap:
+                return JsonResponse(
+                    {"errors": {"time": "This block overlaps with an existing block."}},
+                    status=400,
+                )
+            block = TimeBlock(
+                schedule=schedule,
+                title=title,
+                start_time=start,
+                end_time=end,
+                category=category,
+            )
+            block.full_clean()
+            block.save()
     except ValidationError as e:
         return JsonResponse({"errors": e.message_dict}, status=400)
 
