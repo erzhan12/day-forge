@@ -225,6 +225,31 @@ class TestCreateBlock:
         assert "title" in resp.json()["errors"]
 
     @pytest.mark.django_db
+    def test_adjacent_blocks_allowed(self, auth_client, schedule):
+        resp1 = auth_client.post(
+            "/api/schedules/2026-04-07/blocks/",
+            json.dumps({
+                "title": "First",
+                "start_time": "09:00",
+                "end_time": "10:00",
+                "category": "work",
+            }),
+            content_type="application/json",
+        )
+        assert resp1.status_code == 201
+        resp2 = auth_client.post(
+            "/api/schedules/2026-04-07/blocks/",
+            json.dumps({
+                "title": "Second",
+                "start_time": "10:00",
+                "end_time": "11:00",
+                "category": "work",
+            }),
+            content_type="application/json",
+        )
+        assert resp2.status_code == 201
+
+    @pytest.mark.django_db
     def test_overlapping_block_returns_400(self, auth_client, time_block):
         resp = auth_client.post(
             "/api/schedules/2026-04-07/blocks/",
