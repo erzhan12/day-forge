@@ -94,7 +94,12 @@ INERTIA_SSR_ENABLED = False
 # CSRF for Inertia (X-XSRF-TOKEN header)
 CSRF_COOKIE_NAME = "XSRF-TOKEN"
 CSRF_HEADER_NAME = "HTTP_X_XSRF_TOKEN"
-CSRF_TRUSTED_ORIGINS = ["http://localhost:5173", "http://localhost:8006"] if DEBUG else []
+if DEBUG:
+    CSRF_TRUSTED_ORIGINS = ["http://localhost:5173", "http://localhost:8006"]
+else:
+    CSRF_TRUSTED_ORIGINS = [
+        h for h in os.environ.get("CSRF_TRUSTED_ORIGINS", "").split(",") if h
+    ]
 
 # Auth
 LOGIN_URL = "/accounts/login/"
