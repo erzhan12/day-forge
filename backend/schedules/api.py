@@ -87,6 +87,8 @@ def create_block(request, date):
             {"errors": {"time": "Start time must be before end time."}}, status=400
         )
 
+    # NOTE: On PostgreSQL, add .select_for_update() to prevent race conditions.
+    # SQLite uses DB-level locking only; row-level locks are silently ignored.
     try:
         with transaction.atomic():
             overlap = TimeBlock.objects.filter(

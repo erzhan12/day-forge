@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from "vue"
+import { ref, computed, nextTick } from "vue"
 import type { TimeBlock } from "../types"
 import { useSchedule } from "../composables/useSchedule"
 
@@ -13,6 +13,7 @@ const { updateBlock, deleteBlock } = useSchedule(props.date)
 const editing = ref(false)
 const editTitle = ref("")
 const errorMessage = ref("")
+const titleInput = ref<HTMLInputElement | null>(null)
 
 const categoryColors: Record<string, string> = {
   work: "#3B82F6",
@@ -33,9 +34,11 @@ const duration = computed(() => {
   return `${mins}m`
 })
 
-function startEditing() {
+async function startEditing() {
   editTitle.value = props.block.title
   editing.value = true
+  await nextTick()
+  titleInput.value?.focus()
 }
 
 async function saveTitle() {
@@ -94,12 +97,12 @@ async function handleDelete() {
       />
       <input
         v-if="editing"
+        ref="titleInput"
         v-model="editTitle"
         class="title-input"
         @blur="saveTitle"
         @keydown.enter="saveTitle"
         @keydown.escape="cancelEditing"
-        @vue:mounted="($event: any) => $event.el.focus()"
       />
       <span
         v-else
