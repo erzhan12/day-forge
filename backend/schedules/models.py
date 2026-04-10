@@ -52,7 +52,7 @@ class TimeBlock(models.Model):
     class Meta:
         ordering = ["start_time", "sort_order"]
         indexes = [
-            models.Index(fields=["schedule", "start_time", "end_time"]),
+            models.Index(fields=["schedule", "start_time", "end_time", "sort_order"]),
         ]
 
     def __str__(self):
