@@ -50,6 +50,8 @@ async function saveTitle() {
   const result = await updateBlock(props.block.id, { title: trimmed })
   if (result.ok) {
     editing.value = false
+  } else {
+    errorMessage.value = "Failed to update title"
   }
 }
 
