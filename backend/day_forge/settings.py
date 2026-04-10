@@ -101,6 +101,14 @@ else:
         h for h in os.environ.get("CSRF_TRUSTED_ORIGINS", "").split(",") if h
     ]
 
+# Cookie security
+CSRF_COOKIE_HTTPONLY = False  # frontend JS reads XSRF-TOKEN cookie
+SESSION_COOKIE_SAMESITE = "Lax"
+SECURE_CONTENT_TYPE_NOSNIFF = True
+if not DEBUG:
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+
 # Auth
 LOGIN_URL = "/accounts/login/"
 

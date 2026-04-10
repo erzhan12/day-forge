@@ -33,7 +33,11 @@ async function apiFetch(
     let data: Record<string, unknown> | undefined
     const text = await resp.text()
     if (text) {
-      data = JSON.parse(text)
+      try {
+        data = JSON.parse(text)
+      } catch {
+        return { ok: false, errors: { detail: "Invalid server response." } }
+      }
     }
     router.reload({ only: ["blocks"] })
     return { ok: true, data }
