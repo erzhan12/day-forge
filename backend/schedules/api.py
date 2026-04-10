@@ -168,6 +168,11 @@ def block_detail(request, pk):
                     {"errors": {"title": "Title too long (max 255 characters)."}}, status=400
                 )
         if "is_completed" in data:
+            if not isinstance(data["is_completed"], bool):
+                return JsonResponse(
+                    {"errors": {"is_completed": "is_completed must be a boolean."}},
+                    status=400,
+                )
             block.is_completed = data["is_completed"]
         if "category" in data:
             if data["category"] not in VALID_CATEGORIES:
