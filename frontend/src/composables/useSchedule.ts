@@ -71,5 +71,34 @@ export function useSchedule(date: string) {
     return apiFetch(`/api/blocks/${id}/`, "DELETE")
   }
 
-  return { createBlock, updateBlock, deleteBlock }
+  function reorderBlocks(
+    updates: Array<{
+      id: number
+      start_time: string
+      end_time: string
+      sort_order: number
+    }>,
+  ): Promise<ApiResult> {
+    return apiFetch("/api/blocks/reorder/", "POST", { updates })
+  }
+
+  function restoreBlocks(
+    targetDate: string,
+    blocks: Array<{
+      title: string
+      start_time: string
+      end_time: string
+      category: string
+      is_completed: boolean
+      sort_order: number
+    }>,
+  ): Promise<ApiResult> {
+    return apiFetch(
+      `/api/schedules/${targetDate}/blocks/restore/`,
+      "POST",
+      { blocks },
+    )
+  }
+
+  return { createBlock, updateBlock, deleteBlock, reorderBlocks, restoreBlocks }
 }

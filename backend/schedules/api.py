@@ -8,6 +8,7 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
 from schedules.models import Schedule, TimeBlock
+from schedules.validators import validate_five_minute_granularity
 
 VALID_CATEGORIES = {c.value for c in TimeBlock.Category}
 
@@ -223,3 +224,316 @@ def block_detail(request, pk):
         return JsonResponse({"errors": e.message_dict}, status=400)
 
     return JsonResponse(_block_to_dict(block))
+
+
+@login_required
+@require_http_methods(["POST"])
+def reorder_blocks(request):
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"errors": {"body": "Invalid JSON."}}, status=400)
+
+    if not isinstance(data, dict):
+        return JsonResponse(
+            {"errors": {"body": "Request body must be a JSON object."}},
+            status=400,
+        )
+
+    updates = data.get("updates")
+    if not isinstance(updates, list) or len(updates) == 0:
+        return JsonResponse(
+            {"errors": {"updates": "A non-empty list of updates is required."}},
+            status=400,
+        )
+
+    # Validate each entry is a dict with an integer id
+    for i, u in enumerate(updates):
+        if not isinstance(u, dict):
+            return JsonResponse(
+                {"errors": {"updates": f"Entry {i} must be an object."}},
+                status=400,
+            )
+        uid = u.get("id")
+        if uid is None or isinstance(uid, bool) or not isinstance(uid, int):
+            return JsonResponse(
+                {"errors": {"updates": f"Entry {i} must have an integer 'id'."}},
+                status=400,
+            )
+
+    # Check for duplicate IDs
+    ids = [u["id"] for u in updates]
+    if len(ids) != len(set(ids)):
+        return JsonResponse(
+            {"errors": {"updates": "Duplicate block IDs in request."}}, status=400
+        )
+
+    # Fetch all blocks at once
+    blocks = list(
+        TimeBlock.objects.filter(id__in=ids).select_related("schedule")
+    )
+    if len(blocks) != len(ids):
+        return JsonResponse({"errors": {"detail": "One or more blocks not found."}}, status=404)
+
+    # Verify all blocks belong to the same schedule and the request user
+    schedules = {b.schedule_id for b in blocks}
+    if len(schedules) != 1:
+        return JsonResponse(
+            {"errors": {"updates": "All blocks must belong to the same schedule."}},
+            status=400,
+        )
+    schedule = blocks[0].schedule
+    if schedule.user != request.user:
+        return JsonResponse({"errors": {"detail": "Forbidden."}}, status=403)
+
+    # Build a lookup for the update data
+    update_map = {u["id"]: u for u in updates}
+
+    # Validate each update entry
+    for uid, entry in update_map.items():
+        for field in ("start_time", "end_time", "sort_order"):
+            if field not in entry:
+                return JsonResponse(
+                    {"errors": {field: f"{field} is required for block {uid}."}},
+                    status=400,
+                )
+        try:
+            start = _parse_time(entry["start_time"])
+        except (ValueError, TypeError):
+            return JsonResponse(
+                {"errors": {"start_time": f"Invalid time format for block {uid}. Use HH:MM."}},
+                status=400,
+            )
+        try:
+            end = _parse_time(entry["end_time"])
+        except (ValueError, TypeError):
+            return JsonResponse(
+                {"errors": {"end_time": f"Invalid time format for block {uid}. Use HH:MM."}},
+                status=400,
+            )
+        try:
+            validate_five_minute_granularity(start)
+            validate_five_minute_granularity(end)
+        except ValidationError as e:
+            return JsonResponse({"errors": {"time": str(e.message)}}, status=400)
+        if start >= end:
+            return JsonResponse(
+                {"errors": {"time": f"Start time must be before end time for block {uid}."}},
+                status=400,
+            )
+        sort_order = entry["sort_order"]
+        if not isinstance(sort_order, int) or isinstance(sort_order, bool):
+            return JsonResponse(
+                {"errors": {"sort_order": "sort_order must be an integer."}}, status=400
+            )
+        if not (0 <= sort_order <= 10_000):
+            return JsonResponse(
+                {"errors": {"sort_order": "sort_order must be between 0 and 10000."}},
+                status=400,
+            )
+
+    # Build candidate state: all blocks for the schedule, with updates applied
+    all_blocks = list(TimeBlock.objects.filter(schedule=schedule))
+    candidates = []
+    for b in all_blocks:
+        if b.id in update_map:
+            entry = update_map[b.id]
+            candidates.append({
+                "start_time": _parse_time(entry["start_time"]),
+                "end_time": _parse_time(entry["end_time"]),
+                "sort_order": entry["sort_order"],
+                "block": b,
+            })
+        else:
+            candidates.append({
+                "start_time": b.start_time,
+                "end_time": b.end_time,
+                "sort_order": b.sort_order,
+                "block": b,
+            })
+
+    # Sort and check for overlaps in the full candidate state
+    candidates.sort(key=lambda c: (c["start_time"], c["sort_order"]))
+    for i in range(len(candidates) - 1):
+        if candidates[i]["end_time"] > candidates[i + 1]["start_time"]:
+            return JsonResponse(
+                {"errors": {"time": "Reorder would cause overlapping blocks."}},
+                status=400,
+            )
+
+    # Apply updates atomically
+    try:
+        with transaction.atomic():
+            for b in blocks:
+                entry = update_map[b.id]
+                b.start_time = _parse_time(entry["start_time"])
+                b.end_time = _parse_time(entry["end_time"])
+                b.sort_order = entry["sort_order"]
+                b.full_clean()
+                b.save()
+    except ValidationError as e:
+        return JsonResponse({"errors": e.message_dict}, status=400)
+
+    # Return full block list for the schedule
+    result_blocks = TimeBlock.objects.filter(schedule=schedule).order_by(
+        "start_time", "sort_order"
+    )
+    return JsonResponse(
+        {"blocks": [_block_to_dict(b) for b in result_blocks]},
+    )
+
+
+@login_required
+@require_http_methods(["POST"])
+def restore_blocks(request, date):
+    try:
+        parsed_date = datetime.date.fromisoformat(date)
+    except ValueError:
+        return JsonResponse({"errors": {"date": "Invalid date format."}}, status=400)
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"errors": {"body": "Invalid JSON."}}, status=400)
+
+    if not isinstance(data, dict):
+        return JsonResponse(
+            {"errors": {"body": "Request body must be a JSON object."}},
+            status=400,
+        )
+
+    blocks_data = data.get("blocks")
+    if not isinstance(blocks_data, list):
+        return JsonResponse(
+            {"errors": {"blocks": "A list of blocks is required."}}, status=400
+        )
+
+    schedule, _ = Schedule.objects.get_or_create(user=request.user, date=parsed_date)
+
+    # Validate each block entry
+    validated = []
+    for i, entry in enumerate(blocks_data):
+        if not isinstance(entry, dict):
+            return JsonResponse(
+                {"errors": {"blocks": f"Entry {i} must be an object."}},
+                status=400,
+            )
+        # Title
+        title = entry.get("title", "")
+        if not isinstance(title, str):
+            return JsonResponse(
+                {"errors": {"title": f"Title must be a string (block {i})."}}, status=400
+            )
+        title = title.strip()
+        if not title:
+            return JsonResponse(
+                {"errors": {"title": f"Title is required (block {i})."}}, status=400
+            )
+        if len(title) > 255:
+            return JsonResponse(
+                {"errors": {"title": f"Title too long (block {i})."}}, status=400
+            )
+
+        # Times
+        for field in ("start_time", "end_time"):
+            if field not in entry:
+                return JsonResponse(
+                    {"errors": {field: f"{field} is required (block {i})."}}, status=400
+                )
+        try:
+            start = _parse_time(entry["start_time"])
+        except (ValueError, TypeError):
+            return JsonResponse(
+                {"errors": {"start_time": f"Invalid time format (block {i})."}},
+                status=400,
+            )
+        try:
+            end = _parse_time(entry["end_time"])
+        except (ValueError, TypeError):
+            return JsonResponse(
+                {"errors": {"end_time": f"Invalid time format (block {i})."}},
+                status=400,
+            )
+        try:
+            validate_five_minute_granularity(start)
+            validate_five_minute_granularity(end)
+        except ValidationError as e:
+            return JsonResponse({"errors": {"time": str(e.message)}}, status=400)
+        if start >= end:
+            return JsonResponse(
+                {"errors": {"time": f"Start time must be before end time (block {i})."}},
+                status=400,
+            )
+
+        # Category
+        category = entry.get("category", "other")
+        if category not in VALID_CATEGORIES:
+            choices = ", ".join(sorted(VALID_CATEGORIES))
+            return JsonResponse(
+                {"errors": {"category": f"Invalid category (block {i}). Choose from: {choices}."}},
+                status=400,
+            )
+
+        # is_completed
+        is_completed = entry.get("is_completed", False)
+        if not isinstance(is_completed, bool):
+            return JsonResponse(
+                {"errors": {"is_completed": f"is_completed must be a boolean (block {i})."}},
+                status=400,
+            )
+
+        # sort_order
+        sort_order = entry.get("sort_order", 0)
+        if not isinstance(sort_order, int) or isinstance(sort_order, bool):
+            return JsonResponse(
+                {"errors": {"sort_order": f"sort_order must be an integer (block {i})."}},
+                status=400,
+            )
+        if not (0 <= sort_order <= 10_000):
+            return JsonResponse(
+                {"errors": {"sort_order": f"sort_order must be between 0 and 10000 (block {i})."}},
+                status=400,
+            )
+
+        validated.append({
+            "title": title,
+            "start_time": start,
+            "end_time": end,
+            "category": category,
+            "is_completed": is_completed,
+            "sort_order": sort_order,
+        })
+
+    # Check for overlaps in the candidate set
+    validated.sort(key=lambda v: (v["start_time"], v["sort_order"]))
+    for i in range(len(validated) - 1):
+        if validated[i]["end_time"] > validated[i + 1]["start_time"]:
+            return JsonResponse(
+                {"errors": {"time": "Restored blocks would overlap."}}, status=400
+            )
+
+    # Apply atomically: delete all existing, create from snapshot
+    try:
+        with transaction.atomic():
+            TimeBlock.objects.filter(schedule=schedule).delete()
+            for v in validated:
+                block = TimeBlock(
+                    schedule=schedule,
+                    title=v["title"],
+                    start_time=v["start_time"],
+                    end_time=v["end_time"],
+                    category=v["category"],
+                    is_completed=v["is_completed"],
+                    sort_order=v["sort_order"],
+                )
+                block.full_clean()
+                block.save()
+    except ValidationError as e:
+        return JsonResponse({"errors": e.message_dict}, status=400)
+
+    result_blocks = TimeBlock.objects.filter(schedule=schedule).order_by(
+        "start_time", "sort_order"
+    )
+    return JsonResponse(
+        {"blocks": [_block_to_dict(b) for b in result_blocks]},
+    )

@@ -21,3 +21,10 @@ export interface RenderItem {
   end_time: string
   duration_minutes: number
 }
+
+export interface UndoAction {
+  description: string
+  type: "drag" | "edit" | "toggle" | "add" | "delete"
+  previousBlocks: TimeBlock[]
+  scheduleDate: string
+}
