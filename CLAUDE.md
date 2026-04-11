@@ -15,7 +15,8 @@ See `.claude/rules/` for detailed instructions. Review `tasks/lessons.md` at ses
 - **Build frontend:** `cd frontend && npm run build`
 - **Lint:** `uv run ruff check backend/`
 - **Type check:** `cd frontend && npx vue-tsc --noEmit`
-- **Test:** `uv run pytest backend/tests/ -v`
+- **Test backend:** `uv run pytest backend/tests/ -v`
+- **Test frontend:** `cd frontend && npm test`
 - **Migrate:** `uv run python backend/manage.py migrate`
 - **Seed data:** `uv run python backend/manage.py seed_templates`
 

@@ -5,6 +5,10 @@ import { resolve } from "path"
 export default defineConfig({
   plugins: [vue()],
   root: resolve(__dirname),
+  test: {
+    environment: "jsdom",
+    globals: true,
+  },
   base: process.env.NODE_ENV === "production" ? "/static/" : "/",
   build: {
     outDir: resolve(__dirname, "dist"),
