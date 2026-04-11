@@ -1,12 +1,12 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
 
 ## Project Overview
 
 Day Forge is an AI-powered daily schedule assistant. Django 5.x backend with SQLite, Python 3.14, managed with uv. Vue 3 + Inertia.js frontend served via Vite.
 
-See `.claude/rules/` for detailed instructions. Review `tasks/lessons.md` at session start.
+See `.Codex/rules/` for detailed instructions. Review `tasks/lessons.md` at session start.
 
 ## Commands
 
@@ -15,8 +15,7 @@ See `.claude/rules/` for detailed instructions. Review `tasks/lessons.md` at ses
 - **Build frontend:** `cd frontend && npm run build`
 - **Lint:** `uv run ruff check backend/`
 - **Type check:** `cd frontend && npx vue-tsc --noEmit`
-- **Test backend:** `uv run pytest backend/tests/ -v`
-- **Test frontend:** `cd frontend && npm test`
+- **Test:** `uv run pytest backend/tests/ -v`
 - **Migrate:** `uv run python backend/manage.py migrate`
 - **Seed data:** `uv run python backend/manage.py seed_templates`
 
@@ -28,7 +27,6 @@ See `.claude/rules/` for detailed instructions. Review `tasks/lessons.md` at ses
 - `tasks/todo.md` — Current work items
 - `tasks/lessons.md` — Corrections and patterns learned (review at session start)
 - `docs/features/` — Feature planning documents (created by planner agent)
-- `docs/api.md` — JSON API reference (endpoints, request/response, errors)
 
 ## Architecture
 

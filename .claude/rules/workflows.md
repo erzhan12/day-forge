@@ -1,14 +1,24 @@
 # Development Workflows
 
-## Run
+## Run (two terminals needed)
 ```bash
-uv run python backend/manage.py runserver 8006      # Django dev server on :8006
+uv run python backend/manage.py runserver 8006      # Terminal 1: Django on :8006
+cd frontend && npm run dev                          # Terminal 2: Vite on :5173
 ```
+Visit http://localhost:5173/ — Vite proxies to Django, serves frontend with HMR.
 
 ## Lint
 ```bash
-uv run ruff check backend/                         # Check
+uv run ruff check backend/                         # Python lint
 uv run ruff check backend/ --fix                   # Auto-fix
+cd frontend && npx vue-tsc --noEmit                # TypeScript type check
+```
+
+## Frontend
+```bash
+cd frontend && npm install                         # Install deps
+cd frontend && npm run dev                         # Vite dev server
+cd frontend && npm run build                       # Production build
 ```
 
 ## Test

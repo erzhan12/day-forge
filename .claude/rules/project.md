@@ -10,3 +10,4 @@ These are non-obvious conventions that can't be inferred from code alone.
 - `DJANGO_SECRET_KEY` — Django secret key (required in production, has insecure fallback for dev)
 - `DEBUG` — `"1"` enables debug mode (default), `"0"` for production
 - `ALLOWED_HOSTS` — Comma-separated hostnames (only used when `DEBUG=0`)
+- `CSRF_TRUSTED_ORIGINS` — Comma-separated origins incl. scheme, e.g. `https://app.example.com` (only used when `DEBUG=0`)

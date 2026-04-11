@@ -26,7 +26,7 @@ def admin_request(request_factory, admin_user):
 @pytest.mark.django_db
 class TestScheduleAdmin:
     def test_block_count_annotation(self, admin_request):
-        schedule = Schedule.objects.create(date=datetime.date(2026, 5, 1))
+        schedule = Schedule.objects.create(date=datetime.date(2026, 5, 1), user=admin_request.user)
         schedule.time_blocks.create(title="A", start_time="09:00", end_time="10:00")
         schedule.time_blocks.create(title="B", start_time="10:00", end_time="11:00")
 
