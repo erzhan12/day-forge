@@ -205,11 +205,13 @@ def block_detail(request, pk):
                     status=400,
                 )
             with transaction.atomic():
+                # Lock candidate-overlap rows to serialize concurrent edits
+                # under PostgreSQL. SQLite ignores select_for_update silently.
                 overlap = TimeBlock.objects.filter(
                     schedule=block.schedule,
                     start_time__lt=block.end_time,
                     end_time__gt=block.start_time,
-                ).exclude(pk=block.pk).exists()
+                ).exclude(pk=block.pk).select_for_update().exists()
                 if overlap:
                     return JsonResponse(
                         {"errors": {"time": "This block overlaps with an existing block."}},
@@ -268,28 +270,9 @@ def reorder_blocks(request):
             {"errors": {"updates": "Duplicate block IDs in request."}}, status=400
         )
 
-    # Fetch all blocks at once
-    blocks = list(
-        TimeBlock.objects.filter(id__in=ids).select_related("schedule")
-    )
-    if len(blocks) != len(ids):
-        return JsonResponse({"errors": {"detail": "One or more blocks not found."}}, status=404)
-
-    # Verify all blocks belong to the same schedule and the request user
-    schedules = {b.schedule_id for b in blocks}
-    if len(schedules) != 1:
-        return JsonResponse(
-            {"errors": {"updates": "All blocks must belong to the same schedule."}},
-            status=400,
-        )
-    schedule = blocks[0].schedule
-    if schedule.user != request.user:
-        return JsonResponse({"errors": {"detail": "Forbidden."}}, status=403)
-
-    # Build a lookup for the update data
     update_map = {u["id"]: u for u in updates}
 
-    # Validate each update entry
+    # Validate each update entry's contents (no DB access required)
     for uid, entry in update_map.items():
         for field in ("start_time", "end_time", "sort_order"):
             if field not in entry:
@@ -332,43 +315,96 @@ def reorder_blocks(request):
                 status=400,
             )
 
-    # Build candidate state: all blocks for the schedule, with updates applied
-    all_blocks = list(TimeBlock.objects.filter(schedule=schedule))
-    candidates = []
-    for b in all_blocks:
-        if b.id in update_map:
-            entry = update_map[b.id]
-            candidates.append({
-                "start_time": _parse_time(entry["start_time"]),
-                "end_time": _parse_time(entry["end_time"]),
-                "sort_order": entry["sort_order"],
-                "block": b,
-            })
-        else:
-            candidates.append({
-                "start_time": b.start_time,
-                "end_time": b.end_time,
-                "sort_order": b.sort_order,
-                "block": b,
-            })
-
-    # Sort and check for overlaps in the full candidate state
-    candidates.sort(key=lambda c: (c["start_time"], c["sort_order"]))
-    for i in range(len(candidates) - 1):
-        if candidates[i]["end_time"] > candidates[i + 1]["start_time"]:
-            return JsonResponse(
-                {"errors": {"time": "Reorder would cause overlapping blocks."}},
-                status=400,
-            )
-
-    # Apply updates atomically
+    schedule = None
     try:
         with transaction.atomic():
-            for b in blocks:
-                entry = update_map[b.id]
-                b.start_time = _parse_time(entry["start_time"])
-                b.end_time = _parse_time(entry["end_time"])
-                b.sort_order = entry["sort_order"]
+            # Single locked query: fetch every block for any schedule that
+            # contains at least one of the requested IDs. This both eliminates
+            # the previous two-query pattern (one for the requested blocks, one
+            # for the full schedule needed to check overlaps) and locks the
+            # affected rows for the duration of the transaction. SQLite
+            # silently ignores select_for_update; PostgreSQL respects it.
+            schedule_blocks = list(
+                TimeBlock.objects.select_related("schedule__user")
+                .filter(
+                    schedule__in=TimeBlock.objects.filter(id__in=ids).values(
+                        "schedule"
+                    )
+                )
+                .select_for_update()
+            )
+
+            blocks_by_id = {b.id: b for b in schedule_blocks}
+            present_ids = set(blocks_by_id.keys())
+            requested_ids = set(ids)
+            missing = requested_ids - present_ids
+
+            # Cross-schedule check first: if the requested blocks straddle
+            # multiple schedules, that is a 400 regardless of ownership.
+            requested_schedule_ids = {
+                blocks_by_id[i].schedule_id for i in requested_ids if i in blocks_by_id
+            }
+            if len(requested_schedule_ids) > 1:
+                return JsonResponse(
+                    {
+                        "errors": {
+                            "updates": "All blocks must belong to the same schedule."
+                        }
+                    },
+                    status=400,
+                )
+
+            if missing:
+                # Differentiate "exists but caller cannot see it" (403) from
+                # "does not exist anywhere" (404), matching block_detail's
+                # auth pattern. Both are independent of the user's session.
+                exists_elsewhere = TimeBlock.objects.filter(
+                    id__in=missing
+                ).exists()
+                if exists_elsewhere:
+                    return JsonResponse(
+                        {"errors": {"detail": "Forbidden."}}, status=403
+                    )
+                return JsonResponse(
+                    {"errors": {"detail": "One or more blocks not found."}},
+                    status=404,
+                )
+
+            # All requested IDs are present and live in a single schedule.
+            schedule = blocks_by_id[ids[0]].schedule
+            if schedule.user != request.user:
+                return JsonResponse(
+                    {"errors": {"detail": "Forbidden."}}, status=403
+                )
+
+            # Build the candidate state from the in-memory blocks (no extra
+            # query) by mutating the updated blocks in place and including
+            # every schedule block in the overlap candidates.
+            blocks_to_save = []
+            for b in schedule_blocks:
+                if b.id in update_map:
+                    entry = update_map[b.id]
+                    b.start_time = _parse_time(entry["start_time"])
+                    b.end_time = _parse_time(entry["end_time"])
+                    b.sort_order = entry["sort_order"]
+                    blocks_to_save.append(b)
+
+            candidates = sorted(
+                ((b.start_time, b.end_time, b.sort_order) for b in schedule_blocks),
+                key=lambda c: (c[0], c[2]),
+            )
+            for i in range(len(candidates) - 1):
+                if candidates[i][1] > candidates[i + 1][0]:
+                    return JsonResponse(
+                        {
+                            "errors": {
+                                "time": "Reorder would cause overlapping blocks."
+                            }
+                        },
+                        status=400,
+                    )
+
+            for b in blocks_to_save:
                 b.full_clean()
                 b.save()
     except ValidationError as e:

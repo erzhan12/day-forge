@@ -164,6 +164,29 @@ class TestReorderBlocks:
         ])
         assert resp.status_code == 404
 
+    def test_partial_missing_returns_404_when_truly_absent(
+        self, auth_client, three_blocks
+    ):
+        b1, _, _ = three_blocks
+        # b1 is owned by the user; 99999 does not exist anywhere
+        resp = _post_reorder(auth_client, [
+            {"id": b1.id, "start_time": "07:00", "end_time": "08:00", "sort_order": 0},
+            {"id": 99999, "start_time": "08:00", "end_time": "09:00", "sort_order": 10},
+        ])
+        assert resp.status_code == 404
+
+    def test_other_users_block_alone_returns_403(self, auth_client, db):
+        other = User.objects.create_user(username="other2", password="pass123")
+        sched = Schedule.objects.create(date="2026-04-09", user=other)
+        block = TimeBlock.objects.create(
+            schedule=sched, title="Z", start_time="08:00", end_time="09:00",
+            category="work",
+        )
+        resp = _post_reorder(auth_client, [
+            {"id": block.id, "start_time": "07:00", "end_time": "08:00", "sort_order": 0},
+        ])
+        assert resp.status_code == 403
+
     def test_non_dict_entry_rejected(self, auth_client):
         resp = _post_reorder(auth_client, [1, 2])
         assert resp.status_code == 400
