@@ -11,11 +11,35 @@ import {
 } from "../utils/scheduleTime"
 
 /**
- * Resolve conflicts after moving a block to a new time.
- * Returns the new block list with shifted times, or null if the drop is invalid
- * (e.g. cascade pushes a block past DAY_END).
+ * Resolve overlap conflicts after moving a block to a new time slot.
  *
- * Exported for testing.
+ * Algorithm:
+ *   1. Deep-clone every block. The dragged block is anchored at the requested
+ *      `[newStartMinutes, newEndMinutes)` slot and never shifts again.
+ *   2. Sort by `(start_time, sort_order)`.
+ *   3. Walk neighbours pairwise. When two blocks overlap, shift the
+ *      non-dragged neighbour (forward if it sits after the dragged block,
+ *      backward into the open space if it sits before). Each shift preserves
+ *      the neighbour's duration. After any shift the scan restarts to let
+ *      changes cascade through additional neighbours.
+ *   4. Reassign `sort_order = index * 10` so the result is deterministic.
+ *
+ * @param blocks            Current block list (not mutated).
+ * @param draggedId         `id` of the block being moved.
+ * @param newStartMinutes   Drop position in minutes since midnight.
+ * @param newEndMinutes     Drop end in minutes since midnight (preserves
+ *                          original duration).
+ * @returns The resolved block list, or `null` if the cascade pushes any
+ *          block past `DAY_END_MINUTES` (e.g. dragging a block onto the last
+ *          slot leaves no room for the trailing neighbours to shift forward).
+ *
+ * @example
+ *   // No-op when there's no overlap
+ *   resolveConflicts(blocks, 1, 540, 600) // → blocks with #1 anchored at 09:00
+ *
+ * @example
+ *   // Returns null: shifting the trailing block would push it past 23:00
+ *   resolveConflicts([{id:1,...}, {id:2, end:23:00}], 1, 1370, 1380)
  */
 export function resolveConflicts(
   blocks: TimeBlock[],
@@ -295,7 +319,9 @@ export function useDrag(
       try {
         containerEl.releasePointerCapture(pointerId)
       } catch {
-        // may already be released
+        // Pointer capture may already be released (e.g. element detached
+        // mid-drag, or browser auto-released on pointerup).
+        console.debug("useDrag: pointer capture already released")
       }
       containerEl.removeEventListener("pointermove", onPointerMove)
       containerEl.removeEventListener("pointerup", onPointerUp)

@@ -97,6 +97,9 @@ def create_block(request, date):
     end, err = _parse_time_or_error("end_time", data["end_time"])
     if err is not None:
         return err
+    err = _validate_five_minute_or_error(start, end)
+    if err is not None:
+        return err
 
     title = data.get("title", "").strip()
     if not title:
@@ -226,6 +229,14 @@ def block_detail(request, pk):
                 )
             block.sort_order = sort_order
         if "start_time" in data or "end_time" in data:
+            times_to_check = []
+            if "start_time" in data:
+                times_to_check.append(block.start_time)
+            if "end_time" in data:
+                times_to_check.append(block.end_time)
+            err = _validate_five_minute_or_error(*times_to_check)
+            if err is not None:
+                return err
             err = _validate_time_range(block.start_time, block.end_time)
             if err is not None:
                 return err

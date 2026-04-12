@@ -2,37 +2,7 @@ import json
 
 import pytest
 from django.contrib.auth.models import User
-from django.test import Client
 from schedules.models import Schedule, TimeBlock
-
-
-@pytest.fixture
-def user(db):
-    return User.objects.create_user(username="testuser", password="testpass123")
-
-
-@pytest.fixture
-def auth_client(user):
-    client = Client()
-    client.login(username="testuser", password="testpass123")
-    return client
-
-
-@pytest.fixture
-def csrf_client():
-    return Client(enforce_csrf_checks=True)
-
-
-@pytest.fixture
-def csrf_auth_client(user):
-    client = Client(enforce_csrf_checks=True)
-    client.login(username="testuser", password="testpass123")
-    return client
-
-
-@pytest.fixture
-def schedule(user):
-    return Schedule.objects.create(date="2026-04-07", user=user)
 
 
 @pytest.fixture
@@ -169,6 +139,25 @@ class TestCreateBlock:
             content_type="application/json",
         )
         assert resp.status_code == 400
+
+    @pytest.mark.django_db
+    def test_create_block_non_five_minute_time_rejected(
+        self, auth_client, schedule
+    ):
+        resp = auth_client.post(
+            "/api/schedules/2026-04-07/blocks/",
+            json.dumps({
+                "title": "Off-grid",
+                "start_time": "09:07",
+                "end_time": "10:00",
+                "category": "work",
+            }),
+            content_type="application/json",
+        )
+        assert resp.status_code == 400
+        body = resp.json()
+        assert "time" in body["errors"]
+        assert "5-minute" in body["errors"]["time"]
 
     @pytest.mark.django_db
     def test_unauthenticated_returns_302(self, client):
