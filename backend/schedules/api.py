@@ -18,6 +18,46 @@ def _parse_time(value):
     return datetime.datetime.strptime(value, "%H:%M").time()
 
 
+def _parse_time_or_error(field_name, value, block_id=None):
+    """Parse an HH:MM string. Return ``(time, None)`` on success or
+    ``(None, JsonResponse)`` with a 400 error on failure.
+
+    ``block_id`` is appended to the error message when supplied so callers
+    handling lists of entries can disambiguate which one was malformed.
+    """
+    suffix = f" for block {block_id}" if block_id is not None else ""
+    try:
+        return _parse_time(value), None
+    except (ValueError, TypeError):
+        return None, JsonResponse(
+            {"errors": {field_name: f"Invalid time format{suffix}. Use HH:MM."}},
+            status=400,
+        )
+
+
+def _validate_five_minute_or_error(*times):
+    """Run ``validate_five_minute_granularity`` on every value. Return ``None``
+    on success or a 400 ``JsonResponse`` on the first failure."""
+    try:
+        for t in times:
+            validate_five_minute_granularity(t)
+    except ValidationError as e:
+        return JsonResponse({"errors": {"time": str(e.message)}}, status=400)
+    return None
+
+
+def _validate_time_range(start, end, block_id=None):
+    """Verify ``start < end``. Return ``None`` on success or a 400
+    ``JsonResponse`` otherwise."""
+    if start >= end:
+        suffix = f" for block {block_id}" if block_id is not None else ""
+        return JsonResponse(
+            {"errors": {"time": f"Start time must be before end time{suffix}."}},
+            status=400,
+        )
+    return None
+
+
 def _block_to_dict(block):
     return {
         "id": block.id,
@@ -51,19 +91,12 @@ def create_block(request, date):
                 {"errors": {field: f"{field} is required."}}, status=400
             )
 
-    try:
-        start = _parse_time(data["start_time"])
-    except ValueError:
-        return JsonResponse(
-            {"errors": {"start_time": "Invalid time format. Use HH:MM."}}, status=400
-        )
-
-    try:
-        end = _parse_time(data["end_time"])
-    except ValueError:
-        return JsonResponse(
-            {"errors": {"end_time": "Invalid time format. Use HH:MM."}}, status=400
-        )
+    start, err = _parse_time_or_error("start_time", data["start_time"])
+    if err is not None:
+        return err
+    end, err = _parse_time_or_error("end_time", data["end_time"])
+    if err is not None:
+        return err
 
     title = data.get("title", "").strip()
     if not title:
@@ -83,20 +116,20 @@ def create_block(request, date):
             status=400,
         )
 
-    if start >= end:
-        return JsonResponse(
-            {"errors": {"time": "Start time must be before end time."}}, status=400
-        )
+    err = _validate_time_range(start, end)
+    if err is not None:
+        return err
 
-    # NOTE: On PostgreSQL, add .select_for_update() to prevent race conditions.
-    # SQLite uses DB-level locking only; row-level locks are silently ignored.
+    # Lock the candidate-overlap rows to serialize concurrent inserts under
+    # PostgreSQL. SQLite ignores select_for_update silently but still
+    # serializes via its DB-level write lock.
     try:
         with transaction.atomic():
             overlap = TimeBlock.objects.filter(
                 schedule=schedule,
                 start_time__lt=end,
                 end_time__gt=start,
-            ).exists()
+            ).select_for_update().exists()
             if overlap:
                 return JsonResponse(
                     {"errors": {"time": "This block overlaps with an existing block."}},
@@ -139,21 +172,15 @@ def block_detail(request, pk):
         return JsonResponse({"errors": {"body": "Invalid JSON."}}, status=400)
 
     if "start_time" in data:
-        try:
-            block.start_time = _parse_time(data["start_time"])
-        except ValueError:
-            return JsonResponse(
-                {"errors": {"start_time": "Invalid time format. Use HH:MM."}},
-                status=400,
-            )
+        parsed, err = _parse_time_or_error("start_time", data["start_time"])
+        if err is not None:
+            return err
+        block.start_time = parsed
     if "end_time" in data:
-        try:
-            block.end_time = _parse_time(data["end_time"])
-        except ValueError:
-            return JsonResponse(
-                {"errors": {"end_time": "Invalid time format. Use HH:MM."}},
-                status=400,
-            )
+        parsed, err = _parse_time_or_error("end_time", data["end_time"])
+        if err is not None:
+            return err
+        block.end_time = parsed
 
     try:
         if "title" in data:
@@ -199,11 +226,9 @@ def block_detail(request, pk):
                 )
             block.sort_order = sort_order
         if "start_time" in data or "end_time" in data:
-            if block.start_time >= block.end_time:
-                return JsonResponse(
-                    {"errors": {"time": "Start time must be before end time."}},
-                    status=400,
-                )
+            err = _validate_time_range(block.start_time, block.end_time)
+            if err is not None:
+                return err
             with transaction.atomic():
                 # Lock candidate-overlap rows to serialize concurrent edits
                 # under PostgreSQL. SQLite ignores select_for_update silently.
@@ -280,30 +305,18 @@ def reorder_blocks(request):
                     {"errors": {field: f"{field} is required for block {uid}."}},
                     status=400,
                 )
-        try:
-            start = _parse_time(entry["start_time"])
-        except (ValueError, TypeError):
-            return JsonResponse(
-                {"errors": {"start_time": f"Invalid time format for block {uid}. Use HH:MM."}},
-                status=400,
-            )
-        try:
-            end = _parse_time(entry["end_time"])
-        except (ValueError, TypeError):
-            return JsonResponse(
-                {"errors": {"end_time": f"Invalid time format for block {uid}. Use HH:MM."}},
-                status=400,
-            )
-        try:
-            validate_five_minute_granularity(start)
-            validate_five_minute_granularity(end)
-        except ValidationError as e:
-            return JsonResponse({"errors": {"time": str(e.message)}}, status=400)
-        if start >= end:
-            return JsonResponse(
-                {"errors": {"time": f"Start time must be before end time for block {uid}."}},
-                status=400,
-            )
+        start, err = _parse_time_or_error("start_time", entry["start_time"], block_id=uid)
+        if err is not None:
+            return err
+        end, err = _parse_time_or_error("end_time", entry["end_time"], block_id=uid)
+        if err is not None:
+            return err
+        err = _validate_five_minute_or_error(start, end)
+        if err is not None:
+            return err
+        err = _validate_time_range(start, end, block_id=uid)
+        if err is not None:
+            return err
         sort_order = entry["sort_order"]
         if not isinstance(sort_order, int) or isinstance(sort_order, bool):
             return JsonResponse(
@@ -476,30 +489,18 @@ def restore_blocks(request, date):
                 return JsonResponse(
                     {"errors": {field: f"{field} is required (block {i})."}}, status=400
                 )
-        try:
-            start = _parse_time(entry["start_time"])
-        except (ValueError, TypeError):
-            return JsonResponse(
-                {"errors": {"start_time": f"Invalid time format (block {i})."}},
-                status=400,
-            )
-        try:
-            end = _parse_time(entry["end_time"])
-        except (ValueError, TypeError):
-            return JsonResponse(
-                {"errors": {"end_time": f"Invalid time format (block {i})."}},
-                status=400,
-            )
-        try:
-            validate_five_minute_granularity(start)
-            validate_five_minute_granularity(end)
-        except ValidationError as e:
-            return JsonResponse({"errors": {"time": str(e.message)}}, status=400)
-        if start >= end:
-            return JsonResponse(
-                {"errors": {"time": f"Start time must be before end time (block {i})."}},
-                status=400,
-            )
+        start, err = _parse_time_or_error("start_time", entry["start_time"], block_id=i)
+        if err is not None:
+            return err
+        end, err = _parse_time_or_error("end_time", entry["end_time"], block_id=i)
+        if err is not None:
+            return err
+        err = _validate_five_minute_or_error(start, end)
+        if err is not None:
+            return err
+        err = _validate_time_range(start, end, block_id=i)
+        if err is not None:
+            return err
 
         # Category
         category = entry.get("category", "other")
