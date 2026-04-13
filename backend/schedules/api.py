@@ -12,6 +12,7 @@ from schedules.validators import validate_five_minute_granularity
 
 VALID_CATEGORIES = {c.value for c in TimeBlock.Category}
 MAX_SORT_ORDER = 10_000
+MAX_REORDER_UPDATES = 100
 
 
 def _parse_time(value):
@@ -300,6 +301,15 @@ def block_detail(request, pk):
 @login_required
 @require_http_methods(["POST"])
 def reorder_blocks(request):
+    """Atomically apply a batch of block time/order updates.
+
+    Deployment note: per-request validation caps the payload at 100 blocks
+    (see ``MAX_REORDER_UPDATES`` below), but that does not rate-limit the
+    *frequency* of requests. Production deployments should layer on a
+    request-rate limit at the reverse proxy (e.g. ``limit_req`` in nginx or
+    an API gateway equivalent) to prevent DoS via rapid repeated reorders
+    against the locked overlap scan.
+    """
     try:
         data = json.loads(request.body)
     except json.JSONDecodeError:
@@ -321,9 +331,16 @@ def reorder_blocks(request):
     # Defensive cap: a single drag in the UI only ever touches a handful of
     # blocks. Reject pathological payloads up-front so a malicious client
     # cannot force an expensive validation + locked overlap scan.
-    if len(updates) > 100:
+    if len(updates) > MAX_REORDER_UPDATES:
         return JsonResponse(
-            {"errors": {"updates": "Cannot update more than 100 blocks at once."}},
+            {
+                "errors": {
+                    "updates": (
+                        f"Cannot update more than {MAX_REORDER_UPDATES} "
+                        f"blocks at once."
+                    )
+                }
+            },
             status=400,
         )
 

@@ -91,12 +91,17 @@ export function resolveConflicts(
   // Safety: termination is already proven — each shift strictly advances a
   // block's `start_time` and the `newEnd > DAY_END_MINUTES` check bounds
   // the total motion. The `MAX_ITERATIONS` guard below is a belt-and-braces
-  // check against a *future* bug introducing an infinite loop; it is sized
-  // well above the theoretical worst case (`n * (day_width / SNAP)` ≈
-  // 20k for n=100) so it will never trigger on valid input.
+  // check against a *future* bug introducing an infinite loop, and fails
+  // fast so a broken algorithm can't freeze the UI.
+  //
+  // Sizing: in practice the cascade is O(n) — each affected block shifts at
+  // most a handful of times before settling. With the backend's 100-block
+  // payload cap, that's ≤ ~100 realistic iterations, so 1000 is a 10×
+  // safety margin. If we ever hit it, returning null is a soft failure
+  // (drop marked invalid, user retries) rather than a crash.
   let changed = true
   let iterations = 0
-  const MAX_ITERATIONS = 10000
+  const MAX_ITERATIONS = 1000
   while (changed) {
     if (++iterations > MAX_ITERATIONS) {
       console.error(
@@ -355,10 +360,14 @@ export function useDrag(
         containerEl.releasePointerCapture(pointerId)
       } catch (e) {
         // Pointer capture may already be released (e.g. element detached
-        // mid-drag, or browser auto-released on pointerup). InvalidPointerId
-        // is the only expected failure mode — surface anything else so real
-        // bugs aren't swallowed.
-        if (e instanceof DOMException && e.name === "InvalidPointerId") {
+        // mid-drag, or browser auto-released on pointerup). Expected failure
+        // modes: `InvalidPointerId` (older Chrome / spec name) and
+        // `NotFoundError` (current spec / MDN). Surface anything else so
+        // real bugs aren't swallowed.
+        if (
+          e instanceof DOMException &&
+          (e.name === "InvalidPointerId" || e.name === "NotFoundError")
+        ) {
           console.debug("useDrag: pointer capture already released")
         } else {
           console.warn("useDrag: failed to release pointer capture:", e)
