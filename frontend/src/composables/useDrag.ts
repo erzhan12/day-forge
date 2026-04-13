@@ -66,8 +66,15 @@ export function resolveConflicts(
   })
 
   // Walk forward and shift overlapping blocks.
-  // The dragged block is anchored at the drop position and never shifts.
-  // When the dragged block overlaps a neighbour, the neighbour moves instead.
+  //
+  // INVARIANT: the dragged block stays pinned at the drop position for the
+  // entire loop. Only its neighbours move. We identify the dragged block by
+  // `id` in every iteration, not by index, so the re-sort below is free to
+  // relocate it within the array without breaking the algorithm.
+  //
+  // The re-sort after each shift exists only to keep `result` ordered by
+  // start_time so the pairwise `currEnd > nextStart` scan can detect the
+  // next collision in O(n). It is NOT used to find the dragged block.
   let changed = true
   while (changed) {
     changed = false
@@ -75,10 +82,11 @@ export function resolveConflicts(
       const currEnd = timeToMinutes(result[i].end_time)
       const nextStart = timeToMinutes(result[i + 1].start_time)
       if (currEnd > nextStart) {
-        // Determine which block to shift — never shift the dragged block
+        // Pick the neighbour to move — the dragged block is anchored, so if
+        // it's the later one (i+1) we shift the earlier non-dragged block at
+        // i forward past it; otherwise we shift i+1 forward past i.
         const shiftIdx =
           result[i + 1].id === draggedId ? i : i + 1
-        // If the dragged block is the earlier one, it stays; shift i (earlier non-dragged) forward past the dragged block
         if (shiftIdx === i) {
           const shiftDuration =
             timeToMinutes(result[i].end_time) -

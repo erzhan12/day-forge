@@ -315,6 +315,15 @@ def reorder_blocks(request):
             status=400,
         )
 
+    # Defensive cap: a single drag in the UI only ever touches a handful of
+    # blocks. Reject pathological payloads up-front so a malicious client
+    # cannot force an expensive validation + locked overlap scan.
+    if len(updates) > 100:
+        return JsonResponse(
+            {"errors": {"updates": "Cannot update more than 100 blocks at once."}},
+            status=400,
+        )
+
     # Validate each entry is a dict with an integer id
     for i, u in enumerate(updates):
         if not isinstance(u, dict):
