@@ -86,7 +86,10 @@ def _validate_sort_order(value, block_id=None):
     ``None`` on success or a 400 ``JsonResponse`` otherwise.
     """
     suffix = f" for block {block_id}" if block_id is not None else ""
-    if not isinstance(value, int) or isinstance(value, bool):
+    # Check ``bool`` before ``int``: Python's ``bool`` is a subclass of
+    # ``int``, so we must reject bools explicitly to avoid treating
+    # ``True``/``False`` as valid integers.
+    if isinstance(value, bool) or not isinstance(value, int):
         return JsonResponse(
             {"errors": {"sort_order": f"sort_order must be an integer{suffix}."}},
             status=400,
