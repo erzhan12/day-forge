@@ -318,10 +318,16 @@ export function useDrag(
     if (containerEl) {
       try {
         containerEl.releasePointerCapture(pointerId)
-      } catch {
+      } catch (e) {
         // Pointer capture may already be released (e.g. element detached
-        // mid-drag, or browser auto-released on pointerup).
-        console.debug("useDrag: pointer capture already released")
+        // mid-drag, or browser auto-released on pointerup). InvalidPointerId
+        // is the only expected failure mode — surface anything else so real
+        // bugs aren't swallowed.
+        if (e instanceof DOMException && e.name === "InvalidPointerId") {
+          console.debug("useDrag: pointer capture already released")
+        } else {
+          console.warn("useDrag: failed to release pointer capture:", e)
+        }
       }
       containerEl.removeEventListener("pointermove", onPointerMove)
       containerEl.removeEventListener("pointerup", onPointerUp)

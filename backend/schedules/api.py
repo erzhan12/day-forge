@@ -11,6 +11,7 @@ from schedules.models import Schedule, TimeBlock
 from schedules.validators import validate_five_minute_granularity
 
 VALID_CATEGORIES = {c.value for c in TimeBlock.Category}
+MAX_SORT_ORDER = 10_000
 
 
 def _parse_time(value):
@@ -58,6 +59,53 @@ def _validate_time_range(start, end, block_id=None):
     return None
 
 
+def _validate_block_times(start_str, end_str, block_id=None):
+    """Parse and validate a pair of HH:MM strings: format, 5-minute
+    granularity, and ``start < end``.
+
+    Returns ``(start, end, None)`` on success or ``(None, None, JsonResponse)``
+    on the first failure.
+    """
+    start, err = _parse_time_or_error("start_time", start_str, block_id=block_id)
+    if err is not None:
+        return None, None, err
+    end, err = _parse_time_or_error("end_time", end_str, block_id=block_id)
+    if err is not None:
+        return None, None, err
+    err = _validate_five_minute_or_error(start, end)
+    if err is not None:
+        return None, None, err
+    err = _validate_time_range(start, end, block_id=block_id)
+    if err is not None:
+        return None, None, err
+    return start, end, None
+
+
+def _validate_sort_order(value, block_id=None):
+    """Verify ``value`` is an integer in ``[0, MAX_SORT_ORDER]``. Return
+    ``None`` on success or a 400 ``JsonResponse`` otherwise.
+    """
+    suffix = f" for block {block_id}" if block_id is not None else ""
+    if not isinstance(value, int) or isinstance(value, bool):
+        return JsonResponse(
+            {"errors": {"sort_order": f"sort_order must be an integer{suffix}."}},
+            status=400,
+        )
+    if not (0 <= value <= MAX_SORT_ORDER):
+        return JsonResponse(
+            {
+                "errors": {
+                    "sort_order": (
+                        f"sort_order must be between 0 and {MAX_SORT_ORDER}"
+                        f"{suffix}."
+                    )
+                }
+            },
+            status=400,
+        )
+    return None
+
+
 def _block_to_dict(block):
     return {
         "id": block.id,
@@ -91,13 +139,7 @@ def create_block(request, date):
                 {"errors": {field: f"{field} is required."}}, status=400
             )
 
-    start, err = _parse_time_or_error("start_time", data["start_time"])
-    if err is not None:
-        return err
-    end, err = _parse_time_or_error("end_time", data["end_time"])
-    if err is not None:
-        return err
-    err = _validate_five_minute_or_error(start, end)
+    start, end, err = _validate_block_times(data["start_time"], data["end_time"])
     if err is not None:
         return err
 
@@ -118,10 +160,6 @@ def create_block(request, date):
             {"errors": {"category": f"Invalid category. Choose from: {choices}."}},
             status=400,
         )
-
-    err = _validate_time_range(start, end)
-    if err is not None:
-        return err
 
     # Lock the candidate-overlap rows to serialize concurrent inserts under
     # PostgreSQL. SQLite ignores select_for_update silently but still
@@ -216,18 +254,10 @@ def block_detail(request, pk):
                 )
             block.category = data["category"]
         if "sort_order" in data:
-            sort_order = data["sort_order"]
-            if not isinstance(sort_order, int) or isinstance(sort_order, bool):
-                return JsonResponse(
-                    {"errors": {"sort_order": "sort_order must be an integer."}},
-                    status=400,
-                )
-            if not (0 <= sort_order <= 10_000):
-                return JsonResponse(
-                    {"errors": {"sort_order": "sort_order must be between 0 and 10000."}},
-                    status=400,
-                )
-            block.sort_order = sort_order
+            err = _validate_sort_order(data["sort_order"])
+            if err is not None:
+                return err
+            block.sort_order = data["sort_order"]
         if "start_time" in data or "end_time" in data:
             times_to_check = []
             if "start_time" in data:
@@ -316,28 +346,14 @@ def reorder_blocks(request):
                     {"errors": {field: f"{field} is required for block {uid}."}},
                     status=400,
                 )
-        start, err = _parse_time_or_error("start_time", entry["start_time"], block_id=uid)
+        _, _, err = _validate_block_times(
+            entry["start_time"], entry["end_time"], block_id=uid
+        )
         if err is not None:
             return err
-        end, err = _parse_time_or_error("end_time", entry["end_time"], block_id=uid)
+        err = _validate_sort_order(entry["sort_order"], block_id=uid)
         if err is not None:
             return err
-        err = _validate_five_minute_or_error(start, end)
-        if err is not None:
-            return err
-        err = _validate_time_range(start, end, block_id=uid)
-        if err is not None:
-            return err
-        sort_order = entry["sort_order"]
-        if not isinstance(sort_order, int) or isinstance(sort_order, bool):
-            return JsonResponse(
-                {"errors": {"sort_order": "sort_order must be an integer."}}, status=400
-            )
-        if not (0 <= sort_order <= 10_000):
-            return JsonResponse(
-                {"errors": {"sort_order": "sort_order must be between 0 and 10000."}},
-                status=400,
-            )
 
     schedule = None
     try:
@@ -500,16 +516,9 @@ def restore_blocks(request, date):
                 return JsonResponse(
                     {"errors": {field: f"{field} is required (block {i})."}}, status=400
                 )
-        start, err = _parse_time_or_error("start_time", entry["start_time"], block_id=i)
-        if err is not None:
-            return err
-        end, err = _parse_time_or_error("end_time", entry["end_time"], block_id=i)
-        if err is not None:
-            return err
-        err = _validate_five_minute_or_error(start, end)
-        if err is not None:
-            return err
-        err = _validate_time_range(start, end, block_id=i)
+        start, end, err = _validate_block_times(
+            entry["start_time"], entry["end_time"], block_id=i
+        )
         if err is not None:
             return err
 
@@ -532,16 +541,9 @@ def restore_blocks(request, date):
 
         # sort_order
         sort_order = entry.get("sort_order", 0)
-        if not isinstance(sort_order, int) or isinstance(sort_order, bool):
-            return JsonResponse(
-                {"errors": {"sort_order": f"sort_order must be an integer (block {i})."}},
-                status=400,
-            )
-        if not (0 <= sort_order <= 10_000):
-            return JsonResponse(
-                {"errors": {"sort_order": f"sort_order must be between 0 and 10000 (block {i})."}},
-                status=400,
-            )
+        err = _validate_sort_order(sort_order, block_id=i)
+        if err is not None:
+            return err
 
         validated.append({
             "title": title,
