@@ -97,8 +97,8 @@ Partially update a time block. Only fields present in the request body are modif
 | `400` | `category` | Not one of the allowed choices. |
 | `400` | `sort_order` | Not an integer, or out of bounds. |
 | `400` | `time` | Resulting `start >= end`, or overlaps another block. |
-| `403` | `detail` | Block belongs to another user, or CSRF token missing/invalid. |
-| `404` | `detail` | No block with that `pk`. |
+| `403` | `detail` | CSRF token missing/invalid. |
+| `404` | `detail` | No block with that `pk`, **or** the block belongs to another user. Cross-user access deliberately returns 404 rather than 403 to avoid leaking the existence of block IDs outside the caller's own schedule. |
 
 ---
 
@@ -116,8 +116,8 @@ Delete a time block owned by the authenticated user.
 
 | Status | `errors` key | Meaning |
 |--------|--------------|---------|
-| `403` | `detail` | Block belongs to another user, or CSRF token missing/invalid. |
-| `404` | `detail` | No block with that `pk`. |
+| `403` | `detail` | CSRF token missing/invalid. |
+| `404` | `detail` | No block with that `pk`, **or** the block belongs to another user (see the PATCH section above for the rationale). |
 
 ---
 
@@ -173,8 +173,8 @@ Returns the full block list for the schedule, ordered by `start_time`, `sort_ord
 | `400` | `start_time` / `end_time` | Invalid format, non-5-minute, or `start >= end`. |
 | `400` | `sort_order` | Not an integer or out of bounds. |
 | `400` | `time` | Reorder would cause overlapping blocks (checked against full schedule). |
-| `403` | `detail` | Blocks belong to another user, or CSRF token missing/invalid. |
-| `404` | `detail` | One or more block IDs not found. |
+| `403` | `detail` | CSRF token missing/invalid. |
+| `404` | `detail` | One or more block IDs not found, **or** they belong to another user. Cross-user access deliberately returns 404 rather than 403 to avoid leaking block-ID existence. |
 | `413` | `body` | Request body exceeds 100 KB (checked before JSON parsing). |
 
 All-or-nothing: if any update is invalid, no blocks are changed.

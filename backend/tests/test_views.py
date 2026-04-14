@@ -318,6 +318,8 @@ class TestBlockDetail:
 
     @pytest.mark.django_db
     def test_cannot_patch_other_users_block(self, auth_client):
+        """Cross-user PATCH returns 404, not 403, to avoid leaking the
+        existence of block IDs outside the caller's own schedule."""
         other = User.objects.create_user(username="other", password="pass")
         other_schedule = Schedule.objects.create(date="2026-04-07", user=other)
         block = TimeBlock.objects.create(
@@ -328,17 +330,19 @@ class TestBlockDetail:
             json.dumps({"title": "Hacked"}),
             content_type="application/json",
         )
-        assert resp.status_code == 403
+        assert resp.status_code == 404
 
     @pytest.mark.django_db
     def test_cannot_delete_other_users_block(self, auth_client):
+        """Cross-user DELETE returns 404 for the same reason as the PATCH
+        test above."""
         other = User.objects.create_user(username="other", password="pass")
         other_schedule = Schedule.objects.create(date="2026-04-07", user=other)
         block = TimeBlock.objects.create(
             schedule=other_schedule, title="X", start_time="09:00", end_time="10:00"
         )
         resp = auth_client.delete(f"/api/blocks/{block.pk}/")
-        assert resp.status_code == 403
+        assert resp.status_code == 404
 
     @pytest.mark.django_db
     def test_patch_without_csrf_token_rejected(self, csrf_client, user, time_block):

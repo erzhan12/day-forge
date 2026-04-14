@@ -23,7 +23,23 @@ MAX_REQUEST_BODY_BYTES = 100_000
 
 def _reject_oversized_body(request):
     """Return a 413 ``JsonResponse`` if ``request.body`` exceeds the cap,
-    otherwise ``None``. Call before ``json.loads`` in batch endpoints."""
+    otherwise ``None``. Call before ``json.loads`` in batch endpoints.
+
+    This is **not** the memory-safety gate for very large payloads — Django
+    already enforces ``DATA_UPLOAD_MAX_MEMORY_SIZE`` (2.5 MB default) in
+    middleware and raises ``RequestDataTooBig`` before any view runs, so
+    bodies above that limit never reach us. What this check adds is:
+
+    * a much tighter endpoint-specific cap (100 KB vs 2.5 MB), which
+      avoids burning CPU to parse several megabytes of valid JSON only
+      to reject it via the per-entry count/field checks below;
+    * a structured 413 response with an explicit "Request body too
+      large." error message, instead of Django's default 400.
+
+    ``len(request.body)`` does load the body (Django streams it into
+    memory on first access), but Django's middleware has already bounded
+    that read to 2.5 MB by the time we're called.
+    """
     if len(request.body) > MAX_REQUEST_BODY_BYTES:
         return JsonResponse(
             {"errors": {"body": "Request body too large."}},
@@ -244,7 +260,12 @@ def block_detail(request, pk):
         return JsonResponse({"errors": {"detail": "Not found."}}, status=404)
 
     if block.schedule.user != request.user:
-        return JsonResponse({"errors": {"detail": "Forbidden."}}, status=403)
+        # Return 404 (not 403) when the caller doesn't own the block:
+        # a 403 would confirm that the requested ``pk`` exists in the DB,
+        # letting an authenticated attacker enumerate block IDs outside
+        # their own schedule. 403 is reserved for CSRF/middleware
+        # rejections. See OWASP "Broken Authorization" guidance.
+        return JsonResponse({"errors": {"detail": "Not found."}}, status=404)
 
     if request.method == "DELETE":
         block.delete()
@@ -382,9 +403,24 @@ def reorder_blocks(request):
     (see ``MAX_REORDER_UPDATES`` below) and the raw body at
     ``MAX_REQUEST_BODY_BYTES``, but that does not rate-limit the *frequency*
     of requests. Production deployments should layer on a request-rate
-    limit at the reverse proxy (e.g. ``limit_req`` in nginx or an API
-    gateway equivalent) to prevent DoS via rapid repeated reorders against
-    the locked overlap scan.
+    limit at the reverse proxy to prevent DoS via rapid repeated reorders
+    against the locked overlap scan.
+
+    Example nginx config (place in ``http`` / ``server`` blocks)::
+
+        # Define a 10 MB shared zone, 10 requests/minute per client IP.
+        # 10 r/m is generous — a real drag-and-drop user triggers at
+        # most a handful of reorders per minute.
+        limit_req_zone $binary_remote_addr zone=reorder:10m rate=10r/m;
+
+        location = /api/blocks/reorder/ {
+            limit_req zone=reorder burst=5 nodelay;
+            proxy_pass http://django_upstream;
+        }
+
+    API gateways (Kong, APISIX, Cloudflare, AWS API Gateway) expose
+    equivalent rate-limit primitives — pick whichever lives closest to
+    your edge.
     """
     oversized = _reject_oversized_body(request)
     if oversized is not None:
@@ -467,19 +503,32 @@ def reorder_blocks(request):
     schedule = None
     try:
         with transaction.atomic():
-            # Single locked SQL statement: fetch every block for any
-            # schedule that contains at least one of the requested IDs,
-            # and take row-level locks on all of them.
+            # Single locked SELECT that both fetches and row-locks every
+            # block belonging to any schedule that contains at least one
+            # requested ID. Reading the two lines carefully:
             #
-            # The inner ``values("schedule")`` queryset is intentionally
-            # kept lazy so Django inlines it as a subquery — the whole
-            # thing becomes one ``SELECT ... WHERE schedule_id IN (SELECT
-            # schedule_id FROM ... WHERE id IN (...)) FOR UPDATE``. Do
-            # NOT materialise the inner query (``list()``, ``len()``,
-            # iteration) as a local variable first: that would split
-            # this into two statements, the first unlocked, opening a
-            # TOCTOU window where a concurrent transaction could move
-            # blocks between schedules between the two reads.
+            #   * The INNER queryset
+            #     ``TimeBlock.objects.filter(id__in=ids).values("schedule")``
+            #     is intentionally left lazy. Django inlines it as a
+            #     subquery and the whole thing compiles to one statement:
+            #       SELECT ... WHERE schedule_id IN
+            #         (SELECT schedule_id FROM ... WHERE id IN (...))
+            #       FOR UPDATE;
+            #     Do NOT wrap the inner queryset in ``list()`` / ``len()``
+            #     / a loop — materialising it would split this into two
+            #     separate statements, the first one unlocked, opening a
+            #     TOCTOU window where a concurrent writer could move a
+            #     block between schedules between the two reads.
+            #
+            #   * The OUTER ``list(...)`` here is the opposite — it
+            #     *must* materialise the final queryset under the
+            #     ``select_for_update`` lock, inside the ``atomic()``
+            #     block, so the row locks are acquired immediately and
+            #     held for the whole transaction. Without ``list(...)``
+            #     the queryset would stay lazy and the lock would only
+            #     fire when the rows are actually iterated — potentially
+            #     outside the ``atomic()`` block. Evaluate-now is the
+            #     whole point.
             #
             # SQLite silently ignores ``select_for_update`` (see the
             # ``schedules.W001`` system check); PostgreSQL honours it.
@@ -514,16 +563,12 @@ def reorder_blocks(request):
                 )
 
             if missing:
-                # Differentiate "exists but caller cannot see it" (403) from
-                # "does not exist anywhere" (404), matching block_detail's
-                # auth pattern. Both are independent of the user's session.
-                exists_elsewhere = TimeBlock.objects.filter(
-                    id__in=missing
-                ).exists()
-                if exists_elsewhere:
-                    return JsonResponse(
-                        {"errors": {"detail": "Forbidden."}}, status=403
-                    )
+                # A requested ID that isn't in ``schedule_blocks`` does not
+                # exist in the DB: the outer fetch pulls every row for any
+                # schedule that contains a requested ID, so if the row were
+                # live it would have been included. Return 404 without any
+                # further probing — an extra existence query here would
+                # only leak information about IDs in other users' schedules.
                 return JsonResponse(
                     {"errors": {"detail": "One or more blocks not found."}},
                     status=404,
@@ -532,8 +577,11 @@ def reorder_blocks(request):
             # All requested IDs are present and live in a single schedule.
             schedule = blocks_by_id[ids[0]].schedule
             if schedule.user != request.user:
+                # 404 (not 403) on cross-user access — see the matching
+                # comment in ``block_detail`` for the rationale.
                 return JsonResponse(
-                    {"errors": {"detail": "Forbidden."}}, status=403
+                    {"errors": {"detail": "One or more blocks not found."}},
+                    status=404,
                 )
 
             # Build the candidate state from the in-memory blocks (no extra
@@ -685,22 +733,32 @@ def restore_blocks(request, date):
                 {"errors": {"time": "Restored blocks would overlap."}}, status=400
             )
 
-    # Apply atomically: delete all existing, create from snapshot
+    # Apply atomically: delete all existing, then create the snapshot
+    # in a single ``bulk_create`` call. ``bulk_create`` skips
+    # ``Model.save()`` and ``Model.full_clean()``, so we explicitly
+    # ``full_clean()`` every instance in a pre-pass first — if any
+    # block is invalid the whole request 400s before we touch the DB,
+    # so atomicity holds trivially.
     try:
+        instances = [
+            TimeBlock(
+                schedule=schedule,
+                title=v["title"],
+                start_time=v["start_time"],
+                end_time=v["end_time"],
+                category=v["category"],
+                is_completed=v["is_completed"],
+                sort_order=v["sort_order"],
+            )
+            for v in validated
+        ]
+        for block in instances:
+            block.full_clean()
+
         with transaction.atomic():
             TimeBlock.objects.filter(schedule=schedule).delete()
-            for v in validated:
-                block = TimeBlock(
-                    schedule=schedule,
-                    title=v["title"],
-                    start_time=v["start_time"],
-                    end_time=v["end_time"],
-                    category=v["category"],
-                    is_completed=v["is_completed"],
-                    sort_order=v["sort_order"],
-                )
-                block.full_clean()
-                block.save()
+            if instances:
+                TimeBlock.objects.bulk_create(instances)
     except ValidationError as e:
         return JsonResponse({"errors": e.message_dict}, status=400)
 

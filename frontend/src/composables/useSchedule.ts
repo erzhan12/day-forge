@@ -1,5 +1,10 @@
 import { router } from "@inertiajs/vue3"
 
+// The backend deliberately overrides Django's default CSRF cookie
+// (`csrftoken` / `X-CSRFToken`) to the Inertia/Axios convention:
+// `XSRF-TOKEN` cookie + `X-XSRF-TOKEN` header. The matching settings
+// live in backend/day_forge/settings.py as CSRF_COOKIE_NAME and
+// CSRF_HEADER_NAME — if either side changes, change both.
 function getCsrfToken(): string {
   const match = document.cookie.match(/XSRF-TOKEN=([^;]+)/)
   return match ? decodeURIComponent(match[1]) : ""

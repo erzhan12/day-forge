@@ -53,7 +53,10 @@ class TestReorderBlocks:
         assert resp.status_code == 400
         assert "Duplicate" in resp.json()["errors"]["updates"]
 
-    def test_cross_user_rejected(self, auth_client, db):
+    def test_cross_user_returns_404(self, auth_client, db):
+        """Cross-user access returns 404, not 403: a 403 would leak the
+        fact that the block ID exists in the DB, letting an authenticated
+        attacker enumerate IDs outside their own schedule."""
         other = User.objects.create_user(username="other", password="pass123")
         sched = Schedule.objects.create(date="2026-04-07", user=other)
         block = TimeBlock.objects.create(
@@ -62,7 +65,7 @@ class TestReorderBlocks:
         resp = _post_reorder(auth_client, [
             {"id": block.id, "start_time": "10:00", "end_time": "11:00", "sort_order": 0},
         ])
-        assert resp.status_code == 403
+        assert resp.status_code == 404
 
     def test_cross_schedule_rejected(self, auth_client, user, three_blocks):
         b1, _, _ = three_blocks
@@ -150,7 +153,9 @@ class TestReorderBlocks:
         ])
         assert resp.status_code == 404
 
-    def test_other_users_block_alone_returns_403(self, auth_client, db):
+    def test_other_users_block_alone_returns_404(self, auth_client, db):
+        """Single cross-user request returns 404 — see the test above
+        (``test_cross_user_returns_404``) for the rationale."""
         other = User.objects.create_user(username="other2", password="pass123")
         sched = Schedule.objects.create(date="2026-04-09", user=other)
         block = TimeBlock.objects.create(
@@ -160,7 +165,7 @@ class TestReorderBlocks:
         resp = _post_reorder(auth_client, [
             {"id": block.id, "start_time": "07:00", "end_time": "08:00", "sort_order": 0},
         ])
-        assert resp.status_code == 403
+        assert resp.status_code == 404
 
     def test_non_dict_entry_rejected(self, auth_client):
         resp = _post_reorder(auth_client, [1, 2])
