@@ -13,6 +13,23 @@ from schedules.validators import validate_five_minute_granularity
 VALID_CATEGORIES = {c.value for c in TimeBlock.Category}
 MAX_SORT_ORDER = 10_000
 MAX_REORDER_UPDATES = 100
+# Tight body-size cap for the batch endpoints. Django already enforces
+# ``DATA_UPLOAD_MAX_MEMORY_SIZE`` (2.5 MB default), but at ~100 bytes/block
+# a legitimate payload is well under 20 KB — 100 KB is 5× headroom and
+# avoids parsing several megabytes of JSON only to reject it via the
+# per-entry count/field checks below. Returns HTTP 413 when exceeded.
+MAX_REQUEST_BODY_BYTES = 100_000
+
+
+def _reject_oversized_body(request):
+    """Return a 413 ``JsonResponse`` if ``request.body`` exceeds the cap,
+    otherwise ``None``. Call before ``json.loads`` in batch endpoints."""
+    if len(request.body) > MAX_REQUEST_BODY_BYTES:
+        return JsonResponse(
+            {"errors": {"body": "Request body too large."}},
+            status=413,
+        )
+    return None
 
 
 def _parse_time(value):
@@ -339,12 +356,17 @@ def reorder_blocks(request):
     """Atomically apply a batch of block time/order updates.
 
     Deployment note: per-request validation caps the payload at 100 blocks
-    (see ``MAX_REORDER_UPDATES`` below), but that does not rate-limit the
-    *frequency* of requests. Production deployments should layer on a
-    request-rate limit at the reverse proxy (e.g. ``limit_req`` in nginx or
-    an API gateway equivalent) to prevent DoS via rapid repeated reorders
-    against the locked overlap scan.
+    (see ``MAX_REORDER_UPDATES`` below) and the raw body at
+    ``MAX_REQUEST_BODY_BYTES``, but that does not rate-limit the *frequency*
+    of requests. Production deployments should layer on a request-rate
+    limit at the reverse proxy (e.g. ``limit_req`` in nginx or an API
+    gateway equivalent) to prevent DoS via rapid repeated reorders against
+    the locked overlap scan.
     """
+    oversized = _reject_oversized_body(request)
+    if oversized is not None:
+        return oversized
+
     try:
         data = json.loads(request.body)
     except json.JSONDecodeError:
@@ -530,6 +552,10 @@ def restore_blocks(request, date):
         parsed_date = datetime.date.fromisoformat(date)
     except ValueError:
         return JsonResponse({"errors": {"date": "Invalid date format."}}, status=400)
+
+    oversized = _reject_oversized_body(request)
+    if oversized is not None:
+        return oversized
 
     try:
         data = json.loads(request.body)

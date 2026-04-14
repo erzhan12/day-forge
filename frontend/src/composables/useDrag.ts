@@ -141,7 +141,12 @@ export function resolveConflicts(
           result[i + 1].end_time = minutesToTime(newEnd)
         }
         changed = true
-        // Re-sort after shifting since positions changed
+        // Re-sort: the shift above moved a block's start_time, which may
+        // have changed its position in the ordered list. The top-of-loop
+        // scan walks pairs by index and relies on the array being ordered
+        // by start_time, so we re-sort before restarting to keep the
+        // `currEnd > nextStart` invariant valid. See the top-level comment
+        // above the loop for the full rationale.
         result.sort((a, b) => {
           const aStart = timeToMinutes(a.start_time)
           const bStart = timeToMinutes(b.start_time)

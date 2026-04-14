@@ -36,7 +36,12 @@ export function useUndo(date: string, getCurrentBlocks: () => TimeBlock[]) {
   }
 
   function snapshotBlocks(): TimeBlock[] {
-    return JSON.parse(JSON.stringify(getCurrentBlocks()))
+    // structuredClone is ~2× faster than JSON round-trip and handles
+    // more types (Dates, Sets, Maps) that we don't currently use but
+    // might in the future. Available in all modern browsers (Chrome
+    // 98+, Firefox 94+, Safari 15.4+) and Node 17+, which covers our
+    // Vite build target and the Vitest/jsdom test environment.
+    return structuredClone(getCurrentBlocks())
   }
 
   function pushUndo(action: UndoAction) {

@@ -125,6 +125,11 @@ Delete a time block owned by the authenticated user.
 
 Batch-update the times and sort order of multiple blocks after a drag-and-drop operation. All blocks must belong to the same schedule owned by the authenticated user. The final schedule state (updated + unchanged blocks) is validated for overlaps.
 
+**Limits**
+
+- `updates` array is capped at **100 entries**. Larger payloads are rejected with `400 {"errors": {"updates": "Cannot update more than 100 blocks at once."}}`.
+- The raw request body is capped at **100 KB**. Larger bodies are rejected with `413 {"errors": {"body": "Request body too large."}}` *before* JSON parsing, so malicious clients cannot force expensive parsing.
+
 **Request body**
 
 ```json
@@ -164,12 +169,13 @@ Returns the full block list for the schedule, ordered by `start_time`, `sort_ord
 
 | Status | `errors` key | Meaning |
 |--------|--------------|---------|
-| `400` | `updates` | Not a list, empty, duplicate IDs, or cross-schedule blocks. |
+| `400` | `updates` | Not a list, empty, duplicate IDs, cross-schedule blocks, or more than 100 entries. |
 | `400` | `start_time` / `end_time` | Invalid format, non-5-minute, or `start >= end`. |
 | `400` | `sort_order` | Not an integer or out of bounds. |
 | `400` | `time` | Reorder would cause overlapping blocks (checked against full schedule). |
 | `403` | `detail` | Blocks belong to another user, or CSRF token missing/invalid. |
 | `404` | `detail` | One or more block IDs not found. |
+| `413` | `body` | Request body exceeds 100 KB (checked before JSON parsing). |
 
 All-or-nothing: if any update is invalid, no blocks are changed.
 
@@ -178,6 +184,10 @@ All-or-nothing: if any update is invalid, no blocks are changed.
 ### `POST /api/schedules/{date}/blocks/restore/`
 
 Atomically replace all blocks on a schedule with a provided snapshot. Used by the undo system to restore previous state. Incoming `id` fields are ignored — new rows are created with fresh IDs.
+
+**Limits**
+
+- The raw request body is capped at **100 KB**. Larger bodies are rejected with `413 {"errors": {"body": "Request body too large."}}` *before* JSON parsing.
 
 **Path params**
 
@@ -224,6 +234,7 @@ Atomically replace all blocks on a schedule with a provided snapshot. Used by th
 | `400` | `start_time` / `end_time` | Invalid format, non-5-minute, or `start >= end`. |
 | `400` | `category` | Not one of the allowed choices. |
 | `400` | `time` | Restored blocks would overlap. |
+| `413` | `body` | Request body exceeds 100 KB (checked before JSON parsing). |
 
 All-or-nothing: if any block is invalid, no changes are applied.
 

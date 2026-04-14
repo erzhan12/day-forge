@@ -215,3 +215,18 @@ class TestReorderBlocks:
             content_type="application/json",
         )
         assert resp.status_code == 403
+
+    def test_oversized_body_rejected(self, auth_client):
+        """Bodies over MAX_REQUEST_BODY_BYTES (100 KB) return 413 before
+        json.loads even runs, so a malicious client can't force expensive
+        parsing of megabytes of JSON via the 2.5 MB Django default."""
+        # Build a syntactically-valid JSON payload padded well past 100 KB.
+        huge_title = "x" * 200_000
+        payload = json.dumps({"updates": [{"id": 1, "title": huge_title}]})
+        resp = auth_client.post(
+            "/api/blocks/reorder/",
+            payload,
+            content_type="application/json",
+        )
+        assert resp.status_code == 413
+        assert "too large" in resp.json()["errors"]["body"].lower()
