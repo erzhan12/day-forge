@@ -40,6 +40,20 @@ def _is_plain_int(value) -> bool:
     integers. Every call site that needs a "real" integer must guard
     against that, and centralising the check here keeps the rationale
     in one place.
+
+    Examples:
+        >>> _is_plain_int(42)
+        True
+        >>> _is_plain_int(0)
+        True
+        >>> _is_plain_int(True)
+        False
+        >>> _is_plain_int(False)
+        False
+        >>> _is_plain_int("42")
+        False
+        >>> _is_plain_int(None)
+        False
     """
     return isinstance(value, int) and not isinstance(value, bool)
 
@@ -453,12 +467,22 @@ def reorder_blocks(request):
     schedule = None
     try:
         with transaction.atomic():
-            # Single locked query: fetch every block for any schedule that
-            # contains at least one of the requested IDs. This both eliminates
-            # the previous two-query pattern (one for the requested blocks, one
-            # for the full schedule needed to check overlaps) and locks the
-            # affected rows for the duration of the transaction. SQLite
-            # silently ignores select_for_update; PostgreSQL respects it.
+            # Single locked SQL statement: fetch every block for any
+            # schedule that contains at least one of the requested IDs,
+            # and take row-level locks on all of them.
+            #
+            # The inner ``values("schedule")`` queryset is intentionally
+            # kept lazy so Django inlines it as a subquery — the whole
+            # thing becomes one ``SELECT ... WHERE schedule_id IN (SELECT
+            # schedule_id FROM ... WHERE id IN (...)) FOR UPDATE``. Do
+            # NOT materialise the inner query (``list()``, ``len()``,
+            # iteration) as a local variable first: that would split
+            # this into two statements, the first unlocked, opening a
+            # TOCTOU window where a concurrent transaction could move
+            # blocks between schedules between the two reads.
+            #
+            # SQLite silently ignores ``select_for_update`` (see the
+            # ``schedules.W001`` system check); PostgreSQL honours it.
             schedule_blocks = list(
                 TimeBlock.objects.select_related("schedule__user")
                 .filter(

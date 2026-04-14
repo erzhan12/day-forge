@@ -147,6 +147,14 @@ export function resolveConflicts(
         // by start_time, so we re-sort before restarting to keep the
         // `currEnd > nextStart` invariant valid. See the top-level comment
         // above the loop for the full rationale.
+        //
+        // Perf note: this re-sort makes the loop O(n² log n) worst case
+        // (up to n shifts × O(n log n) sort). For the backend's 100-block
+        // reorder cap the constant is negligible (single-digit ms on
+        // modern hardware — see the "resolves a 30-block full-day cascade"
+        // test in useDrag.test.ts). A batched variant that collected all
+        // shifts in a pass before sorting once would be O(n² + n log n);
+        // worth the change only if we ever raise the 100-block cap.
         result.sort((a, b) => {
           const aStart = timeToMinutes(a.start_time)
           const bStart = timeToMinutes(b.start_time)
@@ -368,16 +376,14 @@ export function useDrag(
         containerEl.releasePointerCapture(pointerId)
       } catch (e) {
         // Pointer capture may already be released (e.g. element detached
-        // mid-drag, or browser auto-released on pointerup). Expected failure
-        // modes: `InvalidPointerId` (older Chrome / spec name) and
-        // `NotFoundError` (current spec / MDN). Surface anything else so
-        // real bugs aren't swallowed.
-        if (
+        // mid-drag, or browser auto-released on pointerup). Expected
+        // failure modes are silent: `InvalidPointerId` (older Chrome /
+        // spec name) and `NotFoundError` (current spec / MDN). Surface
+        // anything else so real bugs aren't swallowed.
+        const expected =
           e instanceof DOMException &&
           (e.name === "InvalidPointerId" || e.name === "NotFoundError")
-        ) {
-          console.debug("useDrag: pointer capture already released")
-        } else {
+        if (!expected) {
           console.warn("useDrag: failed to release pointer capture:", e)
         }
       }

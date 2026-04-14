@@ -165,6 +165,78 @@ class TestRestoreBlocks:
         )
         assert resp.status_code == 403
 
+    def test_undo_of_add_removes_the_added_block(self, auth_client, two_blocks, schedule):
+        """End-to-end verification of the "undo add" flow.
+
+        When the frontend handles an add, it snapshots the block list
+        *before* the add and pushes that snapshot onto the undo stack.
+        Performing undo POSTs that snapshot to the restore endpoint,
+        which replaces the entire schedule — so the just-added block
+        vanishes. This test exercises that contract against the real
+        endpoint without any frontend involvement.
+        """
+        b1, b2 = two_blocks
+        # ``two_blocks`` creates rows with ``start_time="08:00"`` etc —
+        # Django's ``TimeField`` does not coerce the string to
+        # ``datetime.time`` until the row is re-fetched from the DB, so
+        # we refresh before reading the fields to get consistent types.
+        b1.refresh_from_db()
+        b2.refresh_from_db()
+
+        def _hhmm(t):
+            return t.strftime("%H:%M")
+
+        # Snapshot looks like what the frontend's snapshotBlocks() would
+        # produce right before the user clicks "Add block".
+        pre_add_snapshot = [
+            {
+                "title": b1.title,
+                "start_time": _hhmm(b1.start_time),
+                "end_time": _hhmm(b1.end_time),
+                "category": b1.category,
+                "is_completed": b1.is_completed,
+                "sort_order": b1.sort_order,
+            },
+            {
+                "title": b2.title,
+                "start_time": _hhmm(b2.start_time),
+                "end_time": _hhmm(b2.end_time),
+                "category": b2.category,
+                "is_completed": b2.is_completed,
+                "sort_order": b2.sort_order,
+            },
+        ]
+
+        # Simulate the user adding a third block via the normal create
+        # endpoint (the same code path the frontend uses).
+        add_resp = auth_client.post(
+            f"/api/schedules/{schedule.date}/blocks/",
+            json.dumps({
+                "title": "Just Added",
+                "start_time": "11:00",
+                "end_time": "12:00",
+                "category": "work",
+            }),
+            content_type="application/json",
+        )
+        assert add_resp.status_code == 201
+        added_id = add_resp.json()["id"]
+        assert TimeBlock.objects.filter(id=added_id).exists()
+        assert TimeBlock.objects.filter(schedule=schedule).count() == 3
+
+        # Undo: replay the pre-add snapshot via restore. This is exactly
+        # what useUndo.performUndo() does when called after an add.
+        undo_resp = _post_restore(auth_client, str(schedule.date), pre_add_snapshot)
+        assert undo_resp.status_code == 200
+
+        # The added block should be gone, and only the two original
+        # titles should remain on the schedule.
+        assert not TimeBlock.objects.filter(id=added_id).exists()
+        remaining = TimeBlock.objects.filter(schedule=schedule)
+        assert remaining.count() == 2
+        titles = set(remaining.values_list("title", flat=True))
+        assert titles == {b1.title, b2.title}
+
     def test_oversized_body_rejected(self, auth_client):
         """Bodies over MAX_REQUEST_BODY_BYTES (100 KB) return 413 before
         json.loads even runs, so a malicious client can't force expensive
