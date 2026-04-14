@@ -137,4 +137,65 @@ describe("resolveConflicts", () => {
     expect(result!.find((b) => b.id === 2)!.start_time).toBe("09:00")
     expect(result!.find((b) => b.id === 2)!.end_time).toBe("10:00")
   })
+
+  it("resolves a 30-block full-day cascade well under the iteration cap", () => {
+    // Realistic worst case: 30 back-to-back 10-minute blocks filling
+    // 06:00 – 11:00. Dragging the first block forward by 10 minutes
+    // forces every subsequent block to shift forward once — a full-tail
+    // cascade that exercises the while/re-sort loop the hardest a real
+    // schedule can. We can't observe the internal iteration counter
+    // without polluting the public API, so we assert the result is
+    // non-null (if MAX_ITERATIONS=1000 were hit the function would
+    // return null) and that the tail blocks land at the expected
+    // positions. Complete, correct output proves the loop converged in
+    // at most ~30 shifts — two orders of magnitude below the cap.
+    //
+    // Also guards performance: a regression that blew up the iteration
+    // count would surface here long before hitting MAX_ITERATIONS.
+    const blocks: TimeBlock[] = []
+    for (let i = 0; i < 30; i++) {
+      const startMin = 360 + i * 10 // 06:00 + i*10min
+      const hh = Math.floor(startMin / 60)
+      const mm = startMin % 60
+      const pad = (n: number) => n.toString().padStart(2, "0")
+      const endMin = startMin + 10
+      const eh = Math.floor(endMin / 60)
+      const em = endMin % 60
+      blocks.push(
+        makeBlock({
+          id: i + 1,
+          start_time: `${pad(hh)}:${pad(mm)}`,
+          end_time: `${pad(eh)}:${pad(em)}`,
+          sort_order: i * 10,
+        }),
+      )
+    }
+
+    // Drag block 1 from 06:00-06:10 to 06:10-06:20 — overlaps block 2,
+    // which must cascade through blocks 3..30 (each shifts +10 min).
+    const start = performance.now()
+    const result = resolveConflicts(blocks, 1, 370, 380)
+    const elapsedMs = performance.now() - start
+
+    expect(result).not.toBeNull()
+    expect(result!).toHaveLength(30)
+
+    // Dragged block anchored at its drop position.
+    const b1 = result!.find((b) => b.id === 1)!
+    expect(b1.start_time).toBe("06:10")
+    expect(b1.end_time).toBe("06:20")
+
+    // Blocks 2..30 each shifted forward by exactly 10 minutes, so block k
+    // (1-indexed from 2) now starts at 06:00 + k*10 min. Last block (30)
+    // lands at 11:00-11:10.
+    const b30 = result!.find((b) => b.id === 30)!
+    expect(b30.start_time).toBe("11:00")
+    expect(b30.end_time).toBe("11:10")
+
+    // Loose upper bound to catch runaway regressions. A correct
+    // cascade finishes in single-digit milliseconds on modern hardware,
+    // and MAX_ITERATIONS=1000 would take far longer than 500ms even in
+    // slow CI. Keeping this generous so it doesn't flake.
+    expect(elapsedMs).toBeLessThan(500)
+  })
 })

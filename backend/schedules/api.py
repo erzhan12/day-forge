@@ -32,6 +32,18 @@ def _reject_oversized_body(request):
     return None
 
 
+def _is_plain_int(value) -> bool:
+    """True if ``value`` is an ``int`` that isn't a ``bool``.
+
+    Python's ``bool`` is a subclass of ``int``, so a bare
+    ``isinstance(value, int)`` check accepts ``True``/``False`` as valid
+    integers. Every call site that needs a "real" integer must guard
+    against that, and centralising the check here keeps the rationale
+    in one place.
+    """
+    return isinstance(value, int) and not isinstance(value, bool)
+
+
 def _parse_time(value):
     """Parse 'HH:MM' string to datetime.time."""
     return datetime.datetime.strptime(value, "%H:%M").time()
@@ -104,10 +116,7 @@ def _validate_sort_order(value, block_id=None):
     ``None`` on success or a 400 ``JsonResponse`` otherwise.
     """
     suffix = f" for block {block_id}" if block_id is not None else ""
-    # Check ``bool`` before ``int``: Python's ``bool`` is a subclass of
-    # ``int``, so we must reject bools explicitly to avoid treating
-    # ``True``/``False`` as valid integers.
-    if isinstance(value, bool) or not isinstance(value, int):
+    if not _is_plain_int(value):
         return JsonResponse(
             {"errors": {"sort_order": f"sort_order must be an integer{suffix}."}},
             status=400,
@@ -409,7 +418,7 @@ def reorder_blocks(request):
                 status=400,
             )
         uid = u.get("id")
-        if uid is None or isinstance(uid, bool) or not isinstance(uid, int):
+        if uid is None or not _is_plain_int(uid):
             return JsonResponse(
                 {"errors": {"updates": f"Entry {i} must have an integer 'id'."}},
                 status=400,
