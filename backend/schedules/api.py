@@ -216,80 +216,115 @@ def block_detail(request, pk):
     except json.JSONDecodeError:
         return JsonResponse({"errors": {"body": "Invalid JSON."}}, status=400)
 
+    # Stage all incoming changes in `pending` before touching the DB. Any
+    # parse / type / range error returns 400 *before* we enter the atomic
+    # block, so we don't hold a schedule-wide lock across validation.
+    pending: dict = {}
+
     if "start_time" in data:
         parsed, err = _parse_time_or_error("start_time", data["start_time"])
         if err is not None:
             return err
-        block.start_time = parsed
+        pending["start_time"] = parsed
     if "end_time" in data:
         parsed, err = _parse_time_or_error("end_time", data["end_time"])
         if err is not None:
             return err
-        block.end_time = parsed
+        pending["end_time"] = parsed
+    if "title" in data:
+        if not isinstance(data["title"], str):
+            return JsonResponse(
+                {"errors": {"title": "Title must be a string."}}, status=400
+            )
+        title = data["title"].strip()
+        if not title:
+            return JsonResponse(
+                {"errors": {"title": "Title cannot be empty."}}, status=400
+            )
+        if len(title) > 255:
+            return JsonResponse(
+                {"errors": {"title": "Title too long (max 255 characters)."}},
+                status=400,
+            )
+        pending["title"] = title
+    if "is_completed" in data:
+        if not isinstance(data["is_completed"], bool):
+            return JsonResponse(
+                {"errors": {"is_completed": "is_completed must be a boolean."}},
+                status=400,
+            )
+        pending["is_completed"] = data["is_completed"]
+    if "category" in data:
+        if data["category"] not in VALID_CATEGORIES:
+            choices = ", ".join(sorted(VALID_CATEGORIES))
+            return JsonResponse(
+                {"errors": {"category": f"Invalid category. Choose from: {choices}."}},
+                status=400,
+            )
+        pending["category"] = data["category"]
+    if "sort_order" in data:
+        err = _validate_sort_order(data["sort_order"])
+        if err is not None:
+            return err
+        pending["sort_order"] = data["sort_order"]
+
+    time_change = "start_time" in pending or "end_time" in pending
+    schedule_id = block.schedule_id
 
     try:
-        if "title" in data:
-            if not isinstance(data["title"], str):
-                return JsonResponse(
-                    {"errors": {"title": "Title must be a string."}}, status=400
+        with transaction.atomic():
+            if time_change:
+                # Close the PATCH-vs-PATCH TOCTOU race: two concurrent
+                # requests editing *different* blocks in the same schedule
+                # can each pass their own overlap check (neither transaction
+                # sees the other's pending time change) and end up
+                # overlapping. Holding a schedule-wide row lock before the
+                # overlap read serializes all time-changing edits through
+                # one queue, which closes the window. `select_for_update`
+                # is a no-op on SQLite — see schedules.W001.
+                list(
+                    TimeBlock.objects
+                    .filter(schedule_id=schedule_id)
+                    .select_for_update()
                 )
-            block.title = data["title"].strip()
-            if not block.title:
+
+            # Re-read the target block under the lock so we pick up any
+            # committed changes and refuse stale writes. A concurrent
+            # delete still surfaces cleanly as a 404.
+            try:
+                block = TimeBlock.objects.select_related("schedule").get(pk=pk)
+            except TimeBlock.DoesNotExist:
                 return JsonResponse(
-                    {"errors": {"title": "Title cannot be empty."}}, status=400
+                    {"errors": {"detail": "Not found."}}, status=404
                 )
-            if len(block.title) > 255:
-                return JsonResponse(
-                    {"errors": {"title": "Title too long (max 255 characters)."}}, status=400
+
+            for field, value in pending.items():
+                setattr(block, field, value)
+
+            if time_change:
+                err = _validate_five_minute_or_error(
+                    block.start_time, block.end_time
                 )
-        if "is_completed" in data:
-            if not isinstance(data["is_completed"], bool):
-                return JsonResponse(
-                    {"errors": {"is_completed": "is_completed must be a boolean."}},
-                    status=400,
-                )
-            block.is_completed = data["is_completed"]
-        if "category" in data:
-            if data["category"] not in VALID_CATEGORIES:
-                choices = ", ".join(sorted(VALID_CATEGORIES))
-                return JsonResponse(
-                    {"errors": {"category": f"Invalid category. Choose from: {choices}."}},
-                    status=400,
-                )
-            block.category = data["category"]
-        if "sort_order" in data:
-            err = _validate_sort_order(data["sort_order"])
-            if err is not None:
-                return err
-            block.sort_order = data["sort_order"]
-        if "start_time" in data or "end_time" in data:
-            times_to_check = []
-            if "start_time" in data:
-                times_to_check.append(block.start_time)
-            if "end_time" in data:
-                times_to_check.append(block.end_time)
-            err = _validate_five_minute_or_error(*times_to_check)
-            if err is not None:
-                return err
-            err = _validate_time_range(block.start_time, block.end_time)
-            if err is not None:
-                return err
-            with transaction.atomic():
-                # Lock candidate-overlap rows to serialize concurrent edits
-                # under PostgreSQL. SQLite ignores select_for_update silently.
+                if err is not None:
+                    return err
+                err = _validate_time_range(block.start_time, block.end_time)
+                if err is not None:
+                    return err
                 overlap = TimeBlock.objects.filter(
-                    schedule=block.schedule,
+                    schedule_id=schedule_id,
                     start_time__lt=block.end_time,
                     end_time__gt=block.start_time,
-                ).exclude(pk=block.pk).select_for_update().exists()
+                ).exclude(pk=block.pk).exists()
                 if overlap:
                     return JsonResponse(
-                        {"errors": {"time": "This block overlaps with an existing block."}},
+                        {
+                            "errors": {
+                                "time": "This block overlaps with an existing block."
+                            }
+                        },
                         status=400,
                     )
-                block.full_clean()
-                block.save()
-        else:
+
             block.full_clean()
             block.save()
     except ValidationError as e:

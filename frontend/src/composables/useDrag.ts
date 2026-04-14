@@ -18,10 +18,13 @@ import {
  *      `[newStartMinutes, newEndMinutes)` slot and never shifts again.
  *   2. Sort by `(start_time, sort_order)`.
  *   3. Walk neighbours pairwise. When two blocks overlap, shift the
- *      non-dragged neighbour (forward if it sits after the dragged block,
- *      backward into the open space if it sits before). Each shift preserves
- *      the neighbour's duration. After any shift the scan restarts to let
- *      changes cascade through additional neighbours.
+ *      non-dragged neighbour *forward* past the dragged block (preserving
+ *      the neighbour's duration). Shifts always go forward — the dragged
+ *      block is pinned, so even a non-dragged neighbour sitting *before*
+ *      the dragged block gets moved forward past it rather than backward.
+ *      See the "anchors dragged block when dropped onto an earlier block"
+ *      test for the canonical example. After any shift the scan restarts
+ *      to let changes cascade through additional neighbours.
  *   4. Reassign `sort_order = index * 10` so the result is deterministic.
  *
  * @param blocks            Current block list (not mutated).
