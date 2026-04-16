@@ -319,9 +319,26 @@ export function useDrag(
       return
     }
 
+    // Snapshot module-scoped drag state into local constants BEFORE
+    // resetState() so the in-flight undo action stays correctly bound to
+    // *this* drag's pre-drag blocks. Two reasons:
+    //
+    //   1. resetState() clears `snapshot` to []. Without the local
+    //      capture, the `pushUndo({ previousBlocks: snapshot })` below
+    //      would always push an empty array, and undoing a drag would
+    //      then restore the day with zero blocks (i.e. delete everything).
+    //   2. Even if (1) were fixed by reading `snapshot` before reset,
+    //      the await on `reorderBlocks` opens a window in which a
+    //      second `startDrag()` can overwrite the module-scoped snapshot
+    //      before this drag's `pushUndo` runs — so the first drag's
+    //      undo would get the second drag's snapshot.
+    const savedSnapshot = snapshot
+    const title = originalBlock.title
+    const targetTime = previewStartTime.value
+
     // Build updates array for blocks that changed
     const originalMap = new Map(
-      snapshot.map((b) => [b.id, b]),
+      savedSnapshot.map((b) => [b.id, b]),
     )
     const updates: Array<{
       id: number
@@ -346,9 +363,6 @@ export function useDrag(
       }
     }
 
-    const title = originalBlock.title
-    const targetTime = previewStartTime.value
-
     resetState()
 
     if (updates.length === 0) return
@@ -358,7 +372,7 @@ export function useDrag(
       pushUndo({
         description: `Moved "${title}" to ${targetTime}`,
         type: "drag",
-        previousBlocks: snapshot,
+        previousBlocks: savedSnapshot,
         scheduleDate: date,
       })
     }
