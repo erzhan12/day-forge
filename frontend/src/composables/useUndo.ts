@@ -2,6 +2,27 @@ import { ref, computed, onMounted, onUnmounted } from "vue"
 import type { TimeBlock, UndoAction } from "../types"
 import { useSchedule } from "./useSchedule"
 
+/**
+ * Client-side undo stack for schedule edits.
+ *
+ * Important: undo state lives entirely in this tab's memory and is never
+ * synchronised across browser tabs or devices. Concurrent edits in
+ * multiple tabs can silently destroy work:
+ *
+ *   1. Tab A loads the schedule and snapshots its blocks into the stack.
+ *   2. Tab B (same user) makes a separate edit and saves it.
+ *   3. The user undoes in Tab A. The undo posts Tab A's snapshot to
+ *      `POST /api/schedules/<date>/blocks/restore/`, which atomically
+ *      replaces every block on the day — including Tab B's change.
+ *      Tab B's edit is gone with no warning.
+ *
+ * This is acceptable for the single-user MVP. If multi-tab usage becomes
+ * common, options to consider: (a) wire the BroadcastChannel API so each
+ * tab clears or warns on its stack when another tab mutates the day;
+ * (b) add an `If-Match`-style version check to `restore_blocks`; or
+ * (c) move the undo stack server-side. None are wired up today.
+ */
+
 const MAX_UNDO_STACK = 20
 const TOAST_DURATION_MS = 8_000
 

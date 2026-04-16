@@ -60,7 +60,7 @@ Create a time block on the schedule for the given date, owned by the authenticat
 | `category` | Not one of the allowed choices. |
 | `time` | `start_time >= end_time`, or block overlaps an existing block on the same schedule. |
 
-The overlap check runs inside `transaction.atomic()` but is **not** race-safe against concurrent requests on SQLite (no row locks available). Phase 7 / multi-user deployments should move to Postgres and add a DB-level exclusion constraint.
+The overlap check runs inside `transaction.atomic()` but is **not** race-safe against concurrent requests on SQLite (no row locks available). Any production deployment that serves real concurrent users should move to PostgreSQL (where `select_for_update` actually takes row locks) and add a DB-level exclusion constraint on `(schedule, [start_time, end_time))` as defence-in-depth. The same caveat applies to `PATCH /api/blocks/{pk}/`, `POST /api/blocks/reorder/`, and `POST /api/schedules/{date}/blocks/restore/`.
 
 ---
 

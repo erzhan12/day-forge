@@ -343,21 +343,32 @@ def block_detail(request, pk):
                 # overlap read serializes all time-changing edits through
                 # one queue, which closes the window. `select_for_update`
                 # is a no-op on SQLite — see schedules.W001.
-                list(
+                #
+                # Materialise the locked queryset so the row locks are
+                # acquired now, and pull the target block out of it so we
+                # don't pay for a second SELECT just to refresh the same
+                # row that's already in memory under the lock.
+                schedule_blocks = list(
                     TimeBlock.objects
                     .filter(schedule_id=schedule_id)
                     .select_for_update()
                 )
-
-            # Re-read the target block under the lock so we pick up any
-            # committed changes and refuse stale writes. A concurrent
-            # delete still surfaces cleanly as a 404.
-            try:
-                block = TimeBlock.objects.select_related("schedule").get(pk=pk)
-            except TimeBlock.DoesNotExist:
-                return JsonResponse(
-                    {"errors": {"detail": "Not found."}}, status=404
-                )
+                block = next((b for b in schedule_blocks if b.pk == pk), None)
+                if block is None:
+                    return JsonResponse(
+                        {"errors": {"detail": "Not found."}}, status=404
+                    )
+            else:
+                # No time change → no schedule-wide lock needed. Re-read
+                # the target block so we pick up any committed changes
+                # and refuse stale writes. A concurrent delete surfaces
+                # cleanly as a 404.
+                try:
+                    block = TimeBlock.objects.select_related("schedule").get(pk=pk)
+                except TimeBlock.DoesNotExist:
+                    return JsonResponse(
+                        {"errors": {"detail": "Not found."}}, status=404
+                    )
 
             for field, value in pending.items():
                 setattr(block, field, value)
