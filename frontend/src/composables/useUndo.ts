@@ -57,12 +57,11 @@ export function useUndo(date: string, getCurrentBlocks: () => TimeBlock[]) {
   }
 
   function snapshotBlocks(): TimeBlock[] {
-    // structuredClone is ~2× faster than JSON round-trip and handles
-    // more types (Dates, Sets, Maps) that we don't currently use but
-    // might in the future. Available in all modern browsers (Chrome
-    // 98+, Firefox 94+, Safari 15.4+) and Node 17+, which covers our
-    // Vite build target and the Vitest/jsdom test environment.
-    return structuredClone(getCurrentBlocks())
+    // Shallow spread unwraps Vue's reactive proxy (Inertia wraps page
+    // props in a readonly reactive, which structuredClone can't clone
+    // — throws DataCloneError). TimeBlock is flat primitives only, so
+    // a shallow copy is a full clone.
+    return getCurrentBlocks().map((b) => ({ ...b }))
   }
 
   function pushUndo(action: UndoAction) {

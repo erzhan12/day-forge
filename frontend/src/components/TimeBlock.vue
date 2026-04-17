@@ -43,10 +43,14 @@ const categoryColors: Record<string, string> = {
   other: "#6B7280",
 }
 
-const duration = computed(() => {
+const durationMinutes = computed(() => {
   const [sh, sm] = props.block.start_time.split(":").map(Number)
   const [eh, em] = props.block.end_time.split(":").map(Number)
-  const mins = eh * 60 + em - (sh * 60 + sm)
+  return eh * 60 + em - (sh * 60 + sm)
+})
+
+const duration = computed(() => {
+  const mins = durationMinutes.value
   if (mins >= 60) {
     const h = Math.floor(mins / 60)
     const m = mins % 60
@@ -54,6 +58,8 @@ const duration = computed(() => {
   }
   return `${mins}m`
 })
+
+const isCompact = computed(() => durationMinutes.value <= 30)
 
 async function startEditing() {
   editTitle.value = props.block.title
@@ -135,6 +141,7 @@ async function handleDelete() {
     class="time-block"
     :class="{
       completed: block.is_completed,
+      compact: isCompact,
       dragging: drag?.isDragging.value && drag?.dragBlockId.value === block.id,
       shifting: drag?.shiftedBlockIds.value.has(block.id),
     }"
@@ -146,36 +153,67 @@ async function handleDelete() {
     >
       <span class="grip-icon">&#x2807;</span>
     </div>
-    <div class="block-header">
-      <span class="time-badge">{{ block.start_time }} – {{ block.end_time }}</span>
-      <span class="duration">{{ duration }}</span>
-      <button class="delete-btn" @click="handleDelete">&times;</button>
-    </div>
-    <div class="block-body">
-      <input
-        type="checkbox"
-        :checked="block.is_completed"
-        class="checkbox"
-        @change="toggleCompleted"
-      />
-      <input
-        v-if="editing"
-        ref="titleInput"
-        v-model="editTitle"
-        class="title-input"
-        @blur="saveTitle"
-        @keydown.enter="saveTitle"
-        @keydown.escape="cancelEditing"
-      />
-      <span
-        v-else
-        class="title"
-        :class="{ 'title-completed': block.is_completed }"
-        @click="startEditing"
-      >
-        {{ block.title }}
-      </span>
-    </div>
+    <template v-if="isCompact">
+      <div class="compact-row">
+        <input
+          type="checkbox"
+          :checked="block.is_completed"
+          class="checkbox"
+          @change="toggleCompleted"
+        />
+        <span class="time-badge">{{ block.start_time }}–{{ block.end_time }}</span>
+        <input
+          v-if="editing"
+          ref="titleInput"
+          v-model="editTitle"
+          class="title-input"
+          @blur="saveTitle"
+          @keydown.enter="saveTitle"
+          @keydown.escape="cancelEditing"
+        />
+        <span
+          v-else
+          class="title"
+          :class="{ 'title-completed': block.is_completed }"
+          @click="startEditing"
+        >
+          {{ block.title }}
+        </span>
+        <button class="delete-btn" @click="handleDelete">&times;</button>
+      </div>
+    </template>
+    <template v-else>
+      <div class="block-header">
+        <span class="time-badge">{{ block.start_time }} – {{ block.end_time }}</span>
+        <span class="duration">{{ duration }}</span>
+        <button class="delete-btn" @click="handleDelete">&times;</button>
+      </div>
+      <div class="block-body">
+        <input
+          type="checkbox"
+          :checked="block.is_completed"
+          class="checkbox"
+          @change="toggleCompleted"
+        />
+        <input
+          v-if="editing"
+          ref="titleInput"
+          v-model="editTitle"
+          class="title-input"
+          @blur="saveTitle"
+          @keydown.enter="saveTitle"
+          @keydown.escape="cancelEditing"
+        />
+        <span
+          v-else
+          class="title"
+          :class="{ 'title-completed': block.is_completed }"
+          @click="startEditing"
+        >
+          {{ block.title }}
+        </span>
+      </div>
+    </template>
     <div v-if="errorMessage" class="block-error">{{ errorMessage }}</div>
   </div>
 </template>
@@ -189,6 +227,9 @@ async function handleDelete() {
 
 .time-block {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
   background: white;
   border-left: 4px solid #6b7280;
   border-radius: 8px;
@@ -201,6 +242,44 @@ async function handleDelete() {
 
 .time-block.completed {
   opacity: 0.6;
+}
+
+.time-block.compact {
+  padding: 4px 8px 4px 28px;
+}
+
+.compact-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.compact-row .time-badge {
+  flex-shrink: 0;
+}
+
+.compact-row .title,
+.compact-row .title-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.compact-row .checkbox {
+  width: 14px;
+  height: 14px;
+}
+
+.compact-row .delete-btn {
+  margin-left: 0;
+  width: 20px;
+  height: 20px;
+  font-size: 14px;
 }
 
 .time-block.dragging {

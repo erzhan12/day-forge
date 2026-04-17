@@ -201,7 +201,9 @@ export function useDrag(
   let originalBlock: TimeBlock | null = null
   let containerEl: HTMLElement | null = null
   let containerRect: DOMRect | null = null
+  let containerPaddingTop = 0
   let blockDuration = 0
+  let grabOffsetY = 0
   let dropValid = true
   let rafId = 0
   let pointerId = -1
@@ -215,10 +217,17 @@ export function useDrag(
   function updatePreview(e: PointerEvent) {
     if (!containerEl || !originalBlock) return
 
-    // Recalculate container rect to account for page scroll
+    // Recalculate container rect to account for page scroll. Subtract
+    // paddingTop so relativeY is measured from where blocks actually
+    // render (not the outer edge of the container). Subtract
+    // grabOffsetY so the cursor stays at the same spot within the
+    // block the user grabbed, instead of the block jumping so its
+    // top snaps to the cursor.
     containerRect = containerEl.getBoundingClientRect()
-    const relativeY = e.clientY - containerRect.top + containerEl.scrollTop
-    const minuteOffset = relativeY / PX_PER_MINUTE
+    const cursorY =
+      e.clientY - containerRect.top - containerPaddingTop + containerEl.scrollTop
+    const blockTopPx = cursorY - grabOffsetY
+    const minuteOffset = blockTopPx / PX_PER_MINUTE
     const snapped =
       Math.round(minuteOffset / SNAP_MINUTES) * SNAP_MINUTES
 
@@ -232,7 +241,8 @@ export function useDrag(
 
     previewStartTime.value = minutesToTime(newStart)
     previewEndTime.value = minutesToTime(newEnd)
-    ghostTop.value = (newStart - DAY_START_MINUTES) * PX_PER_MINUTE
+    ghostTop.value =
+      containerPaddingTop + (newStart - DAY_START_MINUTES) * PX_PER_MINUTE
 
     // Resolve conflicts
     const resolved = resolveConflicts(
@@ -288,15 +298,26 @@ export function useDrag(
     originalBlock = block
     containerEl = container
     containerRect = container.getBoundingClientRect()
+    containerPaddingTop =
+      parseFloat(getComputedStyle(container).paddingTop) || 0
     blockDuration =
       timeToMinutes(block.end_time) - timeToMinutes(block.start_time)
     dropValid = true
     pointerId = event.pointerId
 
     const startMinutes = timeToMinutes(block.start_time)
+    // Offset between cursor and block top at grab time, in px
+    // relative to the schedule-body content area. Reused in
+    // updatePreview so the ghost follows the cursor from the same
+    // relative position (cursor doesn't teleport to block top).
+    const blockTopPx = (startMinutes - DAY_START_MINUTES) * PX_PER_MINUTE
+    const cursorY =
+      event.clientY - containerRect.top - containerPaddingTop + container.scrollTop
+    grabOffsetY = cursorY - blockTopPx
+
     previewStartTime.value = block.start_time
     previewEndTime.value = block.end_time
-    ghostTop.value = (startMinutes - DAY_START_MINUTES) * PX_PER_MINUTE
+    ghostTop.value = containerPaddingTop + blockTopPx
     previewBlocks.value = []
     shiftedBlockIds.value = new Set()
 
@@ -419,6 +440,8 @@ export function useDrag(
     originalBlock = null
     containerEl = null
     containerRect = null
+    containerPaddingTop = 0
+    grabOffsetY = 0
     snapshot = []
     dropValid = true
   }

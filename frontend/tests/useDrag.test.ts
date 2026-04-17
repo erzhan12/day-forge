@@ -208,26 +208,19 @@ describe("resolveConflicts", () => {
  * drag move before calling `endDrag()`.
  */
 function makeFakeContainer() {
-  const el: Partial<HTMLElement> & {
-    setPointerCapture: ReturnType<typeof vi.fn>
-    releasePointerCapture: ReturnType<typeof vi.fn>
-    addEventListener: ReturnType<typeof vi.fn>
-    removeEventListener: ReturnType<typeof vi.fn>
-    getBoundingClientRect: () => DOMRect
-    scrollTop: number
-  } = {
-    setPointerCapture: vi.fn(),
-    releasePointerCapture: vi.fn(),
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-    getBoundingClientRect: () =>
-      ({
-        top: 0, left: 0, right: 0, bottom: 0,
-        width: 0, height: 0, x: 0, y: 0, toJSON: () => ({}),
-      }) as DOMRect,
-    scrollTop: 0,
-  }
-  return el as unknown as HTMLElement
+  // Real DOM element so jsdom APIs like getComputedStyle work; method
+  // stubs replace the pointer/listener calls the drag code makes.
+  const el = document.createElement("div")
+  el.setPointerCapture = vi.fn()
+  el.releasePointerCapture = vi.fn()
+  el.addEventListener = vi.fn() as unknown as typeof el.addEventListener
+  el.removeEventListener = vi.fn() as unknown as typeof el.removeEventListener
+  el.getBoundingClientRect = () =>
+    ({
+      top: 0, left: 0, right: 0, bottom: 0,
+      width: 0, height: 0, x: 0, y: 0, toJSON: () => ({}),
+    }) as DOMRect
+  return el
 }
 
 describe("useDrag.endDrag (undo snapshot)", () => {
