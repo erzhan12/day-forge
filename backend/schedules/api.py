@@ -1,5 +1,7 @@
 import datetime
 import json
+import logging
+import time
 
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
@@ -9,6 +11,8 @@ from django.views.decorators.http import require_http_methods
 
 from schedules.models import Schedule, TimeBlock
 from schedules.validators import validate_five_minute_granularity
+
+logger = logging.getLogger(__name__)
 
 VALID_CATEGORIES = {c.value for c in TimeBlock.Category}
 MAX_SORT_ORDER = 10_000
@@ -511,6 +515,7 @@ def reorder_blocks(request):
         if err is not None:
             return err
 
+    t0 = time.monotonic()
     schedule = None
     try:
         with transaction.atomic():
@@ -632,6 +637,10 @@ def reorder_blocks(request):
     result_blocks = TimeBlock.objects.filter(schedule=schedule).order_by(
         "start_time", "sort_order"
     )
+    logger.info(
+        "reorder_blocks: %d updates, %.3fs",
+        len(updates), time.monotonic() - t0,
+    )
     return JsonResponse(
         {"blocks": [_block_to_dict(b) for b in result_blocks]},
     )
@@ -750,6 +759,7 @@ def restore_blocks(request, date):
     # ``full_clean()`` every instance in a pre-pass first — if any
     # block is invalid the whole request 400s before we touch the DB,
     # so atomicity holds trivially.
+    t0 = time.monotonic()
     try:
         instances = [
             TimeBlock(
@@ -775,6 +785,10 @@ def restore_blocks(request, date):
 
     result_blocks = TimeBlock.objects.filter(schedule=schedule).order_by(
         "start_time", "sort_order"
+    )
+    logger.info(
+        "restore_blocks: %d blocks, %.3fs",
+        len(validated), time.monotonic() - t0,
     )
     return JsonResponse(
         {"blocks": [_block_to_dict(b) for b in result_blocks]},
