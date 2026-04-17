@@ -21,3 +21,6 @@ frontend/dist/
 
 # Django static build output
 staticfiles/
+
+# IDE
+.idea/
