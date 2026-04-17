@@ -60,7 +60,7 @@ Create a time block on the schedule for the given date, owned by the authenticat
 | `category` | Not one of the allowed choices. |
 | `time` | `start_time >= end_time`, or block overlaps an existing block on the same schedule. |
 
-The overlap check runs inside `transaction.atomic()` but is **not** race-safe against concurrent requests on SQLite (no row locks available). Phase 7 / multi-user deployments should move to Postgres and add a DB-level exclusion constraint.
+The overlap check runs inside `transaction.atomic()` but is **not** race-safe against concurrent requests on SQLite (no row locks available). Any production deployment that serves real concurrent users should move to PostgreSQL (where `select_for_update` actually takes row locks) and add a DB-level exclusion constraint on `(schedule, [start_time, end_time))` as defence-in-depth. The same caveat applies to `PATCH /api/blocks/{pk}/`, `POST /api/blocks/reorder/`, and `POST /api/schedules/{date}/blocks/restore/`.
 
 ---
 
@@ -97,8 +97,8 @@ Partially update a time block. Only fields present in the request body are modif
 | `400` | `category` | Not one of the allowed choices. |
 | `400` | `sort_order` | Not an integer, or out of bounds. |
 | `400` | `time` | Resulting `start >= end`, or overlaps another block. |
-| `403` | `detail` | Block belongs to another user, or CSRF token missing/invalid. |
-| `404` | `detail` | No block with that `pk`. |
+| `403` | `detail` | CSRF token missing/invalid. |
+| `404` | `detail` | No block with that `pk`, **or** the block belongs to another user. Cross-user access deliberately returns 404 rather than 403 to avoid leaking the existence of block IDs outside the caller's own schedule. |
 
 ---
 
@@ -116,8 +116,127 @@ Delete a time block owned by the authenticated user.
 
 | Status | `errors` key | Meaning |
 |--------|--------------|---------|
-| `403` | `detail` | Block belongs to another user, or CSRF token missing/invalid. |
-| `404` | `detail` | No block with that `pk`. |
+| `403` | `detail` | CSRF token missing/invalid. |
+| `404` | `detail` | No block with that `pk`, **or** the block belongs to another user (see the PATCH section above for the rationale). |
+
+---
+
+### `POST /api/blocks/reorder/`
+
+Batch-update the times and sort order of multiple blocks after a drag-and-drop operation. All blocks must belong to the same schedule owned by the authenticated user. The final schedule state (updated + unchanged blocks) is validated for overlaps.
+
+**Limits**
+
+- `updates` array is capped at **100 entries**. Larger payloads are rejected with `400 {"errors": {"updates": "Cannot update more than 100 blocks at once."}}`.
+- The raw request body is capped at **100 KB**. Larger bodies are rejected with `413 {"errors": {"body": "Request body too large."}}` *before* JSON parsing, so malicious clients cannot force expensive parsing.
+
+**Request body**
+
+```json
+{
+  "updates": [
+    {
+      "id": 42,
+      "start_time": "10:00",
+      "end_time": "11:00",
+      "sort_order": 0
+    }
+  ]
+}
+```
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `updates` | array | yes | Non-empty list of block updates. |
+| `updates[].id` | integer | yes | TimeBlock primary key. No duplicates. |
+| `updates[].start_time` | string | yes | `HH:MM`, 5-minute increments. |
+| `updates[].end_time` | string | yes | `HH:MM`, 5-minute increments, `> start_time`. |
+| `updates[].sort_order` | integer | yes | `0 ≤ n ≤ 10000`. |
+
+**Success — `200 OK`**
+
+```json
+{
+  "blocks": [
+    { "id": 42, "title": "...", "start_time": "10:00", "end_time": "11:00", "category": "work", "is_completed": false, "sort_order": 0 }
+  ]
+}
+```
+
+Returns the full block list for the schedule, ordered by `start_time`, `sort_order`.
+
+**Errors**
+
+| Status | `errors` key | Meaning |
+|--------|--------------|---------|
+| `400` | `updates` | Not a list, empty, duplicate IDs, cross-schedule blocks, or more than 100 entries. |
+| `400` | `start_time` / `end_time` | Invalid format, non-5-minute, or `start >= end`. |
+| `400` | `sort_order` | Not an integer or out of bounds. |
+| `400` | `time` | Reorder would cause overlapping blocks (checked against full schedule). |
+| `403` | `detail` | CSRF token missing/invalid. |
+| `404` | `detail` | One or more block IDs not found, **or** they belong to another user. Cross-user access deliberately returns 404 rather than 403 to avoid leaking block-ID existence. |
+| `413` | `body` | Request body exceeds 100 KB (checked before JSON parsing). |
+
+All-or-nothing: if any update is invalid, no blocks are changed.
+
+---
+
+### `POST /api/schedules/{date}/blocks/restore/`
+
+Atomically replace all blocks on a schedule with a provided snapshot. Used by the undo system to restore previous state. Incoming `id` fields are ignored — new rows are created with fresh IDs.
+
+**Limits**
+
+- The raw request body is capped at **100 KB**. Larger bodies are rejected with `413 {"errors": {"body": "Request body too large."}}` *before* JSON parsing.
+
+**Path params**
+
+| Name | Type | Notes |
+|------|------|-------|
+| `date` | string | `YYYY-MM-DD`. If no schedule exists for this date, one is created. |
+
+**Request body**
+
+```json
+{
+  "blocks": [
+    {
+      "title": "Standup",
+      "start_time": "09:00",
+      "end_time": "09:15",
+      "category": "work",
+      "is_completed": false,
+      "sort_order": 0
+    }
+  ]
+}
+```
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `blocks` | array | yes | May be empty (deletes all blocks). |
+| `blocks[].title` | string | yes | 1–255 chars. |
+| `blocks[].start_time` | string | yes | `HH:MM`, 5-minute increments. |
+| `blocks[].end_time` | string | yes | `HH:MM`, 5-minute increments, `> start_time`. |
+| `blocks[].category` | string | no | Default `other`. |
+| `blocks[].is_completed` | boolean | no | Default `false`. |
+| `blocks[].sort_order` | integer | no | Default `0`, `0 ≤ n ≤ 10000`. |
+
+**Success — `200 OK`** — same shape as the reorder response (`{"blocks": [...]}`). Block IDs are new.
+
+**Errors**
+
+| Status | `errors` key | Meaning |
+|--------|--------------|---------|
+| `400` | `date` | Invalid date format. |
+| `400` | `blocks` | Not a list. |
+| `400` | `title` | Missing, empty, or > 255 chars. |
+| `400` | `start_time` / `end_time` | Invalid format, non-5-minute, or `start >= end`. |
+| `400` | `category` | Not one of the allowed choices. |
+| `400` | `time` | Restored blocks would overlap. |
+| `413` | `body` | Request body exceeds 100 KB (checked before JSON parsing). |
+
+All-or-nothing: if any block is invalid, no changes are applied.
 
 ---
 

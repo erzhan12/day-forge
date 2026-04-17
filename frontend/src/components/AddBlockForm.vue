@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, watch } from "vue"
+import { ref, watch, inject } from "vue"
+import type { TimeBlock, UndoAction } from "../types"
 import { useSchedule } from "../composables/useSchedule"
 
 const props = defineProps<{
@@ -9,6 +10,11 @@ const props = defineProps<{
 }>()
 
 const { createBlock } = useSchedule(props.date)
+
+const undo = inject<{
+  pushUndo: (action: UndoAction) => void
+  snapshotBlocks: () => TimeBlock[]
+}>("undo")
 
 const title = ref("")
 const startTime = ref(props.initialStartTime ?? "09:00")
@@ -31,14 +37,24 @@ async function handleSubmit() {
   if (!title.value.trim()) return
   submitting.value = true
   errorMessage.value = ""
+  const snapshot = undo?.snapshotBlocks()
+  const blockTitle = title.value.trim()
   const result = await createBlock({
-    title: title.value.trim(),
+    title: blockTitle,
     start_time: startTime.value,
     end_time: endTime.value,
     category: category.value,
   })
   submitting.value = false
   if (result.ok) {
+    if (undo && snapshot) {
+      undo.pushUndo({
+        description: `Added "${blockTitle}"`,
+        type: "add",
+        previousBlocks: snapshot,
+        scheduleDate: props.date,
+      })
+    }
     title.value = ""
     showForm.value = false
   } else {

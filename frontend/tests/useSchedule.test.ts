@@ -98,4 +98,49 @@ describe("useSchedule", () => {
     expect(result.ok).toBe(false)
     expect(result.errors?.detail).toMatch(/500/)
   })
+
+  it("sends reorderBlocks with correct payload", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      text: () => Promise.resolve('{"blocks":[]}'),
+    })
+    vi.stubGlobal("fetch", fetchSpy)
+
+    const { reorderBlocks } = useSchedule("2026-04-10")
+    const updates = [
+      { id: 1, start_time: "08:00", end_time: "09:00", sort_order: 0 },
+      { id: 2, start_time: "09:00", end_time: "10:00", sort_order: 10 },
+    ]
+    const result = await reorderBlocks(updates)
+
+    expect(result.ok).toBe(true)
+    expect(fetchSpy).toHaveBeenCalledOnce()
+    const [url, options] = fetchSpy.mock.calls[0]
+    expect(url).toBe("/api/blocks/reorder/")
+    expect(options.method).toBe("POST")
+    expect(JSON.parse(options.body)).toEqual({ updates })
+    expect(router.reload).toHaveBeenCalledWith({ only: ["blocks"] })
+  })
+
+  it("sends restoreBlocks with correct payload", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      text: () => Promise.resolve('{"blocks":[]}'),
+    })
+    vi.stubGlobal("fetch", fetchSpy)
+
+    const { restoreBlocks } = useSchedule("2026-04-10")
+    const blocks = [
+      { title: "A", start_time: "08:00", end_time: "09:00", category: "work", is_completed: false, sort_order: 0 },
+    ]
+    const result = await restoreBlocks("2026-04-10", blocks)
+
+    expect(result.ok).toBe(true)
+    expect(fetchSpy).toHaveBeenCalledOnce()
+    const [url, options] = fetchSpy.mock.calls[0]
+    expect(url).toBe("/api/schedules/2026-04-10/blocks/restore/")
+    expect(options.method).toBe("POST")
+    expect(JSON.parse(options.body)).toEqual({ blocks })
+    expect(router.reload).toHaveBeenCalledWith({ only: ["blocks"] })
+  })
 })

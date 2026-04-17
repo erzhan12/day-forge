@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, onMounted, onUnmounted } from "vue"
+import { computed, ref, provide, onMounted, onUnmounted } from "vue"
 import { router } from "@inertiajs/vue3"
 import type { TimeBlock as TimeBlockType, Schedule, RenderItem } from "../types"
 import DateNavigator from "../components/DateNavigator.vue"
@@ -7,7 +7,15 @@ import TimeBlock from "../components/TimeBlock.vue"
 import GapSlot from "../components/GapSlot.vue"
 import AddBlockForm from "../components/AddBlockForm.vue"
 import NowLine from "../components/NowLine.vue"
+import UndoToast from "../components/UndoToast.vue"
 import { todayString } from "../utils/date"
+import {
+  DAY_START, DAY_END, DAY_START_MINUTES, DAY_END_MINUTES,
+  PX_PER_MINUTE, timeToMinutes, minutesToTime,
+} from "../utils/scheduleTime"
+import { useSchedule } from "../composables/useSchedule"
+import { useUndo } from "../composables/useUndo"
+import { useDrag } from "../composables/useDrag"
 import "../app.css"
 
 // Extend RenderItem with overlay variants for items containing the current time
@@ -27,6 +35,23 @@ const props = defineProps<{
 
 const prefillStart = ref<string | undefined>()
 const prefillEnd = ref<string | undefined>()
+const scheduleBodyRef = ref<HTMLElement | null>(null)
+
+// Initialize composables
+const { reorderBlocks } = useSchedule(props.date)
+const getBlocks = () => props.blocks
+const {
+  currentToast, pushUndo, performUndo, snapshotBlocks, dismissToast,
+} = useUndo(props.date, getBlocks)
+const {
+  isDragging, dragBlockId, ghostTop, previewStartTime, previewEndTime,
+  previewBlocks, shiftedBlockIds, startDrag, endDrag, cancelDrag,
+} = useDrag(props.date, getBlocks, reorderBlocks, pushUndo, snapshotBlocks)
+
+// Provide to child components
+provide("undo", { pushUndo, snapshotBlocks })
+provide("drag", { startDrag, isDragging, dragBlockId, shiftedBlockIds })
+provide("scheduleContainer", scheduleBodyRef)
 
 const isToday = computed(() => props.date === todayString())
 
@@ -51,23 +76,28 @@ onUnmounted(() => {
   if (nowInterval) clearInterval(nowInterval)
 })
 
-function timeToMinutes(time: string): number {
-  const [h, m] = time.split(":").map(Number)
-  return h * 60 + m
-}
+// During drag, use preview blocks for real-time visual feedback
+const effectiveBlocks = computed(() =>
+  isDragging.value && previewBlocks.value.length > 0
+    ? previewBlocks.value
+    : props.blocks,
+)
 
-function minutesToTime(mins: number): string {
-  const h = String(Math.floor(mins / 60)).padStart(2, "0")
-  const m = String(mins % 60).padStart(2, "0")
-  return `${h}:${m}`
-}
+// Ghost element computed properties
+const draggedBlock = computed(() =>
+  dragBlockId.value !== null
+    ? props.blocks.find((b) => b.id === dragBlockId.value)
+    : null,
+)
+const ghostHeight = computed(() => {
+  if (!draggedBlock.value) return 0
+  const dur = timeToMinutes(draggedBlock.value.end_time) - timeToMinutes(draggedBlock.value.start_time)
+  return dur * PX_PER_MINUTE
+})
 
 // Build the display list: blocks and gaps with the now marker spliced in.
-// Gaps that contain the current time are split into two halves around it.
-// Blocks that contain the current time get the marker placed before or after
-// (whichever half of the block the current minute falls in).
 const displayList = computed<DisplayItem[]>(() => {
-  const blocks = props.blocks
+  const blocks = effectiveBlocks.value
   const baseItems: RenderItem[] = []
 
   // Filter blocks to those overlapping the visible day window
@@ -173,14 +203,6 @@ const displayList = computed<DisplayItem[]>(() => {
   return result
 })
 
-const DAY_START = "06:00"
-const DAY_END = "23:00"
-const DAY_START_MINUTES = timeToMinutes(DAY_START)
-const DAY_END_MINUTES = timeToMinutes(DAY_END)
-
-// Pixels per minute — 2px/min gives 120px for 1h, 30px for 15min.
-const PX_PER_MINUTE = 2
-
 function itemHeight(item: DisplayItem): string {
   return `${item.duration_minutes * PX_PER_MINUTE}px`
 }
@@ -213,7 +235,17 @@ function logout() {
       :initial-end-time="prefillEnd"
     />
 
-    <div class="schedule-body">
+    <div ref="scheduleBodyRef" class="schedule-body">
+      <!-- Drag ghost element -->
+      <div
+        v-if="isDragging && draggedBlock"
+        class="drag-ghost"
+        :style="{ top: ghostTop + 'px', height: ghostHeight + 'px' }"
+      >
+        <span class="ghost-time">{{ previewStartTime }} – {{ previewEndTime }}</span>
+        <span class="ghost-title">{{ draggedBlock.title }}</span>
+      </div>
+
       <template v-for="(item, idx) in displayList" :key="idx">
         <div
           v-if="item.type === 'block-with-now' && item.block"
@@ -270,6 +302,14 @@ function logout() {
     <div class="logout-footer">
       <button class="logout-btn" @click="logout">Logout</button>
     </div>
+
+    <UndoToast
+      v-if="currentToast"
+      :message="currentToast.description"
+      :actionable="currentToast.actionable"
+      @undo="performUndo"
+      @dismiss="dismissToast"
+    />
   </div>
 </template>
 
@@ -282,7 +322,35 @@ function logout() {
 }
 
 .schedule-body {
+  position: relative;
   padding: 8px 16px;
+}
+
+.drag-ghost {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  background: rgba(59, 130, 246, 0.12);
+  border: 2px dashed #3b82f6;
+  border-radius: 8px;
+  padding: 8px 12px;
+  pointer-events: none;
+  z-index: 20;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ghost-time {
+  font-size: 12px;
+  color: #3b82f6;
+  font-weight: 500;
+}
+
+.ghost-title {
+  font-size: 14px;
+  color: #1f2937;
 }
 
 .schedule-slot {

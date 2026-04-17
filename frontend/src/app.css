@@ -23,3 +23,12 @@ select {
 button {
   cursor: pointer;
 }
+
+body.is-dragging {
+  cursor: grabbing !important;
+  user-select: none !important;
+}
+
+body.is-dragging * {
+  cursor: grabbing !important;
+}

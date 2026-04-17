@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, computed, nextTick } from "vue"
-import type { TimeBlock } from "../types"
+import { ref, computed, nextTick, inject } from "vue"
+import type { Ref } from "vue"
+import type { TimeBlock, UndoAction } from "../types"
 import { useSchedule } from "../composables/useSchedule"
 
 const props = defineProps<{
@@ -9,6 +10,26 @@ const props = defineProps<{
 }>()
 
 const { updateBlock, deleteBlock } = useSchedule(props.date)
+
+const undo = inject<{
+  pushUndo: (action: UndoAction) => void
+  snapshotBlocks: () => TimeBlock[]
+}>("undo")
+
+const drag = inject<{
+  startDrag: (event: PointerEvent, block: TimeBlock, container: HTMLElement) => void
+  isDragging: Ref<boolean>
+  dragBlockId: Ref<number | null>
+  shiftedBlockIds: Ref<Set<number>>
+}>("drag")
+
+const scheduleContainer = inject<Ref<HTMLElement | null>>("scheduleContainer")
+
+function onDragStart(event: PointerEvent) {
+  if (drag && scheduleContainer?.value) {
+    drag.startDrag(event, props.block, scheduleContainer.value)
+  }
+}
 
 const editing = ref(false)
 const editTitle = ref("")
@@ -47,9 +68,18 @@ async function saveTitle() {
     editing.value = false
     return
   }
+  const snapshot = undo?.snapshotBlocks()
   const result = await updateBlock(props.block.id, { title: trimmed })
   if (result.ok) {
     editing.value = false
+    if (undo && snapshot) {
+      undo.pushUndo({
+        description: `Renamed "${props.block.title}" to "${trimmed}"`,
+        type: "edit",
+        previousBlocks: snapshot,
+        scheduleDate: props.date,
+      })
+    }
   } else {
     errorMessage.value = "Failed to update title"
   }
@@ -61,10 +91,21 @@ function cancelEditing() {
 
 async function toggleCompleted() {
   errorMessage.value = ""
+  const snapshot = undo?.snapshotBlocks()
   const result = await updateBlock(props.block.id, {
     is_completed: !props.block.is_completed,
   })
-  if (!result.ok) {
+  if (result.ok) {
+    if (undo && snapshot) {
+      const action = props.block.is_completed ? "Unchecked" : "Checked"
+      undo.pushUndo({
+        description: `${action} "${props.block.title}"`,
+        type: "toggle",
+        previousBlocks: snapshot,
+        scheduleDate: props.date,
+      })
+    }
+  } else {
     errorMessage.value = "Failed to update"
   }
 }
@@ -72,8 +113,18 @@ async function toggleCompleted() {
 async function handleDelete() {
   if (!window.confirm("Delete this block?")) return
   errorMessage.value = ""
+  const snapshot = undo?.snapshotBlocks()
   const result = await deleteBlock(props.block.id)
-  if (!result.ok) {
+  if (result.ok) {
+    if (undo && snapshot) {
+      undo.pushUndo({
+        description: `Deleted "${props.block.title}"`,
+        type: "delete",
+        previousBlocks: snapshot,
+        scheduleDate: props.date,
+      })
+    }
+  } else {
     errorMessage.value = "Failed to delete"
   }
 }
@@ -82,9 +133,19 @@ async function handleDelete() {
 <template>
   <div
     class="time-block"
-    :class="{ completed: block.is_completed }"
+    :class="{
+      completed: block.is_completed,
+      dragging: drag?.isDragging.value && drag?.dragBlockId.value === block.id,
+      shifting: drag?.shiftedBlockIds.value.has(block.id),
+    }"
     :style="{ borderLeftColor: categoryColors[block.category] }"
   >
+    <div
+      class="drag-handle"
+      @pointerdown.stop="onDragStart"
+    >
+      <span class="grip-icon">&#x2807;</span>
+    </div>
     <div class="block-header">
       <span class="time-badge">{{ block.start_time }} – {{ block.end_time }}</span>
       <span class="duration">{{ duration }}</span>
@@ -127,10 +188,11 @@ async function handleDelete() {
 }
 
 .time-block {
+  position: relative;
   background: white;
   border-left: 4px solid #6b7280;
   border-radius: 8px;
-  padding: 12px 16px;
+  padding: 12px 16px 12px 32px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
   box-sizing: border-box;
   height: 100%;
@@ -139,6 +201,39 @@ async function handleDelete() {
 
 .time-block.completed {
   opacity: 0.6;
+}
+
+.time-block.dragging {
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+.time-block.shifting {
+  transition: transform 200ms ease;
+}
+
+.drag-handle {
+  position: absolute;
+  left: 4px;
+  top: 0;
+  bottom: 0;
+  width: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  color: #d1d5db;
+  font-size: 16px;
+  touch-action: none;
+  user-select: none;
+}
+
+.drag-handle:hover {
+  color: #6b7280;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
 }
 
 .block-header {

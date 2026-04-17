@@ -18,4 +18,10 @@ urlpatterns = [
         name="create_block",
     ),
     path("api/blocks/<int:pk>/", schedules_api.block_detail, name="block_detail"),
+    path("api/blocks/reorder/", schedules_api.reorder_blocks, name="reorder_blocks"),
+    path(
+        "api/schedules/<str:date>/blocks/restore/",
+        schedules_api.restore_blocks,
+        name="restore_blocks",
+    ),
 ]

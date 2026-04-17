@@ -1,5 +1,10 @@
 import { router } from "@inertiajs/vue3"
 
+// The backend deliberately overrides Django's default CSRF cookie
+// (`csrftoken` / `X-CSRFToken`) to the Inertia/Axios convention:
+// `XSRF-TOKEN` cookie + `X-XSRF-TOKEN` header. The matching settings
+// live in backend/day_forge/settings.py as CSRF_COOKIE_NAME and
+// CSRF_HEADER_NAME — if either side changes, change both.
 function getCsrfToken(): string {
   const match = document.cookie.match(/XSRF-TOKEN=([^;]+)/)
   return match ? decodeURIComponent(match[1]) : ""
@@ -71,5 +76,34 @@ export function useSchedule(date: string) {
     return apiFetch(`/api/blocks/${id}/`, "DELETE")
   }
 
-  return { createBlock, updateBlock, deleteBlock }
+  function reorderBlocks(
+    updates: Array<{
+      id: number
+      start_time: string
+      end_time: string
+      sort_order: number
+    }>,
+  ): Promise<ApiResult> {
+    return apiFetch("/api/blocks/reorder/", "POST", { updates })
+  }
+
+  function restoreBlocks(
+    targetDate: string,
+    blocks: Array<{
+      title: string
+      start_time: string
+      end_time: string
+      category: string
+      is_completed: boolean
+      sort_order: number
+    }>,
+  ): Promise<ApiResult> {
+    return apiFetch(
+      `/api/schedules/${targetDate}/blocks/restore/`,
+      "POST",
+      { blocks },
+    )
+  }
+
+  return { createBlock, updateBlock, deleteBlock, reorderBlocks, restoreBlocks }
 }
