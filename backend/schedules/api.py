@@ -9,177 +9,37 @@ from django.db import transaction
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
+from schedules.http import (
+    VALID_CATEGORIES,
+    block_to_dict,
+    is_plain_int,
+    parse_time,
+    parse_time_or_error,
+    reject_oversized_body,
+    validate_block_times,
+    validate_five_minute_or_error,
+    validate_sort_order,
+    validate_time_range,
+)
 from schedules.models import Schedule, TimeBlock
-from schedules.validators import validate_five_minute_granularity
 
 logger = logging.getLogger(__name__)
 
-VALID_CATEGORIES = {c.value for c in TimeBlock.Category}
-MAX_SORT_ORDER = 10_000
 MAX_REORDER_UPDATES = 100
-# Tight body-size cap for the batch endpoints. Django already enforces
-# ``DATA_UPLOAD_MAX_MEMORY_SIZE`` (2.5 MB default), but at ~100 bytes/block
-# a legitimate payload is well under 20 KB — 100 KB is 5× headroom and
-# avoids parsing several megabytes of JSON only to reject it via the
-# per-entry count/field checks below. Returns HTTP 413 when exceeded.
-MAX_REQUEST_BODY_BYTES = 100_000
 
-
-def _reject_oversized_body(request):
-    """Return a 413 ``JsonResponse`` if ``request.body`` exceeds the cap,
-    otherwise ``None``. Call before ``json.loads`` in batch endpoints.
-
-    This is **not** the memory-safety gate for very large payloads — Django
-    already enforces ``DATA_UPLOAD_MAX_MEMORY_SIZE`` (2.5 MB default) in
-    middleware and raises ``RequestDataTooBig`` before any view runs, so
-    bodies above that limit never reach us. What this check adds is:
-
-    * a much tighter endpoint-specific cap (100 KB vs 2.5 MB), which
-      avoids burning CPU to parse several megabytes of valid JSON only
-      to reject it via the per-entry count/field checks below;
-    * a structured 413 response with an explicit "Request body too
-      large." error message, instead of Django's default 400.
-
-    ``len(request.body)`` does load the body (Django streams it into
-    memory on first access), but Django's middleware has already bounded
-    that read to 2.5 MB by the time we're called.
-    """
-    if len(request.body) > MAX_REQUEST_BODY_BYTES:
-        return JsonResponse(
-            {"errors": {"body": "Request body too large."}},
-            status=413,
-        )
-    return None
-
-
-def _is_plain_int(value) -> bool:
-    """True if ``value`` is an ``int`` that isn't a ``bool``.
-
-    Python's ``bool`` is a subclass of ``int``, so a bare
-    ``isinstance(value, int)`` check accepts ``True``/``False`` as valid
-    integers. Every call site that needs a "real" integer must guard
-    against that, and centralising the check here keeps the rationale
-    in one place.
-
-    Examples:
-        >>> _is_plain_int(42)
-        True
-        >>> _is_plain_int(0)
-        True
-        >>> _is_plain_int(True)
-        False
-        >>> _is_plain_int(False)
-        False
-        >>> _is_plain_int("42")
-        False
-        >>> _is_plain_int(None)
-        False
-    """
-    return isinstance(value, int) and not isinstance(value, bool)
-
-
-def _parse_time(value):
-    """Parse 'HH:MM' string to datetime.time."""
-    return datetime.datetime.strptime(value, "%H:%M").time()
-
-
-def _parse_time_or_error(field_name, value, block_id=None):
-    """Parse an HH:MM string. Return ``(time, None)`` on success or
-    ``(None, JsonResponse)`` with a 400 error on failure.
-
-    ``block_id`` is appended to the error message when supplied so callers
-    handling lists of entries can disambiguate which one was malformed.
-    """
-    suffix = f" for block {block_id}" if block_id is not None else ""
-    try:
-        return _parse_time(value), None
-    except (ValueError, TypeError):
-        return None, JsonResponse(
-            {"errors": {field_name: f"Invalid time format{suffix}. Use HH:MM."}},
-            status=400,
-        )
-
-
-def _validate_five_minute_or_error(*times):
-    """Run ``validate_five_minute_granularity`` on every value. Return ``None``
-    on success or a 400 ``JsonResponse`` on the first failure."""
-    try:
-        for t in times:
-            validate_five_minute_granularity(t)
-    except ValidationError as e:
-        return JsonResponse({"errors": {"time": str(e.message)}}, status=400)
-    return None
-
-
-def _validate_time_range(start, end, block_id=None):
-    """Verify ``start < end``. Return ``None`` on success or a 400
-    ``JsonResponse`` otherwise."""
-    if start >= end:
-        suffix = f" for block {block_id}" if block_id is not None else ""
-        return JsonResponse(
-            {"errors": {"time": f"Start time must be before end time{suffix}."}},
-            status=400,
-        )
-    return None
-
-
-def _validate_block_times(start_str, end_str, block_id=None):
-    """Parse and validate a pair of HH:MM strings: format, 5-minute
-    granularity, and ``start < end``.
-
-    Returns ``(start, end, None)`` on success or ``(None, None, JsonResponse)``
-    on the first failure.
-    """
-    start, err = _parse_time_or_error("start_time", start_str, block_id=block_id)
-    if err is not None:
-        return None, None, err
-    end, err = _parse_time_or_error("end_time", end_str, block_id=block_id)
-    if err is not None:
-        return None, None, err
-    err = _validate_five_minute_or_error(start, end)
-    if err is not None:
-        return None, None, err
-    err = _validate_time_range(start, end, block_id=block_id)
-    if err is not None:
-        return None, None, err
-    return start, end, None
-
-
-def _validate_sort_order(value, block_id=None):
-    """Verify ``value`` is an integer in ``[0, MAX_SORT_ORDER]``. Return
-    ``None`` on success or a 400 ``JsonResponse`` otherwise.
-    """
-    suffix = f" for block {block_id}" if block_id is not None else ""
-    if not _is_plain_int(value):
-        return JsonResponse(
-            {"errors": {"sort_order": f"sort_order must be an integer{suffix}."}},
-            status=400,
-        )
-    if not (0 <= value <= MAX_SORT_ORDER):
-        return JsonResponse(
-            {
-                "errors": {
-                    "sort_order": (
-                        f"sort_order must be between 0 and {MAX_SORT_ORDER}"
-                        f"{suffix}."
-                    )
-                }
-            },
-            status=400,
-        )
-    return None
-
-
-def _block_to_dict(block):
-    return {
-        "id": block.id,
-        "title": block.title,
-        "start_time": block.start_time.strftime("%H:%M"),
-        "end_time": block.end_time.strftime("%H:%M"),
-        "category": block.category,
-        "is_completed": block.is_completed,
-        "sort_order": block.sort_order,
-    }
+# Private aliases so the long-standing intra-file call sites below keep
+# compiling after helpers moved to ``schedules/http.py``. New code (and
+# cross-app callers) should import the public names directly from
+# ``schedules.http``.
+_reject_oversized_body = reject_oversized_body
+_is_plain_int = is_plain_int
+_parse_time = parse_time
+_parse_time_or_error = parse_time_or_error
+_validate_five_minute_or_error = validate_five_minute_or_error
+_validate_time_range = validate_time_range
+_validate_block_times = validate_block_times
+_validate_sort_order = validate_sort_order
+_block_to_dict = block_to_dict
 
 
 @login_required

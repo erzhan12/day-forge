@@ -11,3 +11,8 @@ These are non-obvious conventions that can't be inferred from code alone.
 - `DEBUG` — `"1"` enables debug mode (default), `"0"` for production
 - `ALLOWED_HOSTS` — Comma-separated hostnames (only used when `DEBUG=0`)
 - `CSRF_TRUSTED_ORIGINS` — Comma-separated origins incl. scheme, e.g. `https://app.example.com` (only used when `DEBUG=0`)
+- `LLM_API_KEY` — OpenAI-compatible API key for the AI command bar. When empty, AI endpoints return 503 and the frontend shows a degraded-mode indicator; manual editing still works.
+- `LLM_BASE_URL` — OpenAI-compatible base URL. Default `https://api.openai.com/v1`. Set to OpenRouter or a self-hosted proxy to swap providers.
+- `LLM_MODEL` — Model name passed to the chat-completions API. Default `gpt-4o-mini`.
+- `LLM_REQUEST_TIMEOUT` — Hard timeout for the LLM HTTP call in seconds. Default `15`. Prevents a hung provider from holding a worker.
+- `LLM_MAX_COMMAND_CHARS` — Cap on the user's command string before sending to the LLM. Default `500`.

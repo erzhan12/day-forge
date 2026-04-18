@@ -8,6 +8,7 @@ import GapSlot from "../components/GapSlot.vue"
 import AddBlockForm from "../components/AddBlockForm.vue"
 import NowLine from "../components/NowLine.vue"
 import UndoToast from "../components/UndoToast.vue"
+import CommandBar from "../components/CommandBar.vue"
 import { todayString } from "../utils/date"
 import {
   DAY_START, DAY_END, DAY_START_MINUTES, DAY_END_MINUTES,
@@ -329,6 +330,12 @@ function logout() {
       @undo="performUndo"
       @dismiss="dismissToast"
     />
+
+    <CommandBar
+      :date="date"
+      :snapshot-blocks="snapshotBlocks"
+      :push-undo="pushUndo"
+    />
   </div>
 </template>
 
@@ -343,6 +350,8 @@ function logout() {
 .schedule-body {
   position: relative;
   padding: 8px 16px;
+  /* Bottom padding so the fixed command bar doesn't occlude the last block. */
+  padding-bottom: 88px;
 }
 
 .drag-ghost {
