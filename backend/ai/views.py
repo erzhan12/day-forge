@@ -121,6 +121,18 @@ def _action_error(action_index: int, detail, status: int = 400) -> JsonResponse:
     )
 
 
+def _validation_error_detail(e: ValidationError):
+    """Return the richest available detail from a ``ValidationError``.
+
+    ``message_dict`` only exists when the error was constructed with
+    per-field data (typically via ``full_clean``). A bare
+    ``ValidationError("msg")`` has no ``message_dict`` and accessing it
+    would raise ``AttributeError``. Fall back to ``str(e)`` so a future
+    model-validator refactor can't produce a cryptic 500.
+    """
+    return getattr(e, "message_dict", None) or {"detail": str(e)}
+
+
 def _check_granularity(action_index, *times):
     """Run the 5-minute granularity validator and map ``ValidationError`` to
     the action-index error envelope."""
@@ -176,7 +188,7 @@ def _apply_add(schedule, blocks_by_id, action, action_index):
     try:
         block.full_clean()
     except ValidationError as e:
-        return _action_error(action_index, e.message_dict)
+        return _action_error(action_index, _validation_error_detail(e))
     block.save()
     blocks_by_id[block.id] = block
     return None
@@ -238,7 +250,7 @@ def _apply_move_or_resize(schedule, blocks_by_id, action, action_index, block):
     try:
         block.full_clean()
     except ValidationError as e:
-        return _action_error(action_index, e.message_dict)
+        return _action_error(action_index, _validation_error_detail(e))
     block.save()
     return None
 

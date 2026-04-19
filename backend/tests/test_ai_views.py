@@ -501,3 +501,30 @@ class TestRateLimit:
         # 429 short-circuits before the LLM path, so no extra interaction row
         # is written for the rejected request.
         assert AIInteraction.objects.count() == 2
+
+    @pytest.mark.django_db
+    def test_cache_incr_value_error_reseeds_counter(
+        self, auth_client, today_schedule, monkeypatch
+    ):
+        """If the key evicts between ``cache.add`` returning False and
+        ``cache.incr`` firing, ``incr`` raises ``ValueError``. The
+        decorator must recover by re-seeding the counter, not 500."""
+        _patch_run(
+            monkeypatch,
+            AICommandResult(
+                raw_response_text="{}",
+                parsed_actions=[],
+                explanation="ok",
+            ),
+        )
+        # Seed the cache with a first successful call.
+        assert _post(auth_client, {"command": "seed"}).status_code == 200
+
+        def _raise_value_error(_key):
+            raise ValueError("key missing")
+
+        monkeypatch.setattr("ai.views.cache.incr", _raise_value_error)
+        # Second call enters the ``incr`` branch, hits ValueError, and
+        # the except clause re-seeds the counter so the request succeeds.
+        resp = _post(auth_client, {"command": "after-evict"})
+        assert resp.status_code == 200
