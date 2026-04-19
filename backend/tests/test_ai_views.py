@@ -476,3 +476,28 @@ class TestMidnightWrap:
         block.refresh_from_db()
         assert block.start_time.strftime("%H:%M") == "22:00"
         assert block.end_time.strftime("%H:%M") == "23:30"
+
+
+class TestRateLimit:
+    @pytest.mark.django_db
+    def test_returns_429_once_budget_is_exceeded(
+        self, auth_client, today_schedule, monkeypatch, settings
+    ):
+        settings.LLM_RATE_LIMIT_PER_HOUR = 2
+        _patch_run(
+            monkeypatch,
+            AICommandResult(
+                raw_response_text="{}",
+                parsed_actions=[],
+                explanation="ok",
+            ),
+        )
+        assert _post(auth_client, {"command": "one"}).status_code == 200
+        assert _post(auth_client, {"command": "two"}).status_code == 200
+
+        resp = _post(auth_client, {"command": "three"})
+        assert resp.status_code == 429
+        assert "rate limit" in resp.json()["errors"]["detail"].lower()
+        # 429 short-circuits before the LLM path, so no extra interaction row
+        # is written for the rejected request.
+        assert AIInteraction.objects.count() == 2

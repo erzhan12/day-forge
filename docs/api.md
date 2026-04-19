@@ -279,6 +279,7 @@ Requires `LLM_API_KEY` to be set. When unset, every call returns `503` so the fr
 | `400` | `action_index` + `detail` | AI action failed validation (overlap, bad time, unknown block ID). All prior actions in the batch are rolled back. |
 | `403` | `detail` | CSRF token missing/invalid. |
 | `413` | `body` | Request body exceeds 100 KB. |
+| `429` | `detail` | Per-user rate limit (`LLM_RATE_LIMIT_PER_HOUR`, default 100/hr) exceeded. No `AIInteraction` row is written for rejected calls. |
 | `502` | `detail` | LLM provider returned an error, or response failed JSON / schema validation. |
 | `503` | `detail` | `LLM_API_KEY` is not configured. |
 | `504` | `detail` | LLM provider timed out (>`LLM_REQUEST_TIMEOUT` seconds). |

@@ -11,6 +11,8 @@ primary enforcement, not a belt-and-suspenders check.
 import datetime
 import re
 
+from schedules.http import is_plain_int
+
 MAX_ACTIONS_PER_COMMAND = 20
 
 ALLOWED_ACTION_TYPES = {"add", "move", "remove", "resize"}
@@ -32,10 +34,6 @@ MAX_EXPLANATION_LEN = 500
 
 def _is_hhmm(value) -> bool:
     return isinstance(value, str) and bool(_TIME_PATTERN.match(value))
-
-
-def _is_plain_int(value) -> bool:
-    return isinstance(value, int) and not isinstance(value, bool)
 
 
 def validate_action_shape(action, allowed_categories) -> list[str]:
@@ -69,7 +67,7 @@ def validate_action_shape(action, allowed_categories) -> list[str]:
                 "'start_time' or 'end_time'"
             )
 
-    if "task_id" in action and not _is_plain_int(action["task_id"]):
+    if "task_id" in action and not is_plain_int(action["task_id"]):
         errors.append("task_id must be an integer")
 
     if "title" in action:

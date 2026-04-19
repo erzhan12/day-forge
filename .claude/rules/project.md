@@ -16,3 +16,4 @@ These are non-obvious conventions that can't be inferred from code alone.
 - `LLM_MODEL` — Model name passed to the chat-completions API. Default `gpt-4o-mini`.
 - `LLM_REQUEST_TIMEOUT` — Hard timeout for the LLM HTTP call in seconds. Default `15`. Prevents a hung provider from holding a worker.
 - `LLM_MAX_COMMAND_CHARS` — Cap on the user's command string before sending to the LLM. Default `500`.
+- `LLM_RATE_LIMIT_PER_HOUR` — Per-user fixed-window rate limit on `POST /api/ai/schedules/<date>/command/`. Default `100`. Counter lives in Django's default cache; a 429 is returned when exceeded. Under a multi-worker LocMem cache each worker has its own counter — use a shared backend (Redis) in production for an accurate global limit.

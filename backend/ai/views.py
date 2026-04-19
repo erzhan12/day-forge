@@ -5,10 +5,13 @@ OpenAI-compatible service in ``ai/service.py``, validates and applies each
 action atomically, and logs every interaction (success or failure).
 """
 import datetime
+import functools
 import json
 import logging
 
+from django.conf import settings
 from django.contrib.auth.decorators import login_required
+from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.http import JsonResponse
@@ -46,6 +49,38 @@ _AI_ERROR_STATUS = {
 }
 
 _MAX_AI_RESPONSE_LOG_LEN = 10_000
+
+_RATE_LIMIT_WINDOW_SECONDS = 3600
+
+
+def _rate_limit_per_user(view_func):
+    """Fixed-window per-user rate limit via Django's default cache.
+
+    Budget is ``settings.LLM_RATE_LIMIT_PER_HOUR`` calls per user per hour;
+    over-budget requests return 429. ``cache.add`` + ``cache.incr`` anchors
+    the TTL to the first call in each window instead of sliding it forward
+    on every request. The default LocMem cache is per-worker, so in
+    multi-worker deployments the effective limit is ``limit × workers`` —
+    use a shared cache backend (e.g. Redis) for an accurate global count.
+    """
+    @functools.wraps(view_func)
+    def wrapper(request, *args, **kwargs):
+        key = f"ai_cmd_rl:{request.user.id}"
+        if cache.add(key, 1, _RATE_LIMIT_WINDOW_SECONDS):
+            count = 1
+        else:
+            try:
+                count = cache.incr(key)
+            except ValueError:
+                cache.set(key, 1, _RATE_LIMIT_WINDOW_SECONDS)
+                count = 1
+        if count > settings.LLM_RATE_LIMIT_PER_HOUR:
+            return JsonResponse(
+                {"errors": {"detail": "Rate limit exceeded. Try again later."}},
+                status=429,
+            )
+        return view_func(request, *args, **kwargs)
+    return wrapper
 
 
 def _log_interaction(schedule, command: str, response_text: str, actions: list):
@@ -245,6 +280,7 @@ def _apply_action(schedule, blocks_by_id, action, action_index):
 
 @login_required
 @require_http_methods(["POST"])
+@_rate_limit_per_user
 def ai_command(request, date):
     oversized = reject_oversized_body(request)
     if oversized is not None:
