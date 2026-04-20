@@ -93,7 +93,12 @@ def _rate_limit_per_user(view_func):
     return wrapper
 
 
-def _log_interaction(schedule, command: str, response_text: str, actions: list):
+def _log_interaction(
+    schedule,
+    command: str,
+    response_text: str,
+    actions: list,
+) -> AIInteraction | None:
     """Best-effort persistence of one AI interaction. Never raises.
 
     ``command`` is logged verbatim — pre-strip, pre-validation — so the log
@@ -105,12 +110,17 @@ def _log_interaction(schedule, command: str, response_text: str, actions: list):
     pathological provider responses — ``TextField`` has no DB-level max,
     but we don't want a 5 MB hallucination hogging our SQLite file.
 
+    Rows start with ``success=False`` (pessimistic); ``_mark_success`` flips
+    them once apply completes.
+
     A failure to persist the audit row (disk full, DB connection drop) must
     NOT abort the request — otherwise a full disk takes out the whole AI
-    feature. Swallow and log so the user still sees their command applied.
+    feature. Swallow and log so the user still sees their command applied;
+    return ``None`` so callers know the row isn't available for later
+    ``_mark_success`` updates.
     """
     try:
-        AIInteraction.objects.create(
+        return AIInteraction.objects.create(
             schedule=schedule,
             user_command=command,
             ai_response=response_text[:_MAX_AI_RESPONSE_LOG_LEN],
@@ -119,6 +129,21 @@ def _log_interaction(schedule, command: str, response_text: str, actions: list):
     except Exception:
         logger.exception(
             "Failed to persist AIInteraction (schedule=%s)", schedule.id
+        )
+        return None
+
+
+def _mark_success(interaction: AIInteraction | None) -> None:
+    """Flip a just-logged AIInteraction row to ``success=True``. No-op if
+    the initial log write failed (``interaction is None``)."""
+    if interaction is None:
+        return
+    try:
+        interaction.success = True
+        interaction.save(update_fields=["success"])
+    except Exception:
+        logger.exception(
+            "Failed to mark AIInteraction success (id=%s)", interaction.id
         )
 
 
@@ -140,7 +165,7 @@ def _action_error(action_index: int, detail, status: int = 400) -> JsonResponse:
     )
 
 
-def _validation_error_detail(e: ValidationError):
+def _validation_error_detail(e: ValidationError) -> dict:
     """Return the richest available detail from a ``ValidationError``.
 
     ``message_dict`` only exists when the error was constructed with
@@ -152,7 +177,7 @@ def _validation_error_detail(e: ValidationError):
     return getattr(e, "message_dict", None) or {"detail": str(e)}
 
 
-def _check_day_window(action_index, start, end):
+def _check_day_window(action_index: int, start, end) -> JsonResponse | None:
     """Reject times outside the ``[DAY_START, DAY_END]`` working-day window.
 
     Mirrors the frontend guard in ``useDrag.ts`` and the constraint the
@@ -170,7 +195,7 @@ def _check_day_window(action_index, start, end):
     return None
 
 
-def _check_granularity(action_index, *times):
+def _check_granularity(action_index: int, *times) -> JsonResponse | None:
     """Run the 5-minute granularity validator and map ``ValidationError`` to
     the action-index error envelope."""
     try:
@@ -181,7 +206,9 @@ def _check_granularity(action_index, *times):
     return None
 
 
-def _check_no_overlap(blocks_by_id, start, end, exclude_id, action_index):
+def _check_no_overlap(
+    blocks_by_id, start, end, exclude_id, action_index: int
+) -> JsonResponse | None:
     """Reject the action if its ``[start, end)`` window overlaps any block
     in ``blocks_by_id`` other than ``exclude_id`` (pass ``None`` to scan
     everything)."""
@@ -193,7 +220,9 @@ def _check_no_overlap(blocks_by_id, start, end, exclude_id, action_index):
     return None
 
 
-def _apply_add(schedule, blocks_by_id, action, action_index):
+def _apply_add(
+    schedule, blocks_by_id, action, action_index: int
+) -> JsonResponse | None:
     title = action["title"].strip()
     # ``category`` is required by ``schemas.validate_action_shape``; the
     # ``get(..., "other")`` fallback is defence-in-depth if the schema check
@@ -234,7 +263,9 @@ def _apply_add(schedule, blocks_by_id, action, action_index):
     return None
 
 
-def _apply_remove(schedule, blocks_by_id, action, action_index, block):
+def _apply_remove(
+    schedule, blocks_by_id, action, action_index: int, block
+) -> JsonResponse | None:
     block.delete()
     blocks_by_id.pop(block.id, None)
     return None
@@ -267,7 +298,9 @@ def _compute_move_resize_times(action, block):
     return new_start, new_end, False
 
 
-def _apply_move_or_resize(schedule, blocks_by_id, action, action_index, block):
+def _apply_move_or_resize(
+    schedule, blocks_by_id, action, action_index: int, block
+) -> JsonResponse | None:
     new_start, new_end, wrapped = _compute_move_resize_times(action, block)
     if wrapped:
         return _action_error(
@@ -298,7 +331,9 @@ def _apply_move_or_resize(schedule, blocks_by_id, action, action_index, block):
     return None
 
 
-def _apply_existing_block_action(schedule, blocks_by_id, action, action_index):
+def _apply_existing_block_action(
+    schedule, blocks_by_id, action, action_index: int
+) -> JsonResponse | None:
     """Dispatcher for move / remove / resize — all need an existing block."""
     task_id = action["task_id"]
     block = blocks_by_id.get(task_id)
@@ -310,8 +345,8 @@ def _apply_existing_block_action(schedule, blocks_by_id, action, action_index):
         # step — surface both as the same "no longer exists" message.
         return _action_error(
             action_index,
-            f"block {task_id} no longer exists on this schedule; "
-            "it may have been deleted concurrently — please retry",
+            "Referenced block no longer exists; it may have been "
+            "deleted. Please retry.",
         )
     if action["type"] == "remove":
         return _apply_remove(schedule, blocks_by_id, action, action_index, block)
@@ -328,7 +363,9 @@ _ACTION_DISPATCH = {
 }
 
 
-def _apply_action(schedule, blocks_by_id, action, action_index):
+def _apply_action(
+    schedule, blocks_by_id, action, action_index: int
+) -> JsonResponse | None:
     """Apply one AI action; return ``None`` on success or a 400 response.
 
     Called sequentially under the schedule's row lock. Overlap checks use
@@ -396,8 +433,9 @@ def ai_command(request, date):
 
     # Intent log BEFORE applying actions. Persisted outside the mutation
     # atomic so it survives a mid-batch rollback — PRD §6.5 requires every
-    # interaction to be logged.
-    _log_interaction(
+    # interaction to be logged. Row starts pessimistic (``success=False``)
+    # and is flipped to True post-apply via ``_mark_success``.
+    interaction = _log_interaction(
         schedule, command, result.raw_response_text, result.parsed_actions
     )
 
@@ -419,6 +457,8 @@ def ai_command(request, date):
             len(result.parsed_actions),
         )
         return rb.response
+
+    _mark_success(interaction)
 
     result_blocks = TimeBlock.objects.filter(schedule=schedule).order_by(
         "start_time", "sort_order"

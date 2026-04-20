@@ -8,6 +8,10 @@ class AIInteraction(models.Model):
     user_command = models.TextField()
     ai_response = models.TextField()
     actions_json = models.JSONField(default=list)
+    # Pessimistic default: row is created before mutations apply, then
+    # flipped to True only if apply succeeds. Lets audit dashboards query
+    # failures without correlating against Django's application log.
+    success = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

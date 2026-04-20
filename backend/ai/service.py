@@ -26,6 +26,7 @@ import openai
 from django.conf import settings
 from openai import OpenAI
 
+from ai.prompts import SYSTEM_PROMPT, build_user_message
 from ai.schemas import (
     validate_action_shape,
     validate_response_envelope,
@@ -106,10 +107,6 @@ def run_command(user_command: str, schedule, blocks, now) -> AICommandResult:
         raise AIInvalidInputError(
             f"command too long (max {settings.LLM_MAX_COMMAND_CHARS} chars)"
         )
-
-    # Imported here to avoid a circular import risk if prompts.py ever
-    # needs service-level config.
-    from ai.prompts import SYSTEM_PROMPT, build_user_message
 
     user_message = build_user_message(schedule, blocks, now, trimmed)
 
