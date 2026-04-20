@@ -53,6 +53,11 @@ _AI_ERROR_STATUS = {
 }
 
 _MAX_AI_RESPONSE_LOG_LEN = 10_000
+# Cap logged user commands so a mis-sized request (over the 1 MB body cap in
+# ``reject_oversized_body`` but still within it) can't bloat the audit
+# table. Kept strictly larger than ``LLM_MAX_COMMAND_CHARS`` so the log
+# preserves evidence that the user *exceeded* the per-request cap.
+_MAX_COMMAND_LOG_LEN = 2_000
 
 _RATE_LIMIT_WINDOW_SECONDS = 3600
 
@@ -122,7 +127,7 @@ def _log_interaction(
     try:
         return AIInteraction.objects.create(
             schedule=schedule,
-            user_command=command,
+            user_command=command[:_MAX_COMMAND_LOG_LEN],
             ai_response=response_text[:_MAX_AI_RESPONSE_LOG_LEN],
             actions_json=actions,
         )
