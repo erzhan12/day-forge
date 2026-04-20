@@ -73,9 +73,13 @@ def build_user_message(schedule, blocks, now, user_command: str) -> str:
     block_lines = [_format_block_line(b) for b in blocks]
     block_section = "\n".join(block_lines) if block_lines else "(no blocks yet)"
 
+    # JSON-encode the user command so embedded newlines / quotes / fake
+    # "User command:" lines are rendered as a single quoted string literal
+    # and can't be mistaken by the model for a separate prompt section.
+    encoded_command = json.dumps(user_command, ensure_ascii=False)
     return (
         f"Schedule date: {schedule.date.isoformat()} ({weekday})\n"
         f"Current local time: {now.strftime('%H:%M')}\n"
         f"Existing blocks:\n{block_section}\n\n"
-        f"User command:\n{user_command}"
+        f"User command:\n{encoded_command}"
     )

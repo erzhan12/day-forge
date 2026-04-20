@@ -94,7 +94,7 @@ def _rate_limit_per_user(view_func):
 
 
 def _log_interaction(schedule, command: str, response_text: str, actions: list):
-    """Best-effort persistence of one AI interaction.
+    """Best-effort persistence of one AI interaction. Never raises.
 
     ``command`` is logged verbatim — pre-strip, pre-validation — so the log
     captures exactly what the client sent. Forensic fidelity matters more
@@ -104,13 +104,22 @@ def _log_interaction(schedule, command: str, response_text: str, actions: list):
     Truncation on ``response_text`` is a belt-and-suspenders safety net for
     pathological provider responses — ``TextField`` has no DB-level max,
     but we don't want a 5 MB hallucination hogging our SQLite file.
+
+    A failure to persist the audit row (disk full, DB connection drop) must
+    NOT abort the request — otherwise a full disk takes out the whole AI
+    feature. Swallow and log so the user still sees their command applied.
     """
-    AIInteraction.objects.create(
-        schedule=schedule,
-        user_command=command,
-        ai_response=response_text[:_MAX_AI_RESPONSE_LOG_LEN],
-        actions_json=actions,
-    )
+    try:
+        AIInteraction.objects.create(
+            schedule=schedule,
+            user_command=command,
+            ai_response=response_text[:_MAX_AI_RESPONSE_LOG_LEN],
+            actions_json=actions,
+        )
+    except Exception:
+        logger.exception(
+            "Failed to persist AIInteraction (schedule=%s)", schedule.id
+        )
 
 
 class _Rollback(Exception):
@@ -295,8 +304,14 @@ def _apply_existing_block_action(schedule, blocks_by_id, action, action_index):
     block = blocks_by_id.get(task_id)
     if block is None:
         # 400 (not 404) to avoid id enumeration across users / schedules.
+        # ``blocks_by_id`` is built from the select_for_update re-fetch, so a
+        # miss here means the LLM referenced an id that either never existed
+        # on this schedule or was deleted between the LLM call and the apply
+        # step — surface both as the same "no longer exists" message.
         return _action_error(
-            action_index, f"block {task_id} not found on this schedule"
+            action_index,
+            f"block {task_id} no longer exists on this schedule; "
+            "it may have been deleted concurrently — please retry",
         )
     if action["type"] == "remove":
         return _apply_remove(schedule, blocks_by_id, action, action_index, block)
@@ -364,11 +379,19 @@ def ai_command(request, date):
         raw = getattr(e, "raw_response_text", "") or str(e)
         _log_interaction(schedule, command, raw, [])
         # Walk MRO so a future subclass (e.g. ``AIRateLimitError``) resolves
-        # to its parent's status instead of raising ``KeyError`` → 500.
+        # to its parent's status instead of raising ``KeyError``. If a new
+        # AIError subclass is ever added with no mapped parent, fall back to
+        # 500 and log loudly — that's a programming error we want visible.
         status = next(
             (s for cls, s in _AI_ERROR_STATUS.items() if isinstance(e, cls)),
-            500,
+            None,
         )
+        if status is None:
+            logger.error(
+                "Unmapped AIError subclass %s — add to _AI_ERROR_STATUS",
+                type(e).__name__,
+            )
+            status = 500
         return JsonResponse({"errors": {"detail": str(e)}}, status=status)
 
     # Intent log BEFORE applying actions. Persisted outside the mutation
