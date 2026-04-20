@@ -29,6 +29,15 @@ class TestLocmemCacheProductionError:
         ):
             assert error_locmem_cache_with_ai_in_production(app_configs=None) == []
 
+    def test_silent_when_api_key_is_whitespace(self):
+        """A whitespace-only key is effectively unset — don't false-alarm."""
+        with override_settings(
+            DEBUG=False,
+            LLM_API_KEY="   ",
+            CACHES={"default": {"BACKEND": LOCMEM}},
+        ):
+            assert error_locmem_cache_with_ai_in_production(app_configs=None) == []
+
     def test_silent_on_shared_cache_backend(self):
         """Any non-LocMem backend is presumed shared across workers."""
         with override_settings(

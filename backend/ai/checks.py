@@ -26,7 +26,7 @@ def error_locmem_cache_with_ai_in_production(app_configs, **kwargs):
     errors = []
     if settings.DEBUG:
         return errors
-    if not settings.LLM_API_KEY:
+    if not settings.LLM_API_KEY or not settings.LLM_API_KEY.strip():
         return errors
     backend = settings.CACHES.get("default", {}).get("BACKEND", "")
     if backend.endswith(".LocMemCache"):

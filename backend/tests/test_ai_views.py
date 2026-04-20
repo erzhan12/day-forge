@@ -478,6 +478,114 @@ class TestMidnightWrap:
         assert block.end_time.strftime("%H:%M") == "23:30"
 
 
+class TestDayWindow:
+    """Server-side enforcement of the [06:00, 23:00] working-day window."""
+
+    @pytest.mark.django_db
+    def test_add_rejected_when_start_before_day_start(
+        self, auth_client, today_schedule, monkeypatch
+    ):
+        _patch_run(
+            monkeypatch,
+            AICommandResult(
+                raw_response_text="{}",
+                parsed_actions=[
+                    {
+                        "type": "add",
+                        "title": "Pre-dawn standup",
+                        "start_time": "05:30",
+                        "end_time": "06:00",
+                        "category": "work",
+                    }
+                ],
+                explanation="Before the day starts",
+            ),
+        )
+        resp = _post(auth_client, {"command": "add standup at 5:30"})
+        assert resp.status_code == 400
+        assert resp.json()["errors"]["action_index"] == 0
+        assert "06:00" in resp.json()["errors"]["detail"]
+        assert TimeBlock.objects.count() == 0
+
+    @pytest.mark.django_db
+    def test_add_rejected_when_end_after_day_end(
+        self, auth_client, today_schedule, monkeypatch
+    ):
+        _patch_run(
+            monkeypatch,
+            AICommandResult(
+                raw_response_text="{}",
+                parsed_actions=[
+                    {
+                        "type": "add",
+                        "title": "Late work",
+                        "start_time": "22:30",
+                        "end_time": "23:30",
+                        "category": "work",
+                    }
+                ],
+                explanation="Past close of day",
+            ),
+        )
+        resp = _post(auth_client, {"command": "add work til 23:30"})
+        assert resp.status_code == 400
+        assert resp.json()["errors"]["action_index"] == 0
+        assert "23:00" in resp.json()["errors"]["detail"]
+        assert TimeBlock.objects.count() == 0
+
+    @pytest.mark.django_db
+    def test_add_accepted_at_day_boundaries(
+        self, auth_client, today_schedule, monkeypatch
+    ):
+        """06:00 start and 23:00 end are inclusive edges."""
+        _patch_run(
+            monkeypatch,
+            AICommandResult(
+                raw_response_text="{}",
+                parsed_actions=[
+                    {
+                        "type": "add",
+                        "title": "Full day",
+                        "start_time": "06:00",
+                        "end_time": "23:00",
+                        "category": "work",
+                    }
+                ],
+                explanation="All day",
+            ),
+        )
+        resp = _post(auth_client, {"command": "block the whole day"})
+        assert resp.status_code == 200
+        assert TimeBlock.objects.count() == 1
+
+    @pytest.mark.django_db
+    def test_resize_rejected_when_end_after_day_end(
+        self, auth_client, today_schedule, monkeypatch
+    ):
+        block = TimeBlock.objects.create(
+            schedule=today_schedule,
+            title="Work",
+            start_time="22:00",
+            end_time="22:30",
+            category="work",
+        )
+        _patch_run(
+            monkeypatch,
+            AICommandResult(
+                raw_response_text="{}",
+                parsed_actions=[
+                    {"type": "resize", "task_id": block.id, "end_time": "23:30"}
+                ],
+                explanation="Extend",
+            ),
+        )
+        resp = _post(auth_client, {"command": "extend work to 23:30"})
+        assert resp.status_code == 400
+        assert "23:00" in resp.json()["errors"]["detail"]
+        block.refresh_from_db()
+        assert block.end_time.strftime("%H:%M") == "22:30"
+
+
 class TestRateLimit:
     @pytest.mark.django_db
     def test_returns_429_once_budget_is_exceeded(

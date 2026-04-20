@@ -28,6 +28,7 @@ from schedules.models import Schedule, TimeBlock
 from schedules.validators import validate_five_minute_granularity
 
 from ai.models import AIInteraction
+from ai.prompts import DAY_END, DAY_START
 from ai.service import (
     AIError,
     AIInvalidInputError,
@@ -37,6 +38,9 @@ from ai.service import (
     AIUnavailableError,
     run_command,
 )
+
+_DAY_START_T = datetime.time.fromisoformat(DAY_START)
+_DAY_END_T = datetime.time.fromisoformat(DAY_END)
 
 logger = logging.getLogger(__name__)
 
@@ -133,6 +137,24 @@ def _validation_error_detail(e: ValidationError):
     return getattr(e, "message_dict", None) or {"detail": str(e)}
 
 
+def _check_day_window(action_index, start, end):
+    """Reject times outside the ``[DAY_START, DAY_END]`` working-day window.
+
+    Mirrors the frontend guard in ``useDrag.ts`` and the constraint the
+    system prompt asks the model to respect — enforced here so a
+    hallucinating response can't insert off-window blocks.
+    """
+    if start < _DAY_START_T:
+        return _action_error(
+            action_index, f"start_time must be >= {DAY_START}"
+        )
+    if end > _DAY_END_T:
+        return _action_error(
+            action_index, f"end_time must be <= {DAY_END}"
+        )
+    return None
+
+
 def _check_granularity(action_index, *times):
     """Run the 5-minute granularity validator and map ``ValidationError`` to
     the action-index error envelope."""
@@ -167,6 +189,9 @@ def _apply_add(schedule, blocks_by_id, action, action_index):
     start = parse_time(action["start_time"])
     end = parse_time(action["end_time"])
 
+    err = _check_day_window(action_index, start, end)
+    if err is not None:
+        return err
     err = _check_granularity(action_index, start, end)
     if err is not None:
         return err
@@ -234,6 +259,9 @@ def _apply_move_or_resize(schedule, blocks_by_id, action, action_index, block):
             action_index, "moved block would extend past midnight"
         )
 
+    err = _check_day_window(action_index, new_start, new_end)
+    if err is not None:
+        return err
     err = _check_granularity(action_index, new_start, new_end)
     if err is not None:
         return err
