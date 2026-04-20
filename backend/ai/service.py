@@ -94,7 +94,7 @@ def _get_client() -> OpenAI:
 
 def run_command(user_command: str, schedule, blocks, now) -> AICommandResult:
     """Call the LLM for one user command. See module docstring for errors."""
-    if not settings.LLM_API_KEY:
+    if not settings.LLM_API_KEY or not settings.LLM_API_KEY.strip():
         raise AIUnavailableError("LLM_API_KEY is not configured")
 
     if not isinstance(user_command, str):
@@ -129,11 +129,14 @@ def run_command(user_command: str, schedule, blocks, now) -> AICommandResult:
         logger.warning("AI timeout: %s", e)
         raise AITimeoutError("AI provider timed out") from e
     except openai.APIError as e:
+        # Log the full provider error server-side; surface a generic message
+        # to the client so provider URLs / auth details / proxy info can't
+        # leak into the response envelope.
         logger.warning("AI provider error: %s", e)
-        raise AIProviderError(f"AI provider error: {e}") from e
+        raise AIProviderError("AI service error") from e
     except Exception as e:  # network / unexpected — log full traceback
         logger.exception("AI unexpected error")
-        raise AIProviderError(f"AI call failed: {e}") from e
+        raise AIProviderError("AI service error") from e
 
     raw = response.choices[0].message.content or ""
 

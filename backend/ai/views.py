@@ -79,6 +79,12 @@ def _rate_limit_per_user(view_func):
                 cache.set(key, 1, _RATE_LIMIT_WINDOW_SECONDS)
                 count = 1
         if count > settings.LLM_RATE_LIMIT_PER_HOUR:
+            logger.warning(
+                "AI rate limit exceeded for user %s (count=%s, limit=%s)",
+                request.user.id,
+                count,
+                settings.LLM_RATE_LIMIT_PER_HOUR,
+            )
             return JsonResponse(
                 {"errors": {"detail": "Rate limit exceeded. Try again later."}},
                 status=429,
@@ -383,10 +389,22 @@ def ai_command(request, date):
                 if err is not None:
                     raise _Rollback(err)
     except _Rollback as rb:
+        logger.warning(
+            "AI action apply failed (user=%s, schedule=%s, actions=%s)",
+            request.user.id,
+            schedule.id,
+            len(result.parsed_actions),
+        )
         return rb.response
 
     result_blocks = TimeBlock.objects.filter(schedule=schedule).order_by(
         "start_time", "sort_order"
+    )
+    logger.info(
+        "AI command applied (user=%s, schedule=%s, actions=%s)",
+        request.user.id,
+        schedule.id,
+        len(result.parsed_actions),
     )
     return JsonResponse(
         {
