@@ -131,8 +131,8 @@ def run_command(user_command: str, schedule, blocks, now) -> AICommandResult:
     except openai.APIError as e:
         logger.warning("AI provider error: %s", e)
         raise AIProviderError(f"AI provider error: {e}") from e
-    except Exception as e:  # network / unexpected
-        logger.warning("AI unexpected error: %s", e)
+    except Exception as e:  # network / unexpected — log full traceback
+        logger.exception("AI unexpected error")
         raise AIProviderError(f"AI call failed: {e}") from e
 
     raw = response.choices[0].message.content or ""

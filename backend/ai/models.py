@@ -10,5 +10,13 @@ class AIInteraction(models.Model):
     actions_json = models.JSONField(default=list)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        indexes = [
+            models.Index(
+                fields=["schedule", "-created_at"],
+                name="ai_interact_sched_created_idx",
+            ),
+        ]
+
     def __str__(self):
         return f"{self.schedule.date}: {self.user_command[:50]}"
