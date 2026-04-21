@@ -86,10 +86,18 @@ def _get_client() -> OpenAI:
     """
     global _client
     if _client is None:
-        _client = OpenAI(
-            api_key=settings.LLM_API_KEY,
-            base_url=settings.LLM_BASE_URL,
-        )
+        try:
+            _client = OpenAI(
+                api_key=settings.LLM_API_KEY,
+                base_url=settings.LLM_BASE_URL,
+            )
+        except Exception as e:
+            # Never log ``e`` / repr(e) / the traceback — the failing frame's
+            # locals hold ``settings.LLM_API_KEY``. Record only the exception
+            # class so the key can't leak to logs / APM / error trackers.
+            # ``from None`` suppresses chaining for the same reason.
+            logger.warning("AI client init failed: %s", type(e).__name__)
+            raise AIProviderError("AI client initialization failed") from None
     return _client
 
 

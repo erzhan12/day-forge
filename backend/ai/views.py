@@ -415,6 +415,11 @@ def ai_command(request, date):
     current_blocks = list(
         TimeBlock.objects.filter(schedule=schedule).order_by("start_time", "sort_order")
     )
+    # BLOCKING: synchronous network call can consume up to LLM_REQUEST_TIMEOUT
+    # (~15s) and holds the worker thread for its duration. Fine for dev and
+    # low-concurrency deployments; for production under meaningful load,
+    # migrate to an async view (Django 4.1+ ``async def``) or a task queue
+    # (Celery + polling / websocket push) to avoid thread pool starvation.
     try:
         result = run_command(command, schedule, current_blocks, now)
     except AIError as e:
