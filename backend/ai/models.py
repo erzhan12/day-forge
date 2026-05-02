@@ -8,7 +8,19 @@ class AIInteraction(models.Model):
     user_command = models.TextField()
     ai_response = models.TextField()
     actions_json = models.JSONField(default=list)
+    # Pessimistic default: row is created before mutations apply, then
+    # flipped to True only if apply succeeds. Lets audit dashboards query
+    # failures without correlating against Django's application log.
+    success = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(
+                fields=["schedule", "-created_at"],
+                name="ai_interact_sched_created_idx",
+            ),
+        ]
 
     def __str__(self):
         return f"{self.schedule.date}: {self.user_command[:50]}"

@@ -1,58 +1,18 @@
 import { router } from "@inertiajs/vue3"
+import { type ApiResult, requestJson } from "./useHttp"
 
-// The backend deliberately overrides Django's default CSRF cookie
-// (`csrftoken` / `X-CSRFToken`) to the Inertia/Axios convention:
-// `XSRF-TOKEN` cookie + `X-XSRF-TOKEN` header. The matching settings
-// live in backend/day_forge/settings.py as CSRF_COOKIE_NAME and
-// CSRF_HEADER_NAME — if either side changes, change both.
-function getCsrfToken(): string {
-  const match = document.cookie.match(/XSRF-TOKEN=([^;]+)/)
-  return match ? decodeURIComponent(match[1]) : ""
-}
-
-export interface ApiResult {
-  ok: boolean
-  data?: Record<string, unknown>
-  errors?: Record<string, string | string[]>
-}
+export type { ApiResult }
 
 async function apiFetch(
   url: string,
   method: string,
   body?: Record<string, unknown>,
 ): Promise<ApiResult> {
-  let resp: Response
-  try {
-    resp = await fetch(url, {
-      method,
-      headers: {
-        "Content-Type": "application/json",
-        "X-XSRF-TOKEN": getCsrfToken(),
-      },
-      body: body ? JSON.stringify(body) : undefined,
-    })
-  } catch {
-    return { ok: false, errors: { detail: "Network error. Please check your connection." } }
-  }
-  if (resp.ok) {
-    let data: Record<string, unknown> | undefined
-    const text = await resp.text()
-    if (text) {
-      try {
-        data = JSON.parse(text)
-      } catch {
-        return { ok: false, errors: { detail: "Invalid server response." } }
-      }
-    }
+  const result = await requestJson(url, method, body)
+  if (result.ok) {
     router.reload({ only: ["blocks"] })
-    return { ok: true, data }
   }
-  try {
-    const data = await resp.json()
-    return { ok: false, errors: data.errors }
-  } catch {
-    return { ok: false, errors: { detail: `Server error (${resp.status})` } }
-  }
+  return result
 }
 
 export function useSchedule(date: string) {

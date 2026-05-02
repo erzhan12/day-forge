@@ -73,7 +73,10 @@ export function useUndo(date: string, getCurrentBlocks: () => TimeBlock[]) {
   }
 
   async function performUndo(): Promise<void> {
-    if (undoStack.value.length === 0) return
+    if (undoStack.value.length === 0) {
+      showToast("Nothing to undo.", false)
+      return
+    }
 
     const action = undoStack.value[undoStack.value.length - 1]
     const blocksPayload = action.previousBlocks.map((b) => ({

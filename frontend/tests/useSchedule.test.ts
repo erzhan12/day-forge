@@ -51,7 +51,8 @@ describe("useSchedule", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
       ok: false,
       status: 400,
-      json: () => Promise.resolve({ errors: { title: "Required" } }),
+      text: () =>
+        Promise.resolve(JSON.stringify({ errors: { title: "Required" } })),
     }))
 
     const { createBlock } = useSchedule("2026-04-10")
@@ -89,7 +90,7 @@ describe("useSchedule", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
       ok: false,
       status: 500,
-      json: () => Promise.reject(new Error("not json")),
+      text: () => Promise.resolve("not json"),
     }))
 
     const { deleteBlock } = useSchedule("2026-04-10")

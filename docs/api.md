@@ -240,6 +240,54 @@ All-or-nothing: if any block is invalid, no changes are applied.
 
 ---
 
+### `POST /api/ai/schedules/{date}/command/`
+
+Translate a natural-language command (English or Russian) into schedule mutations via the configured LLM, apply them atomically, and return the updated block list. Every call is logged to `AIInteraction`, success or failure — PRD §6.5.
+
+Requires `LLM_API_KEY` to be set. When unset, every call returns `503` so the frontend can show a degraded-mode indicator; manual editing is unaffected.
+
+**Path params**
+
+| Name | Type | Notes |
+|------|------|-------|
+| `date` | string | `YYYY-MM-DD`. Schedule is created if missing. |
+
+**Request body**
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `command` | string | yes | Up to `LLM_MAX_COMMAND_CHARS` (default 500) after trim. |
+
+**Success — `200 OK`**
+
+```json
+{
+  "blocks": [
+    { "id": 42, "title": "Standup", "start_time": "10:00", "end_time": "10:15", "category": "work", "is_completed": false, "sort_order": 0 }
+  ],
+  "explanation": "Added standup at 10:00 for 15 minutes."
+}
+```
+
+`blocks` is the full schedule after the AI's actions were applied. `explanation` is a short human-readable summary produced by the model (same language as the user's command).
+
+**Errors**
+
+| Status | `errors` key | Meaning |
+|--------|--------------|---------|
+| `400` | `command` / `date` / `body` | Request shape / command type invalid. |
+| `400` | `action_index` + `detail` | AI action failed validation (overlap, bad time, unknown block ID). All prior actions in the batch are rolled back. |
+| `403` | `detail` | CSRF token missing/invalid. |
+| `413` | `body` | Request body exceeds 100 KB. |
+| `429` | `detail` | Per-user rate limit (`LLM_RATE_LIMIT_PER_HOUR`, default 100/hr) exceeded. No `AIInteraction` row is written for rejected calls. |
+| `502` | `detail` | LLM provider returned an error, or response failed JSON / schema validation. |
+| `503` | `detail` | `LLM_API_KEY` is not configured. |
+| `504` | `detail` | LLM provider timed out (>`LLM_REQUEST_TIMEOUT` seconds). |
+
+Atomicity: mid-batch validation failure rolls back all DB mutations. The `AIInteraction` row for the request is written *before* mutations are applied, so failed requests still leave a log entry with `actions_json` reflecting the AI's intent.
+
+---
+
 ## Example: create → update → delete (dev)
 
 ```bash

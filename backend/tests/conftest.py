@@ -2,6 +2,7 @@ import django
 import pytest
 from django.conf import settings
 from django.contrib.auth.models import User
+from django.core.cache import cache
 from django.test import Client
 
 # Ensure Django is set up before tests run
@@ -9,6 +10,16 @@ if not settings.configured:
     django.setup()
 
 from schedules.models import Schedule  # noqa: E402  (must come after django.setup)
+
+
+@pytest.fixture(autouse=True)
+def _clear_cache():
+    """The AI command endpoint uses the default cache for per-user rate
+    limiting, and LocMemCache persists across tests in the same process.
+    Clear before and after every test so rate-limit counters don't leak."""
+    cache.clear()
+    yield
+    cache.clear()
 
 
 @pytest.fixture

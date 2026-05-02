@@ -2,8 +2,69 @@
 
 from unittest.mock import patch
 
+from ai.checks import error_locmem_cache_with_ai_in_production
 from django.test import override_settings
 from schedules.checks import warn_sqlite_in_production
+
+LOCMEM = "django.core.cache.backends.locmem.LocMemCache"
+REDIS = "django.core.cache.backends.redis.RedisCache"
+
+
+class TestLocmemCacheProductionError:
+    def test_fires_even_when_debug_true(self):
+        """A misconfigured prod with DEBUG=True must not silently bypass
+        the rate-limiter check; AI-enabled + LocMem fires regardless of
+        DEBUG mode."""
+        with override_settings(
+            DEBUG=True,
+            LLM_API_KEY="sk-test",
+            CACHES={"default": {"BACKEND": LOCMEM}},
+        ):
+            errors = error_locmem_cache_with_ai_in_production(app_configs=None)
+        assert len(errors) == 1
+        assert errors[0].id == "ai.E001"
+
+    def test_silent_when_ai_disabled(self):
+        """No LLM_API_KEY → no AI traffic → no rate-limit bypass risk."""
+        with override_settings(
+            DEBUG=False,
+            LLM_API_KEY="",
+            CACHES={"default": {"BACKEND": LOCMEM}},
+        ):
+            assert error_locmem_cache_with_ai_in_production(app_configs=None) == []
+
+    def test_silent_when_api_key_is_whitespace(self):
+        """A whitespace-only key is effectively unset — don't false-alarm."""
+        with override_settings(
+            DEBUG=False,
+            LLM_API_KEY="   ",
+            CACHES={"default": {"BACKEND": LOCMEM}},
+        ):
+            assert error_locmem_cache_with_ai_in_production(app_configs=None) == []
+
+    def test_silent_on_shared_cache_backend(self):
+        """Any non-LocMem backend is presumed shared across workers."""
+        with override_settings(
+            DEBUG=False,
+            LLM_API_KEY="sk-test",
+            CACHES={"default": {"BACKEND": REDIS}},
+        ):
+            assert error_locmem_cache_with_ai_in_production(app_configs=None) == []
+
+    def test_errors_when_prod_plus_locmem_plus_ai(self):
+        """DEBUG=False + LLM_API_KEY set + LocMem is the blocking case."""
+        with override_settings(
+            DEBUG=False,
+            LLM_API_KEY="sk-test",
+            CACHES={"default": {"BACKEND": LOCMEM}},
+        ):
+            errors = error_locmem_cache_with_ai_in_production(app_configs=None)
+        assert len(errors) == 1
+        err = errors[0]
+        assert err.id == "ai.E001"
+        assert "LocMemCache" in err.msg
+        assert "per-process" in err.msg
+        assert "Redis" in (err.hint or "")
 
 
 class TestSqliteProductionWarning:

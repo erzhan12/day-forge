@@ -114,10 +114,12 @@ describe("useUndo", () => {
     expect(undo.currentToast.value?.description).toMatch(/failed/i)
   })
 
-  it("performUndo on empty stack is a no-op", async () => {
+  it("performUndo on empty stack shows 'Nothing to undo' toast", async () => {
     const { undo } = mountUndo()
     await undo.performUndo()
     expect(mockRestoreBlocks).not.toHaveBeenCalled()
+    expect(undo.currentToast.value?.description).toBe("Nothing to undo.")
+    expect(undo.currentToast.value?.actionable).toBe(false)
   })
 
   it("snapshotBlocks deep clones", () => {

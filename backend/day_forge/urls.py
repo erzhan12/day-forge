@@ -1,3 +1,4 @@
+from ai import views as ai_views
 from django.contrib import admin
 from django.urls import path
 from schedules import api as schedules_api
@@ -23,5 +24,10 @@ urlpatterns = [
         "api/schedules/<str:date>/blocks/restore/",
         schedules_api.restore_blocks,
         name="restore_blocks",
+    ),
+    path(
+        "api/ai/schedules/<str:date>/command/",
+        ai_views.ai_command,
+        name="ai_command",
     ),
 ]

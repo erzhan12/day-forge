@@ -24,7 +24,7 @@ export interface RenderItem {
 
 export interface UndoAction {
   description: string
-  type: "drag" | "edit" | "toggle" | "add" | "delete"
+  type: "drag" | "edit" | "toggle" | "add" | "delete" | "ai"
   previousBlocks: TimeBlock[]
   scheduleDate: string
 }
