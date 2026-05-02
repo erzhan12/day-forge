@@ -20,6 +20,17 @@ See `.claude/rules/` for detailed instructions. Review `tasks/lessons.md` at ses
 - **Migrate:** `uv run python backend/manage.py migrate`
 - **Seed data:** `uv run python backend/manage.py seed_templates`
 
+## Production Deployment
+
+The AI command endpoint (`POST /api/ai/schedules/<date>/command/`) makes a **synchronous** LLM call that holds a Django worker for up to `LLM_REQUEST_TIMEOUT` seconds (default 15). Under sync workers, N concurrent AI requests starve the worker pool and stall *all* traffic, including manual schedule edits — not just AI traffic. This is acceptable for development and low-concurrency demos; before exposing the AI endpoint to production load, do **one** of:
+
+- Convert `ai_command` to an `async def` view (Django 4.1+) backed by an async LLM client.
+- Move the LLM call to a Celery task and return results via polling or a websocket push.
+
+Other production prerequisites (already enforced by the `ai.E001` system check when `LLM_API_KEY` is set):
+
+- Use a **shared cache backend** (Redis or Memcached) for `CACHES['default']`. The default `LocMemCache` is per-process, so the per-user rate limit collapses to `LLM_RATE_LIMIT_PER_HOUR × worker_count` and is trivially bypassed.
+
 ## Key Files
 
 - `RULES.md` — Living knowledge base of patterns, pitfalls, conventions

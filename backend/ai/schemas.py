@@ -78,6 +78,12 @@ def validate_action_shape(action, allowed_categories) -> list[str]:
             errors.append("title cannot be empty")
         elif len(title) > MAX_TITLE_LEN:
             errors.append(f"title must be <= {MAX_TITLE_LEN} chars")
+        elif any(ord(c) < 32 and c not in "\t\n\r" for c in title):
+            # Reject NUL and other unprintable control chars that could
+            # corrupt downstream consumers (CSV exports, log scrapers).
+            # Tab/newline/CR are allowed since users may legitimately
+            # paste multi-line titles.
+            errors.append("title contains invalid control characters")
 
     for time_field in ("start_time", "end_time"):
         if time_field in action and not _is_hhmm(action[time_field]):

@@ -11,14 +11,18 @@ REDIS = "django.core.cache.backends.redis.RedisCache"
 
 
 class TestLocmemCacheProductionError:
-    def test_silent_when_debug_true(self):
-        """Dev runs ignore LocMem + AI regardless of key status."""
+    def test_fires_even_when_debug_true(self):
+        """A misconfigured prod with DEBUG=True must not silently bypass
+        the rate-limiter check; AI-enabled + LocMem fires regardless of
+        DEBUG mode."""
         with override_settings(
             DEBUG=True,
             LLM_API_KEY="sk-test",
             CACHES={"default": {"BACKEND": LOCMEM}},
         ):
-            assert error_locmem_cache_with_ai_in_production(app_configs=None) == []
+            errors = error_locmem_cache_with_ai_in_production(app_configs=None)
+        assert len(errors) == 1
+        assert errors[0].id == "ai.E001"
 
     def test_silent_when_ai_disabled(self):
         """No LLM_API_KEY → no AI traffic → no rate-limit bypass risk."""
