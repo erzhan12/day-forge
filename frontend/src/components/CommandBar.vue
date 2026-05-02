@@ -30,6 +30,17 @@ const PLACEHOLDERS = [
 const placeholder = ref(PLACEHOLDERS[0])
 let placeholderTimer: ReturnType<typeof setInterval> | null = null
 
+function _scheduleChanged(snapshot: TimeBlock[], responseBlocks: unknown): boolean {
+  if (!Array.isArray(responseBlocks)) return false
+  const key = (b: TimeBlock) =>
+    `${b.id}|${b.title}|${b.start_time}|${b.end_time}|${b.category}|${b.is_completed}|${b.sort_order}`
+  const before = new Set(snapshot.map(key))
+  const after = new Set((responseBlocks as TimeBlock[]).map((b) => key(b as TimeBlock)))
+  if (before.size !== after.size) return true
+  for (const k of before) if (!after.has(k)) return true
+  return false
+}
+
 async function handleSubmit() {
   if (isProcessing.value) return
   const command = input.value.trim()
@@ -39,12 +50,14 @@ async function handleSubmit() {
   const result = await submitCommand(props.date, command)
 
   if (result.ok) {
-    props.pushUndo({
-      description: result.explanation || "AI command",
-      type: "ai",
-      previousBlocks: snapshot,
-      scheduleDate: props.date,
-    })
+    if (_scheduleChanged(snapshot, result.data?.blocks)) {
+      props.pushUndo({
+        description: result.explanation || "AI command",
+        type: "ai",
+        previousBlocks: snapshot,
+        scheduleDate: props.date,
+      })
+    }
     input.value = ""
   }
   // On failure: keep input so the user can edit and retry.

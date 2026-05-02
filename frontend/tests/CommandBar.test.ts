@@ -18,8 +18,11 @@ vi.mock("../src/composables/useAI", () => ({
 
 import CommandBar from "../src/components/CommandBar.vue"
 
+const BLOCK_A = { id: 1, title: "A", start_time: "09:00", end_time: "10:00", category: "work" as const, is_completed: false, sort_order: 0 }
+const BLOCK_B = { id: 2, title: "Standup", start_time: "10:00", end_time: "10:15", category: "work" as const, is_completed: false, sort_order: 1 }
+
 function makeSnapshot() {
-  return [{ id: 1, title: "A", start_time: "09:00", end_time: "10:00", category: "work" as const, is_completed: false, sort_order: 0 }]
+  return [{ ...BLOCK_A }]
 }
 
 // Track the mounted wrapper so `afterEach` can always tear it down — without
@@ -54,8 +57,13 @@ describe("CommandBar", () => {
     wrapper = null
   })
 
-  it("submits on Enter and pushes undo with type: 'ai'", async () => {
-    submitCommand.mockResolvedValue({ ok: true, explanation: "Added standup" })
+  it("submits on Enter and pushes undo when blocks changed", async () => {
+    // Response includes a new block — schedule changed → undo must be registered.
+    submitCommand.mockResolvedValue({
+      ok: true,
+      explanation: "Added standup",
+      data: { blocks: [BLOCK_A, BLOCK_B] },
+    })
     const pushUndo = vi.fn()
     const w = mountBar({ pushUndo })
 
@@ -71,6 +79,26 @@ describe("CommandBar", () => {
     expect(action.description).toBe("Added standup")
     expect(action.scheduleDate).toBe("2026-04-18")
     // Input clears on success.
+    expect((input.element as HTMLInputElement).value).toBe("")
+  })
+
+  it("does not push undo when AI succeeds but schedule is unchanged (zero actions)", async () => {
+    // LLM replied with a clarification — same blocks back, no mutations applied.
+    submitCommand.mockResolvedValue({
+      ok: true,
+      explanation: "Cannot add block at 23:40 — outside working hours.",
+      data: { blocks: [BLOCK_A] },
+    })
+    const pushUndo = vi.fn()
+    const w = mountBar({ pushUndo })
+
+    const input = w.find(".command-input")
+    await input.setValue("add call at 23:40 for 5 min")
+    await w.find("form").trigger("submit")
+    await nextTick()
+
+    expect(pushUndo).not.toHaveBeenCalled()
+    // Input still clears — the command was handled successfully.
     expect((input.element as HTMLInputElement).value).toBe("")
   })
 
@@ -104,7 +132,11 @@ describe("CommandBar", () => {
   })
 
   it("takes snapshot via the prop (DataCloneError regression guard)", async () => {
-    submitCommand.mockResolvedValue({ ok: true, explanation: "ok" })
+    submitCommand.mockResolvedValue({
+      ok: true,
+      explanation: "ok",
+      data: { blocks: [BLOCK_A, BLOCK_B] },
+    })
     const snapshotBlocks = vi.fn(makeSnapshot)
     const w = mountBar({ snapshotBlocks })
     await w.find(".command-input").setValue("hi")
