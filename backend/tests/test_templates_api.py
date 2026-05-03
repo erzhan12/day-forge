@@ -272,3 +272,61 @@ class TestRulesCRUD:
         resp = auth_client.delete(f"/api/rules/{r.id}/")
         assert resp.status_code == 200
         assert not Rule.objects.filter(pk=r.id).exists()
+
+
+@pytest.mark.django_db
+class TestRulePriorityBounds:
+    """Bounds-check on the ``priority`` field. Without this the API would
+    accept arbitrary-precision Python ints and let them propagate to the
+    DB, where Django's ``IntegerField`` (32-bit signed) would reject them
+    with a ``DataError`` and surface as a 500. Bounding at the API layer
+    turns that into a structured 400."""
+
+    def test_create_rejects_priority_above_max(self, auth_client):
+        resp = _post(
+            auth_client,
+            "/api/rules/",
+            {"text": "X", "priority": 10**12},
+        )
+        assert resp.status_code == 400
+        assert "priority" in resp.json()["errors"]
+
+    def test_create_rejects_priority_below_min(self, auth_client):
+        resp = _post(
+            auth_client,
+            "/api/rules/",
+            {"text": "X", "priority": -10**12},
+        )
+        assert resp.status_code == 400
+        assert "priority" in resp.json()["errors"]
+
+    def test_create_accepts_priority_at_max(self, auth_client, user):
+        from templates_mgr.api import MAX_PRIORITY
+
+        resp = _post(
+            auth_client,
+            "/api/rules/",
+            {"text": "X", "priority": MAX_PRIORITY},
+        )
+        assert resp.status_code == 201
+        assert Rule.objects.get(user=user, text="X").priority == MAX_PRIORITY
+
+    def test_patch_rejects_out_of_range_priority(self, auth_client, user):
+        r = Rule.objects.create(user=user, text="X", priority=5)
+        resp = _patch(
+            auth_client, f"/api/rules/{r.id}/", {"priority": 10**12}
+        )
+        assert resp.status_code == 400
+        r.refresh_from_db()
+        assert r.priority == 5  # unchanged
+
+    def test_patch_accepts_priority_at_min(self, auth_client, user):
+        from templates_mgr.api import MIN_PRIORITY
+
+        r = Rule.objects.create(user=user, text="X", priority=0)
+        resp = _patch(
+            auth_client, f"/api/rules/{r.id}/", {"priority": MIN_PRIORITY}
+        )
+        assert resp.status_code == 200
+        r.refresh_from_db()
+        assert r.priority == MIN_PRIORITY

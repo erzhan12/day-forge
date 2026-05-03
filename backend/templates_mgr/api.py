@@ -33,6 +33,13 @@ MAX_TEMPLATE_NAME_LEN = 100
 MAX_TEMPLATE_BLOCKS = 50
 MAX_RULE_TEXT_LEN = 500
 MAX_RULES_PER_USER = 100
+# Bound the priority field to stay well within Django's 32-bit IntegerField
+# range so an out-of-range payload returns a structured 400 instead of
+# letting the value reach the DB driver and surfacing as a 500. The values
+# are far larger than any realistic priority a user would set; the cap
+# exists purely to fail fast at the API boundary.
+MIN_PRIORITY = -1_000_000
+MAX_PRIORITY = 1_000_000
 
 _DAY_START_T = datetime.time.fromisoformat(DAY_START)
 _DAY_END_T = datetime.time.fromisoformat(DAY_END)
@@ -180,6 +187,11 @@ def _parse_rule_create_payload(data) -> tuple[dict, JsonResponse | None]:
         priority = data["priority"]
         if not isinstance(priority, int) or isinstance(priority, bool):
             return {}, _err("priority", "priority must be an integer.")
+        if not (MIN_PRIORITY <= priority <= MAX_PRIORITY):
+            return {}, _err(
+                "priority",
+                f"priority must be between {MIN_PRIORITY} and {MAX_PRIORITY}.",
+            )
         cleaned["priority"] = priority
     return cleaned, None
 
@@ -206,6 +218,11 @@ def _parse_rule_patch_payload(data) -> tuple[dict, JsonResponse | None]:
         priority = data["priority"]
         if not isinstance(priority, int) or isinstance(priority, bool):
             return {}, _err("priority", "priority must be an integer.")
+        if not (MIN_PRIORITY <= priority <= MAX_PRIORITY):
+            return {}, _err(
+                "priority",
+                f"priority must be between {MIN_PRIORITY} and {MAX_PRIORITY}.",
+            )
         cleaned["priority"] = priority
 
     if not cleaned:
