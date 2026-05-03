@@ -19,6 +19,7 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from schedules.http import (
     VALID_CATEGORIES,
+    is_plain_int,
     parse_time_or_error,
     reject_oversized_body,
     validate_five_minute_or_error,
@@ -185,7 +186,7 @@ def _parse_rule_create_payload(data) -> tuple[dict, JsonResponse | None]:
         cleaned["is_active"] = data["is_active"]
     if "priority" in data:
         priority = data["priority"]
-        if not isinstance(priority, int) or isinstance(priority, bool):
+        if not is_plain_int(priority):
             return {}, _err("priority", "priority must be an integer.")
         if not (MIN_PRIORITY <= priority <= MAX_PRIORITY):
             return {}, _err(
@@ -216,7 +217,7 @@ def _parse_rule_patch_payload(data) -> tuple[dict, JsonResponse | None]:
         cleaned["is_active"] = data["is_active"]
     if "priority" in data:
         priority = data["priority"]
-        if not isinstance(priority, int) or isinstance(priority, bool):
+        if not is_plain_int(priority):
             return {}, _err("priority", "priority must be an integer.")
         if not (MIN_PRIORITY <= priority <= MAX_PRIORITY):
             return {}, _err(

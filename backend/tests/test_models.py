@@ -131,6 +131,31 @@ class TestTemplate:
         Template.objects.create(user=other, name="B", type="weekday", blocks=[])
 
 
+@pytest.mark.parametrize(
+    ("date", "expected"),
+    [
+        # 2026-05-04 is a Monday — anchor the calendar so the parametrize
+        # list reads top-to-bottom Mon..Sun.
+        (datetime.date(2026, 5, 4), "weekday"),  # Mon = 0
+        (datetime.date(2026, 5, 5), "weekday"),  # Tue = 1
+        (datetime.date(2026, 5, 6), "weekday"),  # Wed = 2
+        (datetime.date(2026, 5, 7), "weekday"),  # Thu = 3
+        (datetime.date(2026, 5, 8), "weekday"),  # Fri = 4
+        (datetime.date(2026, 5, 9), "weekend"),  # Sat = 5
+        (datetime.date(2026, 5, 10), "weekend"),  # Sun = 6
+    ],
+)
+def test_template_slot_type_for_date_covers_all_seven_weekdays(date, expected):
+    """Pin the Mon=0..Sun=6 contract of ``date.weekday()``.
+
+    The helper exists precisely because the comparison ``>= 5`` is
+    non-obvious — it relies on ``weekday()`` (NOT ``isoweekday()``,
+    which uses Mon=1..Sun=7). A parametrized sweep across all seven
+    days catches any future "fix" that swaps the API.
+    """
+    assert Template.slot_type_for_date(date) == expected
+
+
 # --- Rule ---
 
 
