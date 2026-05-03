@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, watch, inject } from "vue"
+import type { Ref } from "vue"
+import { computed, ref, watch, inject } from "vue"
 import type { TimeBlock, UndoAction } from "../types"
 import { useSchedule } from "../composables/useSchedule"
 
@@ -15,6 +16,9 @@ const undo = inject<{
   pushUndo: (action: UndoAction) => void
   snapshotBlocks: () => TimeBlock[]
 }>("undo")
+
+const scheduleDisabled = inject<Ref<boolean> | null>("scheduleDisabled", null)
+const isDisabled = computed(() => Boolean(scheduleDisabled?.value))
 
 const title = ref("")
 const startTime = ref(props.initialStartTime ?? "09:00")
@@ -34,6 +38,7 @@ watch(
 )
 
 async function handleSubmit() {
+  if (isDisabled.value) return
   if (!title.value.trim()) return
   submitting.value = true
   errorMessage.value = ""
@@ -71,7 +76,12 @@ function cancel() {
 
 <template>
   <div class="add-block">
-    <button v-if="!showForm" class="add-btn" @click="showForm = true">
+    <button
+      v-if="!showForm"
+      class="add-btn"
+      :disabled="isDisabled"
+      @click="showForm = true"
+    >
       + Add Block
     </button>
     <form v-else class="add-form" @submit.prevent="handleSubmit">

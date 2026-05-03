@@ -44,7 +44,7 @@ describe("useSchedule", () => {
 
     expect(result.ok).toBe(true)
     expect(result.data).toEqual(body)
-    expect(router.reload).toHaveBeenCalledWith({ only: ["blocks"] })
+    expect(router.reload).toHaveBeenCalledWith({ only: ["blocks", "schedule"] })
   })
 
   it("returns errors on 400", async () => {
@@ -120,7 +120,7 @@ describe("useSchedule", () => {
     expect(url).toBe("/api/blocks/reorder/")
     expect(options.method).toBe("POST")
     expect(JSON.parse(options.body)).toEqual({ updates })
-    expect(router.reload).toHaveBeenCalledWith({ only: ["blocks"] })
+    expect(router.reload).toHaveBeenCalledWith({ only: ["blocks", "schedule"] })
   })
 
   it("sends restoreBlocks with correct payload", async () => {
@@ -142,6 +142,6 @@ describe("useSchedule", () => {
     expect(url).toBe("/api/schedules/2026-04-10/blocks/restore/")
     expect(options.method).toBe("POST")
     expect(JSON.parse(options.body)).toEqual({ blocks })
-    expect(router.reload).toHaveBeenCalledWith({ only: ["blocks"] })
+    expect(router.reload).toHaveBeenCalledWith({ only: ["blocks", "schedule"] })
   })
 })

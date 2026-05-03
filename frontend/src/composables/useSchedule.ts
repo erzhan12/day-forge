@@ -10,7 +10,7 @@ async function apiFetch(
 ): Promise<ApiResult> {
   const result = await requestJson(url, method, body)
   if (result.ok) {
-    router.reload({ only: ["blocks"] })
+    router.reload({ only: ["blocks", "schedule"] })
   }
   return result
 }

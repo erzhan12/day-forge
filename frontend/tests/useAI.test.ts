@@ -54,7 +54,7 @@ describe("useAI.submitCommand", () => {
     expect(options.method).toBe("POST")
     expect(options.headers["X-XSRF-TOKEN"]).toBe("csrf-xyz")
     expect(JSON.parse(options.body)).toEqual({ command: "add standup" })
-    expect(router.reload).toHaveBeenCalledWith({ only: ["blocks"] })
+    expect(router.reload).toHaveBeenCalledWith({ only: ["blocks", "schedule"] })
   })
 
   it("toggles isProcessing around the call", async () => {

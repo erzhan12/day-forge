@@ -26,6 +26,7 @@ from schedules.http import (
 )
 from schedules.models import Schedule, TimeBlock
 from schedules.validators import validate_five_minute_granularity
+from templates_mgr.models import Rule, Template
 
 from ai.models import AIInteraction
 from ai.prompts import DAY_END, DAY_START
@@ -37,6 +38,7 @@ from ai.service import (
     AITimeoutError,
     AIUnavailableError,
     run_command,
+    run_draft,
 )
 
 _DAY_START_T = datetime.time.fromisoformat(DAY_START)
@@ -62,38 +64,62 @@ _MAX_COMMAND_LOG_LEN = 2_000
 _RATE_LIMIT_WINDOW_SECONDS = 3600
 
 
-def _rate_limit_per_user(view_func):
-    """Fixed-window per-user rate limit via Django's default cache.
+def _consume_rate_limit(user_id: int, key_prefix: str, limit: int) -> bool:
+    """Increment the per-user fixed-window counter under ``key_prefix``.
 
-    Budget is ``settings.LLM_RATE_LIMIT_PER_HOUR`` calls per user per hour;
-    over-budget requests return 429. ``cache.add`` + ``cache.incr`` anchors
-    the TTL to the first call in each window instead of sliding it forward
-    on every request. The default LocMem cache is per-worker, so in
+    Returns True when the call is within budget (caller proceeds), False
+    when exceeded (caller returns 429). ``cache.add`` anchors the TTL to
+    the first call in each window so it doesn't slide forward on every
+    request; falls back to ``cache.set`` if a backend evicts the key
+    mid-window.
+
+    LocMem note: the default ``LocMemCache`` is per-worker, so in
     multi-worker deployments the effective limit is ``limit × workers`` —
-    use a shared cache backend (e.g. Redis) for an accurate global count.
+    the ``ai.E001`` system check blocks production startup unless the
+    cache backend is shared (Redis / Memcached).
+    """
+    key = f"{key_prefix}:{user_id}"
+    if cache.add(key, 1, _RATE_LIMIT_WINDOW_SECONDS):
+        count = 1
+    else:
+        try:
+            count = cache.incr(key)
+        except ValueError:
+            cache.set(key, 1, _RATE_LIMIT_WINDOW_SECONDS)
+            count = 1
+    if count > limit:
+        logger.warning(
+            "AI rate limit exceeded for user %s (key=%s, count=%s, limit=%s)",
+            user_id,
+            key_prefix,
+            count,
+            limit,
+        )
+        return False
+    return True
+
+
+def _rate_limited_response() -> JsonResponse:
+    return JsonResponse(
+        {"errors": {"detail": "Rate limit exceeded. Try again later."}},
+        status=429,
+    )
+
+
+def _rate_limit_per_user(view_func):
+    """Fixed-window per-user rate limit decorator for the command endpoint.
+
+    Used by ``ai_command``. The draft endpoint does **not** use a
+    decorator — its rate limit is consumed inline after precondition
+    checks pass, so a 422 / 409 / oversized-body / invalid-date does not
+    burn the 10/hr draft budget.
     """
     @functools.wraps(view_func)
     def wrapper(request, *args, **kwargs):
-        key = f"ai_cmd_rl:{request.user.id}"
-        if cache.add(key, 1, _RATE_LIMIT_WINDOW_SECONDS):
-            count = 1
-        else:
-            try:
-                count = cache.incr(key)
-            except ValueError:
-                cache.set(key, 1, _RATE_LIMIT_WINDOW_SECONDS)
-                count = 1
-        if count > settings.LLM_RATE_LIMIT_PER_HOUR:
-            logger.warning(
-                "AI rate limit exceeded for user %s (count=%s, limit=%s)",
-                request.user.id,
-                count,
-                settings.LLM_RATE_LIMIT_PER_HOUR,
-            )
-            return JsonResponse(
-                {"errors": {"detail": "Rate limit exceeded. Try again later."}},
-                status=429,
-            )
+        if not _consume_rate_limit(
+            request.user.id, "ai_cmd_rl", settings.LLM_RATE_LIMIT_PER_HOUR
+        ):
+            return _rate_limited_response()
         return view_func(request, *args, **kwargs)
     return wrapper
 
@@ -103,6 +129,7 @@ def _log_interaction(
     command: str,
     response_text: str,
     actions: list,
+    kind: str = AIInteraction.Kind.COMMAND,
 ) -> AIInteraction | None:
     """Best-effort persistence of one AI interaction. Never raises.
 
@@ -114,6 +141,10 @@ def _log_interaction(
     Truncation on ``response_text`` is a belt-and-suspenders safety net for
     pathological provider responses — ``TextField`` has no DB-level max,
     but we don't want a 5 MB hallucination hogging our SQLite file.
+
+    ``kind`` distinguishes user commands from draft generations in audit
+    reports without overloading ``user_command`` (drafts log a synthetic
+    ``"[DRAFT]"`` placeholder).
 
     Rows start with ``success=False`` (pessimistic); ``_mark_success`` flips
     them once apply completes.
@@ -130,6 +161,7 @@ def _log_interaction(
             user_command=command[:_MAX_COMMAND_LOG_LEN],
             ai_response=response_text[:_MAX_AI_RESPONSE_LOG_LEN],
             actions_json=actions,
+            kind=kind,
         )
     except Exception:
         logger.exception(
@@ -470,11 +502,210 @@ def ai_command(request, date):
 
     _mark_success(interaction)
 
+    # Status flip is gated on actions being non-empty: RULES.md treats a
+    # 200 with ``actions: []`` as a successful no-op (LLM ambiguity /
+    # out-of-window guard), and undo registration follows the same gate.
+    # Promoting a draft to active on a no-op LLM response would lie about
+    # user intent.
+    if len(result.parsed_actions) > 0:
+        schedule.mark_active_if_draft()
+
     result_blocks = TimeBlock.objects.filter(schedule=schedule).order_by(
         "start_time", "sort_order"
     )
     logger.info(
         "AI command applied (user=%s, schedule=%s, actions=%s)",
+        request.user.id,
+        schedule.id,
+        len(result.parsed_actions),
+    )
+    return JsonResponse(
+        {
+            "blocks": [block_to_dict(b) for b in result_blocks],
+            "explanation": result.explanation,
+        }
+    )
+
+
+@login_required
+@require_http_methods(["POST"])
+def ai_generate_draft(request, date):
+    """Generate a draft schedule for an empty day.
+
+    Refuses if the schedule already has any blocks (409) or if the user
+    has no template configured for the day's slot type (422). Both checks
+    happen before any LLM call **and before the rate-limit counter is
+    incremented**, so a stale page or a misconfigured account can't burn
+    the 10/hr draft budget without a real LLM call ever firing. (Drafts
+    use ``LLM_DRAFT_MODEL``, ~5-10x the cost of ``LLM_MODEL``, so the
+    budget is small and worth protecting.)
+
+    The LLM call runs outside any transaction (long network call, no DB
+    locks held); the apply step opens a fresh ``transaction.atomic()``
+    that **locks the Schedule row** with ``select_for_update()`` (an
+    empty ``TimeBlock`` queryset locks zero rows, so the lock has to be
+    on the parent), then re-checks emptiness under that lock so a
+    concurrent ``create_block`` or another draft request can't race
+    blocks in between the pre-call ``exists()`` and the apply.
+    """
+    oversized = reject_oversized_body(request)
+    if oversized is not None:
+        return oversized
+
+    try:
+        parsed_date = datetime.date.fromisoformat(date)
+    except ValueError:
+        return JsonResponse({"errors": {"date": "Invalid date format."}}, status=400)
+
+    schedule, _ = Schedule.objects.get_or_create(
+        user=request.user, date=parsed_date
+    )
+
+    if TimeBlock.objects.filter(schedule=schedule).exists():
+        return JsonResponse(
+            {
+                "errors": {
+                    "detail": (
+                        "Schedule already has blocks; delete them before "
+                        "regenerating."
+                    )
+                }
+            },
+            status=409,
+        )
+
+    slot_type = (
+        Template.Type.WEEKEND
+        if parsed_date.weekday() >= 5
+        else Template.Type.WEEKDAY
+    )
+    template = Template.objects.filter(
+        user=request.user, type=slot_type
+    ).first()
+    if template is None:
+        return JsonResponse(
+            {
+                "errors": {
+                    "detail": (
+                        "No template configured for this day type. "
+                        "Open Settings."
+                    )
+                }
+            },
+            status=422,
+        )
+
+    # Rate limit consumption goes here, AFTER all preconditions pass and
+    # BEFORE the LLM call. Earlier 400 / 409 / 413 / 422 paths must not
+    # increment the counter — see the docstring above.
+    if not _consume_rate_limit(
+        request.user.id,
+        "ai_draft_rl",
+        settings.LLM_DRAFT_RATE_LIMIT_PER_HOUR,
+    ):
+        return _rate_limited_response()
+
+    history_start = parsed_date - datetime.timedelta(
+        days=settings.LLM_HISTORY_DAYS
+    )
+    history = list(
+        Schedule.objects.filter(
+            user=request.user,
+            date__lt=parsed_date,
+            date__gte=history_start,
+            status__in=[Schedule.Status.ACTIVE, Schedule.Status.REVIEWED],
+        )
+        .order_by("date")
+        .prefetch_related("time_blocks")
+    )
+    rules = list(
+        Rule.objects.filter(user=request.user, is_active=True).order_by("-priority")
+    )
+
+    now = timezone.localtime()
+    try:
+        result = run_draft(schedule, template, history, rules, now)
+    except AIError as e:
+        raw = getattr(e, "raw_response_text", "") or str(e)
+        _log_interaction(
+            schedule, "[DRAFT]", raw, [], kind=AIInteraction.Kind.DRAFT
+        )
+        status = next(
+            (s for cls, s in _AI_ERROR_STATUS.items() if isinstance(e, cls)),
+            None,
+        )
+        if status is None:
+            logger.error(
+                "Unmapped AIError subclass %s — add to _AI_ERROR_STATUS",
+                type(e).__name__,
+            )
+            status = 500
+        return JsonResponse({"errors": {"detail": str(e)}}, status=status)
+
+    interaction = _log_interaction(
+        schedule,
+        "[DRAFT]",
+        result.raw_response_text,
+        result.parsed_actions,
+        kind=AIInteraction.Kind.DRAFT,
+    )
+
+    try:
+        with transaction.atomic():
+            # Lock the SCHEDULE row, not the empty ``TimeBlock`` queryset.
+            # On an empty schedule (the normal case for a draft) a
+            # ``SELECT ... FOR UPDATE WHERE schedule_id = ?`` against
+            # ``TimeBlock`` matches no rows and so acquires no locks —
+            # two concurrent draft requests would both pass the check
+            # and both insert. Locking the parent row serialises every
+            # potential writer for this schedule (drafts, manual block
+            # creation, reorder, etc.) through one queue.
+            #
+            # SQLite ignores ``select_for_update`` silently (see
+            # ``schedules.W001``); PostgreSQL honours it.
+            Schedule.objects.select_for_update().get(pk=schedule.pk)
+            locked_blocks = list(TimeBlock.objects.filter(schedule=schedule))
+            # Re-check emptiness under the row lock — a concurrent
+            # ``create_block`` or draft could have raced in between the
+            # initial ``.exists()`` check and this point.
+            if locked_blocks:
+                raise _Rollback(
+                    JsonResponse(
+                        {
+                            "errors": {
+                                "detail": (
+                                    "Schedule already has blocks; delete "
+                                    "them before regenerating."
+                                )
+                            }
+                        },
+                        status=409,
+                    )
+                )
+            blocks_by_id: dict = {}
+            for idx, action in enumerate(result.parsed_actions):
+                err = _apply_add(schedule, blocks_by_id, action, idx)
+                if err is not None:
+                    raise _Rollback(err)
+    except _Rollback as rb:
+        logger.warning(
+            "AI draft apply failed (user=%s, schedule=%s, actions=%s)",
+            request.user.id,
+            schedule.id,
+            len(result.parsed_actions),
+        )
+        return rb.response
+
+    _mark_success(interaction)
+
+    # Drafts intentionally do NOT flip ``schedule.status``. The badge
+    # stays "draft" until the user makes a real edit (which happens
+    # through one of the forward-mutating endpoints in schedules.api).
+    result_blocks = TimeBlock.objects.filter(schedule=schedule).order_by(
+        "start_time", "sort_order"
+    )
+    logger.info(
+        "AI draft applied (user=%s, schedule=%s, actions=%s)",
         request.user.id,
         schedule.id,
         len(result.parsed_actions),

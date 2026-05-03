@@ -32,6 +32,26 @@ class Schedule(models.Model):
     def __str__(self):
         return f"{self.date} ({self.status})"
 
+    def mark_active_if_draft(self) -> bool:
+        """Promote a freshly-drafted schedule to ``active`` on first user
+        engagement. No-op when already ``active`` or ``reviewed``.
+
+        Returns True if the status was flipped (caller may use this for
+        logging / cache invalidation; the API layer ignores the return).
+
+        Wiring rule: every **forward-mutating** schedule endpoint (create,
+        update, delete, reorder, AI command with ≥1 action) calls this
+        right before returning a 200. ``restore_blocks`` (the undo target)
+        and ``ai_generate_draft`` are explicitly excluded — restoring is
+        not a fresh edit, and a draft staying ``draft`` is the whole
+        point of the badge.
+        """
+        if self.status == self.Status.DRAFT:
+            self.status = self.Status.ACTIVE
+            self.save(update_fields=["status"])
+            return True
+        return False
+
 
 class TimeBlock(models.Model):
     class Category(models.TextChoices):

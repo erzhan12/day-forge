@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue"
-import { router } from "@inertiajs/vue3"
+import { Link, router } from "@inertiajs/vue3"
 import { parseLocalDate, toLocalDateString, todayString } from "../utils/date"
 
 const props = defineProps<{
@@ -42,8 +42,15 @@ function navigate(date: string) {
       >
         Today
       </button>
+      <slot name="status" />
     </div>
-    <button class="nav-btn" @click="navigate(offsetDate(1))">&#8250;</button>
+    <div class="right-controls">
+      <slot name="actions" />
+      <Link href="/settings/" class="nav-btn settings-btn" aria-label="Settings">
+        <span aria-hidden="true">⚙</span>
+      </Link>
+      <button class="nav-btn" @click="navigate(offsetDate(1))">&#8250;</button>
+    </div>
   </nav>
 </template>
 
@@ -99,4 +106,18 @@ function navigate(date: string) {
   background: #f3f4f6;
 }
 
+.right-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-btn {
+  text-decoration: none;
+  color: #374151;
+}
+
+.settings-btn:hover {
+  background: #f3f4f6;
+}
 </style>

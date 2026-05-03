@@ -110,8 +110,9 @@ class TestTimeBlock:
 
 @pytest.mark.django_db
 class TestTemplate:
-    def test_create_with_blocks(self, db):
+    def test_create_with_blocks(self, user):
         t = Template.objects.create(
+            user=user,
             name="Weekday",
             type="weekday",
             blocks=[{"title": "Work", "start_time": "09:00", "end_time": "17:00"}],
@@ -119,21 +120,31 @@ class TestTemplate:
         assert str(t) == "Weekday (weekday)"
         assert len(t.blocks) == 1
 
+    def test_unique_user_type(self, user):
+        Template.objects.create(user=user, name="A", type="weekday", blocks=[])
+        with pytest.raises(IntegrityError):
+            Template.objects.create(user=user, name="B", type="weekday", blocks=[])
+
+    def test_same_type_different_users(self, user):
+        other = User.objects.create_user(username="other-tpl", password="pass")
+        Template.objects.create(user=user, name="A", type="weekday", blocks=[])
+        Template.objects.create(user=other, name="B", type="weekday", blocks=[])
+
 
 # --- Rule ---
 
 
 @pytest.mark.django_db
 class TestRule:
-    def test_ordering_by_priority(self, db):
-        r_low = Rule.objects.create(text="Low priority", priority=1)
-        r_high = Rule.objects.create(text="High priority", priority=10)
-        results = list(Rule.objects.all())
+    def test_ordering_by_priority(self, user):
+        r_low = Rule.objects.create(user=user, text="Low priority", priority=1)
+        r_high = Rule.objects.create(user=user, text="High priority", priority=10)
+        results = list(Rule.objects.filter(user=user))
         assert results == [r_high, r_low]
 
-    def test_str_truncation(self, db):
+    def test_str_truncation(self, user):
         long_text = "x" * 200
-        r = Rule.objects.create(text=long_text)
+        r = Rule.objects.create(user=user, text=long_text)
         assert len(str(r)) == 80
 
 

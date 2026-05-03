@@ -1,4 +1,5 @@
-from django.core.management.base import BaseCommand
+from django.contrib.auth import get_user_model
+from django.core.management.base import BaseCommand, CommandError
 
 from templates_mgr.models import Rule, Template
 
@@ -30,28 +31,56 @@ DEFAULT_RULES = [
 
 
 class Command(BaseCommand):
-    help = "Seed default weekday/weekend templates and starter rules"
+    help = (
+        "Seed default weekday/weekend templates and starter rules for a "
+        "specific user. The --user argument is required — there is no "
+        "fallback to 'first superuser' because templates and rules are "
+        "per-user, and silently binding seed data to an arbitrary user is "
+        "ambiguous in a multi-user world."
+    )
+
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--user",
+            required=True,
+            help="Username to scope the seeded templates and rules to.",
+        )
 
     def handle(self, *args, **options):
+        username = options["user"]
+        UserModel = get_user_model()
+        try:
+            user = UserModel.objects.get(username=username)
+        except UserModel.DoesNotExist as e:
+            raise CommandError(f"User {username!r} does not exist.") from e
+
         created = 0
 
         for name, tpl_type, blocks in [
             ("Default Weekday", Template.Type.WEEKDAY, WEEKDAY_BLOCKS),
             ("Default Weekend", Template.Type.WEEKEND, WEEKEND_BLOCKS),
         ]:
-            if not Template.objects.filter(name=name).exists():
-                Template.objects.create(name=name, type=tpl_type, blocks=blocks)
-                self.stdout.write(f"Created: {name} template")
+            if not Template.objects.filter(user=user, type=tpl_type).exists():
+                Template.objects.create(
+                    user=user, name=name, type=tpl_type, blocks=blocks
+                )
+                self.stdout.write(f"Created: {name} template for {username}")
                 created += 1
             else:
-                self.stdout.write(f"Skipped: {name} template (already exists)")
+                self.stdout.write(
+                    f"Skipped: {name} template (already exists for {username})"
+                )
 
         for text, priority in DEFAULT_RULES:
-            if not Rule.objects.filter(text=text).exists():
-                Rule.objects.create(text=text, priority=priority)
-                self.stdout.write(f"Created rule: {text}")
+            if not Rule.objects.filter(user=user, text=text).exists():
+                Rule.objects.create(user=user, text=text, priority=priority)
+                self.stdout.write(f"Created rule for {username}: {text}")
                 created += 1
             else:
-                self.stdout.write(f"Skipped rule: {text} (already exists)")
+                self.stdout.write(
+                    f"Skipped rule for {username}: {text} (already exists)"
+                )
 
-        self.stdout.write(self.style.SUCCESS(f"Done. {created} item(s) created."))
+        self.stdout.write(
+            self.style.SUCCESS(f"Done. {created} item(s) created for {username}.")
+        )

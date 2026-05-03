@@ -121,6 +121,13 @@ LOGIN_URL = "/accounts/login/"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.filebased.FileBasedCache",
+        "LOCATION": PROJECT_ROOT / ".cache",
+    }
+}
+
 # LLM (OpenAI-compatible; swap base URL for OpenRouter, etc.)
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
 LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "https://api.openai.com/v1")
@@ -128,3 +135,16 @@ LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-4o-mini")
 LLM_REQUEST_TIMEOUT = float(os.environ.get("LLM_REQUEST_TIMEOUT", "15"))
 LLM_MAX_COMMAND_CHARS = int(os.environ.get("LLM_MAX_COMMAND_CHARS", "500"))
 LLM_RATE_LIMIT_PER_HOUR = int(os.environ.get("LLM_RATE_LIMIT_PER_HOUR", "100"))
+# Heavier model used for draft generation (PRD §15.3). Defaults to gpt-4o
+# (~5-10x cost of LLM_MODEL) since drafts shape a whole day from history
+# and benefit from the larger context window.
+LLM_DRAFT_MODEL = os.environ.get("LLM_DRAFT_MODEL", "gpt-4o")
+# Independent fixed-window counter for the draft endpoint. Drafts are
+# billed against a separate budget so a misbehaving auto-trigger loop
+# can't drain the command budget too. Default 10/hr is well above realistic
+# usage (one auto + one or two manual regenerates per day).
+LLM_DRAFT_RATE_LIMIT_PER_HOUR = int(
+    os.environ.get("LLM_DRAFT_RATE_LIMIT_PER_HOUR", "10")
+)
+# Number of past schedules included in the draft context (PRD §6.2).
+LLM_HISTORY_DAYS = int(os.environ.get("LLM_HISTORY_DAYS", "7"))

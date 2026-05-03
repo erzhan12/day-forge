@@ -187,6 +187,7 @@ export function useDrag(
   ) => Promise<ApiResult>,
   pushUndo: (action: UndoAction) => void,
   snapshotBlocks: () => TimeBlock[],
+  isDisabled?: () => boolean,
 ) {
   const isDragging = ref(false)
   const dragBlockId = ref<number | null>(null)
@@ -294,6 +295,10 @@ export function useDrag(
     block: TimeBlock,
     container: HTMLElement,
   ) {
+    // Suppress drag while a draft is generating (or any other parent
+    // disable signal). Without this, the disable on TimeBlock /
+    // GapSlot would be decorative — drag bypasses click-based mutation.
+    if (isDisabled && isDisabled()) return
     snapshot = snapshotBlocks()
     originalBlock = block
     containerEl = container
