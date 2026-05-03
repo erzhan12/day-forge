@@ -574,11 +574,7 @@ def ai_generate_draft(request, date):
             status=409,
         )
 
-    slot_type = (
-        Template.Type.WEEKEND
-        if parsed_date.weekday() >= 5
-        else Template.Type.WEEKDAY
-    )
+    slot_type = Template.slot_type_for_date(parsed_date)
     template = Template.objects.filter(
         user=request.user, type=slot_type
     ).first()
