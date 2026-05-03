@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, provide, onMounted, onUnmounted } from "vue"
+import { computed, ref, provide, onMounted, onUnmounted, watch } from "vue"
 import { router } from "@inertiajs/vue3"
 import type { TimeBlock as TimeBlockType, Schedule, RenderItem } from "../types"
 import DateNavigator from "../components/DateNavigator.vue"
@@ -9,6 +9,8 @@ import AddBlockForm from "../components/AddBlockForm.vue"
 import NowLine from "../components/NowLine.vue"
 import UndoToast from "../components/UndoToast.vue"
 import CommandBar from "../components/CommandBar.vue"
+import DraftBadge from "../components/DraftBadge.vue"
+import RegenerateDraftButton from "../components/RegenerateDraftButton.vue"
 import { todayString } from "../utils/date"
 import {
   DAY_START, DAY_END, DAY_START_MINUTES, DAY_END_MINUTES,
@@ -17,6 +19,7 @@ import {
 import { useSchedule } from "../composables/useSchedule"
 import { useUndo } from "../composables/useUndo"
 import { useDrag } from "../composables/useDrag"
+import { useDraft } from "../composables/useDraft"
 import "../app.css"
 
 // Extend RenderItem with overlay variants for items containing the current time
@@ -28,11 +31,21 @@ interface DisplayItem {
   duration_minutes: number
 }
 
-const props = defineProps<{
-  schedule: Schedule
-  blocks: TimeBlockType[]
-  date: string
-}>()
+const props = withDefaults(
+  defineProps<{
+    schedule: Schedule
+    blocks: TimeBlockType[]
+    date: string
+    auto_draft_pending?: boolean
+    has_template_for_type?: boolean
+    slot_type?: "weekday" | "weekend"
+  }>(),
+  {
+    auto_draft_pending: false,
+    has_template_for_type: false,
+    slot_type: "weekday",
+  },
+)
 
 const prefillStart = ref<string | undefined>()
 const prefillEnd = ref<string | undefined>()
@@ -44,15 +57,77 @@ const getBlocks = () => props.blocks
 const {
   currentToast, pushUndo, performUndo, snapshotBlocks, dismissToast,
 } = useUndo(props.date, getBlocks)
+
+// Draft generation state — module-level singleton inside useDraft, single
+// consumer is this page.
+const { isGeneratingDraft, lastDraftError, generateDraft } = useDraft()
+
+// Schedule-wide disabled flag: while a draft is generating, suppress all
+// user mutation paths (form submit, inline edit, completion toggle,
+// delete, drag, gap-click-to-add, command bar). Provided via inject so
+// child components don't need to thread it through props.
+const scheduleDisabled = computed(() => isGeneratingDraft.value)
+provide("scheduleDisabled", scheduleDisabled)
+
 const {
   isDragging, dragBlockId, ghostTop, previewStartTime, previewEndTime,
   previewBlocks, shiftedBlockIds, startDrag, endDrag, cancelDrag,
-} = useDrag(props.date, getBlocks, reorderBlocks, pushUndo, snapshotBlocks)
+} = useDrag(
+  props.date, getBlocks, reorderBlocks, pushUndo, snapshotBlocks,
+  () => scheduleDisabled.value,
+)
 
 // Provide to child components
 provide("undo", { pushUndo, snapshotBlocks })
 provide("drag", { startDrag, isDragging, dragBlockId, shiftedBlockIds })
 provide("scheduleContainer", scheduleBodyRef)
+
+// Per-component-instance set of dates the auto-draft has already been
+// attempted for. Inertia's same-component navigation sometimes preserves
+// state and only refreshes props (partial reload), and partial reloads
+// explicitly do not remount, so onMounted is unreliable for "fire once
+// per new date." A watcher with this set covers first mount AND date
+// navigation reliably; a real remount (full Inertia visit) starts fresh,
+// which is correct: the server's `auto_draft_pending` is the
+// authoritative one-shot signal for "this is a brand-new schedule."
+const attemptedAutoDraftDates = new Set<string>()
+
+async function maybeGenerateDraft() {
+  if (
+    !props.auto_draft_pending ||
+    props.blocks.length !== 0 ||
+    attemptedAutoDraftDates.has(props.date)
+  ) {
+    return
+  }
+  attemptedAutoDraftDates.add(props.date)
+  await runDraft()
+}
+
+watch(
+  () => [props.date, props.auto_draft_pending, props.blocks.length] as const,
+  () => {
+    maybeGenerateDraft()
+  },
+  { immediate: true },
+)
+
+async function runDraft() {
+  const snapshot = snapshotBlocks()
+  const result = await generateDraft(props.date)
+  if (result.ok) {
+    pushUndo({
+      description: result.explanation || "Generated draft",
+      type: "draft",
+      previousBlocks: snapshot,
+      scheduleDate: props.date,
+    })
+  }
+}
+
+function handleRegenerateClick() {
+  runDraft()
+}
 
 const isToday = computed(() => props.date === todayString())
 
@@ -233,7 +308,23 @@ function logout() {
 
 <template>
   <div class="schedule-page">
-    <DateNavigator :date="date" />
+    <DateNavigator :date="date">
+      <template #status>
+        <DraftBadge
+          :show="schedule.status === 'draft' && blocks.length > 0"
+        />
+      </template>
+      <template #actions>
+        <RegenerateDraftButton
+          v-if="schedule.status === 'draft' && blocks.length === 0"
+          :has-template="has_template_for_type"
+          :slot-type="slot_type"
+          @click="handleRegenerateClick"
+        />
+      </template>
+    </DateNavigator>
+
+    <p v-if="lastDraftError" class="draft-error">{{ lastDraftError }}</p>
 
     <AddBlockForm
       :date="date"
@@ -242,6 +333,10 @@ function logout() {
     />
 
     <div ref="scheduleBodyRef" class="schedule-body">
+      <div v-if="isGeneratingDraft" class="draft-overlay" aria-live="polite">
+        <span class="overlay-spinner" />
+        <span class="overlay-text">Generating draft…</span>
+      </div>
       <!-- Drag ghost element -->
       <div
         v-if="isDragging && draggedBlock"
@@ -288,6 +383,7 @@ function logout() {
             :start-time="item.start_time"
             :end-time="item.end_time"
             :duration-minutes="item.duration_minutes"
+            :disabled="scheduleDisabled"
             @add-here="handleAddHere"
           />
           <NowLine
@@ -313,6 +409,7 @@ function logout() {
             :start-time="item.start_time"
             :end-time="item.end_time"
             :duration-minutes="item.duration_minutes"
+            :disabled="scheduleDisabled"
             @add-here="handleAddHere"
           />
         </div>
@@ -352,6 +449,48 @@ function logout() {
   padding: 8px 16px;
   /* Bottom padding so the fixed command bar doesn't occlude the last block. */
   padding-bottom: 88px;
+}
+
+.draft-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: rgba(249, 250, 251, 0.85);
+  z-index: 25;
+  font-size: 14px;
+  color: #374151;
+  pointer-events: auto;
+}
+
+.overlay-spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid #e5e7eb;
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.overlay-text {
+  font-weight: 500;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.draft-error {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 8px 16px;
+  background: #fef2f2;
+  color: #b91c1c;
+  border-radius: 8px;
+  font-size: 13px;
 }
 
 .drag-ghost {

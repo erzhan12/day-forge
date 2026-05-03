@@ -129,3 +129,34 @@ def validate_response_envelope(parsed) -> list[str]:
         )
 
     return errors
+
+
+def validate_draft_response(parsed, allowed_categories) -> list[str]:
+    """Validate a draft-generation LLM response.
+
+    Same envelope + per-action shape checks as ``validate_response_envelope``
+    + ``validate_action_shape``, plus an extra rule: only ``add`` actions
+    are valid in a draft (the schedule is empty by construction, so there
+    are no ``task_id``s to reference). The cap on action count reuses
+    ``MAX_ACTIONS_PER_COMMAND`` — a 20-block day is plausible
+    (06:00-23:00 in 50-min slices). Bump only when real drafts need more.
+    """
+    envelope_errors = validate_response_envelope(parsed)
+    if envelope_errors:
+        return envelope_errors
+
+    errors: list[str] = []
+    for idx, action in enumerate(parsed["actions"]):
+        if not isinstance(action, dict):
+            errors.append(f"action[{idx}]: must be an object")
+            continue
+        if action.get("type") != "add":
+            errors.append(
+                f"action[{idx}]: drafts only accept 'add' actions, "
+                f"got {action.get('type')!r}"
+            )
+            continue
+        per_errs = validate_action_shape(action, allowed_categories)
+        if per_errs:
+            errors.append(f"action[{idx}]: {', '.join(per_errs)}")
+    return errors

@@ -25,7 +25,14 @@ const drag = inject<{
 
 const scheduleContainer = inject<Ref<HTMLElement | null>>("scheduleContainer")
 
+const scheduleDisabled = inject<Ref<boolean> | null>("scheduleDisabled", null)
+
+function isDisabled(): boolean {
+  return Boolean(scheduleDisabled?.value)
+}
+
 function onDragStart(event: PointerEvent) {
+  if (isDisabled()) return
   if (drag && scheduleContainer?.value) {
     drag.startDrag(event, props.block, scheduleContainer.value)
   }
@@ -62,6 +69,7 @@ const duration = computed(() => {
 const isCompact = computed(() => durationMinutes.value <= 30)
 
 async function startEditing() {
+  if (isDisabled()) return
   editTitle.value = props.block.title
   editing.value = true
   await nextTick()
@@ -96,6 +104,7 @@ function cancelEditing() {
 }
 
 async function toggleCompleted() {
+  if (isDisabled()) return
   errorMessage.value = ""
   const snapshot = undo?.snapshotBlocks()
   const result = await updateBlock(props.block.id, {
@@ -117,6 +126,7 @@ async function toggleCompleted() {
 }
 
 async function handleDelete() {
+  if (isDisabled()) return
   if (!window.confirm("Delete this block?")) return
   errorMessage.value = ""
   const snapshot = undo?.snapshotBlocks()

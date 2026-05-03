@@ -48,7 +48,7 @@ export function useAI() {
           ? result.data.explanation
           : null
       lastExplanation.value = explanation
-      router.reload({ only: ["blocks"] })
+      router.reload({ only: ["blocks", "schedule"] })
       return { ok: true, data: result.data, explanation }
     }
 

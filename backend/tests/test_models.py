@@ -110,8 +110,9 @@ class TestTimeBlock:
 
 @pytest.mark.django_db
 class TestTemplate:
-    def test_create_with_blocks(self, db):
+    def test_create_with_blocks(self, user):
         t = Template.objects.create(
+            user=user,
             name="Weekday",
             type="weekday",
             blocks=[{"title": "Work", "start_time": "09:00", "end_time": "17:00"}],
@@ -119,21 +120,56 @@ class TestTemplate:
         assert str(t) == "Weekday (weekday)"
         assert len(t.blocks) == 1
 
+    def test_unique_user_type(self, user):
+        Template.objects.create(user=user, name="A", type="weekday", blocks=[])
+        with pytest.raises(IntegrityError):
+            Template.objects.create(user=user, name="B", type="weekday", blocks=[])
+
+    def test_same_type_different_users(self, user):
+        other = User.objects.create_user(username="other-tpl", password="pass")
+        Template.objects.create(user=user, name="A", type="weekday", blocks=[])
+        Template.objects.create(user=other, name="B", type="weekday", blocks=[])
+
+
+@pytest.mark.parametrize(
+    ("date", "expected"),
+    [
+        # 2026-05-04 is a Monday — anchor the calendar so the parametrize
+        # list reads top-to-bottom Mon..Sun.
+        (datetime.date(2026, 5, 4), "weekday"),  # Mon = 0
+        (datetime.date(2026, 5, 5), "weekday"),  # Tue = 1
+        (datetime.date(2026, 5, 6), "weekday"),  # Wed = 2
+        (datetime.date(2026, 5, 7), "weekday"),  # Thu = 3
+        (datetime.date(2026, 5, 8), "weekday"),  # Fri = 4
+        (datetime.date(2026, 5, 9), "weekend"),  # Sat = 5
+        (datetime.date(2026, 5, 10), "weekend"),  # Sun = 6
+    ],
+)
+def test_template_slot_type_for_date_covers_all_seven_weekdays(date, expected):
+    """Pin the Mon=0..Sun=6 contract of ``date.weekday()``.
+
+    The helper exists precisely because the comparison ``>= 5`` is
+    non-obvious — it relies on ``weekday()`` (NOT ``isoweekday()``,
+    which uses Mon=1..Sun=7). A parametrized sweep across all seven
+    days catches any future "fix" that swaps the API.
+    """
+    assert Template.slot_type_for_date(date) == expected
+
 
 # --- Rule ---
 
 
 @pytest.mark.django_db
 class TestRule:
-    def test_ordering_by_priority(self, db):
-        r_low = Rule.objects.create(text="Low priority", priority=1)
-        r_high = Rule.objects.create(text="High priority", priority=10)
-        results = list(Rule.objects.all())
+    def test_ordering_by_priority(self, user):
+        r_low = Rule.objects.create(user=user, text="Low priority", priority=1)
+        r_high = Rule.objects.create(user=user, text="High priority", priority=10)
+        results = list(Rule.objects.filter(user=user))
         assert results == [r_high, r_low]
 
-    def test_str_truncation(self, db):
+    def test_str_truncation(self, user):
         long_text = "x" * 200
-        r = Rule.objects.create(text=long_text)
+        r = Rule.objects.create(user=user, text=long_text)
         assert len(str(r)) == 80
 
 

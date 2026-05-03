@@ -286,6 +286,121 @@ Requires `LLM_API_KEY` to be set. When unset, every call returns `503` so the fr
 
 Atomicity: mid-batch validation failure rolls back all DB mutations. The `AIInteraction` row for the request is written *before* mutations are applied, so failed requests still leave a log entry with `actions_json` reflecting the AI's intent.
 
+A successful command flips `Schedule.status` from `draft` to `active` **only when** at least one action was applied. A 200 with `actions: []` (LLM ambiguity / out-of-window guard) leaves the status untouched, mirroring the no-undo-registration contract.
+
+---
+
+### `POST /api/ai/schedules/{date}/generate-draft/`
+
+Generate a fresh draft schedule for an empty day from the user's
+weekday/weekend template, the last `LLM_HISTORY_DAYS` (default 7) days of
+history (excluding `draft`-status schedules), and active rules. The LLM
+fills the day with `add` actions only — no `task_id`s exist on an empty
+schedule. The draft does **not** flip `Schedule.status`; the badge stays
+`draft` until the user makes a real edit.
+
+**Path params**
+
+| Name | Type | Notes |
+|------|------|-------|
+| `date` | string | `YYYY-MM-DD`. Invalid format → `400`. |
+
+**Request body** — none.
+
+**Success — `200 OK`**
+
+```json
+{
+  "blocks": [
+    {"id": 12, "title": "Deep work", "start_time": "09:00", "end_time": "12:00", "category": "work", "is_completed": false, "sort_order": 0}
+  ],
+  "explanation": "Generated draft from weekday template; gym shifted from 17:30 to 18:00 based on last week's pattern."
+}
+```
+
+**Errors**
+
+| Status | `errors` key | Meaning |
+|--------|--------------|---------|
+| `400` | `date` | Path date is not `YYYY-MM-DD`. |
+| `403` | `detail` | CSRF token missing/invalid. |
+| `409` | `detail` | Schedule already has blocks; delete them before regenerating. |
+| `413` | `body` | Request body exceeds 100 KB. |
+| `422` | `detail` | No template configured for this day's slot type. |
+| `429` | `detail` | Draft rate limit (`LLM_DRAFT_RATE_LIMIT_PER_HOUR`, default 10/hr) exceeded. Counter is independent from the command-bar counter. |
+| `502` | `detail` | LLM provider returned an error, or response failed JSON / schema validation. |
+| `503` | `detail` | `LLM_API_KEY` is not configured. |
+| `504` | `detail` | LLM provider timed out. |
+
+The `409` and `422` checks both run before any LLM call, so neither burns the rate-limit budget. The `409` is re-checked under `select_for_update()` after the LLM call to close the race window with concurrent `create_block` requests.
+
+Audit row: every call (success or failure) writes one `AIInteraction` row with `kind="draft"`, `user_command="[DRAFT]"`, and `actions_json` reflecting the LLM's parsed actions.
+
+---
+
+## Templates and Rules
+
+Per-user CRUD for the templates and rules that shape draft generation.
+
+### `GET /api/templates/`
+
+Returns the current user's templates.
+
+```json
+{
+  "templates": [
+    {"id": 1, "name": "Default Weekday", "type": "weekday", "blocks": [...]},
+    {"id": 2, "name": "Default Weekend", "type": "weekend", "blocks": [...]}
+  ]
+}
+```
+
+### `POST /api/templates/` / `PUT /api/templates/{pk}/`
+
+Create or replace a template. The unique `(user, type)` constraint means each user has at most one weekday and one weekend template — a duplicate `type` returns `409` with `errors.type` describing the conflict.
+
+**Body**
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `name` | string | 1–100 chars. |
+| `type` | string | `"weekday"` or `"weekend"`. |
+| `blocks` | array | Up to 50 entries. Each entry: `{title, start_time, end_time, category}`, validated against the same HH:MM regex, 5-minute granularity, day-window, no-overlap rules used by `_apply_add`. |
+
+**Errors**: `400` for shape/validation issues; `404` for cross-user PK access on PUT (id enumeration guard); `409` on unique-constraint violation.
+
+### `DELETE /api/templates/{pk}/`
+
+Deletes the template. Returns `404` for cross-user PK access.
+
+### `GET /api/rules/`
+
+Returns the current user's rules ordered by `-priority`.
+
+```json
+{"rules": [{"id": 1, "text": "No meetings before 9", "is_active": true, "priority": 10}]}
+```
+
+### `POST /api/rules/`
+
+**Body**
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `text` | string | 1–500 chars. |
+| `is_active` | boolean | Optional. Default `true`. |
+| `priority` | integer | Optional. Default `0`. |
+
+A user is capped at 100 rules; over-cap requests return `400`.
+
+### `PATCH /api/rules/{pk}/`
+
+Partial update of `text`, `is_active`, `priority`. Cross-user PK → `404`.
+
+### `DELETE /api/rules/{pk}/`
+
+Deletes the rule. Cross-user PK → `404`.
+
 ---
 
 ## Example: create → update → delete (dev)

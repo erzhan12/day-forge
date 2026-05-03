@@ -112,6 +112,7 @@ def create_block(request, date):
     except ValidationError as e:
         return JsonResponse({"errors": e.message_dict}, status=400)
 
+    schedule.mark_active_if_draft()
     return JsonResponse(_block_to_dict(block), status=201)
 
 
@@ -132,7 +133,9 @@ def block_detail(request, pk):
         return JsonResponse({"errors": {"detail": "Not found."}}, status=404)
 
     if request.method == "DELETE":
+        schedule = block.schedule
         block.delete()
+        schedule.mark_active_if_draft()
         return JsonResponse({"ok": True})
 
     # PATCH
@@ -266,6 +269,7 @@ def block_detail(request, pk):
     except ValidationError as e:
         return JsonResponse({"errors": e.message_dict}, status=400)
 
+    block.schedule.mark_active_if_draft()
     return JsonResponse(_block_to_dict(block))
 
 
@@ -501,6 +505,8 @@ def reorder_blocks(request):
         "reorder_blocks: %d updates, %.3fs",
         len(updates), time.monotonic() - t0,
     )
+    if schedule is not None:
+        schedule.mark_active_if_draft()
     return JsonResponse(
         {"blocks": [_block_to_dict(b) for b in result_blocks]},
     )

@@ -1,11 +1,15 @@
 <script setup lang="ts">
 import { computed } from "vue"
 
-const props = defineProps<{
-  startTime: string
-  endTime: string
-  durationMinutes: number
-}>()
+const props = withDefaults(
+  defineProps<{
+    startTime: string
+    endTime: string
+    durationMinutes: number
+    disabled?: boolean
+  }>(),
+  { disabled: false },
+)
 
 const emit = defineEmits<{
   "add-here": [payload: { start_time: string; end_time: string }]
@@ -21,13 +25,18 @@ const durationLabel = computed(() => {
 })
 
 function handleClick() {
+  if (props.disabled) return
   emit("add-here", { start_time: props.startTime, end_time: props.endTime })
 }
 
 </script>
 
 <template>
-  <div class="gap-slot" @click="handleClick">
+  <div
+    class="gap-slot"
+    :class="{ disabled }"
+    @click="handleClick"
+  >
     <span class="gap-label">Free — {{ durationLabel }}</span>
     <span class="gap-time">{{ startTime }} – {{ endTime }}</span>
   </div>
@@ -52,6 +61,17 @@ function handleClick() {
   background: #f9fafb;
   border-color: #9ca3af;
   color: #6b7280;
+}
+
+.gap-slot.disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.gap-slot.disabled:hover {
+  background: transparent;
+  border-color: #d1d5db;
+  color: #9ca3af;
 }
 
 .gap-label {

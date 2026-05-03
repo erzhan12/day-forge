@@ -26,9 +26,15 @@ import openai
 from django.conf import settings
 from openai import OpenAI
 
-from ai.prompts import SYSTEM_PROMPT, build_user_message
+from ai.prompts import (
+    SYSTEM_PROMPT,
+    SYSTEM_PROMPT_DRAFT,
+    build_draft_user_message,
+    build_user_message,
+)
 from ai.schemas import (
     validate_action_shape,
+    validate_draft_response,
     validate_response_envelope,
 )
 
@@ -69,6 +75,20 @@ class AIParseError(AIError):
 
 @dataclass
 class AICommandResult:
+    raw_response_text: str
+    parsed_actions: list[dict]
+    explanation: str
+
+
+@dataclass
+class AIDraftResult:
+    """Result envelope for ``run_draft``.
+
+    Same shape as ``AICommandResult`` but kept separate so call sites are
+    explicit about which path produced the actions. The view's audit log
+    distinguishes the two via the new ``AIInteraction.kind`` field.
+    """
+
     raw_response_text: str
     parsed_actions: list[dict]
     explanation: str
@@ -174,6 +194,70 @@ def run_command(user_command: str, schedule, blocks, now) -> AICommandResult:
         )
 
     return AICommandResult(
+        raw_response_text=raw,
+        parsed_actions=list(parsed["actions"]),
+        explanation=parsed.get("explanation", ""),
+    )
+
+
+def run_draft(schedule, template, history_schedules, rules, now) -> AIDraftResult:
+    """Call the LLM to generate a draft schedule.
+
+    Same exception taxonomy as ``run_command`` so the view can map errors
+    via the existing ``_AI_ERROR_STATUS`` table. Uses
+    ``settings.LLM_DRAFT_MODEL`` (heavier than ``LLM_MODEL`` because drafts
+    shape a whole day from history), and ``validate_draft_response`` which
+    additionally rejects any non-``add`` action.
+    """
+    if not settings.LLM_API_KEY or not settings.LLM_API_KEY.strip():
+        raise AIUnavailableError("LLM_API_KEY is not configured")
+
+    user_message = build_draft_user_message(
+        schedule, template, history_schedules, rules, now
+    )
+
+    client = _get_client()
+    try:
+        response = client.chat.completions.create(
+            model=settings.LLM_DRAFT_MODEL,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT_DRAFT},
+                {"role": "user", "content": user_message},
+            ],
+            response_format={"type": "json_object"},
+            temperature=0,
+            timeout=settings.LLM_REQUEST_TIMEOUT,
+        )
+    except openai.APITimeoutError as e:
+        logger.warning("AI draft timeout: %s", e)
+        raise AITimeoutError("AI provider timed out") from e
+    except openai.APIError as e:
+        logger.warning("AI draft provider error: %s", e)
+        raise AIProviderError("AI service error") from e
+    except Exception as e:  # network / unexpected — log full traceback
+        logger.exception("AI draft unexpected error")
+        raise AIProviderError("AI service error") from e
+
+    raw = response.choices[0].message.content or ""
+
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise AIParseError(
+            f"AI returned invalid JSON: {e}", raw_response_text=raw
+        ) from e
+
+    from schedules.models import TimeBlock  # local import: avoid app-load cycles
+
+    allowed_categories = {c.value for c in TimeBlock.Category}
+    errors = validate_draft_response(parsed, allowed_categories)
+    if errors:
+        raise AIParseError(
+            "AI draft response failed validation: " + "; ".join(errors),
+            raw_response_text=raw,
+        )
+
+    return AIDraftResult(
         raw_response_text=raw,
         parsed_actions=list(parsed["actions"]),
         explanation=parsed.get("explanation", ""),

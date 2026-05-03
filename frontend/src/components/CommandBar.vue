@@ -4,7 +4,8 @@
 // apiHealthy) so the status dot can share state without prop-drilling.
 // If a second consumer is ever added (e.g. a chat drawer), move that
 // state back into `useAI()` to avoid cross-instance leakage.
-import { onMounted, onUnmounted, ref } from "vue"
+import type { Ref } from "vue"
+import { computed, inject, onMounted, onUnmounted, ref } from "vue"
 import type { TimeBlock, UndoAction } from "../types"
 import { useAI } from "../composables/useAI"
 
@@ -18,6 +19,11 @@ const {
   isProcessing, lastError, lastExplanation, apiHealthy,
   submitCommand, clearError,
 } = useAI()
+
+const scheduleDisabled = inject<Ref<boolean> | null>("scheduleDisabled", null)
+const inputDisabled = computed(
+  () => isProcessing.value || Boolean(scheduleDisabled?.value),
+)
 
 const input = ref("")
 const inputEl = ref<HTMLInputElement | null>(null)
@@ -42,7 +48,7 @@ function _scheduleChanged(snapshot: TimeBlock[], responseBlocks: unknown): boole
 }
 
 async function handleSubmit() {
-  if (isProcessing.value) return
+  if (inputDisabled.value) return
   const command = input.value.trim()
   if (!command) return
 
@@ -121,7 +127,7 @@ onUnmounted(() => {
         type="text"
         class="command-input"
         :placeholder="placeholder + ' (press / to focus)'"
-        :disabled="isProcessing"
+        :disabled="inputDisabled"
         autocomplete="off"
         spellcheck="false"
         @input="handleInput"
