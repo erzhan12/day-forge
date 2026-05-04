@@ -106,3 +106,46 @@
 - [x] `RULES.md`: status matrix, conditional UPDATE rationale, body-after-lock rationale, streak/skipped semantics, frozen-vs-recompute
 - [x] `docs/features/0006_MANUAL_TEST.md`
 - [ ] Manual end-to-end test with a real `LLM_API_KEY`
+
+## Follow-ups (discovered during manual testing)
+
+### UX / Rules
+
+- [ ] **Auto-bump default priority for new Rules.** Today every new rule
+  lands at `priority=0` (hardcoded in `RulesList.vue:44`'s `createRule({...,
+  priority: 0 })` call). Adding a second rule produces two rules at
+  priority 0 → the user has to click ▲ once just to see ordering change,
+  and the priority arrows look like a no-op on a single rule. Better:
+  default to `max(existing.priority) + 1` so each new rule lands on top
+  with a unique priority. Either compute on the frontend before POST, or
+  push the default into the backend (`templates_mgr.api._parse_rule_create_payload`)
+  so curl users get the same behaviour. Backend-side default is preferable
+  — single source of truth and consistent across clients. Discovered while
+  walking Test 3 of `docs/features/0005_MANUAL_TEST.md`.
+
+- [ ] **Disabled-arrow tooltip on a single Rule.** Both ▲ and ▼ are
+  disabled when there's only one rule (`:disabled="idx === 0"` and
+  `:disabled="idx === localRules.length - 1"` both true). Currently
+  silent — the user sees greyed-out arrows with no explanation. Add a
+  `title` attribute like "Add another rule to reorder" so the affordance
+  is self-documenting. Pairs naturally with the auto-bump task above.
+
+- [ ] **Compact Rule priorities on add/delete.** Combined with the
+  auto-bump task above, priorities will only grow monotonically over
+  time. Concretely: start with `[r1=0, r2=1]`, delete `r1`, add `r3` →
+  `[r2=1, r3=2]`. After many add/delete cycles the user sees badge values
+  like "Priority 47" on the only rule, and eventually hits the API-layer
+  upper bound (validated in `templates_mgr/api.py`). Compact to
+  `0..N-1` after every list-mutation so:
+  * default priority for the next new rule is always trivially `len(existing)`
+  * badge values stay small and meaningful
+  * no drift over the lifetime of an account
+
+  Backend-side compaction in the `delete` and `create` views (single
+  transaction with the actual mutation) is the natural place. Frontend
+  picks it up via the existing partial reload of the rules list.
+
+  Alternative: hide the numeric priority badge entirely — sort key is
+  internal, users only care about ▲/▼ ordering. Either approach
+  resolves the same root issue. Discovered while walking Test 3
+  (delete with `[r1=0, r2=1]` leaves the survivor at priority 1, not 0).

@@ -19,7 +19,16 @@
 // Pre-reqs:
 //   * Django running on :8006 (``make run``)
 //   * Vite running on :5173 (``make frontend-dev``)
-//   * Test user ``playwright`` created via:
+//   * Test user ``playwright`` created via the snippet below.
+//
+// ⚠️  WARNING — LOCAL DEVELOPMENT ONLY
+// The snippet below creates a Django SUPERUSER with a known weak
+// password (``playwright-pw-do-not-use-in-prod``). Running it against
+// a production database creates a backdoor admin account anyone with
+// network access to the app can log into. Never paste it into a
+// production manage.py shell. Only run against your local SQLite dev
+// DB (``db/day_forge.db``):
+//
 //       uv run python backend/manage.py shell -c "
 //       from django.contrib.auth.models import User
 //       u, _ = User.objects.get_or_create(username='playwright', defaults={'is_staff': True, 'is_superuser': True})
