@@ -29,6 +29,8 @@ export default defineConfig({
       "/accounts": "http://localhost:8006",
       "/api": "http://localhost:8006",
       "/schedule": "http://localhost:8006",
+      "/settings": "http://localhost:8006",
+      "/analytics": "http://localhost:8006",
       "/admin": "http://localhost:8006",
       "^/$": "http://localhost:8006",
     },
