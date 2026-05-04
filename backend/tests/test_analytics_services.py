@@ -245,6 +245,29 @@ class TestComputeStreak:
             )
         assert compute_streak(user, today=self.TODAY) == 3
 
+    def test_uses_constant_query_count_regardless_of_streak_length(
+        self, user, streak_settings, django_assert_num_queries
+    ):
+        """Regression: the streak walker must NOT issue O(window_days)
+        queries. One bulk SELECT for the whole window + the prefetch
+        round-trip for ``time_blocks`` is the budget — independent of
+        how many days are in the streak. Without the bulk query, this
+        test fails with ~30 SELECTs on a long streak."""
+        for offset in range(1, 11):  # 10 perfect days
+            self._make_day(
+                user,
+                self.TODAY - datetime.timedelta(days=offset),
+                blocks=[("09:00", "10:00", True)],
+            )
+        # Budget: exactly 2 queries —
+        #   1) SELECT on Schedule with LEFT OUTER JOIN daily_review
+        #      (the select_related), filtered to the window
+        #   2) prefetch SELECT on TimeBlock for all returned schedules
+        # Tight budget so a regression to per-day SELECTs (30 queries
+        # for 10 days, or 31 with the prefetch) trips the test.
+        with django_assert_num_queries(2):
+            assert compute_streak(user, today=self.TODAY) == 10
+
     def test_on_the_fly_recompute_when_no_review_row(self, user, streak_settings):
         """A day with blocks but no DailyReview row should still count
         toward the streak (streak reflects behaviour, not page-visit

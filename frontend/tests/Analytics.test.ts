@@ -114,7 +114,12 @@ describe("Analytics.vue", () => {
     expect(url).toBe("/api/analytics/schedules/2026-04-01/mark-reviewed/")
   })
 
-  it("cancels pending notes auto-save when the page unmounts", async () => {
+  it("flushes a pending notes auto-save when the page unmounts", async () => {
+    // Regression: dropping the pending PATCH would lose a half-typed
+    // note when the user navigates away < 1s after typing. Flush
+    // instead. The debounce timer is cleared (so no double-fire after
+    // unmount), but the PATCH IS issued synchronously from the
+    // unmount handler.
     vi.useFakeTimers()
     const fetchSpy = vi.fn().mockResolvedValue({
       ok: true,
@@ -125,7 +130,7 @@ describe("Analytics.vue", () => {
 
     const wrapper = mount(Analytics, {
       props: {
-        review: makeReview(),
+        review: makeReview({ id: 99 }),
         streak: STREAK,
         schedule: makeSchedule("active"),
         blocks: BLOCKS,
@@ -133,8 +138,6 @@ describe("Analytics.vue", () => {
       },
     })
 
-    // Type into the notes textarea and trigger the input handler so the
-    // debounce timer is armed.
     const textarea = wrapper.find(".notes-input")
     await textarea.setValue("half-typed note")
     await textarea.trigger("input")
@@ -142,10 +145,40 @@ describe("Analytics.vue", () => {
     // Unmount BEFORE the 1s debounce window elapses.
     wrapper.unmount()
 
-    // Now advance past the debounce window. If the unmount cleanup
-    // works, the PATCH must NOT fire.
-    vi.advanceTimersByTime(2000)
+    // The flush PATCH should fire synchronously from onUnmounted —
+    // no need to advance timers. (Advancing them would be a no-op
+    // anyway because the timer was cleared.)
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+    const [url, options] = fetchSpy.mock.calls[0]
+    expect(url).toBe("/api/analytics/reviews/99/notes/")
+    expect(options.method).toBe("PATCH")
+    expect(JSON.parse(options.body)).toEqual({ notes: "half-typed note" })
 
+    // Advancing past the debounce window must NOT trigger a second
+    // PATCH (would mean the timer wasn't actually cleared).
+    vi.advanceTimersByTime(2000)
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+    vi.useRealTimers()
+  })
+
+  it("does not flush on unmount if notes were not edited", async () => {
+    vi.useFakeTimers()
+    const fetchSpy = vi.fn()
+    vi.stubGlobal("fetch", fetchSpy)
+
+    const wrapper = mount(Analytics, {
+      props: {
+        review: makeReview({ notes: "saved" }),
+        streak: STREAK,
+        schedule: makeSchedule("active"),
+        blocks: BLOCKS,
+        date: "2026-04-01",
+      },
+    })
+
+    // No keystroke → no armed timer → no flush.
+    wrapper.unmount()
+    vi.advanceTimersByTime(2000)
     expect(fetchSpy).not.toHaveBeenCalled()
     vi.useRealTimers()
   })

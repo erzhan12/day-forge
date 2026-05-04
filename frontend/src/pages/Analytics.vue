@@ -56,16 +56,22 @@ function onNotesInput() {
   }, NOTES_DEBOUNCE_MS)
 }
 
-// Drop the pending PATCH if the user navigates away inside the debounce
-// window. Without this, a PATCH could fire from an unmounted page and —
-// because ``useAnalytics`` is a module-level singleton — potentially
-// against a stale ``review.id`` if the next analytics page mounts fast.
-// Trade-off: a half-typed note < 1s old is discarded; matches "save on
-// pause", not "save on every keystroke".
+// Flush a pending PATCH on unmount instead of dropping it — losing a
+// half-typed note because the user navigated < 1s after typing is
+// worse than the alternative. ``saveNotes`` is parameterised by
+// ``review.id``, so the request lands on the correct review even if a
+// new Analytics page mounts immediately afterwards. Inertia is an SPA
+// (no real page unload), so the in-flight fetch completes normally.
+// The ``!==`` guard avoids an idempotent no-op PATCH when the
+// debounce timer was armed by a keystroke that didn't actually change
+// the value.
 onUnmounted(() => {
   if (saveTimer) {
     clearTimeout(saveTimer)
     saveTimer = null
+    if (notesDraft.value !== props.review.notes) {
+      saveNotes(props.review.id, notesDraft.value)
+    }
   }
 })
 

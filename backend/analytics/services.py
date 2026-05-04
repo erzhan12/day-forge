@@ -134,22 +134,34 @@ def compute_streak(user, *, today=None) -> int:
 
     Capped at ``ANALYTICS_STREAK_WINDOW_DAYS`` to keep the query bounded
     on long-lived accounts.
+
+    Query strategy: one SELECT for the entire window with
+    ``select_related("daily_review")`` + ``prefetch_related("time_blocks")``,
+    then walk in memory. The naive per-day loop issued up to N SELECTs
+    (default 30) on every analytics page visit; users with long streaks
+    paid for all of them every time. The bulk query is constant cost
+    regardless of streak length.
     """
     if today is None:
         today = timezone.localdate()
 
-    streak = 0
     threshold = settings.ANALYTICS_STREAK_THRESHOLD
     window = settings.ANALYTICS_STREAK_WINDOW_DAYS
 
+    window_start = today - datetime.timedelta(days=window)
+    schedules = (
+        Schedule.objects.filter(
+            user=user, date__gte=window_start, date__lt=today
+        )
+        .select_related("daily_review")
+        .prefetch_related("time_blocks")
+    )
+    by_date = {s.date: s for s in schedules}
+
+    streak = 0
     for offset in range(1, window + 1):
         target_date = today - datetime.timedelta(days=offset)
-        schedule = (
-            Schedule.objects.filter(user=user, date=target_date)
-            .select_related("daily_review")
-            .prefetch_related("time_blocks")
-            .first()
-        )
+        schedule = by_date.get(target_date)
         if schedule is None:
             break  # gap day — user didn't plan that day, streak ends
 
