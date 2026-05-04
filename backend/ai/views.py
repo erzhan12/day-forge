@@ -508,7 +508,7 @@ def ai_command(request, date):
     # Promoting a draft to active on a no-op LLM response would lie about
     # user intent.
     if len(result.parsed_actions) > 0:
-        schedule.mark_active_if_draft()
+        schedule.mark_active_on_edit()
 
     result_blocks = TimeBlock.objects.filter(schedule=schedule).order_by(
         "start_time", "sort_order"

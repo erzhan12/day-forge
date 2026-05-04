@@ -68,3 +68,41 @@
 ### Deploy notes
 
 - Run migrations after pulling: `uv run python backend/manage.py migrate` — `templates_mgr.0002_user_fk` wipes any existing global templates and rules. Re-seed per user with `seed_templates --user <name>`.
+
+## Phase 6 — Analytics & End-of-Day Review
+
+### Backend
+
+- [x] `analytics.models.DailyReview`: add `planned_minutes_by_category`, `completed_minutes_by_category` JSON fields, `updated_at`, `completion_rate` property
+- [x] `analytics/migrations/0002_review_aggregates.py`
+- [x] `Schedule.mark_active_on_edit()` (replaces `mark_active_if_draft`) — DB-conditional UPDATE, handles draft AND reviewed source
+- [x] `Schedule.mark_reviewed_if_active()`
+- [x] Update all call sites in `schedules/api.py`, `ai/views.py`
+- [x] `ANALYTICS_STREAK_THRESHOLD`, `ANALYTICS_STREAK_WINDOW_DAYS` settings (validated at import)
+- [x] `analytics/services.py`: `compute_review_stats`, `recompute_review_from_schedule`, `compute_streak`
+- [x] `analytics/views.py`: `analytics_view` (Inertia), `mark_reviewed`, `update_review_notes`
+- [x] URLs: `/analytics/<date>/`, `/api/analytics/schedules/<date>/mark-reviewed/`, `/api/analytics/reviews/<pk>/notes/`
+- [x] `analytics/admin.py`: extend list_display with completion %, notes excerpt, updated_at
+- [x] `ai/prompts.py`: append `(completed: X/Y)` per history line when DailyReview exists
+
+### Frontend
+
+- [x] `frontend/src/types/index.ts`: `CategoryMinutes`, `DailyReview`, `StreakInfo`
+- [x] `frontend/src/utils/categoryColors.ts` (extracted from TimeBlock.vue)
+- [x] `frontend/src/composables/useAnalytics.ts` (markReviewed + saveNotes)
+- [x] `frontend/src/components/{CompletionBar,CategoryBreakdown,StreakCounter,SkippedTasks}.vue`
+- [x] `frontend/src/pages/Analytics.vue`
+- [x] `frontend/src/pages/Schedule.vue`: "View analytics" link in actions slot
+- [x] `frontend/src/components/TimeBlock.vue`: import categoryColors from shared util
+
+### Tests + docs
+
+- [x] `test_analytics_models.py`, `test_analytics_services.py`, `test_analytics_views.py`
+- [x] `test_settings_validation.py` (env var validation)
+- [x] Extend `test_status_flow.py` with `mark_active_on_edit` (incl. stale-instance recovery), `mark_reviewed_if_active`, reviewed-unfreezes-on-edit
+- [x] Extend `test_ai_prompts_draft.py` with completion suffix case
+- [x] Frontend tests: `useAnalytics`, `CompletionBar`, `CategoryBreakdown`, `StreakCounter`, `SkippedTasks`, `Analytics.vue`
+- [x] `docs/api.md`: analytics endpoints
+- [x] `RULES.md`: status matrix, conditional UPDATE rationale, body-after-lock rationale, streak/skipped semantics, frozen-vs-recompute
+- [x] `docs/features/0006_MANUAL_TEST.md`
+- [ ] Manual end-to-end test with a real `LLM_API_KEY`

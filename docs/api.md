@@ -403,6 +403,117 @@ Deletes the rule. Cross-user PK → `404`.
 
 ---
 
+## Analytics
+
+Per-day review panel + Mark-reviewed flow. The Inertia page route
+(`GET /analytics/<date>/`) is documented for completeness even though
+it renders HTML, not JSON.
+
+### `GET /analytics/{date}/`
+
+Inertia render of the per-day analytics panel. Recomputes the
+`DailyReview` snapshot on every visit while the schedule is `active`;
+serves the persisted (frozen) snapshot once `Schedule.status` is
+`reviewed`. A `reviewed` schedule that predates Phase 6 (no
+`DailyReview` row yet) is recomputed-and-persisted once for back-compat.
+
+**Errors**
+
+| Status | Meaning |
+|--------|---------|
+| `400` | Invalid date format, **or** the date is in the future. Analytics is past-/today-only. |
+| `404` | No `Schedule` row exists for the user on this date. Analytics is read-only — it never auto-creates. |
+
+### `POST /api/analytics/schedules/{date}/mark-reviewed/`
+
+Freeze the analytics snapshot for the given date by flipping
+`Schedule.status` from `active` to `reviewed`. Idempotent.
+
+**Path params** — `date` (`YYYY-MM-DD`).
+
+**Request body** (optional)
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `notes` | string | Optional. ≤ 2000 chars. Persisted on the active→reviewed flip; ignored on a retry against an already-reviewed schedule (use `PATCH /api/analytics/reviews/{pk}/notes/` to edit notes after review). Empty body is accepted as a no-op equivalent to `{}`. Unknown fields are silently ignored. |
+
+**Success — `200 OK`** — returns the persisted `DailyReview` row:
+
+```json
+{
+  "id": 7,
+  "schedule_id": 42,
+  "date": "2026-04-01",
+  "status": "reviewed",
+  "planned_count": 5,
+  "completed_count": 4,
+  "skipped_count": 1,
+  "completion_rate": 0.8,
+  "planned_minutes_by_category": {"work": 240, "personal": 30, "health": 60, "other": 0},
+  "completed_minutes_by_category": {"work": 240, "personal": 0, "health": 60, "other": 0},
+  "notes": "Felt focused.",
+  "created_at": "...",
+  "updated_at": "..."
+}
+```
+
+**Idempotency rules**
+
+- A retry against an already-reviewed schedule returns the existing
+  snapshot **without** parsing the body, **without** acquiring the
+  lock, and **without** recomputing. `updated_at` is identical between
+  two calls. A retry with a malformed body (e.g. corrupted by network)
+  to a reviewed schedule still returns `200`, not `400`.
+- A retry with a different `notes` value against a reviewed schedule
+  returns the original snapshot — the second `notes` value is
+  discarded. Use the PATCH endpoint to overwrite notes after review.
+
+**Errors**
+
+| Status | `errors` key | Meaning |
+|--------|--------------|---------|
+| `400` | `detail` | Schedule status is `draft` (cannot review a never-edited day). |
+| `400` | `body` | Invalid JSON on the active path (parser is reached only when status==`active` under the lock). |
+| `400` | `notes` | Notes too long (> 2000 chars). |
+| `403` | `detail` | CSRF token missing/invalid. |
+| `404` | `detail` | No schedule for this user on this date. |
+| `413` | `body` | Request body exceeds 100 KB. Rejected before any status check. |
+
+**Concurrency**: the active→reviewed path opens a `transaction.atomic()`,
+takes `select_for_update()` on the parent `Schedule` row (an empty
+`TimeBlock` queryset would lock zero rows under PostgreSQL — RULES.md
+"Locking an empty child queryset locks nothing"), re-checks `status`
+under the lock to close the mark_reviewed-vs-mark_reviewed TOCTOU
+race, then recomputes + persists + flips status atomically.
+
+### `PATCH /api/analytics/reviews/{pk}/notes/`
+
+Edit `notes` on an existing review row. Notes are the only field
+editable post-review; everything else is frozen.
+
+**Path params** — `pk` (DailyReview primary key).
+
+**Request body**
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `notes` | string | yes | ≤ 2000 chars. |
+
+**Success — `200 OK`** — returns the updated `DailyReview` row (same
+shape as `mark-reviewed`).
+
+**Errors**
+
+| Status | `errors` key | Meaning |
+|--------|--------------|---------|
+| `400` | `body` | Invalid JSON, or empty body (PATCH without a field is degenerate). |
+| `400` | `notes` | Missing, not a string, or > 2000 chars. |
+| `403` | `detail` | CSRF token missing/invalid. |
+| `404` | `detail` | No review with that PK, **or** the review's schedule belongs to another user. Cross-user 404 (not 403) matches the project-wide convention. |
+| `413` | `body` | Request body exceeds 100 KB. |
+
+---
+
 ## Example: create → update → delete (dev)
 
 ```bash

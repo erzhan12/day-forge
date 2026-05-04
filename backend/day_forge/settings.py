@@ -148,3 +148,22 @@ LLM_DRAFT_RATE_LIMIT_PER_HOUR = int(
 )
 # Number of past schedules included in the draft context (PRD §6.2).
 LLM_HISTORY_DAYS = int(os.environ.get("LLM_HISTORY_DAYS", "7"))
+
+# Analytics / streak. Validated at import time so a misconfigured value
+# fails the worker boot loudly instead of silently producing ``streak=0``
+# forever. ``ANALYTICS_STREAK_THRESHOLD`` is the per-day completion ratio
+# required for a day to count toward the streak; ``ANALYTICS_STREAK_WINDOW_DAYS``
+# caps the backward calendar walk so an old account doesn't trigger an
+# O(account-age) scan.
+ANALYTICS_STREAK_THRESHOLD = float(os.environ.get("ANALYTICS_STREAK_THRESHOLD", "0.8"))
+if not (0.0 <= ANALYTICS_STREAK_THRESHOLD <= 1.0):
+    raise ValueError(
+        "ANALYTICS_STREAK_THRESHOLD must be a float in [0.0, 1.0]; "
+        f"got {ANALYTICS_STREAK_THRESHOLD!r}"
+    )
+ANALYTICS_STREAK_WINDOW_DAYS = int(os.environ.get("ANALYTICS_STREAK_WINDOW_DAYS", "30"))
+if ANALYTICS_STREAK_WINDOW_DAYS <= 0:
+    raise ValueError(
+        "ANALYTICS_STREAK_WINDOW_DAYS must be a positive integer; "
+        f"got {ANALYTICS_STREAK_WINDOW_DAYS!r}"
+    )

@@ -23,10 +23,75 @@ This is a living document — update it as new patterns emerge.
 
 ## Schedule.status flip rules
 
-- `Schedule.status` flips `draft → active` on the **first user mutation** via every forward-mutating endpoint: `create_block`, `block_detail` PATCH, `block_detail` DELETE, `reorder_blocks`, and `ai_command` (only when `len(parsed_actions) > 0`). The helper is `Schedule.mark_active_if_draft()` in `backend/schedules/models.py`.
+Full transition matrix (post-Phase 6):
+
+```
+draft  ──user edits any block──▶  active  ──Mark reviewed click──▶  reviewed
+                                  ▲ │                                    │
+                                  │ └────────────────────────────────────┘
+                                  └── any subsequent edit on reviewed ────┘
+                                       (mark_active_on_edit)
+```
+
+- `Schedule.status` flips `draft → active` AND `reviewed → active` on every forward-mutating endpoint: `create_block`, `block_detail` PATCH, `block_detail` DELETE, `reorder_blocks`, and `ai_command` (only when `len(parsed_actions) > 0`). The single helper for both directions is `Schedule.mark_active_on_edit()` in `backend/schedules/models.py` (replaces the Phase-5 `mark_active_if_draft`).
+- `Schedule.mark_reviewed_if_active()` flips `active → reviewed` (forward direction). Refuses on `draft` — a never-edited day cannot be reviewed (analytics would be meaningless on auto-draft data the user never touched).
 - `restore_blocks` (the undo target) does **not** flip status. Calling it with the previous block list shouldn't pretend the user just made a fresh edit. Concretely: undoing a freshly auto-generated draft (`restore_blocks([])`) leaves `status="draft"`, so the regenerate button reappears.
 - `ai_generate_draft` does **not** flip status. The badge stays "Draft" until the user actually edits.
 - `ai_command` returning `actions: []` is a successful no-op (RULES.md / undo gating already documented this). Status flipping must follow the same gate, otherwise an LLM responding with "I don't understand" silently promotes a draft to active.
+
+### `mark_active_on_edit` MUST use a DB-conditional UPDATE, not a Python `self.status` check
+
+Critical: the helper is implemented as
+
+```python
+type(self).objects.filter(
+    pk=self.pk,
+    status__in=[self.Status.DRAFT, self.Status.REVIEWED],
+).update(status=self.Status.ACTIVE)
+```
+
+NOT as `if self.status in (...): self.save()`. Reason: a concurrent `mark_reviewed` may flip the row to `reviewed` between the time a `block_detail` PATCH loaded its `Schedule` instance and the time `mark_active_on_edit` is called. The in-memory `self.status` would still say `active` and a Python-side check would short-circuit the flip, leaving the DB row frozen-reviewed with stale snapshot data. The conditional UPDATE evaluates its WHERE clause against current DB state at lock-acquisition time, so it correctly re-flips the row. The regression test `TestMarkActiveOnEdit::test_stale_instance_recovery` in `backend/tests/test_status_flow.py` pins this contract.
+
+Both helpers also sync `self.status` after a successful UPDATE so callers that re-read the in-memory copy see the new value without a refetch.
+
+## Analytics: frozen-vs-recompute review snapshot
+
+- `analytics_view` (`GET /analytics/<date>/`) **recomputes the `DailyReview` row on every visit** while `Schedule.status != "reviewed"`. Toggle a checkbox on `/schedule/<date>/`, navigate to `/analytics/<date>/`, the panel reflects the toggle immediately. No polling, no WebSocket — just a recompute on each GET.
+- Once `status == "reviewed"`, the row is **frozen**. The view serves the persisted snapshot verbatim; `updated_at` no longer advances.
+- Editing any block on a `reviewed` schedule flips `status → active` via `mark_active_on_edit`, which makes the next analytics visit recompute. End state is always "fresh frozen snapshot" or "active + recomputed-on-next-visit", never "frozen + stale".
+- `mark_reviewed` is **hard-idempotent**: a retry against an already-reviewed schedule returns the persisted snapshot without parsing the body, acquiring the lock, or recomputing. `updated_at` is identical between two calls — pinned by `test_idempotent_returns_same_snapshot_unchanged_updated_at`.
+
+## `mark_reviewed` parses the request body AFTER the under-lock status check
+
+The endpoint is hard-idempotent on `REVIEWED`: a retry should always succeed and return the persisted snapshot, regardless of payload. If the body were parsed before the status check, a network retry with a corrupted body would 400 on `JSONDecodeError` even though the previous attempt already succeeded. Order in `backend/analytics/views.py:mark_reviewed`:
+
+1. `reject_oversized_body` (413) — independent of status.
+2. Date parse (400).
+3. Schedule lookup (404).
+4. Pre-lock status check — REVIEWED returns the snapshot without touching the body.
+5. `transaction.atomic()` + `select_for_update().get()` on the parent `Schedule` row.
+6. Re-check status under the lock — REVIEWED still returns the snapshot without parsing.
+7. ONLY when `status == ACTIVE` under the lock do we parse and validate the body, then recompute + persist + flip status.
+
+This pattern is pinned by `test_idempotent_tolerates_malformed_body_on_reviewed`. See also "Locking an empty child queryset locks nothing" — the parent-row lock is required because `TimeBlock` may be empty.
+
+## Streak walker semantics
+
+- `compute_streak(user)` walks calendar dates backward from yesterday up to `ANALYTICS_STREAK_WINDOW_DAYS` (default 30).
+- **Gap day** (no `Schedule` row for that date) → hard break. Rationale: the user didn't plan that day, so the streak ends.
+- **Zero-block schedule** ("rest day") → skip — doesn't count, doesn't break.
+- **Day with blocks** → use `DailyReview.completion_rate` if the row exists (cheap read), otherwise compute on the fly via `compute_review_stats` (no DB write — keeps the streak accurate for users who plan well but rarely open analytics).
+- A day at or above `ANALYTICS_STREAK_THRESHOLD` (default 0.8) counts; below → break.
+
+## Skipped-tasks semantics (today vs past)
+
+`SkippedTasks.vue` mirrors `compute_review_stats` exactly:
+
+- **Past day** → every uncompleted block is shown.
+- **Today** → only blocks whose `end_time < currentHHMM` are shown. Future-window uncompleted blocks aren't decided yet (still active).
+- **Future day** → never shown (analytics_view rejects future dates anyway).
+
+The frontend refreshes `currentHHMM` on a 1-minute interval (matches `Schedule.vue`'s `nowMinutes` cadence) so blocks transition into the list as their windows close. Without this, a block ending at 11:00 would still appear "active" at 11:30 until manual refresh.
 
 ## Templates / Rules ownership
 

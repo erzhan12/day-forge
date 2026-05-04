@@ -32,12 +32,14 @@ class Schedule(models.Model):
     def __str__(self):
         return f"{self.date} ({self.status})"
 
-    def mark_active_if_draft(self) -> bool:
-        """Promote a freshly-drafted schedule to ``active`` on first user
-        engagement. No-op when already ``active`` or ``reviewed``.
+    def mark_active_on_edit(self) -> bool:
+        """Promote a schedule to ``active`` on a forward-mutating edit.
 
-        Returns True if the status was flipped (caller may use this for
-        logging / cache invalidation; the API layer ignores the return).
+        Flips ``draft → active`` (first user engagement after auto-draft)
+        OR ``reviewed → active`` (any edit on a reviewed day unfreezes
+        the analytics snapshot). No-op when already ``active``.
+
+        Returns True if the status was flipped.
 
         Wiring rule: every **forward-mutating** schedule endpoint (create,
         update, delete, reorder, AI command with ≥1 action) calls this
@@ -45,10 +47,49 @@ class Schedule(models.Model):
         and ``ai_generate_draft`` are explicitly excluded — restoring is
         not a fresh edit, and a draft staying ``draft`` is the whole
         point of the badge.
+
+        **Implementation must be a DB-conditional UPDATE, not a
+        Python-side check on ``self.status``.** During Phase 6 a
+        concurrent ``mark_reviewed`` may have flipped the row to
+        ``reviewed`` between the time this instance was loaded and the
+        time we're called — the in-memory ``self.status`` would still
+        say ``active`` and a Python-side guard would short-circuit the
+        flip, leaving the DB row frozen-reviewed with stale snapshot
+        data. The conditional UPDATE evaluates its WHERE clause against
+        the current DB state at lock-acquisition time, so it correctly
+        re-flips the row regardless of what the Python instance thinks.
         """
-        if self.status == self.Status.DRAFT:
+        updated = type(self).objects.filter(
+            pk=self.pk,
+            status__in=[self.Status.DRAFT, self.Status.REVIEWED],
+        ).update(status=self.Status.ACTIVE)
+        if updated:
+            # Sync in-memory copy so any caller that re-reads ``self.status``
+            # without a refetch sees the new value.
             self.status = self.Status.ACTIVE
-            self.save(update_fields=["status"])
+            return True
+        return False
+
+    def mark_reviewed_if_active(self) -> bool:
+        """Flip ``active → reviewed`` to freeze the analytics snapshot.
+
+        Refuses on ``draft`` (a never-edited day cannot be reviewed —
+        analytics would be meaningless on auto-draft data the user never
+        touched) and is a no-op on already-reviewed.
+
+        Symmetric with ``mark_active_on_edit``: also a DB-conditional
+        UPDATE for consistency. Although mark_reviewed's caller holds
+        ``select_for_update`` so staleness isn't a risk here in practice,
+        keeping a single transition pattern across both helpers reduces
+        cognitive load and prevents future call sites from accidentally
+        bypassing the lock.
+        """
+        updated = type(self).objects.filter(
+            pk=self.pk,
+            status=self.Status.ACTIVE,
+        ).update(status=self.Status.REVIEWED)
+        if updated:
+            self.status = self.Status.REVIEWED
             return True
         return False
 

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, provide, onMounted, onUnmounted, watch } from "vue"
-import { router } from "@inertiajs/vue3"
+import { Link, router } from "@inertiajs/vue3"
 import type { TimeBlock as TimeBlockType, Schedule, RenderItem } from "../types"
 import DateNavigator from "../components/DateNavigator.vue"
 import TimeBlock from "../components/TimeBlock.vue"
@@ -130,6 +130,14 @@ function handleRegenerateClick() {
 }
 
 const isToday = computed(() => props.date === todayString())
+
+// Analytics is past-/today-only AND meaningless on a never-edited
+// (draft) day — analytics_view returns 400 for future and 404 for
+// missing schedules, but a stale link in the nav would still feel
+// broken. Hide it locally for those cases.
+const showAnalyticsLink = computed(() => {
+  return props.date <= todayString() && props.schedule.status !== "draft"
+})
 
 // Reactive current-minute counter so display list recomputes as time passes
 const NOW_UPDATE_INTERVAL_MS = 60_000
@@ -321,6 +329,13 @@ function logout() {
           :slot-type="slot_type"
           @click="handleRegenerateClick"
         />
+        <Link
+          v-if="showAnalyticsLink"
+          :href="`/analytics/${date}/`"
+          class="analytics-link"
+        >
+          View analytics
+        </Link>
       </template>
     </DateNavigator>
 
@@ -616,5 +631,20 @@ function logout() {
   background: #fee2e2;
   color: #dc2626;
   border-color: #fca5a5;
+}
+
+.analytics-link {
+  font-size: 12px;
+  padding: 4px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: white;
+  color: #374151;
+  text-decoration: none;
+}
+
+.analytics-link:hover {
+  background: #f3f4f6;
+  color: #1f2937;
 }
 </style>

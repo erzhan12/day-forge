@@ -15,6 +15,7 @@ from ai.prompts import (
     _template_entry_to_dict,
     build_draft_user_message,
 )
+from analytics.models import DailyReview
 from schedules.models import Schedule, TimeBlock
 from templates_mgr.models import Rule, Template
 
@@ -134,6 +135,67 @@ def test_build_draft_user_message_full_context(user):
     # Yesterday (active) is included; the older draft is filtered out.
     assert "Sunday gym" in msg
     assert "Should be hidden" not in msg
+
+
+@pytest.mark.django_db
+def test_build_draft_user_message_includes_completion_suffix(user):
+    """A history schedule with a ``DailyReview`` whose ``planned_count >
+    0`` gets a ``(completed: X/Y)`` suffix on its date header line; a
+    schedule without a review (or with ``planned_count == 0``) is silent.
+    Pins the analytics-as-context contract for the AI draft prompt.
+    """
+    schedule = Schedule.objects.create(
+        user=user, date=datetime.date(2026, 5, 4)  # Monday
+    )
+
+    # History day 1 — has a review with planned_count > 0 → suffix.
+    has_review = Schedule.objects.create(
+        user=user,
+        date=datetime.date(2026, 5, 3),
+        status=Schedule.Status.ACTIVE,
+    )
+    TimeBlock.objects.create(
+        schedule=has_review,
+        title="Reviewed gym",
+        start_time=datetime.time(10, 0),
+        end_time=datetime.time(11, 0),
+        category="health",
+    )
+    DailyReview.objects.create(
+        schedule=has_review, planned_count=7, completed_count=5
+    )
+
+    # History day 2 — no review → no suffix.
+    no_review = Schedule.objects.create(
+        user=user,
+        date=datetime.date(2026, 5, 2),
+        status=Schedule.Status.ACTIVE,
+    )
+    TimeBlock.objects.create(
+        schedule=no_review,
+        title="No review block",
+        start_time=datetime.time(9, 0),
+        end_time=datetime.time(10, 0),
+        category="other",
+    )
+
+    history = list(
+        Schedule.objects.filter(user=user)
+        .exclude(pk=schedule.pk)
+        .order_by("date")
+        .prefetch_related("time_blocks")
+    )
+
+    msg = build_draft_user_message(
+        schedule, None, history, [], datetime.datetime(2026, 5, 4, 7, 30)
+    )
+    # Suffix appears exactly once — for has_review only.
+    assert "(completed: 5/7)" in msg
+    assert msg.count("(completed:") == 1
+    # Both history dates are still present.
+    assert "2026-05-03 (Sunday) (completed: 5/7)" in msg
+    assert "2026-05-02 (Saturday)" in msg
+    assert "2026-05-02 (Saturday) (completed:" not in msg
 
 
 @pytest.mark.django_db

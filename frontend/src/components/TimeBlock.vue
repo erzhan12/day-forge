@@ -3,6 +3,7 @@ import { ref, computed, nextTick, inject } from "vue"
 import type { Ref } from "vue"
 import type { TimeBlock, UndoAction } from "../types"
 import { useSchedule } from "../composables/useSchedule"
+import { categoryColors } from "../utils/categoryColors"
 
 const props = defineProps<{
   block: TimeBlock
@@ -42,13 +43,6 @@ const editing = ref(false)
 const editTitle = ref("")
 const errorMessage = ref("")
 const titleInput = ref<HTMLInputElement | null>(null)
-
-const categoryColors: Record<string, string> = {
-  work: "#3B82F6",
-  personal: "#8B5CF6",
-  health: "#10B981",
-  other: "#6B7280",
-}
 
 const durationMinutes = computed(() => {
   const [sh, sm] = props.block.start_time.split(":").map(Number)

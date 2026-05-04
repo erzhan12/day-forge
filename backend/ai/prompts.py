@@ -201,7 +201,19 @@ def build_draft_user_message(
         if getattr(past, "status", None) == "draft":
             continue
         past_weekday = past.date.strftime("%A")
-        history_lines.append(f"# {past.date.isoformat()} ({past_weekday})")
+        # Per-day completion ratio is appended when a DailyReview row exists
+        # with at least one planned block — gives the LLM a passive signal
+        # like "user finishes ~70% of weekday plans" without a structured
+        # stats block. Phase 6 only persists reviews via analytics_view, so
+        # this is silently a no-op for users who never open the panel.
+        review = getattr(past, "daily_review", None)
+        if review is not None and review.planned_count > 0:
+            suffix = f" (completed: {review.completed_count}/{review.planned_count})"
+        else:
+            suffix = ""
+        history_lines.append(
+            f"# {past.date.isoformat()} ({past_weekday}){suffix}"
+        )
         past_blocks = list(past.time_blocks.all())
         if past_blocks:
             for b in past_blocks:

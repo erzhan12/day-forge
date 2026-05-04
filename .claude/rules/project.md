@@ -20,5 +20,7 @@ These are non-obvious conventions that can't be inferred from code alone.
 - `LLM_DRAFT_MODEL` — Model used for draft generation (`POST /api/ai/schedules/<date>/generate-draft/`). Default `gpt-4o`. Heavier than `LLM_MODEL` because drafts shape a whole day from history (PRD §15.3).
 - `LLM_DRAFT_RATE_LIMIT_PER_HOUR` — Independent fixed-window counter for the draft endpoint. Default `10`. Same shared-cache requirement as `LLM_RATE_LIMIT_PER_HOUR` — covered by the same `ai.E001` system check.
 - `LLM_HISTORY_DAYS` — Number of past schedules included in the draft context. Default `7` (PRD §6.2). Only schedules with `status` in `{active, reviewed}` are included — `draft`-status days are excluded so the AI doesn't train on its own unreviewed output.
+- `ANALYTICS_STREAK_THRESHOLD` — Per-day completion ratio required for a day to count toward the streak. Default `0.8`. Must be a float in `[0.0, 1.0]`; out-of-range values raise `ValueError` at import time so a misconfigured deploy fails loudly instead of silently producing `streak=0` forever.
+- `ANALYTICS_STREAK_WINDOW_DAYS` — Hard cap on how far back the streak query walks. Default `30`. Must be a positive int; `<= 0` raises `ValueError` at import time. Prevents `O(account-age)` scans on long-lived accounts.
 
 **Privacy note**: User commands submitted via the AI endpoint are logged verbatim to the `AIInteraction` table for audit purposes (PRD §6.5). Users should avoid entering sensitive data (passwords, API keys) in command prompts.
