@@ -365,7 +365,26 @@ async function confirmDelete() {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
+  /* Without ``fixed``, the auto algorithm distributes width by
+     intrinsic content. ``<input type="time">`` and ``<select>`` carry
+     built-in picker / dropdown controls so they claim ~90-110px of
+     intrinsic width; an empty ``<input type="text">`` for Title has
+     none and gets squeezed into padding. Fixed layout + explicit
+     widths flips that — Title takes whatever's left after the
+     fixed-width control columns. */
+  table-layout: fixed;
 }
+
+.blocks-table th:nth-child(1),
+.blocks-table td:nth-child(1) { width: auto; }       /* Title — fills remaining */
+.blocks-table th:nth-child(2),
+.blocks-table td:nth-child(2) { width: 96px; }       /* Start */
+.blocks-table th:nth-child(3),
+.blocks-table td:nth-child(3) { width: 96px; }       /* End */
+.blocks-table th:nth-child(4),
+.blocks-table td:nth-child(4) { width: 108px; }      /* Category */
+.blocks-table th:nth-child(5),
+.blocks-table td:nth-child(5) { width: 36px; }       /* delete × */
 
 .blocks-table th {
   text-align: left;
