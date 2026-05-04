@@ -47,8 +47,9 @@ goes through `restore_blocks([])` which deliberately does **not** flip
 status — that's the only reliable way to clear blocks while keeping the
 draft badge. Deleting blocks one by one in the UI flips
 `status → active` on the first delete (because every forward-mutating
-endpoint calls `mark_active_if_draft()`), so the Regenerate pill
-disappears.
+endpoint calls `mark_active_on_edit()` — renamed from
+`mark_active_if_draft()` in Phase 6 to also cover `reviewed → active`),
+so the Regenerate pill disappears.
 
 ---
 

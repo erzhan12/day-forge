@@ -1,4 +1,5 @@
 from ai import views as ai_views
+from analytics import views as analytics_views
 from django.contrib import admin
 from django.urls import path
 from schedules import api as schedules_api
@@ -59,5 +60,21 @@ urlpatterns = [
         "api/ai/schedules/<str:date>/generate-draft/",
         ai_views.ai_generate_draft,
         name="ai_generate_draft",
+    ),
+    # Analytics
+    path(
+        "analytics/<str:date>/",
+        analytics_views.analytics_view,
+        name="analytics",
+    ),
+    path(
+        "api/analytics/schedules/<str:date>/mark-reviewed/",
+        analytics_views.mark_reviewed,
+        name="mark_reviewed",
+    ),
+    path(
+        "api/analytics/reviews/<int:pk>/notes/",
+        analytics_views.update_review_notes,
+        name="update_review_notes",
     ),
 ]
