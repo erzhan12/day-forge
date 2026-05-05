@@ -122,3 +122,35 @@ The frontend refreshes `currentHHMM` on a 1-minute interval (matches `Schedule.v
 
 - Every mutation now needs `router.reload({ only: ["blocks", "schedule"] })`. Reloading only `blocks` would leave `schedule.status` stale and the badge / regenerate button out of sync. Affected files: `useAI.ts`, `useSchedule.ts` (which `useUndo` and `useDrag` go through), `useDraft.ts`.
 - `auto_draft_pending` is its own Inertia prop, NOT part of `schedule`. Partial reloads of `["blocks", "schedule"]` do not refresh it. The frontend keeps its own `attemptedAutoDraftDates` set per component instance to prevent refire.
+
+## PR review iteration loop (AI-driven changes)
+
+For PRs the AI assistant authors in this repo, run the full review-iterate loop autonomously, then **stop at the merge boundary**.
+
+### The loop
+
+1. Open the PR (push branch + `gh pr create`).
+2. Wait for `claude-review` (and any other CI) to land. Use the Monitor tool to be notified — don't poll, don't sleep.
+3. Read review comments end-to-end before reacting.
+4. Triage every finding by **severity AND validity** — not just severity:
+   - **Real P0 / P1** (genuine bugs, missed test gaps, real security holes) → fix.
+   - **False-positive P0 / P1** (see patterns below) → reject in writing on the PR (a short comment explaining the rationale) rather than silently ignoring. Do not change code to satisfy a misclassified finding.
+   - **P2 / P3** → apply the cheap ones inline; otherwise add to `tasks/todo.md` "Follow-ups" section.
+5. Push the fixes as one or more follow-up commits. Force-push only when amending the still-pending top commit on a one-commit PR; otherwise stack.
+6. Loop back to step 2 until either no findings remain or only P2/P3 are left.
+
+### The merge step is NOT in the loop
+
+When the loop terminates, **report status** (passing CI, no/only-low findings) and **wait for an explicit `merge` / `ok merge` / equivalent from the user** before running `gh pr merge`. Phrases like "fix it", "address the review", "apply suggestions" authorize the code changes only — not the merge. The user retains the merge decision regardless of how confident the automation, the CI, or the auto-reviewer is. Longer-form rationale: `~/.claude/projects/-Users-erzhan-DATA-PROJ-day-forge/memory/feedback_pr_merge.md`.
+
+### Reviewer false-positive patterns observed (don't auto-comply)
+
+These have shown up repeatedly from `claude-review` and were rejected with the user's agreement; recognise the pattern and push back instead of complying:
+
+- **Demanding env vars for credentials in local-dev test fixtures** whose password is clearly marked `do-not-use-in-prod` and whose target is `localhost`. The "credentials" are a fixture, not real secrets; env-var indirection adds friction without changing the threat model.
+- **Asking for runtime "production-detection" guards** (e.g. "refuse to run if DB > 50MB") that don't model the actual threat — a dev script's reach is constrained by network / Django settings, not by file sizes. The threshold is also arbitrary and false-positives on real dev DBs after enough use.
+- **Suggesting `createsuperuser` (interactive) replace an idempotent Django shell snippet** on "security" grounds. The interactive command breaks automation; the snippet's idempotency IS the point.
+- **Adding `refresh_from_db()` after `select_for_update().get()`** "for safety". The `SELECT ... FOR UPDATE` IS the synchronization point — there is no fresher state to fetch.
+- **Adding indexes that already exist by Django default** (e.g. on a `OneToOneField`'s implicit unique index, or an `UniqueConstraint(fields=['a', 'b'])`'s composite index). Verify with `sqlite_master` / `pg_indexes` before agreeing.
+
+When in doubt: **a written rejection on the PR > silent ignoring > complying with bad advice**. The conversation log of "here's why we rejected this" is itself useful context for the next reviewer pass.
