@@ -179,6 +179,10 @@ describe("TimeBlock", () => {
     await wrapper.find(".title-input").trigger("keydown.enter")
     await vi.dynamicImportSettled()
     expect(wrapper.text()).toContain("Failed to update title")
+    // Failure path re-opens the input so the user can retry without
+    // losing their typed value (paired with ``editing.value = true``
+    // on the failure branch in saveTitle).
+    expect(wrapper.find(".title-input").exists()).toBe(true)
   })
 
   it("renders drag handle", () => {

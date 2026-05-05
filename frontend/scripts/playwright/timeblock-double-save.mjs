@@ -11,8 +11,21 @@
 //
 // Run from frontend/:  node scripts/playwright/timeblock-double-save.mjs
 //
-// ⚠️  See template-editor-layout.mjs for warnings about the
-// ``playwright`` test user (LOCAL DEV ONLY).
+// Pre-reqs:
+//   * Django on :8006 (``make run``)
+//   * Vite on :5173 (``make frontend-dev``)
+//   * Test user ``playwright`` created via the snippet below.
+//
+// ⚠️  WARNING — LOCAL DEVELOPMENT ONLY
+// The snippet creates a Django SUPERUSER with a known weak password
+// (``playwright-pw-do-not-use-in-prod``). Running it against a
+// production database creates a backdoor admin. Never paste it into
+// a production manage.py shell. Local SQLite dev DB only:
+//
+//       uv run python backend/manage.py shell -c "
+//       from django.contrib.auth.models import User
+//       u, _ = User.objects.get_or_create(username='playwright', defaults={'is_staff': True, 'is_superuser': True})
+//       u.set_password('playwright-pw-do-not-use-in-prod'); u.save()"
 
 import { chromium } from "@playwright/test"
 import { execSync } from "node:child_process"
@@ -31,8 +44,9 @@ const REPO_ROOT = resolve(process.cwd(), "..")
 // Pre-seed: ensure the playwright user has a Schedule on SCHEDULE_DATE
 // with exactly one TimeBlock named SEED_TITLE. Idempotent.
 console.log("→ Seeding test data via Django shell…")
-execSync(
-  `uv run python backend/manage.py shell -c "
+try {
+  execSync(
+    `uv run python backend/manage.py shell -c "
 from schedules.models import Schedule, TimeBlock
 from django.contrib.auth.models import User
 import datetime
@@ -47,8 +61,17 @@ TimeBlock.objects.create(
 )
 print('seeded schedule', s.id)
 "`,
-  { stdio: "inherit", cwd: REPO_ROOT },
-)
+    { stdio: "inherit", cwd: REPO_ROOT },
+  )
+} catch (err) {
+  console.error("\n❌ Seed step failed. Common causes:")
+  console.error(`  * Django not running (start with ``make run``)`)
+  console.error(
+    `  * Test user '${USERNAME}' does not exist — see WARNING in this file's header`,
+  )
+  console.error(`  * uv environment not activated (try \`uv sync\`)\n`)
+  process.exit(2)
+}
 
 const browser = await chromium.launch({ headless: true })
 const context = await browser.newContext({
