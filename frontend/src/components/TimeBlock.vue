@@ -71,15 +71,29 @@ async function startEditing() {
 }
 
 async function saveTitle() {
+  // Guard: ``@keydown.enter`` and ``@blur`` both bind to ``saveTitle``.
+  // After Enter, Vue removes the input from the DOM (when ``editing``
+  // flips false), which fires blur, which re-enters this handler.
+  // Setting ``editing.value = false`` BEFORE the network await ensures
+  // the second call short-circuits here. (A flag reset in a ``finally``
+  // wouldn't work — by the time blur fires sequentially the flag is
+  // already cleared. The ``editing`` ref is the right state to gate on.)
+  if (!editing.value) return
+
   const trimmed = editTitle.value.trim()
   if (!trimmed || trimmed === props.block.title) {
     editing.value = false
     return
   }
+
+  // Take edit mode down NOW. Vue will remove the input on next tick;
+  // the resulting blur will re-enter ``saveTitle`` and immediately
+  // hit the ``!editing.value`` early-return above.
+  editing.value = false
+
   const snapshot = undo?.snapshotBlocks()
   const result = await updateBlock(props.block.id, { title: trimmed })
   if (result.ok) {
-    editing.value = false
     if (undo && snapshot) {
       undo.pushUndo({
         description: `Renamed "${props.block.title}" to "${trimmed}"`,
@@ -89,7 +103,10 @@ async function saveTitle() {
       })
     }
   } else {
+    // Re-open the input so the user can retry; clearing it would
+    // discard their typed value.
     errorMessage.value = "Failed to update title"
+    editing.value = true
   }
 }
 
