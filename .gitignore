@@ -26,6 +26,11 @@ node_modules/
 frontend/node_modules/
 frontend/dist/
 
+# Playwright artefacts (screenshots from ad-hoc investigation scripts)
+frontend/scripts/playwright/*.png
+frontend/playwright-report/
+frontend/test-results/
+
 # Django static build output
 staticfiles/
 

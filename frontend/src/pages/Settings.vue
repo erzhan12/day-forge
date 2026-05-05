@@ -89,12 +89,24 @@ const today = todayString()
 
 <style scoped>
 .settings-page {
+  /* max-width grows with the viewport: a single 720px column on
+     narrow/laptop screens, but expanding to 1024px on desktop where
+     the 2-column ``.template-grid`` kicks in. Without this widening,
+     two cards inside a 720px page get ~352px each — too narrow for
+     the 5-column blocks form. See the playwright repro at
+     scripts/playwright/template-editor-layout.mjs. */
   max-width: 720px;
   margin: 0 auto;
   padding: 24px 16px 80px;
   display: flex;
   flex-direction: column;
   gap: 24px;
+}
+
+@media (min-width: 1024px) {
+  .settings-page {
+    max-width: 1024px;
+  }
 }
 
 .page-header {
@@ -142,7 +154,15 @@ const today = todayString()
   gap: 16px;
 }
 
-@media (min-width: 720px) {
+/* Two-column only on truly wide viewports. At 720px each card gets
+   ~320px which can't fit the 5-column blocks form (Title + Start +
+   End + Category + delete = ~370px minimum). Lifting to 1024px keeps
+   side-by-side layout for desktop-class screens (where ``max-width:
+   720px`` of the page already constrains the page itself, so each
+   card lands at ~352px) — the page-level max-width still leaves us
+   tight, so we also need the form-row CSS in TemplateEditor.
+   See the playwright repro at scripts/playwright/template-editor-layout.mjs. */
+@media (min-width: 1024px) {
   .template-grid {
     grid-template-columns: 1fr 1fr;
   }
