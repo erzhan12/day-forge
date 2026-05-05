@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { mount } from "@vue/test-utils"
+import { flushPromises, mount } from "@vue/test-utils"
 import { ref } from "vue"
 
 // Mock useSchedule
@@ -100,6 +100,41 @@ describe("TimeBlock", () => {
     expect(mockUpdateBlock).toHaveBeenCalledWith(1, { title: "New Title" })
   })
 
+  it("does not double-save when blur fires after enter", async () => {
+    // Regression for the ``@keydown.enter`` + ``@blur`` race. Both
+    // bind to ``saveTitle``. Pressing Enter eventually unmounts the
+    // input which fires blur, triggering a second invocation. Without
+    // taking ``editing`` down BEFORE the network await, that second
+    // call could proceed all the way to a duplicate PATCH + duplicate
+    // undo entry.
+    //
+    // The end-to-end variant of this test lives at
+    // frontend/scripts/playwright/timeblock-double-save.mjs — it caught
+    // a sibling-bug that this unit test alone missed (a guard that
+    // worked for concurrent re-entry but not for sequential re-entry
+    // through a finally-cleared flag). Keep both: the unit test pins
+    // the contract; the e2e script pins the real-browser timing.
+    let resolveFirst: (v: { ok: boolean }) => void = () => {}
+    mockUpdateBlock.mockReturnValueOnce(
+      new Promise<{ ok: boolean }>((res) => {
+        resolveFirst = res
+      }),
+    )
+    const wrapper = mountWithProvide({
+      block: makeBlock(),
+      date: "2026-04-10",
+    })
+    await wrapper.find(".title").trigger("click")
+    const input = wrapper.find(".title-input")
+    await input.setValue("New Title")
+    await input.trigger("keydown.enter")
+    await input.trigger("blur")
+    resolveFirst({ ok: true })
+    await flushPromises()
+    expect(mockUpdateBlock).toHaveBeenCalledTimes(1)
+    expect(mockPushUndo).toHaveBeenCalledTimes(1)
+  })
+
   it("cancels editing on escape without saving", async () => {
     const wrapper = mountWithProvide({ block: makeBlock(), date: "2026-04-10" })
     await wrapper.find(".title").trigger("click")
@@ -144,6 +179,10 @@ describe("TimeBlock", () => {
     await wrapper.find(".title-input").trigger("keydown.enter")
     await vi.dynamicImportSettled()
     expect(wrapper.text()).toContain("Failed to update title")
+    // Failure path re-opens the input so the user can retry without
+    // losing their typed value (paired with ``editing.value = true``
+    // on the failure branch in saveTitle).
+    expect(wrapper.find(".title-input").exists()).toBe(true)
   })
 
   it("renders drag handle", () => {
