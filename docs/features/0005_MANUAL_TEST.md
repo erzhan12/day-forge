@@ -213,7 +213,7 @@ uv run python backend/manage.py shell -c "from schedules.models import Schedule;
 UI прячет кнопку Regenerate когда блоки есть, поэтому это curl-only
 проверка серверного guard'а.
 
-- [ ] Залогиниться через curl. Django CSRF middleware требует cookie
+- [X] Залогиниться через curl. Django CSRF middleware требует cookie
   ДО POST'а на login, поэтому сначала GET (`@ensure_csrf_cookie`
   поставит cookie), затем POST с заголовком. После login токен
   ротейтится — перечитываем:
@@ -240,7 +240,7 @@ UI прячет кнопку Regenerate когда блоки есть, поэт
   # 3) Перечитать CSRF (rotate'ится после login)
   CSRF=$(grep XSRF-TOKEN cookies.txt | awk '{print $NF}')
   ```
-- [ ] Дёрнуть generate-draft на дате с блоками:
+- [X] Дёрнуть generate-draft на дате с блоками:
   ```bash
   curl -X POST -b cookies.txt \
     -H "X-XSRF-TOKEN: $CSRF" \
@@ -257,28 +257,28 @@ UI прячет кнопку Regenerate когда блоки есть, поэт
 
 ### 10a. Сжечь budget реальными LLM-вызовами
 
-- [ ] Поставить `LLM_DRAFT_RATE_LIMIT_PER_HOUR=2` в `.env` и перезапустить Django.
-- [ ] Зайти на свежий weekday (например, `/schedule/2026-05-12/`) —
+- [X] Поставить `LLM_DRAFT_RATE_LIMIT_PER_HOUR=2` в `.env` и перезапустить Django.
+- [X] Зайти на свежий weekday (например, `/schedule/2026-05-12/`) —
   auto-draft срабатывает (counter = 1).
-- [ ] ⌘Z для undo (состояние: `status=draft`, `blocks=[]`).
-- [ ] Кликнуть **Regenerate draft** — отрабатывает (counter = 2).
-- [ ] ⌘Z ещё раз.
-- [ ] Кликнуть **Regenerate draft** → `429`. Inline-ошибка под телом
+- [X] ⌘Z для undo (состояние: `status=draft`, `blocks=[]`).
+- [X] Кликнуть **Regenerate draft** — отрабатывает (counter = 2).
+- [X] ⌘Z ещё раз.
+- [X] Кликнуть **Regenerate draft** → `429`. Inline-ошибка под телом
   schedule читается "Draft rate limit reached. Try again later."
-- [ ] Подтвердить что **command bar всё ещё работает** (отдельный
+- [X] Подтвердить что **command bar всё ещё работает** (отдельный
   counter; AI command на другом schedule не должна 429-ить).
 
 ### 10b. 409 / 422 / 413 / 400 НЕ должны тратить budget
 
 Это пинит регрессию которую мы заложили в этом PR.
 
-- [ ] Сбросить кэш чтобы counter стартовал с 0:
+- [X] Сбросить кэш чтобы counter стартовал с 0:
   ```bash
   uv run python backend/manage.py shell -c "from django.core.cache import cache; cache.clear()"
   ```
   (FileBasedCache хранит entries в `.cache/` — clear кэша атомарно
   сбрасывает все counters.)
-- [ ] С `LLM_DRAFT_RATE_LIMIT_PER_HOUR=2` дёрнуть endpoint 3 раза через
+- [X] С `LLM_DRAFT_RATE_LIMIT_PER_HOUR=2` дёрнуть endpoint 3 раза через
   curl на дату с блоками (форсит 409 каждый раз). Используй
   `cookies.txt` + `$CSRF` из Test 9 (или повтори login-флоу оттуда):
   ```bash
@@ -291,7 +291,7 @@ UI прячет кнопку Regenerate когда блоки есть, поэт
   done
   # → 409 409 409  (НЕ 409 409 429)
   ```
-- [ ] Проинспектировать counter: должен отсутствовать или быть равным 0.
+- [X] Проинспектировать counter: должен отсутствовать или быть равным 0.
   ```bash
   uv run python backend/manage.py shell -c "from django.core.cache import cache; print(cache.get('ai_draft_rl:1'))"
   # → None
@@ -301,17 +301,17 @@ UI прячет кнопку Regenerate когда блоки есть, поэт
 
 ## Тест 11 — Изоляция между пользователями
 
-- [ ] Создать второго суперюзера через `createsuperuser`.
-- [ ] Под пользователем A создать weekday template с именем "A weekday".
-- [ ] Разлогиниться, залогиниться под B. Зайти на `/settings/`.
-- [ ] Страница показывает два пустых слота — template'а A не видно.
-- [ ] Зайти на `/schedule/<today>/`. Кнопка Regenerate **disabled** для
+- [X] Создать второго суперюзера через `createsuperuser`.
+- [X] Под пользователем A создать weekday template с именем "A weekday".
+- [X] Разлогиниться, залогиниться под B. Зайти на `/settings/`.
+- [X] Страница показывает два пустых слота — template'а A не видно.
+- [X] Зайти на `/schedule/<today>/`. Кнопка Regenerate **disabled** для
   пользователя B, потому что у него нет template'а.
-- [ ] Подтвердить через шелл:
+- [X] Подтвердить через шелл:
   ```bash
   uv run python backend/manage.py shell -c "from templates_mgr.models import Template; [print(t.user.username, t.type) for t in Template.objects.all()]"
   ```
-- [ ] (Cross-user PK guard) Под пользователем B попытаться сделать PUT
+- [X] (Cross-user PK guard) Под пользователем B попытаться сделать PUT
   на template пользователя A по id — сервер возвращает **404** (не 403):
   ```bash
   curl -X PUT -b cookies.txt -H "X-XSRF-TOKEN: $CSRF" \
@@ -325,18 +325,18 @@ UI прячет кнопку Regenerate когда блоки есть, поэт
 
 ## Тест 12 — 422 fallback (template удалён между загрузкой страницы и кликом)
 
-- [ ] Открыть `/schedule/<future-weekday>/` с присутствующим weekday
+- [X] Открыть `/schedule/<future-weekday>/` с присутствующим weekday
   template'ом. Дождаться окончания auto-draft, затем ⌘Z для очистки
   блоков. Теперь Regenerate pill виден и enabled.
-- [ ] В другой вкладке браузера открыть `/settings/` и **удалить**
+- [X] В другой вкладке браузера открыть `/settings/` и **удалить**
   weekday template.
-- [ ] Вернуться на вкладку schedule БЕЗ перезагрузки и кликнуть
+- [X] Вернуться на вкладку schedule БЕЗ перезагрузки и кликнуть
   **Regenerate draft**. Inertia-проп `has_template_for_type` устарел,
   поэтому кнопка локально всё ещё enabled.
-- [ ] **Network**: `POST /generate-draft/` → `422`.
-- [ ] Inline-ошибка читается "No template configured. Open Settings to
+- [X] **Network**: `POST /generate-draft/` → `422`.
+- [X] Inline-ошибка читается "No template configured. Open Settings to
   create one." Ручное редактирование (drag, edit, delete, +Add Block)
   всё ещё работает.
-- [ ] После клика по шестерёнке и пересоздания template'а возврат на
+- [X] После клика по шестерёнке и пересоздания template'а возврат на
   schedule перерендеривает с `has_template_for_type=true`, и кнопка
   снова enabled.

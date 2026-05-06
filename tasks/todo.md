@@ -149,3 +149,25 @@
   internal, users only care about ▲/▼ ordering. Either approach
   resolves the same root issue. Discovered while walking Test 3
   (delete with `[r1=0, r2=1]` leaves the survivor at priority 1, not 0).
+
+### Playwright e2e tooling
+
+- [ ] **Makefile target for the playwright scripts.** Right now each
+  is invoked via `cd frontend && node scripts/playwright/<name>.mjs`.
+  At ≥4 scripts the friction is real. Add a `make e2e` (or
+  `e2e:layout` / `e2e:race` / `e2e:isolation`) so scripts are
+  discoverable from `make help` and the invocation is one keystroke.
+  Suggested by `claude-review` on PR #13.
+
+- [ ] **`frontend/scripts/playwright/README.md`.** Up to PR #13 we
+  have 4 e2e scripts; deferred earlier as "premature for 2". Add a
+  short README documenting: prereqs (Django + Vite + ``playwright``
+  test user creation snippet), how to run individual scripts and any
+  shared assumptions (seed dates, idempotent setup, etc.). Pair with
+  the Makefile follow-up above. Suggested by `claude-review` on PR
+  #13 and PR #11.
+
+- [ ] **Extract magic numbers in playwright scripts.** `await page.waitForTimeout(1500)`,
+  the 30-iteration login wait loops, etc. Pull out as named
+  `WAIT_FOR_PATCH_MS` / `LOGIN_POLL_MAX_TRIES` / etc. Trivial
+  readability cleanup. Suggested by `claude-review` on PR #13.
