@@ -119,20 +119,20 @@ forward-mutating endpoint вызывает `mark_active_on_edit()` —
 **Исходное состояние**: weekday template существует (после Тест 2),
 `LLM_API_KEY` задан.
 
-- [ ] Перейти стрелками даты на будущий weekday, который ты НИКОГДА не
+- [X] Перейти стрелками даты на будущий weekday, который ты НИКОГДА не
   посещал (например, `/schedule/2026-05-11/`, понедельник).
-- [ ] **Network**: страница рендерится с `auto_draft_pending=true` в
+- [X] **Network**: страница рендерится с `auto_draft_pending=true` в
   Inertia props, затем автоматически улетает
   `POST /api/ai/schedules/2026-05-11/generate-draft/`.
-- [ ] В теле schedule отрисован spinner overlay по центру с текстом
+- [X] В теле schedule отрисован spinner overlay по центру с текстом
   "Generating draft…".
-- [ ] Пока генерится: command bar input отключён, кнопка "+ Add Block"
+- [X] Пока генерится: command bar input отключён, кнопка "+ Add Block"
   отключена, click-to-add по gap-слотам подавлен (cursor: not-allowed).
-- [ ] Через ~5–10с draft отрисовывается. У каждого блока ожидаемый
+- [X] Через ~5–10с draft отрисовывается. У каждого блока ожидаемый
   цвет категории. Pill в date navigator'е теперь читается
   "Draft — edit to keep" (`DraftBadge`); Regenerate pill пропал
   (он рендерится только когда `blocks.length === 0`).
-- [ ] В шелле `AIInteraction` показывает строку с `kind=draft`,
+- [X] В шелле `AIInteraction` показывает строку с `kind=draft`,
   `success=True`.
 
 ---
@@ -143,21 +143,21 @@ forward-mutating endpoint вызывает `mark_active_on_edit()` —
 состоянии на дате X — если X "израсходован", перейди на другую свежую
 дату и дай auto-draft отработать).
 
-- [ ] Кликнуть по любому блоку для inline-edit заголовка и нажать Enter.
-- [ ] **Network**: `PATCH /api/blocks/<id>/` → `200`. Inertia partial
+- [X] Кликнуть по любому блоку для inline-edit заголовка и нажать Enter.
+- [X] **Network**: `PATCH /api/blocks/<id>/` → `200`. Inertia partial
   reload запрашивает `["blocks", "schedule"]`.
-- [ ] Badge "Draft — edit to keep" **пропадает** (status флипнулся в
+- [X] Badge "Draft — edit to keep" **пропадает** (status флипнулся в
   `active` на сервере, и partial reload это подхватил).
-- [ ] **(Phase 6 артефакт)** В правой части date navigator'а появляется
+- [X] **(Phase 6 артефакт)** В правой части date navigator'а появляется
   ссылка "View analytics" — это нормально, не баг.
 
 Для каждой из вариаций ниже зайди на свежую дату, чтобы auto-draft
 снова отработал, выполни действие и подтверди что badge пропадает:
 
-- [ ] Тогглнуть чекбокс (completion) → флипает.
-- [ ] Перетащить блок на новый слот → флипает.
-- [ ] Добавить новый блок через форму "+ Add Block" → флипает.
-- [ ] Команда AI command bar с реальным действием ("add coffee at 10:00")
+- [X] Тогглнуть чекбокс (completion) → флипает.
+- [X] Перетащить блок на новый слот → флипает.
+- [X] Добавить новый блок через форму "+ Add Block" → флипает.
+- [X] Команда AI command bar с реальным действием ("add coffee at 10:00")
   → флипает.
 
 ---
@@ -167,11 +167,11 @@ forward-mutating endpoint вызывает `mark_active_on_edit()` —
 **Исходное состояние**: свежедрафтнутый schedule (`status=draft`,
 блоки на месте).
 
-- [ ] В command bar ввести что-то, от чего AI откажется, например
+- [X] В command bar ввести что-то, от чего AI откажется, например
   "what's the weather like".
-- [ ] `POST /api/ai/schedules/<date>/command/` возвращает `200` с
+- [X] `POST /api/ai/schedules/<date>/command/` возвращает `200` с
   `actions: []` и объяснением в баре.
-- [ ] Badge "Draft — edit to keep" **остаётся** (RULES.md: 200 с нулём
+- [X] Badge "Draft — edit to keep" **остаётся** (RULES.md: 200 с нулём
   actions это успешный no-op; флип статуса гейтится на
   `len(parsed_actions) > 0`).
 
@@ -181,12 +181,12 @@ forward-mutating endpoint вызывает `mark_active_on_edit()` —
 
 **Исходное состояние**: свежедрафтнутый schedule.
 
-- [ ] Нажать ⌘Z (или Ctrl+Z).
-- [ ] **Network**: `POST /api/schedules/<date>/blocks/restore/` с
+- [X] Нажать ⌘Z (или Ctrl+Z).
+- [X] **Network**: `POST /api/schedules/<date>/blocks/restore/` с
   `{"blocks": []}`.
-- [ ] Schedule становится пустым; draft badge пропадает (нет блоков);
+- [X] Schedule становится пустым; draft badge пропадает (нет блоков);
   `status` остаётся `draft` (проверим в следующем шаге).
-- [ ] Pill **Regenerate draft** снова появляется в date navigator'е,
+- [X] Pill **Regenerate draft** снова появляется в date navigator'е,
   **enabled** (template существует, `status=draft`, `blocks=0`).
 
 Опциональная проверка через шелл:
@@ -202,9 +202,9 @@ uv run python backend/manage.py shell -c "from schedules.models import Schedule;
 **Исходное состояние**: пустой drafted schedule (то состояние, в котором
 тебя оставил Тест 7 — `status=draft`, `blocks=[]`).
 
-- [ ] Кликнуть pill **Regenerate draft**.
-- [ ] Появляется spinner overlay; улетает `POST /generate-draft/`.
-- [ ] Draft регенерится; badge снова флипает в "Draft — edit to keep".
+- [X] Кликнуть pill **Regenerate draft**.
+- [X] Появляется spinner overlay; улетает `POST /generate-draft/`.
+- [X] Draft регенерится; badge снова флипает в "Draft — edit to keep".
 
 ---
 
@@ -213,13 +213,31 @@ uv run python backend/manage.py shell -c "from schedules.models import Schedule;
 UI прячет кнопку Regenerate когда блоки есть, поэтому это curl-only
 проверка серверного guard'а.
 
-- [ ] Залогиниться через curl (выставит sessionid + XSRF-TOKEN cookies):
+- [ ] Залогиниться через curl. Django CSRF middleware требует cookie
+  ДО POST'а на login, поэтому сначала GET (`@ensure_csrf_cookie`
+  поставит cookie), затем POST с заголовком. После login токен
+  ротейтится — перечитываем:
   ```bash
+  # Tip: для дебага убери ``-o /dev/null`` чтобы увидеть response body.
+
+  # 1) GET ставит XSRF-TOKEN cookie
+  curl -s -c cookies.txt -b cookies.txt \
+    http://localhost:8006/accounts/login/ -o /dev/null
+
+  CSRF=$(grep XSRF-TOKEN cookies.txt | awk '{print $NF}')
+  if [ -z "$CSRF" ]; then
+    echo "Error: XSRF-TOKEN cookie not found. Django up on :8006?"
+    exit 1
+  fi
+
+  # 2) POST с CSRF-заголовком
   curl -s -c cookies.txt -b cookies.txt \
     -H "Content-Type: application/json" \
+    -H "X-XSRF-TOKEN: $CSRF" \
     -d '{"username":"<your-username>","password":"<your-password>"}' \
-    http://localhost:8006/accounts/login/ > /dev/null
+    http://localhost:8006/accounts/login/ -o /dev/null
 
+  # 3) Перечитать CSRF (rotate'ится после login)
   CSRF=$(grep XSRF-TOKEN cookies.txt | awk '{print $NF}')
   ```
 - [ ] Дёрнуть generate-draft на дате с блоками:
@@ -261,7 +279,8 @@ UI прячет кнопку Regenerate когда блоки есть, поэт
   (FileBasedCache хранит entries в `.cache/` — clear кэша атомарно
   сбрасывает все counters.)
 - [ ] С `LLM_DRAFT_RATE_LIMIT_PER_HOUR=2` дёрнуть endpoint 3 раза через
-  curl на дату с блоками (форсит 409 каждый раз):
+  curl на дату с блоками (форсит 409 каждый раз). Используй
+  `cookies.txt` + `$CSRF` из Test 9 (или повтори login-флоу оттуда):
   ```bash
   for i in 1 2 3; do
     curl -s -o /dev/null -w "%{http_code}\n" \
