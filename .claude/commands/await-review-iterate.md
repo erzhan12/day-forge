@@ -15,7 +15,28 @@ Capture the current `HEAD` SHA — `git rev-parse HEAD` — for filtering review
 
 ## Step 2 — Locate the PR
 
-`gh pr view --json number,headRefOid,url,headRefName`. If there is no PR for the current branch, **stop** and ask the user whether to open one. Do not auto-open.
+`gh pr view --json number,headRefOid,url,headRefName`.
+
+**If a PR exists**: capture its number / URL and proceed to Step 3.
+
+**If no PR exists**: draft a title + body and ask the user to confirm before creating. Never auto-create without confirmation.
+
+- **Title** (≤ 70 chars): mirror the commit subject if there's a single coherent commit, otherwise summarise the branch's intent. Match the project's prefix conventions (`feat(...)`, `fix(...)`, `test(...)`, `docs(...)`, etc., visible in `git log`).
+- **Body** template:
+
+  ```markdown
+  ## Summary
+  <2-4 bullet points covering the main changes>
+
+  ## Test plan
+  <Markdown checklist of how the changes were verified — tie back to commits / scripts / manual tests run>
+
+  🤖 Generated with [Claude Code](https://claude.com/claude-code)
+  ```
+
+- Present the drafted title + body to the user inline. Wait for explicit confirmation (`yes`, `ok`, `create`, or a corrected version). Edits from the user override the draft verbatim.
+- On confirmation, run `gh pr create --title "<title>" --body "$(cat <<'EOF' ... EOF)"` — heredoc so multiline body renders correctly.
+- Re-run `gh pr view --json ...` to capture the new PR's metadata, then continue to Step 3.
 
 If `headRefOid` does not match the local HEAD SHA after a push, wait ~5 s and re-query — GitHub may still be processing the push.
 
@@ -146,7 +167,7 @@ The user retains the merge decision. See RULES.md § "PR review iteration loop (
 
 - **Dirty working tree at Step 1.** Stop, list the untracked / modified files, ask the user to commit / stash. Don't act.
 - **Branch is `main` / `master`.** Stop. The skill is for feature branches with open PRs.
-- **No PR for the branch.** Stop and ask if the user wants to open one. Don't auto-create.
+- **No PR for the branch.** Draft title + body per the Step 2 template, present to the user, await explicit confirmation, then `gh pr create`. Never auto-create without confirmation.
 - **`headRefOid` lags after push.** Wait ~5 s, re-query once. If still mismatched, surface and stop.
 - **Workflow ran but no comment posted.** Treat as "no findings" — exit loop, report, wait for merge approval.
 - **Workflow conclusion is `failure` / `cancelled`.** Surface the run URL. Stop. Don't try to parse a missing comment.
