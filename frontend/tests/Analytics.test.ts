@@ -161,6 +161,46 @@ describe("Analytics.vue", () => {
     vi.useRealTimers()
   })
 
+  it("debounces notes PATCH until 1s after the last input", async () => {
+    vi.useFakeTimers()
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: () => Promise.resolve("{}"),
+    })
+    vi.stubGlobal("fetch", fetchSpy)
+
+    const wrapper = mount(Analytics, {
+      props: {
+        review: makeReview({ id: 42 }),
+        streak: STREAK,
+        schedule: makeSchedule("active"),
+        blocks: BLOCKS,
+        date: "2026-04-01",
+      },
+    })
+
+    const textarea = wrapper.find(".notes-input")
+    await textarea.setValue("a")
+    await textarea.trigger("input")
+    vi.advanceTimersByTime(500)
+    expect(fetchSpy).not.toHaveBeenCalled()
+
+    await textarea.setValue("ab")
+    await textarea.trigger("input")
+    vi.advanceTimersByTime(999)
+    expect(fetchSpy).not.toHaveBeenCalled()
+
+    vi.advanceTimersByTime(1)
+    await vi.runAllTimersAsync()
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+    const [url, options] = fetchSpy.mock.calls[0]
+    expect(url).toBe("/api/analytics/reviews/42/notes/")
+    expect(options.method).toBe("PATCH")
+
+    vi.useRealTimers()
+  })
+
   it("does not flush on unmount if notes were not edited", async () => {
     vi.useFakeTimers()
     const fetchSpy = vi.fn()

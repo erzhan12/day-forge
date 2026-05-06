@@ -20,20 +20,20 @@ make run
 make frontend-dev
 ```
 
-1. Open http://localhost:5173/ and log in.
-2. DevTools → **Network** (filter `Fetch/XHR`) and **Console**.
-3. Have a shell ready to inspect rows:
-   ```bash
-   uv run python backend/manage.py shell -c "from analytics.models import DailyReview; [print(r.schedule.date, r.schedule.status, r.completed_count, r.planned_count, r.updated_at) for r in DailyReview.objects.order_by('-updated_at')[:10]]"
-   ```
+- [x] Open http://localhost:5173/ and log in.
+- [x] DevTools → **Network** (filter `Fetch/XHR`) and **Console**.
+- [x] Have a shell ready to inspect rows:
+  ```bash
+  uv run python backend/manage.py shell -c "from analytics.models import DailyReview; [print(r.schedule.date, r.schedule.status, r.completed_count, r.planned_count, r.updated_at) for r in DailyReview.objects.order_by('-updated_at')[:10]]"
+  ```
 
 Endpoints to watch:
 `GET /analytics/<date>/`,
 `POST /api/analytics/schedules/<date>/mark-reviewed/`,
 `PATCH /api/analytics/reviews/<pk>/notes/`.
 
-Set up a past day with some completed/uncompleted blocks before starting
-(e.g. `/schedule/<yesterday>/`, add 4 blocks, check 2 of them).
+- [x] Set up a past day with some completed/uncompleted blocks before starting
+  (e.g. `/schedule/<yesterday>/`, add 4 blocks, check 2 of them).
 
 ---
 
@@ -42,59 +42,60 @@ Set up a past day with some completed/uncompleted blocks before starting
 **Pre-state**: a past schedule with `status=active` and a mix of
 completed/uncompleted blocks.
 
-1. Visit `/analytics/<that-date>/`.
-2. **Network**: a single `GET /analytics/<date>/` (Inertia). No JSON
-   round-trip for the panel data.
-3. The page shows: CompletionBar with the right ratio, CategoryBreakdown
-   with 4 rows (work/personal/health/other), StreakCounter, SkippedTasks
-   list (uncompleted blocks listed; completed ones absent), Notes textarea.
-4. Status badge reads **Active**; **Mark reviewed** button is visible.
-5. In another tab, edit a block on `/schedule/<that-date>/` (toggle
-   completion).
-6. Refresh the analytics page. The CompletionBar reflects the change;
-   `updated_at` advances (verify via the shell query above).
+- [x] Visit `/analytics/<that-date>/`.
+- [x] **Network**: a single `GET /analytics/<date>/` (Inertia). No JSON
+  round-trip for the panel data.
+- [x] The page shows: CompletionBar with the right ratio, CategoryBreakdown
+  with 4 rows (work/personal/health/other), StreakCounter, SkippedTasks
+  list (uncompleted blocks listed; completed ones absent), Notes textarea.
+- [x] Status badge reads **Active**; **Mark reviewed** button is visible.
+- [x] In another tab, edit a block on `/schedule/<that-date>/` (toggle
+  completion).
+- [x] Refresh the analytics page. The CompletionBar reflects the change;
+  `updated_at` advances (verify via the shell query above).
 
 ---
 
 ## Test 2 — Mark reviewed flips status and freezes the snapshot
 
-1. From the analytics page (still ACTIVE, with notes empty or filled),
-   click **Mark reviewed**.
-2. **Network**: `POST /api/analytics/schedules/<date>/mark-reviewed/`
-   → `200`. The response body is the persisted `DailyReview`.
-3. The page reloads (Inertia partial: `["review", "schedule"]`). Status
-   badge flips to **Reviewed**; the **Mark reviewed** button disappears.
-4. Verify in shell: `Schedule.status == "reviewed"`,
-   `DailyReview.notes == "<whatever was in the textarea>"`.
-5. Click **Mark reviewed** again is impossible (button hidden). To test
-   server-side idempotency, use curl:
-   ```bash
-   curl -s -X POST -b cookies.txt -H "X-XSRF-TOKEN: $CSRF" \
-     -H "Content-Type: application/json" \
-     http://localhost:8006/api/analytics/schedules/<date>/mark-reviewed/
-   # → 200 with the same updated_at as the first call
-   ```
-6. Verify the second call's `updated_at` matches the first.
+- [x] From the analytics page (still ACTIVE, with notes empty or filled),
+  click **Mark reviewed**.
+- [x] **Network**: `POST /api/analytics/schedules/<date>/mark-reviewed/`
+  → `200`. The response body is the persisted `DailyReview`.
+- [x] The page reloads (Inertia partial: `["review", "schedule"]`). Status
+  badge flips to **Reviewed**; the **Mark reviewed** button disappears.
+- [x] Verify in shell: `Schedule.status == "reviewed"`,
+  `DailyReview.notes == "<whatever was in the textarea>"`.
+- [x] Click **Mark reviewed** again is impossible (button hidden). To test
+  server-side idempotency, use curl:
+  ```bash
+  curl -s -X POST -b cookies.txt -H "X-XSRF-TOKEN: $CSRF" \
+    -H "Content-Type: application/json" \
+    http://localhost:8006/api/analytics/schedules/<date>/mark-reviewed/
+  # → 200 with the same updated_at as the first call
+  ```
+- [x] Verify the second call's `updated_at` matches the first.
 
 ---
 
 ## Test 3 — Idempotent on already-reviewed: body is ignored entirely
 
-```bash
-# Different notes value — must NOT overwrite the persisted notes.
-curl -s -X POST -b cookies.txt -H "X-XSRF-TOKEN: $CSRF" \
-  -H "Content-Type: application/json" \
-  -d '{"notes": "different"}' \
-  http://localhost:8006/api/analytics/schedules/<date>/mark-reviewed/
-# → 200 with the ORIGINAL notes (not "different")
-
-# Malformed JSON — must NOT 400.
-curl -s -X POST -b cookies.txt -H "X-XSRF-TOKEN: $CSRF" \
-  -H "Content-Type: application/json" \
-  -d '{not json' \
-  http://localhost:8006/api/analytics/schedules/<date>/mark-reviewed/
-# → 200 with the persisted snapshot
-```
+- [x] Different notes value — must NOT overwrite the persisted notes:
+  ```bash
+  curl -s -X POST -b cookies.txt -H "X-XSRF-TOKEN: $CSRF" \
+    -H "Content-Type: application/json" \
+    -d '{"notes": "different"}' \
+    http://localhost:8006/api/analytics/schedules/<date>/mark-reviewed/
+  # → 200 with the ORIGINAL notes (not "different")
+  ```
+- [x] Malformed JSON — must NOT 400:
+  ```bash
+  curl -s -X POST -b cookies.txt -H "X-XSRF-TOKEN: $CSRF" \
+    -H "Content-Type: application/json" \
+    -d '{not json' \
+    http://localhost:8006/api/analytics/schedules/<date>/mark-reviewed/
+  # → 200 with the persisted snapshot
+  ```
 
 The `200` on a malformed body is the regression that pins the
 "body parsed only after under-lock status check" rule — without that
@@ -105,19 +106,19 @@ the previous attempt succeeded.
 
 ## Test 4 — Editing a reviewed schedule unfreezes it
 
-1. Navigate from `/analytics/<date>/` to `/schedule/<that-date>/` via
-   the **← Back to schedule** link.
-2. Toggle any block's completion checkbox.
-3. **Network**: `PATCH /api/blocks/<id>/` → `200`. Inertia partial
-   reloads `["blocks", "schedule"]`.
-4. Status badge flips back to (no badge — the regular schedule view
-   doesn't show the analytics-page badges).
-5. Visit `/analytics/<date>/` again. Status badge is **Active**;
-   **Mark reviewed** button is back; the panel reflects the edit
-   (CompletionBar updated, `updated_at` advanced).
-6. Repeat for the other forward-mutating endpoints to confirm the
-   pattern: `+ Add Block`, drag-to-reorder, `× Delete`, AI command
-   bar with a non-empty action.
+- [x] Navigate from `/analytics/<date>/` to `/schedule/<that-date>/` via
+  the **← Back to schedule** link.
+- [x] Toggle any block's completion checkbox.
+- [x] **Network**: `PATCH /api/blocks/<id>/` → `200`. Inertia partial
+  reloads `["blocks", "schedule"]`.
+- [x] Status badge flips back to (no badge — the regular schedule view
+  doesn't show the analytics-page badges).
+- [x] Visit `/analytics/<date>/` again. Status badge is **Active**;
+  **Mark reviewed** button is back; the panel reflects the edit
+  (CompletionBar updated, `updated_at` advanced).
+- [x] Repeat for the other forward-mutating endpoints to confirm the
+  pattern: `+ Add Block`, drag-to-reorder, `× Delete`, AI command
+  bar with a non-empty action.
 
 The unfreezing comes from `mark_active_on_edit()` (the renamed
 `mark_active_if_draft`), which is wired into every mutation endpoint.
@@ -126,16 +127,16 @@ The unfreezing comes from `mark_active_on_edit()` (the renamed
 
 ## Test 5 — Notes auto-save (debounced)
 
-1. Visit `/analytics/<date>/` (ACTIVE).
-2. Type into the Notes textarea. The first keystroke does NOT fire a
-   request.
-3. Wait 1 second after the last keystroke. **Network**: `PATCH
-   /api/analytics/reviews/<pk>/notes/` → `200`.
-4. Continue typing — each batch of fast keystrokes results in exactly
-   one PATCH after a 1s pause.
-5. Refresh the page; the saved notes are preserved.
-6. Mark reviewed. Notes still editable via the same PATCH endpoint
-   (the textarea remains usable).
+- [X] Visit `/analytics/<date>/` (ACTIVE).
+- [X] Type into the Notes textarea. The first keystroke does NOT fire a
+  request.
+- [X] Wait 1 second after the last keystroke. **Network**: `PATCH
+  /api/analytics/reviews/<pk>/notes/` → `200`.
+- [X] Continue typing — each batch of fast keystrokes results in exactly
+  one PATCH after a 1s pause.
+- [X] Refresh the page; the saved notes are preserved.
+- [X] Mark reviewed. Notes still editable via the same PATCH endpoint
+  (the textarea remains usable).
 
 ---
 
@@ -144,19 +145,19 @@ The unfreezing comes from `mark_active_on_edit()` (the renamed
 **Pre-state**: at least 3 consecutive past days each with at least 80%
 completion (the default `ANALYTICS_STREAK_THRESHOLD`).
 
-1. Visit `/analytics/<today>/` (or any past day with a schedule).
-2. The streak pill shows `🔥 N-day streak` where N matches the count
-   of consecutive ≥80% days backward from yesterday.
-3. Set up a "gap day" (a calendar day with NO `Schedule` row) somewhere
-   in the streak.
-4. Refresh — the streak count is now the days since today until the gap.
-5. Replace the gap with a zero-block "rest day" Schedule
-   (`Schedule.objects.create(user=..., date=..., status='active')` with
-   no blocks). Refresh — the streak counts the 80% days *across* the
-   rest day (rest days are skipped, not breaks).
-6. Add a below-threshold day in the middle (e.g. 1/3 completed = 33%).
-   Refresh — the streak count drops to the days between today and
-   that below-threshold day.
+- [x] Visit `/analytics/<today>/` (or any past day with a schedule).
+- [x] The streak pill shows `🔥 N-day streak` where N matches the count
+  of consecutive ≥80% days backward from yesterday.
+- [x] Set up a "gap day" (a calendar day with NO `Schedule` row) somewhere
+  in the streak.
+- [x] Refresh — the streak count is now the days since today until the gap.
+- [x] Replace the gap with a zero-block "rest day" Schedule
+  (`Schedule.objects.create(user=..., date=..., status='active')` with
+  no blocks). Refresh — the streak counts the 80% days *across* the
+  rest day (rest days are skipped, not breaks).
+- [x] Add a below-threshold day in the middle (e.g. 1/3 completed = 33%).
+  Refresh — the streak count drops to the days between today and
+  that below-threshold day.
 
 ---
 
@@ -165,57 +166,100 @@ completion (the default `ANALYTICS_STREAK_THRESHOLD`).
 **Pre-state**: at least one past day with a persisted `DailyReview`
 (any day you've marked reviewed in earlier tests works).
 
-1. Navigate to a fresh future weekday you have NEVER visited (e.g.
-   `/schedule/<two-weeks-from-now>/`). Auto-draft will fire if you have
-   a weekday template configured.
-2. **Network**: `POST /api/ai/schedules/<date>/generate-draft/` → `200`.
-3. In the shell, inspect the latest draft AIInteraction row:
-   ```bash
-   uv run python backend/manage.py shell -c "from ai.models import AIInteraction; i = AIInteraction.objects.filter(kind='draft').last(); print(i.ai_response[:500])"
-   ```
-4. Look at the prompt that was sent. The `Recent history` section
-   should contain a date header line for the reviewed day with a
-   `(completed: X/Y)` suffix:
-   ```
-   # 2026-04-25 (Saturday) (completed: 5/7)
-   ```
-5. A history day **without** a `DailyReview` row should NOT have the
-   suffix:
-   ```
-   # 2026-04-26 (Sunday)
-   ```
+- [x] Navigate to a fresh future weekday you have NEVER visited (e.g.
+  `/schedule/<two-weeks-from-now>/`). Auto-draft will fire if you have
+  a weekday template configured.
+- [x] **Network**: `POST /api/ai/schedules/<date>/generate-draft/` → `200`.
+- [x] Reconstruct the user message that was sent to the LLM. The prompt
+  itself is **not persisted** — `AIInteraction` stores `user_command="[DRAFT]"`,
+  `ai_response`, and `actions_json`, but never the rendered user message.
+  Re-run the same query + `build_draft_user_message` (both pure functions
+  of DB state) to render an identical user message:
+  ```bash
+  uv run python backend/manage.py shell -c "
+  import datetime as dt
+  from django.contrib.auth import get_user_model
+  from django.utils import timezone
+  from django.conf import settings
+  from schedules.models import Schedule
+  from templates_mgr.models import Template, Rule
+  from ai.prompts import build_draft_user_message
+
+  U = get_user_model()
+  user = U.objects.get(username='<your-username>')
+  target = dt.date(2026, 5, 18)  # ← the date visited in step 1
+
+  template_type = 'weekday' if target.weekday() < 5 else 'weekend'
+  template = Template.objects.filter(user=user, type=template_type).first()
+  history_start = target - dt.timedelta(days=settings.LLM_HISTORY_DAYS)
+  history = list(
+      Schedule.objects.filter(
+          user=user, date__lt=target, date__gte=history_start,
+          status__in=[Schedule.Status.ACTIVE, Schedule.Status.REVIEWED],
+      ).order_by('date').prefetch_related('time_blocks')
+  )
+  rules = list(Rule.objects.filter(user=user, is_active=True).order_by('-priority'))
+  schedule = Schedule.objects.filter(user=user, date=target).first() or Schedule(user=user, date=target)
+  print(build_draft_user_message(schedule, template, history, rules, timezone.localtime()))
+  "
+  ```
+  This isn't a substitute for actually firing auto-draft (steps 1-2
+  exercise the real view + LLM call). Reconstruction just exposes the
+  prompt content, which the view doesn't write to disk.
+- [x] In the printed `Recent history (last days):` section, the date
+  header for a reviewed day MUST have a `(completed: X/Y)` suffix:
+  ```
+  # 2026-04-25 (Saturday) (completed: 5/7)
+  ```
+- [x] A history day **without** a `DailyReview` row MUST NOT have the
+  suffix:
+  ```
+  # 2026-04-26 (Sunday)
+  ```
 
 The suffix only appears when `DailyReview.planned_count > 0`. Empty/zero
 days are silently formatted without the suffix.
+
+### Optional: true E2E with prompt capture
+
+For end-to-end verification of the actually-sent prompt (not a
+reconstruction), see `frontend/scripts/playwright/draft-prompt-history-suffix.mjs`.
+It requires a temporary one-line patch in `backend/ai/service.py:run_draft`
+that writes `user_message` to `/tmp/draft_prompt_test7.txt` immediately
+before the LLM call (the script's header explains exactly what to add
+and revert). **💸 One real `LLM_DRAFT_MODEL` call per run.**
 
 ---
 
 ## Test 8 — Future date 400, missing schedule 404
 
-```bash
-curl -s -o /dev/null -w "%{http_code}\n" -b cookies.txt \
-  http://localhost:8006/analytics/2099-12-31/
-# → 400
-
-curl -s -o /dev/null -w "%{http_code}\n" -b cookies.txt \
-  http://localhost:8006/analytics/2026-01-01/
-# → 404 (assuming no schedule exists for 2026-01-01)
-```
+- [x] Future date returns 400:
+  ```bash
+  curl -s -o /dev/null -w "%{http_code}\n" -b cookies.txt \
+    http://localhost:8006/analytics/2099-12-31/
+  # → 400
+  ```
+- [x] Missing schedule returns 404:
+  ```bash
+  curl -s -o /dev/null -w "%{http_code}\n" -b cookies.txt \
+    http://localhost:8006/analytics/2026-01-01/
+  # → 404 (assuming no schedule exists for 2026-01-01)
+  ```
 
 ---
 
 ## Test 9 — Cross-user PK guard on notes PATCH
 
-1. Create a second superuser; log in as them in a private window.
-2. From the second user, attempt to PATCH the first user's notes:
-   ```bash
-   curl -s -o /dev/null -w "%{http_code}\n" \
-     -X PATCH -b user_b_cookies.txt -H "X-XSRF-TOKEN: $CSRF_B" \
-     -H "Content-Type: application/json" \
-     -d '{"notes":"hacked"}' \
-     http://localhost:8006/api/analytics/reviews/<user-A-review-id>/notes/
-   # → 404 (not 403 — id-enumeration guard)
-   ```
+- [x] Create a second superuser; log in as them in a private window.
+- [x] From the second user, attempt to PATCH the first user's notes:
+  ```bash
+  curl -s -o /dev/null -w "%{http_code}\n" \
+    -X PATCH -b user_b_cookies.txt -H "X-XSRF-TOKEN: $CSRF_B" \
+    -H "Content-Type: application/json" \
+    -d '{"notes":"hacked"}' \
+    http://localhost:8006/api/analytics/reviews/<user-A-review-id>/notes/
+  # → 404 (not 403 — id-enumeration guard)
+  ```
 
 ---
 
@@ -225,17 +269,21 @@ curl -s -o /dev/null -w "%{http_code}\n" -b cookies.txt \
 uncompleted blocks (e.g. one that ends at 09:00 and one that starts at
 14:00).
 
-1. Visit `/analytics/<today>/` *before* 14:00 local.
-2. The **Skipped** section lists only the past-window uncompleted block.
-3. Wait until after the future block's end time, OR set your system
-   clock forward.
-4. The Skipped section now lists both. The component refreshes its
-   internal `currentHHMM` once a minute, mirroring `Schedule.vue`'s
-   `nowMinutes` cadence.
-5. For a past day (not today), every uncompleted block shows up
-   regardless of time.
-6. When the filtered list would be empty, the entire **Skipped**
-   section is hidden (no header, no whitespace).
+- [x] Visit `/analytics/<today>/` *before* 14:00 local.
+- [x] The **Skipped** section lists only the past-window uncompleted block.
+- [x] Wait until after the future block's end time, OR set your system
+  clock forward.
+- [x] The Skipped section now lists both. The component refreshes its
+  internal `currentHHMM` once a minute, mirroring `Schedule.vue`'s
+  `nowMinutes` cadence.
+- [x] For a past day (not today), every uncompleted block shows up
+  regardless of time.
+- [x] When the filtered list would be empty, the entire **Skipped**
+  section is hidden (no header, no whitespace).
+
+For an automated, deterministic version of this test (uses Playwright's
+`page.clock` API to fake browser time, no system-clock changes needed),
+see `frontend/scripts/playwright/skipped-tasks-today-aware.mjs`.
 
 ---
 
@@ -243,13 +291,20 @@ uncompleted blocks (e.g. one that ends at 09:00 and one that starts at
 
 Quick smoke of the post-Phase-6 status flow:
 
-1. Visit a fresh date → status = `draft` (auto-draft may fire).
-2. Edit any block → status = `active` (`mark_active_on_edit` fires).
-3. Visit `/analytics/<date>/`, click **Mark reviewed** →
-   status = `reviewed`; analytics frozen.
-4. Edit any block on `/schedule/<date>/` → status flips back to
-   `active`; next analytics visit recomputes.
-5. Re-mark reviewed → status = `reviewed`; analytics re-frozen with
-   the new snapshot.
+- [x] Visit a fresh date → status = `draft` (auto-draft may fire).
+- [x] Edit any block → status = `active` (`mark_active_on_edit` fires).
+- [x] Visit `/analytics/<date>/`, click **Mark reviewed** →
+  status = `reviewed`; analytics frozen.
+- [x] Edit any block on `/schedule/<date>/` → status flips back to
+  `active`; next analytics visit recomputes.
+- [x] Re-mark reviewed → status = `reviewed`; analytics re-frozen with
+  the new snapshot.
+
+**Pitfall:** the date you pick for this test must be **today or past**
+(Django's `timezone.localdate()`), not future. Step 4-5 require
+`GET /analytics/<date>/` to recompute, but the analytics view rejects
+future dates with a 400. A future date will silently break the
+recompute step and the matrix verdict can falsely PASS if it only
+checks the final `reviewed` state.
 
 Verified via the shell query in Setup.
