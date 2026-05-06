@@ -45,3 +45,36 @@ def error_locmem_cache_with_ai_in_production(app_configs, **kwargs):
             )
         )
     return errors
+
+
+@register()
+def error_draft_capture_in_production(app_configs, **kwargs):
+    """Block production startup when LLM_DRAFT_CAPTURE_PROMPT_PATH is
+    set under DEBUG=False.
+
+    The capture writes the rendered LLM user_message — which embeds the
+    user's full ``LLM_HISTORY_DAYS`` of past schedules and their template
+    — to disk on every ``generate-draft`` call. That's pure test
+    infrastructure (see Phase 6 Test 7), and any non-dev deployment with
+    it set is almost certainly a misconfiguration that would silently
+    spool user PII to a local file. Mirrors the ``ai.E001`` pattern.
+    """
+    errors = []
+    if not getattr(settings, "LLM_DRAFT_CAPTURE_PROMPT_PATH", ""):
+        return errors
+    if settings.DEBUG:
+        return errors
+    errors.append(
+        Error(
+            "LLM_DRAFT_CAPTURE_PROMPT_PATH is set while DEBUG=False. "
+            "The capture writes the user's full schedule history (PII) "
+            "to disk on every draft request — test infrastructure only, "
+            "never safe in production.",
+            hint=(
+                "Unset LLM_DRAFT_CAPTURE_PROMPT_PATH in your environment "
+                "(or remove it from .env) before running with DEBUG=False."
+            ),
+            id="ai.E002",
+        )
+    )
+    return errors

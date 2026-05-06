@@ -215,16 +215,25 @@ def run_draft(schedule, template, history_schedules, rules, now) -> AIDraftResul
     user_message = build_draft_user_message(
         schedule, template, history_schedules, rules, now
     )
-    # Optional capture for the Phase 6 Test 7 e2e script. Default-off via
-    # empty LLM_DRAFT_CAPTURE_PROMPT_PATH; only writes when an operator
-    # explicitly opts in via .env. The OSError swallow keeps a misconfigured
-    # path (read-only fs, parent dir gone) from breaking real draft requests.
+    # Optional capture for the Phase 6 Test 7 e2e script. Overwrites the
+    # target file on EVERY draft call when LLM_DRAFT_CAPTURE_PROMPT_PATH
+    # is non-empty — purely test infrastructure, see
+    # ``frontend/scripts/playwright/draft-prompt-history-suffix.mjs``.
+    # Default-off via empty path; ``ai.E002`` blocks startup when the
+    # path is set under DEBUG=False, so this branch can only ever execute
+    # in dev. The except logs (instead of swallowing) so a misconfigured
+    # path surfaces in the operator's dev console rather than silently
+    # disabling the test capture.
     if settings.LLM_DRAFT_CAPTURE_PROMPT_PATH:
         try:
             with open(settings.LLM_DRAFT_CAPTURE_PROMPT_PATH, "w") as _f:
                 _f.write(user_message)
-        except OSError:
-            pass
+        except OSError as e:
+            logger.warning(
+                "Failed to write LLM_DRAFT_CAPTURE_PROMPT_PATH=%r: %s",
+                settings.LLM_DRAFT_CAPTURE_PROMPT_PATH,
+                e,
+            )
 
     client = _get_client()
     try:
