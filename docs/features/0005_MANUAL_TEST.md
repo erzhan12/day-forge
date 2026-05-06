@@ -218,11 +218,17 @@ UI прячет кнопку Regenerate когда блоки есть, поэт
   поставит cookie), затем POST с заголовком. После login токен
   ротейтится — перечитываем:
   ```bash
+  # Tip: для дебага убери ``-o /dev/null`` чтобы увидеть response body.
+
   # 1) GET ставит XSRF-TOKEN cookie
   curl -s -c cookies.txt -b cookies.txt \
     http://localhost:8006/accounts/login/ -o /dev/null
 
   CSRF=$(grep XSRF-TOKEN cookies.txt | awk '{print $NF}')
+  if [ -z "$CSRF" ]; then
+    echo "Error: XSRF-TOKEN cookie not found. Django up on :8006?"
+    exit 1
+  fi
 
   # 2) POST с CSRF-заголовком
   curl -s -c cookies.txt -b cookies.txt \
