@@ -215,6 +215,16 @@ def run_draft(schedule, template, history_schedules, rules, now) -> AIDraftResul
     user_message = build_draft_user_message(
         schedule, template, history_schedules, rules, now
     )
+    # Optional capture for the Phase 6 Test 7 e2e script. Default-off via
+    # empty LLM_DRAFT_CAPTURE_PROMPT_PATH; only writes when an operator
+    # explicitly opts in via .env. The OSError swallow keeps a misconfigured
+    # path (read-only fs, parent dir gone) from breaking real draft requests.
+    if settings.LLM_DRAFT_CAPTURE_PROMPT_PATH:
+        try:
+            with open(settings.LLM_DRAFT_CAPTURE_PROMPT_PATH, "w") as _f:
+                _f.write(user_message)
+        except OSError:
+            pass
 
     client = _get_client()
     try:

@@ -2,29 +2,20 @@
 //
 // 💸 COST WARNING — one real LLM_DRAFT_MODEL call (gpt-4o by default).
 //
-// Strategy: relies on a TEMPORARY patch in backend/ai/service.py:run_draft
-// that writes the rendered user_message to /tmp/draft_prompt_test7.txt
-// right before the LLM call. Auto-driving the auto-draft flow via
-// Playwright gets us the genuine end-to-end path (real LLM call, real
-// view query, real prompt builder); the captured file lets us assert
-// the suffix invariants the spec pins.
+// Strategy: backend/ai/service.py:run_draft writes the rendered user_message
+// to settings.LLM_DRAFT_CAPTURE_PROMPT_PATH when that setting is non-empty.
+// We set it to /tmp/draft_prompt_test7.txt via .env, drive the auto-draft
+// flow via Playwright (genuine end-to-end: real LLM call, real view query,
+// real prompt builder), and assert the captured prompt's suffix invariants.
 //
-// Patch to apply (revert after the run):
-//
-//   user_message = build_draft_user_message(
-//       schedule, template, history_schedules, rules, now
-//   )
-//   # TEST7-CAPTURE: temporary, revert after Test 7 manual verification.
-//   try:
-//       with open("/tmp/draft_prompt_test7.txt", "w") as _f:
-//           _f.write(user_message)
-//   except OSError:
-//       pass
-//
-//   client = _get_client()
+// Setup (one-time per machine):
+//   1. Add to .env:  LLM_DRAFT_CAPTURE_PROMPT_PATH=/tmp/draft_prompt_test7.txt
+//   2. Restart Django so settings.py picks up the new value.
+//   3. Run this script. The capture file is overwritten on every draft.
+//   4. Optionally remove the line from .env when done — capture is opt-in.
 //
 // Pre-reqs:
-//   * Django :8006 with the TEST7-CAPTURE patch applied + autoreloaded.
+//   * Django :8006 with LLM_DRAFT_CAPTURE_PROMPT_PATH set + restarted.
 //   * Vite :5173.
 //   * Test user `playwright` with weekday template and history days
 //     seeded (2026-05-03 active no DailyReview, 2026-05-04 active with
@@ -82,7 +73,10 @@ try {
 
   console.log("-> Reading captured prompt...")
   if (!existsSync(CAPTURE_PATH)) {
-    fail(`capture file ${CAPTURE_PATH} not written - is the TEST7-CAPTURE patch applied & autoreloaded?`)
+    fail(
+      `capture file ${CAPTURE_PATH} not written - is LLM_DRAFT_CAPTURE_PROMPT_PATH=${CAPTURE_PATH} ` +
+      `set in .env and Django restarted? See script header for setup.`,
+    )
   }
   const prompt = readFileSync(CAPTURE_PATH, "utf-8")
 

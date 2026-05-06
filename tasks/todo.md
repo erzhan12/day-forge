@@ -171,3 +171,28 @@
   the 30-iteration login wait loops, etc. Pull out as named
   `WAIT_FOR_PATCH_MS` / `LOGIN_POLL_MAX_TRIES` / etc. Trivial
   readability cleanup. Suggested by `claude-review` on PR #13.
+
+- [ ] **Cleanup test data in `finally` for playwright scripts.** Currently
+  scripts seed via `update_or_create` (idempotent across re-runs) and
+  leave the data in place. `claude-review` on PR #14 suggested deleting
+  the seeded schedules in the `finally` block to prevent state pollution.
+  Counter-argument: leaving the data in place lets a developer inspect
+  the DB after a failed run, which is genuinely useful. Resolution:
+  add cleanup but gate behind `--cleanup` flag, default off. Suggested
+  by `claude-review` on PR #14.
+
+- [ ] **Pre-flight server-reachable check at the top of every playwright
+  script.** Currently a script with Django/Vite down fails late with a
+  cryptic ECONNREFUSED. A `fetch(BASE/accounts/login/, { method: 'HEAD' })`
+  + clear "start them with `make run` / `make frontend-dev`" message at
+  the top would shave debugging time for new contributors. Pairs with
+  the test-utils.mjs follow-up below — same one-shared-helper file.
+  Suggested by `claude-review` on PR #14.
+
+- [ ] **`frontend/scripts/playwright/test-utils.mjs` shared helpers.**
+  `login()`, `fail()`, the seed `execSync` boilerplate, the server
+  pre-flight check are duplicated across 5+ scripts. Factor into one
+  helpers module so each script is just its scenario logic. Touches
+  every existing playwright script — defer to its own PR. Suggested
+  by `claude-review` on PR #13 and PR #14, plus my own
+  `/review-fix-loop-staged` review of PR #14.

@@ -12,23 +12,63 @@
 // Pre-reqs:
 //   * Django :8006, Vite :5173.
 //   * `playwright` user, `playwright-pw-do-not-use-in-prod` password.
-//   * Schedules seeded for 2026-05-02 (clean), 2026-05-04 (mixed),
-//     2026-05-06 (today). See the seed snippet in the parent shell.
 //   * Django's `timezone.localdate()` must equal 2026-05-06 at run time
-//     (verified via `make shell` if in doubt).
+//     (`make shell` to verify). The script's hardcoded clock-fake assumes
+//     this; on a different system date the analytics view will treat the
+//     "today" schedule as future and 400.
 //
 // Run from frontend/:
 //   node scripts/playwright/skipped-tasks-today-aware.mjs
 
 import { chromium } from "@playwright/test"
+import { execSync } from "node:child_process"
+import { resolve } from "node:path"
 
 const BASE = "http://localhost:5173"
 const USERNAME = "playwright"
 const PASSWORD = "playwright-pw-do-not-use-in-prod"
 
 const TODAY = "2026-05-06"
-const PAST_MIXED = "2026-05-04"
-const PAST_CLEAN = "2026-05-02"
+const PAST_MIXED = "2026-04-30"
+const PAST_CLEAN = "2026-04-28"
+
+const REPO_ROOT = resolve(process.cwd(), "..")
+
+console.log("-> Seeding 3 schedules (today, past-mixed, past-clean) via Django shell...")
+try {
+  execSync(
+    `uv run python backend/manage.py shell -c "
+from schedules.models import Schedule, TimeBlock
+from django.contrib.auth.models import User
+import datetime as dt
+u = User.objects.get(username='${USERNAME}')
+
+# Today: past-uncompleted, past-completed (control), future-uncompleted
+today, _ = Schedule.objects.update_or_create(user=u, date=dt.date(2026,5,6), defaults={'status':'active'})
+today.time_blocks.all().delete()
+TimeBlock.objects.create(schedule=today, title='Morning standup',  start_time='08:00', end_time='09:00', category='work',     is_completed=False, sort_order=0)
+TimeBlock.objects.create(schedule=today, title='Coffee',           start_time='10:00', end_time='10:30', category='personal', is_completed=True,  sort_order=1)
+TimeBlock.objects.create(schedule=today, title='Afternoon focus',  start_time='14:00', end_time='15:00', category='work',     is_completed=False, sort_order=2)
+
+# Past mixed: 2 blocks, 1 uncompleted ('Email')
+mixed, _ = Schedule.objects.update_or_create(user=u, date=dt.date(2026,4,30), defaults={'status':'active'})
+mixed.time_blocks.all().delete()
+TimeBlock.objects.create(schedule=mixed, title='Standup', start_time='09:00', end_time='09:30', category='work', is_completed=True, sort_order=0)
+TimeBlock.objects.create(schedule=mixed, title='Email',   start_time='10:00', end_time='10:30', category='work', is_completed=False, sort_order=1)
+
+# Past clean: 1 block fully completed - Skipped section MUST be hidden
+clean, _ = Schedule.objects.update_or_create(user=u, date=dt.date(2026,4,28), defaults={'status':'active'})
+clean.time_blocks.all().delete()
+TimeBlock.objects.create(schedule=clean, title='Workout', start_time='09:00', end_time='10:00', category='health', is_completed=True, sort_order=0)
+print('seeded today/past-mixed/past-clean')
+"`,
+    { stdio: "inherit", cwd: REPO_ROOT },
+  )
+} catch (err) {
+  console.error("\nSeed failed (Django running? user 'playwright' exists?)")
+  console.error(err.message)
+  process.exit(2)
+}
 
 const browser = await chromium.launch({ headless: true })
 const context = await browser.newContext({ viewport: { width: 1280, height: 900 } })

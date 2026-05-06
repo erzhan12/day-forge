@@ -148,6 +148,13 @@ LLM_DRAFT_RATE_LIMIT_PER_HOUR = int(
 )
 # Number of past schedules included in the draft context (PRD §6.2).
 LLM_HISTORY_DAYS = int(os.environ.get("LLM_HISTORY_DAYS", "7"))
+# Set to a writable file path to capture the rendered LLM draft user_message
+# on every generate-draft call. Used by the Phase 6 Test 7 e2e script
+# (frontend/scripts/playwright/draft-prompt-history-suffix.mjs) to verify
+# the prompt content end-to-end without manually patching service.py. Empty
+# string disables capture (default). Default-off so production deployments
+# never write the prompt to disk.
+LLM_DRAFT_CAPTURE_PROMPT_PATH = os.environ.get("LLM_DRAFT_CAPTURE_PROMPT_PATH", "")
 
 # Analytics / streak. Validated at import time so a misconfigured value
 # fails the worker boot loudly instead of silently producing ``streak=0``

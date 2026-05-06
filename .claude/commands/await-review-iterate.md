@@ -1,6 +1,6 @@
 Run the PR review iteration loop on the current branch's open PR: push → wait `claude-review` → triage → fix valid P0/P1 / push back on false-positives / defer P2/P3 → push fixes → repeat → STOP at the merge boundary.
 
-This is the **iterate-and-fix** variant of the read-only triage skill `grid-bot-validation/.claude/commands/await-review.md`. Same parsing logic for the bot's comment, but here we actually push commits and loop. The merge step is **never** automatic — see RULES.md § "PR review iteration loop (AI-driven changes)" for the rationale.
+This is the **iterate-and-fix** variant of a read-only PR-review triage skill — same parsing logic for the bot's comment, but here we actually push commits and loop. The merge step is **never** automatic — see RULES.md § "PR review iteration loop (AI-driven changes)" for the rationale.
 
 ## Step 1 — Push if there is anything to push
 
