@@ -1,6 +1,15 @@
 // Phase 5 Test 6 reproduction: AI command no-op must NOT flip status
 // from draft to active.
 //
+// 💸 COST WARNING — this script makes a REAL LLM call against the
+// configured provider (``LLM_API_KEY`` + ``LLM_BASE_URL`` from .env).
+// One run = one billable command-bar request. Don't loop this in CI
+// without mocking; for that, prefer the unit-level test in
+// ``backend/tests/test_ai_views.py`` which patches ``run_command``.
+// The script's value is end-to-end fidelity — verifying the model
+// genuinely does the right thing on an irrelevant prompt — which is
+// exactly what mocks would hide.
+//
 // Scenario: a freshly drafted schedule (status=draft, blocks present)
 // receives an irrelevant/refusable command via the command bar. The
 // expected backend response is HTTP 200 with ``actions: []`` and a
@@ -120,15 +129,23 @@ try {
   const cmdInput = page.locator(".command-input")
   await cmdInput.waitFor({ timeout: 3000 })
   await cmdInput.fill(COMMAND)
-  await cmdInput.press("Enter")
 
-  // Wait for the AI response to land (LLM_REQUEST_TIMEOUT default 15s)
-  console.log(`→ Waiting for /api/ai/schedules/.../command/ response…`)
-  for (let i = 0; i < 30 && aiCalls.length === 0; i++) {
-    await page.waitForTimeout(500)
-  }
-  // Give it a small grace period for the partial reload to settle
-  await page.waitForTimeout(1000)
+  // Wait for the AI response and the keystroke that triggers it in
+  // parallel — ``waitForResponse`` is the idiomatic Playwright way to
+  // sync on a specific URL (cleaner than a poll loop on a captured
+  // array). The 20s timeout matches LLM_REQUEST_TIMEOUT (default 15s)
+  // with headroom for network jitter.
+  console.log(`→ Submitting + waiting for /api/ai/schedules/.../command/ response…`)
+  await Promise.all([
+    page.waitForResponse(
+      (resp) => /\/api\/ai\/schedules\/[^/]+\/command\/$/.test(resp.url()),
+      { timeout: 20_000 },
+    ),
+    cmdInput.press("Enter"),
+  ])
+  // Small grace period for the partial reload + Vue state to settle
+  // before we assert on the DB.
+  await page.waitForTimeout(500)
 
   // Re-check status by visiting Django shell (post-mutation)
   const dbStatusOut = execSync(

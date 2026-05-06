@@ -123,12 +123,19 @@ print('deleted')
   // ────────────────────────────────────────────────────────────────
   console.log(`\n→ [2/4] Click Regenerate on stale page — expect 422 + inline error`)
   aiCalls.length = 0  // reset capture
-  await regenBtn.click()
-  // Wait for the POST to land + Vue to render the error
-  for (let i = 0; i < 20 && aiCalls.length === 0; i++) {
-    await page.waitForTimeout(250)
-  }
-  await page.waitForTimeout(500)
+  // Use ``waitForResponse`` synchronised with the click so we don't
+  // racy-poll on the captured array. The capture array is still
+  // populated by the listener registered up top, so post-await we
+  // can read it the same way.
+  await Promise.all([
+    page.waitForResponse(
+      (resp) => /\/api\/ai\/schedules\/[^/]+\/generate-draft\/$/.test(resp.url()),
+      { timeout: 10_000 },
+    ),
+    regenBtn.click(),
+  ])
+  // Vue render tick for ``.draft-error`` to attach.
+  await page.waitForTimeout(200)
 
   const lastCall = aiCalls[aiCalls.length - 1]
   check(
