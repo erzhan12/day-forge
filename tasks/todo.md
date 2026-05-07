@@ -226,3 +226,14 @@
   `templates_mgr.api` helpers have similar gaps). Out of scope for
   feature 0007 because it touches files unrelated to the chat surface
   and adds no behavioural change. Suggested by `claude-review` on PR #15.
+
+- [ ] **`assertNumQueries` test for `select_related("daily_review")` in
+  `ai_generate_draft`.** PR #15 added the `select_related` as a
+  drive-by N+1 fix; the optimisation isn't covered by an explicit
+  query-count test. Future regression risk: someone removes the
+  `select_related` and tests still pass because the prompt builder's
+  N+1 access doesn't break correctness. Add a test that seeds N past
+  schedules each with a `DailyReview`, calls the draft endpoint with
+  `run_draft` stubbed, and asserts `assertNumQueries(<expected>)`.
+  Out of scope for feature 0007 because it tests a Phase-6 codepath.
+  Suggested by `claude-review` on PR #15 iter 6.

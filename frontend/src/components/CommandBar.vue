@@ -66,7 +66,7 @@ let placeholderTimer: ReturnType<typeof setInterval> | null = null
 const MAX_VISIBLE_MESSAGES = 4
 const LINE_HEIGHT_PX = 20
 const MAX_TEXTAREA_LINES = 10
-const PLACEHOLDER_ROTATION_MS = 4_000
+const PLACEHOLDER_ROTATION_MS = 6_000
 
 const visibleMessages = computed(() => {
   const arr = messages.value
@@ -238,7 +238,7 @@ onUnmounted(() => {
 .privacy-hint {
   max-width: 640px;
   margin: 0 auto 4px;
-  font-size: 10px;
+  font-size: 11px;
   color: #6b7280;
   text-align: center;
   font-style: italic;

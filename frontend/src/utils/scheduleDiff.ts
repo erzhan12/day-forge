@@ -22,6 +22,16 @@ const blockKey = (b: TimeBlock): string =>
  * Used to gate undo-stack pushes: a 200 with ``actions: []`` should not
  * register an undo entry, even though the AI considered the request a
  * success (e.g. clarifying-question turn or chit-chat reply).
+ *
+ * @param snapshot - The block array as it stood before the AI request was
+ *   sent (captured by `useUndo.snapshotBlocks` at submit time).
+ * @param responseBlocks - Whatever the server returned in `data.blocks`.
+ *   Typed as `unknown` because the chat response shape allows `null` /
+ *   missing for non-applied turns; this function is the type guard.
+ * @returns `true` if the set of blockKeys differs between snapshot and
+ *   response — i.e. at least one block was added, removed, or mutated
+ *   in a user-visible field. `false` if the response did not change
+ *   the schedule (or `responseBlocks` is not an array).
  */
 export function scheduleChanged(
   snapshot: TimeBlock[],
