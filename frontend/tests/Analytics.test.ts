@@ -188,7 +188,12 @@ describe("Analytics.vue", () => {
 
     await textarea.setValue("ab")
     await textarea.trigger("input")
-    vi.advanceTimersByTime(999)
+    // Intermediate checkpoint: at 500ms past the SECOND input, the first
+    // input's timer would have fired (1000ms total) if it weren't cancelled.
+    // No call here means the second input correctly resets the debounce.
+    vi.advanceTimersByTime(500)
+    expect(fetchSpy).not.toHaveBeenCalled()
+    vi.advanceTimersByTime(499)
     expect(fetchSpy).not.toHaveBeenCalled()
 
     vi.advanceTimersByTime(1)

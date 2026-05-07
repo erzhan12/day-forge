@@ -183,6 +183,14 @@ completion (the default `ANALYTICS_STREAK_THRESHOLD`).
   `ai_response`, and `actions_json`, but never the rendered user message.
   Re-run the same query + `build_draft_user_message` (both pure functions
   of DB state) to render an identical user message:
+
+  > ⚠️ **Drift caveat.** This snippet is hand-mirrored from
+  > `backend/ai/views.py:ai_generate_draft` and `backend/ai/prompts.py:build_draft_user_message`.
+  > If either signature changes (history filter, status set, prompt
+  > builder args), the snippet's output stops matching what the live
+  > view sends. For guaranteed accuracy use the automated Playwright
+  > script (callout above) — it captures the actual prompt the view
+  > built via `LLM_DRAFT_CAPTURE_PROMPT_PATH`.
   ```bash
   uv run python backend/manage.py shell -c "
   import datetime as dt

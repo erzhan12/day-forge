@@ -171,7 +171,10 @@ def test_capture_writes_with_owner_only_perms(
 ):
     """LLM_DRAFT_CAPTURE_PROMPT_PATH writes must be 0o600 (owner-only) so a
     permissive umask doesn't expose the user's full schedule history (PII)
-    to other accounts on the host."""
+    to other accounts on the host. Force ``umask(0o000)`` for the duration
+    of the call so the test fails if the explicit ``mode=0o600`` is ever
+    dropped — without the umask manipulation, a stricter system umask
+    could hide the regression."""
     import os
     import stat
 
@@ -187,13 +190,17 @@ def test_capture_writes_with_owner_only_perms(
     )
     monkeypatch.setattr("ai.service._get_client", _success_response_client)
 
-    run_draft(
-        schedule, template, [], [], datetime.datetime(2026, 5, 4, 8, 0)
-    )
+    old_umask = os.umask(0o000)
+    try:
+        run_draft(
+            schedule, template, [], [], datetime.datetime(2026, 5, 4, 8, 0)
+        )
+    finally:
+        os.umask(old_umask)
 
     assert capture_path.exists()
     mode = stat.S_IMODE(os.stat(capture_path).st_mode)
-    assert mode == 0o600, f"expected 0o600, got {oct(mode)}"
+    assert mode == 0o600, f"expected 0o600 even with umask(0), got {oct(mode)}"
 
 
 @pytest.mark.django_db
