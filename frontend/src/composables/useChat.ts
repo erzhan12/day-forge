@@ -65,6 +65,36 @@ function extractErrorMessage(
   return typeof first === "string" && first ? first : "AI chat failed"
 }
 
+/**
+ * Returns the multi-turn AI chat composable for feature 0007.
+ *
+ * State (`activeDate`, `messages`, `isProcessing`, `lastError`,
+ * `pendingAsk`, `apiHealthy`) lives at module scope — every call to
+ * `useChat()` returns refs that point at the SAME singleton. The bottom
+ * dock and the future sidebar (PR B) share one thread per tab; tests
+ * reset state via `_resetChatStateForTests()` in a `beforeEach`.
+ *
+ * **Pre-condition:** the consumer (currently `Schedule.vue` via a
+ * `watch(() => props.date, …, { immediate: true })`) MUST call
+ * `setActiveDate(date)` before any `submitTurn(...)`. `submitTurn`
+ * throws synchronously when `activeDate` is null — that catches a
+ * future regression where the watcher is removed.
+ *
+ * **Staleness guard:** every event that should invalidate an in-flight
+ * turn (a fresh `submitTurn`, a `clearThread`, or a date change via
+ * `setActiveDate`) bumps the module-level `latestRequestId` counter.
+ * Each `submitTurn` captures its own `myId` and only writes back to
+ * `isProcessing` or the message list if `myId === latestRequestId` at
+ * resolution time. This single check covers every cancellation cause
+ * (newer submit, manual Clear, date navigation) without overlapping
+ * date / spinner / message guards. See `docs/features/0007_PLAN.md`
+ * §2.1 for the full design rationale.
+ *
+ * `clearThread()` is a logical cancel: it bumps the token, clears the
+ * spinner directly (safe because the bump invalidates any in-flight
+ * resolver), and resets the message list / pendingAsk / lastError —
+ * but preserves `activeDate`.
+ */
 export function useChat() {
   function setActiveDate(date: string): void {
     if (activeDate.value === date) return

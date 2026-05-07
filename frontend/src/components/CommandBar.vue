@@ -309,7 +309,12 @@ onUnmounted(() => {
   font: inherit;
   padding: 6px 0;
   resize: none;
-  line-height: 1.4;
+  /* Must equal `LINE_HEIGHT_PX` in <script> — `autosize()` derives the
+     max textarea height as LINE_HEIGHT_PX × MAX_TEXTAREA_LINES, so a
+     drift between this rule and the constant would mis-size the
+     scroll cap. Pinned to a px value rather than a unitless multiplier
+     so font-size changes don't silently break that contract. */
+  line-height: 20px;
   min-height: 20px;
   max-height: 200px;
   overflow-y: auto;

@@ -614,6 +614,12 @@ def ai_generate_draft(request, date):
             status__in=[Schedule.Status.ACTIVE, Schedule.Status.REVIEWED],
         )
         .order_by("date")
+        # ``prompts.build_draft_user_message`` reads ``past.daily_review``
+        # for each schedule (Phase-6 completion-ratio suffix). Without
+        # ``select_related`` that's an N+1 — one extra query per past
+        # day. Pre-existing perf issue surfaced during PR #15 review;
+        # one-line tag-along, not part of feature 0007 proper.
+        .select_related("daily_review")
         .prefetch_related("time_blocks")
     )
     rules = list(
