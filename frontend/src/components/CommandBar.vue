@@ -59,7 +59,14 @@ const PLACEHOLDERS = [
 const placeholder = ref(PLACEHOLDERS[0])
 let placeholderTimer: ReturnType<typeof setInterval> | null = null
 
+// Tunables for the bottom dock UI. Pulled out as named constants so the
+// magic numbers don't drift across handlers — `LINE_HEIGHT_PX` must match
+// the `line-height` rule on `.command-input` in <style>; if you change
+// one, change the other.
 const MAX_VISIBLE_MESSAGES = 4
+const LINE_HEIGHT_PX = 20
+const MAX_TEXTAREA_LINES = 10
+const PLACEHOLDER_ROTATION_MS = 4_000
 
 const visibleMessages = computed(() => {
   const arr = messages.value
@@ -70,9 +77,7 @@ function autosize(): void {
   const el = inputEl.value
   if (!el) return
   el.style.height = "auto"
-  // Cap at ~10 lines so the textarea doesn't eat the schedule view.
-  const lineHeight = 20
-  const maxHeight = lineHeight * 10
+  const maxHeight = LINE_HEIGHT_PX * MAX_TEXTAREA_LINES
   el.style.height = Math.min(el.scrollHeight, maxHeight) + "px"
 }
 
@@ -86,11 +91,14 @@ async function handleSubmit(): Promise<void> {
   autosize()
   try {
     await submitTurn(text, props.snapshotBlocks, props.pushUndo)
-  } catch {
+  } catch (err) {
     // Errors land inside the thread as a synthetic assistant message —
     // the catch here only matters if `submitTurn` rejects synchronously
     // (e.g. activeDate not set), which Schedule.vue's setActiveDate call
-    // makes unreachable. Keep silent.
+    // makes unreachable in production. Log so a future regression in the
+    // Schedule.vue watcher surfaces in the dev console rather than
+    // silently dropping the user's input.
+    console.error("CommandBar: submitTurn rejected synchronously:", err)
   }
 }
 
@@ -134,7 +142,7 @@ onMounted(() => {
   placeholderTimer = setInterval(() => {
     const next = (PLACEHOLDERS.indexOf(placeholder.value) + 1) % PLACEHOLDERS.length
     placeholder.value = PLACEHOLDERS[next]
-  }, 4_000)
+  }, PLACEHOLDER_ROTATION_MS)
   autosize()
 })
 

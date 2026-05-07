@@ -1,8 +1,18 @@
 import type { TimeBlock } from "../types"
 
-// Comparison key: the combination that uniquely determines whether a block
-// is "the same" from the user's perspective. ``id`` is included so a
-// remove + re-add at the same time/title still counts as a change.
+/**
+ * Stable string key for set-based block diffing.
+ *
+ * Concatenates every user-visible field that the AI / drag / completion
+ * paths can mutate: the DB `id` (so a remove + re-add of an identical
+ * block still registers as a change), the textual `title`, the time
+ * window (`start_time`, `end_time`), the `category` enum, the
+ * `is_completed` flag, and `sort_order`. The pipe delimiter `|` is safe
+ * because none of those fields can legitimately contain it — `category`
+ * is a closed enum, times are `HH:MM`, ids/sort orders are integers,
+ * `is_completed` is a boolean, and titles with embedded `|` are still
+ * unambiguous because every field's position is fixed.
+ */
 const blockKey = (b: TimeBlock): string =>
   `${b.id}|${b.title}|${b.start_time}|${b.end_time}|${b.category}|${b.is_completed}|${b.sort_order}`
 

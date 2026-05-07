@@ -191,6 +191,30 @@ LLM_MAX_EXPLANATION_CHARS = int(
     os.environ.get("LLM_MAX_EXPLANATION_CHARS", "300")
 )
 
+# Validate the chat-related caps at import time so a misconfigured deploy
+# fails worker boot loudly instead of silently producing degenerate
+# behaviour (e.g. an unreachable rate limit, a turn cap of zero that
+# rejects every request, a transcript char cap of zero that 400s every
+# message). Mirrors the ``ANALYTICS_STREAK_*`` precedent below.
+# Scope: only the settings introduced in feature 0007. Pre-existing LLM
+# settings (``LLM_RATE_LIMIT_PER_HOUR``, ``LLM_HISTORY_DAYS``,
+# ``LLM_REQUEST_TIMEOUT``, etc.) are intentionally NOT validated here —
+# they have shipped without validation since Phase 4 and tightening them
+# in this PR would be scope creep that could break tolerated deploy
+# configurations.
+for _name, _value in (
+    ("LLM_CHAT_RATE_LIMIT_PER_HOUR", LLM_CHAT_RATE_LIMIT_PER_HOUR),
+    ("LLM_CHAT_MAX_TURNS", LLM_CHAT_MAX_TURNS),
+    ("LLM_CHAT_MAX_TOTAL_CHARS", LLM_CHAT_MAX_TOTAL_CHARS),
+    ("LLM_CHAT_MAX_ASK_CHARS", LLM_CHAT_MAX_ASK_CHARS),
+    ("LLM_MAX_EXPLANATION_CHARS", LLM_MAX_EXPLANATION_CHARS),
+):
+    if _value <= 0:
+        raise ValueError(
+            f"{_name} must be a positive integer; got {_value!r}"
+        )
+del _name, _value
+
 # Analytics / streak. Validated at import time so a misconfigured value
 # fails the worker boot loudly instead of silently producing ``streak=0``
 # forever. ``ANALYTICS_STREAK_THRESHOLD`` is the per-day completion ratio

@@ -206,3 +206,14 @@
   `claude-review` on PR #14. Pairs naturally with the test-utils.mjs
   follow-up — the test-utils module would expose a single `seed()`
   helper that shells out to the new scripts.
+
+- [ ] **Manual QA gate for feature 0007 chat dock before any production
+  use.** PR #15 ships PR A of the multi-turn chat panel; the smoke
+  checklist in the PR description is unticked. Three items: (1) ambiguous
+  chat command in dev → assistant `ask` lands in the dock thread, (2)
+  navigate via DateNavigator's next-day arrow → thread resets and a
+  follow-up does NOT mutate the new day, (3) optional E2E (real LLM,
+  cost): `node frontend/scripts/playwright/ai-chat-clarifying-question.mjs`
+  + `ai-chat-date-change-resets-thread.mjs`. Plus the iOS Safari
+  autogrow-textarea check from `docs/features/0007_PLAN.md` open note 3.
+  Suggested by `claude-review` on PR #15.

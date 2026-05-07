@@ -38,6 +38,13 @@ const apiHealthy = ref(true)
 // in rendering. Every `submitTurn` bumps it; `clearThread` (and via it,
 // `setActiveDate`) bumps it. `submitTurn` resolvers compare their own
 // captured `myId` against this to decide whether they may write to state.
+//
+// ⚠️  Tests MUST call `_resetChatStateForTests()` in a `beforeEach` to
+// reset this counter (and the rest of the module-level refs). Without
+// it, a previous test's bumped counter leaks into the next test and a
+// fresh `submitTurn` may hit `myId === latestRequestId` only by luck —
+// race-condition findings will look intermittent rather than
+// deterministic. See `frontend/tests/useChat.test.ts` for the pattern.
 let latestRequestId = 0
 
 interface ChatApiResult extends ApiResult {
