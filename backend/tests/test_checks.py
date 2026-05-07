@@ -2,7 +2,10 @@
 
 from unittest.mock import patch
 
-from ai.checks import error_locmem_cache_with_ai_in_production
+from ai.checks import (
+    error_draft_capture_in_production,
+    error_locmem_cache_with_ai_in_production,
+)
 from django.test import override_settings
 from schedules.checks import warn_sqlite_in_production
 
@@ -65,6 +68,51 @@ class TestLocmemCacheProductionError:
         assert "LocMemCache" in err.msg
         assert "per-process" in err.msg
         assert "Redis" in (err.hint or "")
+
+
+class TestDraftCaptureProductionError:
+    def test_silent_when_path_unset(self):
+        """Default-off — no error when LLM_DRAFT_CAPTURE_PROMPT_PATH is empty."""
+        with override_settings(DEBUG=False, LLM_DRAFT_CAPTURE_PROMPT_PATH=""):
+            assert error_draft_capture_in_production(app_configs=None) == []
+
+    def test_silent_when_setting_not_defined(self, monkeypatch, settings):
+        """An old .env that doesn't define LLM_DRAFT_CAPTURE_PROMPT_PATH at
+        all must not crash the check. ``getattr(settings, ..., "")`` defends
+        in depth in case an early-boot path hits the check before settings
+        finish loading.
+
+        Uses ``monkeypatch.delattr`` (auto-restored at teardown) instead of
+        a raw ``del`` so the absent-attribute state can't leak into
+        unrelated tests in the same session.
+        """
+        settings.DEBUG = False
+        monkeypatch.delattr(settings, "LLM_DRAFT_CAPTURE_PROMPT_PATH")
+        assert not hasattr(settings, "LLM_DRAFT_CAPTURE_PROMPT_PATH")
+        assert error_draft_capture_in_production(app_configs=None) == []
+
+    def test_silent_when_debug_true(self):
+        """Dev mode + path set is the intended testing flow — no error."""
+        with override_settings(
+            DEBUG=True,
+            LLM_DRAFT_CAPTURE_PROMPT_PATH="/tmp/draft_prompt_test7.txt",
+        ):
+            assert error_draft_capture_in_production(app_configs=None) == []
+
+    def test_errors_when_prod_with_path_set(self):
+        """DEBUG=False + path set = blocking. The msg / hint must name
+        the env var so the operator can resolve without spelunking."""
+        with override_settings(
+            DEBUG=False,
+            LLM_DRAFT_CAPTURE_PROMPT_PATH="/tmp/draft_prompt_test7.txt",
+        ):
+            errors = error_draft_capture_in_production(app_configs=None)
+        assert len(errors) == 1
+        err = errors[0]
+        assert err.id == "ai.E002"
+        assert "LLM_DRAFT_CAPTURE_PROMPT_PATH" in err.msg
+        assert "DEBUG=False" in err.msg
+        assert "LLM_DRAFT_CAPTURE_PROMPT_PATH" in (err.hint or "")
 
 
 class TestSqliteProductionWarning:
