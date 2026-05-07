@@ -163,6 +163,14 @@ completion (the default `ANALYTICS_STREAK_THRESHOLD`).
 
 ## Test 7 — AI draft prompt includes per-day completion ratios
 
+> 🤖 **Automated variant available.** For one-shot regression after a
+> first manual run, prefer
+> `frontend/scripts/playwright/draft-prompt-history-suffix.mjs` — it
+> seeds inline, fires real auto-draft, captures the prompt via
+> `LLM_DRAFT_CAPTURE_PROMPT_PATH`, and asserts the suffix invariants.
+> One-time setup: add `LLM_DRAFT_CAPTURE_PROMPT_PATH=/tmp/draft_prompt_test7.txt`
+> to `.env` and restart Django. 💸 ~$0.10 in LLM cost per run (`gpt-4o`).
+
 **Pre-state**: at least one past day with a persisted `DailyReview`
 (any day you've marked reviewed in earlier tests works).
 

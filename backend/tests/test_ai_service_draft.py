@@ -135,3 +135,96 @@ def test_run_draft_rejects_non_add(user, monkeypatch, settings):
     assert "only accept 'add'" in str(exc_info.value)
     # Raw response preserved for the audit log.
     assert "remove" in exc_info.value.raw_response_text
+
+
+def _success_response_client(captured: dict | None = None) -> _FakeClient:
+    """Helper: a fake LLM client that returns a single valid 'add' action."""
+    return _FakeClient(
+        captured if captured is not None else {},
+        json.dumps(
+            {
+                "actions": [
+                    {
+                        "type": "add",
+                        "title": "Block",
+                        "start_time": "09:00",
+                        "end_time": "10:00",
+                        "category": "work",
+                    }
+                ],
+                "explanation": "fresh draft",
+            }
+        ),
+    )
+
+
+@pytest.mark.django_db
+def test_capture_writes_with_owner_only_perms(
+    user, monkeypatch, settings, tmp_path
+):
+    """LLM_DRAFT_CAPTURE_PROMPT_PATH writes must be 0o600 (owner-only) so a
+    permissive umask doesn't expose the user's full schedule history (PII)
+    to other accounts on the host."""
+    import os
+    import stat
+
+    capture_path = tmp_path / "draft_prompt.txt"
+    settings.LLM_API_KEY = "sk-test"
+    settings.LLM_DRAFT_CAPTURE_PROMPT_PATH = str(capture_path)
+
+    schedule = Schedule.objects.create(
+        user=user, date=datetime.date(2026, 5, 4)
+    )
+    template = Template.objects.create(
+        user=user, name="WD", type="weekday", blocks=[]
+    )
+    monkeypatch.setattr("ai.service._get_client", _success_response_client)
+
+    run_draft(
+        schedule, template, [], [], datetime.datetime(2026, 5, 4, 8, 0)
+    )
+
+    assert capture_path.exists()
+    mode = stat.S_IMODE(os.stat(capture_path).st_mode)
+    assert mode == 0o600, f"expected 0o600, got {oct(mode)}"
+
+
+@pytest.mark.django_db
+def test_capture_refuses_to_follow_symlink(
+    user, monkeypatch, settings, tmp_path, caplog
+):
+    """The capture write must use O_NOFOLLOW so a pre-existing symlink at
+    the configured path can't be exploited to write through it (e.g., a
+    local attacker pre-creating /tmp/draft_prompt_test7.txt as a symlink to
+    a victim file). The OSError is swallowed-then-logged, not raised, so
+    real draft requests still succeed."""
+    victim = tmp_path / "victim.txt"
+    victim.write_text("victim data")
+    symlink_path = tmp_path / "draft_prompt.txt"
+    symlink_path.symlink_to(victim)
+
+    settings.LLM_API_KEY = "sk-test"
+    settings.LLM_DRAFT_CAPTURE_PROMPT_PATH = str(symlink_path)
+
+    schedule = Schedule.objects.create(
+        user=user, date=datetime.date(2026, 5, 4)
+    )
+    template = Template.objects.create(
+        user=user, name="WD", type="weekday", blocks=[]
+    )
+    monkeypatch.setattr("ai.service._get_client", _success_response_client)
+
+    import logging
+    with caplog.at_level(logging.WARNING, logger="ai.service"):
+        # The draft itself succeeds — capture failure is non-fatal.
+        result = run_draft(
+            schedule, template, [], [], datetime.datetime(2026, 5, 4, 8, 0)
+        )
+
+    assert result.parsed_actions  # draft completed despite capture failure
+    assert victim.read_text() == "victim data"  # symlink target untouched
+    # The OSError surfaces in logs so a misconfigured path isn't silent.
+    assert any(
+        "LLM_DRAFT_CAPTURE_PROMPT_PATH" in r.message
+        for r in caplog.records
+    )

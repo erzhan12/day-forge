@@ -20,6 +20,7 @@ codes; tests monkeypatch ``_get_client()`` so they never hit the network.
 """
 import json
 import logging
+import os
 from dataclasses import dataclass
 
 import openai
@@ -221,12 +222,23 @@ def run_draft(schedule, template, history_schedules, rules, now) -> AIDraftResul
     # ``frontend/scripts/playwright/draft-prompt-history-suffix.mjs``.
     # Default-off via empty path; ``ai.E002`` blocks startup when the
     # path is set under DEBUG=False, so this branch can only ever execute
-    # in dev. The except logs (instead of swallowing) so a misconfigured
-    # path surfaces in the operator's dev console rather than silently
+    # in dev. Defense-in-depth on top of E002:
+    #   * ``O_NOFOLLOW`` — refuses to write through a pre-existing symlink
+    #     (mitigates the symlink-attack vector when the capture lives in a
+    #     world-writable dir like ``/tmp``).
+    #   * ``mode=0o600`` — owner-read/write only. The captured prompt
+    #     embeds the user's full schedule history (PII), so a permissive
+    #     umask must not turn it into a world-readable file.
+    # The except logs (instead of swallowing) so a misconfigured path
+    # surfaces in the operator's dev console rather than silently
     # disabling the test capture.
     if settings.LLM_DRAFT_CAPTURE_PROMPT_PATH:
         try:
-            with open(settings.LLM_DRAFT_CAPTURE_PROMPT_PATH, "w") as _f:
+            flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW
+            fd = os.open(
+                settings.LLM_DRAFT_CAPTURE_PROMPT_PATH, flags, 0o600
+            )
+            with os.fdopen(fd, "w") as _f:
                 _f.write(user_message)
         except OSError as e:
             logger.warning(
