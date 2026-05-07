@@ -11,6 +11,7 @@ primary enforcement, not a belt-and-suspenders check.
 import datetime
 import re
 
+from django.conf import settings
 from schedules.http import is_plain_int
 
 MAX_ACTIONS_PER_COMMAND = 20
@@ -112,11 +113,8 @@ def validate_response_envelope(parsed) -> list[str]:
     """Sanity-check the top-level shape before inspecting individual actions.
 
     The explanation cap is read from ``settings.LLM_MAX_EXPLANATION_CHARS``
-    so chat and one-shot share a single tunable. Lazy import keeps the
-    module importable without Django settings configured.
+    so chat and one-shot share a single tunable.
     """
-    from django.conf import settings
-
     if not isinstance(parsed, dict):
         return ["response must be a JSON object"]
 
@@ -151,11 +149,8 @@ def validate_chat_response_envelope(parsed) -> list[str]:
     Caps on ``ask`` and ``explanation`` length live in
     ``settings.LLM_CHAT_MAX_ASK_CHARS`` / ``LLM_MAX_EXPLANATION_CHARS``
     (the latter is shared with the one-shot envelope so both endpoints
-    stay aligned). Lazy import keeps the module importable without
-    Django settings (``ai/prompts.py`` is also imported at app load time).
+    stay aligned).
     """
-    from django.conf import settings
-
     if not isinstance(parsed, dict):
         return ["response must be a JSON object"]
 

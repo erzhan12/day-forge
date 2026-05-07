@@ -220,6 +220,61 @@ class TestValidation:
         assert resp.status_code == 400
 
     @pytest.mark.django_db
+    def test_max_turns_boundary_equal_passes(
+        self, today_schedule, auth_client, monkeypatch, settings
+    ):
+        """Boundary: exactly LLM_CHAT_MAX_TURNS messages MUST pass.
+
+        Validator uses ``> LLM_CHAT_MAX_TURNS`` so the cap value itself
+        is allowed. Locks the off-by-one direction.
+        """
+        settings.LLM_CHAT_MAX_TURNS = 5
+        from ai.service import AIChatResult
+
+        def _ok(*a, **kw):
+            return AIChatResult(
+                raw_response_text="{}",
+                parsed_actions=[],
+                explanation="",
+                ask=None,
+            )
+
+        monkeypatch.setattr("ai.views.run_chat", _ok)
+        resp = _post(
+            auth_client,
+            {
+                "messages": [
+                    _user_turn("1"),
+                    _assistant_turn("2"),
+                    _user_turn("3"),
+                    _assistant_turn("4"),
+                    _user_turn("5"),
+                ]
+            },
+        )
+        assert resp.status_code == 200
+
+    @pytest.mark.django_db
+    def test_max_turns_plus_one_rejected(self, auth_client, settings):
+        """Boundary + 1: one over the cap MUST 400."""
+        settings.LLM_CHAT_MAX_TURNS = 5
+        resp = _post(
+            auth_client,
+            {
+                "messages": [
+                    _user_turn("1"),
+                    _assistant_turn("2"),
+                    _user_turn("3"),
+                    _assistant_turn("4"),
+                    _user_turn("5"),
+                    _assistant_turn("6"),
+                    _user_turn("7"),
+                ]
+            },
+        )
+        assert resp.status_code == 400
+
+    @pytest.mark.django_db
     def test_oversized_body(self, auth_client):
         # Single message bumps the body past the 1 MB cap.
         resp = auth_client.post(

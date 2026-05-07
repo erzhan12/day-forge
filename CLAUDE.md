@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Day Forge is an AI-powered daily schedule assistant. Django 5.x backend with SQLite, Python 3.14, managed with uv. Vue 3 + Inertia.js frontend served via Vite.
 
-> ⚠️  **Production scale blocker** — the AI endpoints (command, draft, chat) are currently synchronous. Read **Production Deployment** below before exposing this app to concurrent load.
+> ⚠️  **WARNING: Production scale blocker** — the AI endpoints (command, draft, chat) are currently synchronous. Read **Production Deployment** below before exposing this app to concurrent load.
 
 See `.claude/rules/` for detailed instructions. Review `tasks/lessons.md` at session start.
 
@@ -24,7 +24,7 @@ See `.claude/rules/` for detailed instructions. Review `tasks/lessons.md` at ses
 
 ## Production Deployment
 
-> ⚠️  **CRITICAL — PRODUCTION SCALE BLOCKER:** the AI endpoints are currently synchronous and will starve the worker pool under concurrent load. This is acceptable for development and demos but MUST be addressed before production deployment. See conversion options below.
+> ⚠️  **WARNING: CRITICAL — PRODUCTION SCALE BLOCKER:** the AI endpoints are currently synchronous and will starve the worker pool under concurrent load. This is acceptable for development and demos but MUST be addressed before production deployment. See conversion options below.
 
 The AI command endpoint (`POST /api/ai/schedules/<date>/command/`), draft endpoint (`POST /api/ai/schedules/<date>/generate-draft/`), and chat endpoint (`POST /api/ai/schedules/<date>/chat/`) all make **synchronous** LLM calls that hold a Django worker for up to `LLM_REQUEST_TIMEOUT` seconds (default 15). Under sync workers, N concurrent AI requests starve the worker pool and stall *all* traffic, including manual schedule edits. This is acceptable for development and low-concurrency demos; before exposing the AI endpoints to production load, do **one** of:
 
