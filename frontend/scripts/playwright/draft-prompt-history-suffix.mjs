@@ -1,6 +1,7 @@
 // Phase 6 Test 7: AI draft prompt includes per-day completion ratios.
 //
-// 💸 COST WARNING — one real LLM_DRAFT_MODEL call (gpt-4o by default).
+// 💸 COST WARNING — one real LLM_DRAFT_MODEL call (gpt-4o by default,
+// approximately $0.05–$0.10 per run as of 2026-05).
 //
 // Strategy: backend/ai/service.py:run_draft writes the rendered user_message
 // to settings.LLM_DRAFT_CAPTURE_PROMPT_PATH when that setting is non-empty.

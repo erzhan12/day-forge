@@ -76,15 +76,18 @@ class TestDraftCaptureProductionError:
         with override_settings(DEBUG=False, LLM_DRAFT_CAPTURE_PROMPT_PATH=""):
             assert error_draft_capture_in_production(app_configs=None) == []
 
-    def test_silent_when_setting_not_defined(self, settings):
+    def test_silent_when_setting_not_defined(self, monkeypatch, settings):
         """An old .env that doesn't define LLM_DRAFT_CAPTURE_PROMPT_PATH at
         all must not crash the check. ``getattr(settings, ..., "")`` defends
         in depth in case an early-boot path hits the check before settings
-        finish loading."""
-        # Remove the attribute entirely; ``override_settings`` adds, doesn't
-        # remove, so we del directly on the live settings object.
+        finish loading.
+
+        Uses ``monkeypatch.delattr`` (auto-restored at teardown) instead of
+        a raw ``del`` so the absent-attribute state can't leak into
+        unrelated tests in the same session.
+        """
         settings.DEBUG = False
-        del settings.LLM_DRAFT_CAPTURE_PROMPT_PATH
+        monkeypatch.delattr(settings, "LLM_DRAFT_CAPTURE_PROMPT_PATH")
         assert not hasattr(settings, "LLM_DRAFT_CAPTURE_PROMPT_PATH")
         assert error_draft_capture_in_production(app_configs=None) == []
 

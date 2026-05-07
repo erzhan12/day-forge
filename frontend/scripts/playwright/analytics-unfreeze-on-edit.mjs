@@ -4,7 +4,8 @@
 // Add Block, drag reorder, delete, and AI command bar — each after
 // re-freezing via Mark reviewed.
 //
-// 💸 The AI step issues one real LLM request (same as ai-command-noop.mjs).
+// 💸 The AI step issues one real LLM request (same as ai-command-noop.mjs);
+//    LLM_MODEL (gpt-4o-mini by default) ≈ $0.001-$0.003 per run as of 2026-05.
 //
 // Run from frontend/:
 //   node scripts/playwright/analytics-unfreeze-on-edit.mjs

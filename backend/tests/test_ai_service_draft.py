@@ -230,8 +230,11 @@ def test_capture_refuses_to_follow_symlink(
 
     assert result.parsed_actions  # draft completed despite capture failure
     assert victim.read_text() == "victim data"  # symlink target untouched
-    # The OSError surfaces in logs so a misconfigured path isn't silent.
+    # The OSError surfaces in logs at WARNING level. Tighten beyond a
+    # name-match so an unrelated WARNING that happens to mention the
+    # setting can't satisfy this assertion.
     assert any(
-        "LLM_DRAFT_CAPTURE_PROMPT_PATH" in r.message
+        r.levelno == logging.WARNING
+        and "LLM_DRAFT_CAPTURE_PROMPT_PATH" in r.message
         for r in caplog.records
     )
