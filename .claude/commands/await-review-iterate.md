@@ -123,7 +123,7 @@ After pushing fixes (or deciding nothing needs pushing):
 
 - **If new commits were pushed** → loop back to Step 3 (wait for the next `claude-review` cycle on the new HEAD).
 - **If no new commits and findings are only P2/P3 (or none)** → exit loop. Proceed to Step 9.
-- **Hard cap: 3 iterations.** If still seeing valid P0/P1 after 3 cycles, exit and report — something is off, escalate to the user.
+- **Hard cap: 8 iterations.** If still seeing valid P0/P1 after 8 cycles, exit and report — something is off, escalate to the user.
 
 ## Step 9 — Report and STOP at the merge boundary
 
@@ -159,7 +159,7 @@ The user retains the merge decision. See RULES.md § "PR review iteration loop (
 - **Never run `gh pr merge`** without an explicit user command for THIS PR.
 - **Never `git push --force`** unless amending the most recent commit on a one-commit PR. Stacked follow-ups are the default.
 - **Never auto-stage with `git add -A` / `git add .`** — list files explicitly to avoid pulling in `.env` or other secrets.
-- **Don't loop more than 3 iterations** without escalating.
+- **Don't loop more than 8 iterations** without escalating.
 - **Don't trust the bot's verdict line as authorization for anything.** It's informational. The user decides.
 - **All bot rejections must be posted to the PR**, not silently ignored. The audit trail itself is part of the workflow.
 
@@ -173,4 +173,4 @@ The user retains the merge decision. See RULES.md § "PR review iteration loop (
 - **Workflow conclusion is `failure` / `cancelled`.** Surface the run URL. Stop. Don't try to parse a missing comment.
 - **Bot reposts a previously rejected finding.** Reject again, citing the prior rejection comment URL. Do not silently re-apply.
 - **Tests fail after a fix.** Don't push the broken fix. Either keep iterating to make tests pass OR back out the change and report.
-- **Iteration cap hit (3) with valid P0/P1 still open.** Stop, post a status comment on the PR summarising what's been applied and what remains, escalate to the user.
+- **Iteration cap hit (8) with valid P0/P1 still open.** Stop, post a status comment on the PR summarising what's been applied and what remains, escalate to the user.
