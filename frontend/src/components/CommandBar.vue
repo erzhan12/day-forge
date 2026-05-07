@@ -154,6 +154,9 @@ onUnmounted(() => {
 
 <template>
   <div class="command-bar" data-testid="command-bar">
+    <div v-if="visibleMessages.length > 0" class="privacy-hint" data-testid="chat-privacy-hint">
+      Full chat history is re-sent to the AI provider each turn — clear before discussing sensitive data.
+    </div>
     <div v-if="visibleMessages.length > 0" class="thread" data-testid="chat-thread">
       <div
         v-for="(msg, idx) in visibleMessages"
@@ -228,6 +231,15 @@ onUnmounted(() => {
   z-index: 30;
   padding: 8px 16px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.privacy-hint {
+  max-width: 640px;
+  margin: 0 auto 4px;
+  font-size: 10px;
+  color: #6b7280;
+  text-align: center;
+  font-style: italic;
 }
 
 .thread {

@@ -84,9 +84,16 @@ class TestValidation:
         ],
     )
     def test_non_object_json_root_returns_400(self, auth_client, body):
-        # Valid JSON whose root is not an object would crash on
-        # ``data.get("messages")`` (AttributeError → 500) without an
-        # explicit ``isinstance(data, dict)`` guard. Lock the contract.
+        """Lock the contract that malformed bodies always return 4xx, never 5xx.
+
+        Valid JSON with a non-dict root (``[]``, ``"x"``, ``123``,
+        ``null``, ``true``) parses cleanly via ``json.loads`` but would
+        crash on ``data.get("messages")`` with ``AttributeError`` → 500
+        without the explicit ``isinstance(data, dict)`` guard added in
+        ``backend/ai/views.py`` (the post-JSON-parse step). This test
+        exercises every primitive root form the bot found that a 500
+        was reachable from valid JSON.
+        """
         resp = auth_client.post(URL, body, content_type="application/json")
         assert resp.status_code == 400
         payload = resp.json()

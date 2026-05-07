@@ -120,6 +120,11 @@ export function useChat() {
     pushUndo: (a: UndoAction) => void,
   ): Promise<void> {
     if (activeDate.value === null) {
+      // Surface a user-visible message before throwing — if the
+      // Schedule.vue watcher ever regresses, the user sees something
+      // actionable in the dock instead of a silent no-op. The throw
+      // remains so unit tests catch the regression deterministically.
+      lastError.value = "Chat not initialised — please reload the page."
       throw new Error(
         "useChat.submitTurn called before setActiveDate — caller must " +
           "register the active date first.",
