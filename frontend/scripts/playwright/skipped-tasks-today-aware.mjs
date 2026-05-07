@@ -12,10 +12,9 @@
 // Pre-reqs:
 //   * Django :8006, Vite :5173.
 //   * `playwright` user, `playwright-pw-do-not-use-in-prod` password.
-//   * Django's `timezone.localdate()` must equal 2026-05-06 at run time
-//     (`make shell` to verify). The script's hardcoded clock-fake assumes
-//     this; on a different system date the analytics view will treat the
-//     "today" schedule as future and 400.
+//
+// Dates are computed from Django's `timezone.localdate()` at run time, so
+// the test doesn't rot when the calendar advances.
 //
 // Run from frontend/:
 //   node scripts/playwright/skipped-tasks-today-aware.mjs
@@ -28,13 +27,32 @@ const BASE = "http://localhost:5173"
 const USERNAME = "playwright"
 const PASSWORD = "playwright-pw-do-not-use-in-prod"
 
-const TODAY = "2026-05-06"
-const PAST_MIXED = "2026-04-30"
-const PAST_CLEAN = "2026-04-28"
-
 const REPO_ROOT = resolve(process.cwd(), "..")
 
-console.log("-> Seeding 3 schedules (today, past-mixed, past-clean) via Django shell...")
+// Read Django's notion of "today" so the test doesn't rot on the
+// calendar. The shell preamble line ("X objects imported automatically...")
+// is filtered out by matching the ISO date on its own line.
+function djangoToday() {
+  const out = execSync(
+    `uv run python backend/manage.py shell -c "from django.utils import timezone; print(timezone.localdate().isoformat())"`,
+    { cwd: REPO_ROOT },
+  ).toString()
+  const match = out.match(/^\d{4}-\d{2}-\d{2}$/m)
+  if (!match) throw new Error(`could not parse Django date from:\n${out}`)
+  return match[0]
+}
+
+function daysBefore(isoDate, n) {
+  const d = new Date(isoDate + "T00:00:00Z")
+  d.setUTCDate(d.getUTCDate() - n)
+  return d.toISOString().slice(0, 10)
+}
+
+const TODAY = djangoToday()
+const PAST_MIXED = daysBefore(TODAY, 6)
+const PAST_CLEAN = daysBefore(TODAY, 8)
+
+console.log(`-> Seeding 3 schedules (today=${TODAY}, mixed=${PAST_MIXED}, clean=${PAST_CLEAN}) via Django shell...`)
 try {
   execSync(
     `uv run python backend/manage.py shell -c "
@@ -42,22 +60,25 @@ from schedules.models import Schedule, TimeBlock
 from django.contrib.auth.models import User
 import datetime as dt
 u = User.objects.get(username='${USERNAME}')
+today_d = dt.date.fromisoformat('${TODAY}')
+mixed_d = dt.date.fromisoformat('${PAST_MIXED}')
+clean_d = dt.date.fromisoformat('${PAST_CLEAN}')
 
 # Today: past-uncompleted, past-completed (control), future-uncompleted
-today, _ = Schedule.objects.update_or_create(user=u, date=dt.date(2026,5,6), defaults={'status':'active'})
+today, _ = Schedule.objects.update_or_create(user=u, date=today_d, defaults={'status':'active'})
 today.time_blocks.all().delete()
 TimeBlock.objects.create(schedule=today, title='Morning standup',  start_time='08:00', end_time='09:00', category='work',     is_completed=False, sort_order=0)
 TimeBlock.objects.create(schedule=today, title='Coffee',           start_time='10:00', end_time='10:30', category='personal', is_completed=True,  sort_order=1)
 TimeBlock.objects.create(schedule=today, title='Afternoon focus',  start_time='14:00', end_time='15:00', category='work',     is_completed=False, sort_order=2)
 
 # Past mixed: 2 blocks, 1 uncompleted ('Email')
-mixed, _ = Schedule.objects.update_or_create(user=u, date=dt.date(2026,4,30), defaults={'status':'active'})
+mixed, _ = Schedule.objects.update_or_create(user=u, date=mixed_d, defaults={'status':'active'})
 mixed.time_blocks.all().delete()
 TimeBlock.objects.create(schedule=mixed, title='Standup', start_time='09:00', end_time='09:30', category='work', is_completed=True, sort_order=0)
 TimeBlock.objects.create(schedule=mixed, title='Email',   start_time='10:00', end_time='10:30', category='work', is_completed=False, sort_order=1)
 
 # Past clean: 1 block fully completed - Skipped section MUST be hidden
-clean, _ = Schedule.objects.update_or_create(user=u, date=dt.date(2026,4,28), defaults={'status':'active'})
+clean, _ = Schedule.objects.update_or_create(user=u, date=clean_d, defaults={'status':'active'})
 clean.time_blocks.all().delete()
 TimeBlock.objects.create(schedule=clean, title='Workout', start_time='09:00', end_time='10:00', category='health', is_completed=True, sort_order=0)
 print('seeded today/past-mixed/past-clean')
@@ -78,7 +99,7 @@ const page = await context.newPage()
 // SkippedTasks.vue (both the "today vs past" classifier and the
 // HH:MM filter) are pinned. Start at 11:30 local — past the 09:00 block
 // end but before the 14:00 block start.
-await page.clock.install({ time: new Date("2026-05-06T11:30:00") })
+await page.clock.install({ time: new Date(`${TODAY}T11:30:00`) })
 
 function fail(msg) {
   console.error(`\n FAIL ${msg}`)
@@ -110,7 +131,7 @@ async function isSkippedSectionVisible() {
 }
 
 try {
-  console.log("-> Login (clock pinned to 2026-05-06T11:30 local)...")
+  console.log(`-> Login (clock pinned to ${TODAY}T11:30 local)...`)
   await login()
 
   // ── Inv A: today @ 11:30 — only past-window block in Skipped ──
@@ -124,7 +145,7 @@ try {
 
   // ── Inv B: advance clock to 15:30 → setInterval tick adds future block ──
   console.log("-> Advance fake clock to 15:30, run 60s (fires setInterval)...")
-  await page.clock.setSystemTime(new Date("2026-05-06T15:30:00"))
+  await page.clock.setSystemTime(new Date(`${TODAY}T15:30:00`))
   await page.clock.runFor(60_000)
   await page
     .locator(".skipped-tasks .skipped-row")
