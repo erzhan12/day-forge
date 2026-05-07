@@ -196,3 +196,13 @@
   every existing playwright script — defer to its own PR. Suggested
   by `claude-review` on PR #13 and PR #14, plus my own
   `/review-fix-loop-staged` review of PR #14.
+
+- [ ] **Extract Django shell seeds to standalone scripts.** Each
+  playwright script currently embeds its seed via a multi-line
+  `execSync(... uv run python backend/manage.py shell -c "...")`
+  template literal. Pull these out into `backend/scripts/seed-*.py`
+  files (create the directory if needed) so seeds are auditable,
+  testable, and editable with proper Python tooling. Suggested by
+  `claude-review` on PR #14. Pairs naturally with the test-utils.mjs
+  follow-up — the test-utils module would expose a single `seed()`
+  helper that shells out to the new scripts.

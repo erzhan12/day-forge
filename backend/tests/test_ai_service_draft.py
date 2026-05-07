@@ -138,7 +138,14 @@ def test_run_draft_rejects_non_add(user, monkeypatch, settings):
 
 
 def _success_response_client(captured: dict | None = None) -> _FakeClient:
-    """Helper: a fake LLM client that returns a single valid 'add' action."""
+    """Helper: a fake LLM client that returns a single valid 'add' action.
+
+    ``captured`` mirrors ``_FakeClient``'s constructor — when supplied, the
+    last ``chat.completions.create`` call's kwargs land in it for tests
+    that need to inspect what the service sent (model, messages, etc.).
+    Pass ``None`` (the default) when you only care that the call happened
+    and don't need the kwargs.
+    """
     return _FakeClient(
         captured if captured is not None else {},
         json.dumps(

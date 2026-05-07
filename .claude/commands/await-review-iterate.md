@@ -152,7 +152,7 @@ Awaiting explicit `merge` / `ok merge` from the user before running `gh pr merge
 - All-green CI
 - The user having said "fix the review" or "apply the suggestions" earlier — those authorize code changes only
 
-The user retains the merge decision. See RULES.md § "PR review iteration loop (AI-driven changes) → The merge step is NOT in the loop" and the project memory file `~/.claude/projects/-Users-erzhan-DATA-PROJ-day-forge/memory/feedback_pr_merge.md`.
+The user retains the merge decision. See RULES.md § "PR review iteration loop (AI-driven changes) → The merge step is NOT in the loop" and the project memory file `feedback_pr_merge.md` (under `~/.claude/projects/<project-hash>/memory/`; the hash varies per machine).
 
 ## Constraints
 
