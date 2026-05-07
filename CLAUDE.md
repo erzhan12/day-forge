@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Day Forge is an AI-powered daily schedule assistant. Django 5.x backend with SQLite, Python 3.14, managed with uv. Vue 3 + Inertia.js frontend served via Vite.
 
+> ⚠️  **Production scale blocker** — the AI endpoints (command, draft, chat) are currently synchronous. Read **Production Deployment** below before exposing this app to concurrent load.
+
 See `.claude/rules/` for detailed instructions. Review `tasks/lessons.md` at session start.
 
 ## Commands

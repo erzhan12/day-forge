@@ -154,7 +154,9 @@ onUnmounted(() => {
 
 <template>
   <div class="command-bar" data-testid="command-bar">
-    <div v-if="visibleMessages.length > 0" class="privacy-hint" data-testid="chat-privacy-hint">
+    <!-- Always visible (not gated on visibleMessages) so the warning
+         lands before the user types anything, not after. -->
+    <div class="privacy-hint" data-testid="chat-privacy-hint">
       Full chat history is re-sent to the AI provider each turn — clear before discussing sensitive data.
     </div>
     <div v-if="visibleMessages.length > 0" class="thread" data-testid="chat-thread">
