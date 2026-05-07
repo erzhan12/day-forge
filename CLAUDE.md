@@ -22,6 +22,8 @@ See `.claude/rules/` for detailed instructions. Review `tasks/lessons.md` at ses
 
 ## Production Deployment
 
+> ⚠️  **CRITICAL — PRODUCTION SCALE BLOCKER:** the AI endpoints are currently synchronous and will starve the worker pool under concurrent load. This is acceptable for development and demos but MUST be addressed before production deployment. See conversion options below.
+
 The AI command endpoint (`POST /api/ai/schedules/<date>/command/`), draft endpoint (`POST /api/ai/schedules/<date>/generate-draft/`), and chat endpoint (`POST /api/ai/schedules/<date>/chat/`) all make **synchronous** LLM calls that hold a Django worker for up to `LLM_REQUEST_TIMEOUT` seconds (default 15). Under sync workers, N concurrent AI requests starve the worker pool and stall *all* traffic, including manual schedule edits. This is acceptable for development and low-concurrency demos; before exposing the AI endpoints to production load, do **one** of:
 
 - Convert the AI views to `async def` (Django 4.1+) backed by an async LLM client.

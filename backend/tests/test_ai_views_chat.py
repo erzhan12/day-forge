@@ -164,6 +164,45 @@ class TestValidation:
         assert resp.status_code == 400
 
     @pytest.mark.django_db
+    def test_total_chars_cap_boundary_equal_passes(
+        self, today_schedule, auth_client, monkeypatch, settings
+    ):
+        """Boundary: total content length exactly equal to the cap MUST pass.
+
+        The validator uses ``>`` not ``>=`` so a transcript whose
+        cumulative ``content`` length lands exactly on
+        ``LLM_CHAT_MAX_TOTAL_CHARS`` is valid input. This locks in the
+        off-by-one direction.
+        """
+        settings.LLM_MAX_COMMAND_CHARS = 100
+        settings.LLM_CHAT_MAX_TOTAL_CHARS = 50
+        # Stub the LLM call so the request can reach the success branch
+        # — the test is about validation, not provider behaviour.
+        from ai.service import AIChatResult
+
+        def _ok(*a, **kw):
+            return AIChatResult(
+                raw_response_text="{}",
+                parsed_actions=[],
+                explanation="",
+                ask=None,
+            )
+
+        monkeypatch.setattr("ai.views.run_chat", _ok)
+        # 20 + 15 + 15 = 50 exactly.
+        resp = _post(
+            auth_client,
+            {
+                "messages": [
+                    _user_turn("a" * 20),
+                    _assistant_turn("b" * 15),
+                    _user_turn("c" * 15),
+                ]
+            },
+        )
+        assert resp.status_code == 200
+
+    @pytest.mark.django_db
     def test_max_turns_cap(self, auth_client, settings):
         settings.LLM_CHAT_MAX_TURNS = 3
         resp = _post(
