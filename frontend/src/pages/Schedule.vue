@@ -20,6 +20,7 @@ import { useSchedule } from "../composables/useSchedule"
 import { useUndo } from "../composables/useUndo"
 import { useDrag } from "../composables/useDrag"
 import { useDraft } from "../composables/useDraft"
+import { useChat } from "../composables/useChat"
 import "../app.css"
 
 // Extend RenderItem with overlay variants for items containing the current time
@@ -81,6 +82,19 @@ const {
 provide("undo", { pushUndo, snapshotBlocks })
 provide("drag", { startDrag, isDragging, dragBlockId, shiftedBlockIds })
 provide("scheduleContainer", scheduleBodyRef)
+
+// Multi-turn chat thread (feature 0007). State lives in `useChat`
+// (module-level) so the bottom dock and the future sidebar share one
+// thread. Re-anchor the active date here so navigation between days
+// always resets the thread — without this, a follow-up like "ага,
+// добавь его" authored against day A could mutate day B. The watcher is
+// `immediate: true` so first mount registers the date too.
+const { setActiveDate: setChatActiveDate } = useChat()
+watch(
+  () => props.date,
+  (d) => setChatActiveDate(d),
+  { immediate: true },
+)
 
 // Per-component-instance set of dates the auto-draft has already been
 // attempted for. Inertia's same-component navigation sometimes preserves

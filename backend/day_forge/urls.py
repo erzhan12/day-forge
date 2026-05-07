@@ -61,6 +61,11 @@ urlpatterns = [
         ai_views.ai_generate_draft,
         name="ai_generate_draft",
     ),
+    path(
+        "api/ai/schedules/<str:date>/chat/",
+        ai_views.ai_chat,
+        name="ai_chat",
+    ),
     # Analytics
     path(
         "analytics/<str:date>/",

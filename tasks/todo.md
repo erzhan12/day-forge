@@ -206,3 +206,34 @@
   `claude-review` on PR #14. Pairs naturally with the test-utils.mjs
   follow-up — the test-utils module would expose a single `seed()`
   helper that shells out to the new scripts.
+
+- [ ] **Manual QA gate for feature 0007 chat dock before any production
+  use.** PR #15 ships PR A of the multi-turn chat panel; the smoke
+  checklist in the PR description is unticked. Three items: (1) ambiguous
+  chat command in dev → assistant `ask` lands in the dock thread, (2)
+  navigate via DateNavigator's next-day arrow → thread resets and a
+  follow-up does NOT mutate the new day, (3) optional E2E (real LLM,
+  cost): `node frontend/scripts/playwright/ai-chat-clarifying-question.mjs`
+  + `ai-chat-date-change-resets-thread.mjs`. Plus the iOS Safari
+  autogrow-textarea check from `docs/features/0007_PLAN.md` open note 3.
+  Suggested by `claude-review` on PR #15.
+
+- [ ] **Type hints on internal helpers in `backend/ai/views.py`.**
+  `_consume_rate_limit`, `_log_interaction`, `_mark_success`,
+  `_validation_error_detail`, `_check_*`, `_apply_*`, etc. lack full
+  type annotations. Add them in a discrete refactor PR (or pair with
+  a broader backend typing pass — the `schedules.api` and
+  `templates_mgr.api` helpers have similar gaps). Out of scope for
+  feature 0007 because it touches files unrelated to the chat surface
+  and adds no behavioural change. Suggested by `claude-review` on PR #15.
+
+- [ ] **`assertNumQueries` test for `select_related("daily_review")` in
+  `ai_generate_draft`.** PR #15 added the `select_related` as a
+  drive-by N+1 fix; the optimisation isn't covered by an explicit
+  query-count test. Future regression risk: someone removes the
+  `select_related` and tests still pass because the prompt builder's
+  N+1 access doesn't break correctness. Add a test that seeds N past
+  schedules each with a `DailyReview`, calls the draft endpoint with
+  `run_draft` stubbed, and asserts `assertNumQueries(<expected>)`.
+  Out of scope for feature 0007 because it tests a Phase-6 codepath.
+  Suggested by `claude-review` on PR #15 iter 6.

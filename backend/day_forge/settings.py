@@ -156,6 +156,65 @@ LLM_HISTORY_DAYS = int(os.environ.get("LLM_HISTORY_DAYS", "7"))
 # never write the prompt to disk.
 LLM_DRAFT_CAPTURE_PROMPT_PATH = os.environ.get("LLM_DRAFT_CAPTURE_PROMPT_PATH", "")
 
+# Chat (feature 0007). Independent rate-limit bucket from the one-shot
+# command endpoint — same shared-cache requirement enforced by ai.E001.
+# A "task" typically takes 3-5 chat turns, so the budget is set such that
+# ~12 distinct tasks/hour fit comfortably without leaving accidental
+# headroom for runaway loops.
+LLM_CHAT_RATE_LIMIT_PER_HOUR = int(
+    os.environ.get("LLM_CHAT_RATE_LIMIT_PER_HOUR", "60")
+)
+# Hard cap on len(messages[]) per request. Protects against runaway
+# transcript size if the client never resets the thread.
+LLM_CHAT_MAX_TURNS = int(os.environ.get("LLM_CHAT_MAX_TURNS", "20"))
+# Hard cap on the sum of len(content) across all messages — caps prompt
+# cost regardless of how many short turns the user piles on. Default is
+# 4× LLM_MAX_COMMAND_CHARS so the user can comfortably build up a
+# multi-turn brief without bumping into the limit on a normal session.
+LLM_CHAT_MAX_TOTAL_CHARS = int(
+    os.environ.get(
+        "LLM_CHAT_MAX_TOTAL_CHARS", str(LLM_MAX_COMMAND_CHARS * 4)
+    )
+)
+# Schema caps on the model's per-turn output. Truncated provider responses
+# or runaway questions surface as a parse error (502) rather than a UI
+# overflow.
+LLM_CHAT_MAX_ASK_CHARS = int(os.environ.get("LLM_CHAT_MAX_ASK_CHARS", "300"))
+# Cap on the LLM's ``explanation`` field — applies to BOTH the chat envelope
+# (feature 0007) and the legacy one-shot ``validate_response_envelope``. A
+# unified cap keeps the two surfaces consistent (the chat plan called this
+# out as "apply the same cap to the existing one-shot for consistency"). The
+# default 300 is intentionally tighter than the previous hardcoded 500 in
+# ``schemas.py``; the system prompt asks for a one-sentence explanation, so
+# anything beyond 300 is already a deviation from the requested format.
+LLM_MAX_EXPLANATION_CHARS = int(
+    os.environ.get("LLM_MAX_EXPLANATION_CHARS", "300")
+)
+
+# Validate the chat-related caps at import time so a misconfigured deploy
+# fails worker boot loudly instead of silently producing degenerate
+# behaviour (e.g. an unreachable rate limit, a turn cap of zero that
+# rejects every request, a transcript char cap of zero that 400s every
+# message). Mirrors the ``ANALYTICS_STREAK_*`` precedent below.
+# Scope: only the settings introduced in feature 0007. Pre-existing LLM
+# settings (``LLM_RATE_LIMIT_PER_HOUR``, ``LLM_HISTORY_DAYS``,
+# ``LLM_REQUEST_TIMEOUT``, etc.) are intentionally NOT validated here —
+# they have shipped without validation since Phase 4 and tightening them
+# in this PR would be scope creep that could break tolerated deploy
+# configurations.
+for _name, _value in (
+    ("LLM_CHAT_RATE_LIMIT_PER_HOUR", LLM_CHAT_RATE_LIMIT_PER_HOUR),
+    ("LLM_CHAT_MAX_TURNS", LLM_CHAT_MAX_TURNS),
+    ("LLM_CHAT_MAX_TOTAL_CHARS", LLM_CHAT_MAX_TOTAL_CHARS),
+    ("LLM_CHAT_MAX_ASK_CHARS", LLM_CHAT_MAX_ASK_CHARS),
+    ("LLM_MAX_EXPLANATION_CHARS", LLM_MAX_EXPLANATION_CHARS),
+):
+    if _value <= 0:
+        raise ValueError(
+            f"{_name} must be a positive integer; got {_value!r}"
+        )
+del _name, _value
+
 # Analytics / streak. Validated at import time so a misconfigured value
 # fails the worker boot loudly instead of silently producing ``streak=0``
 # forever. ``ANALYTICS_STREAK_THRESHOLD`` is the per-day completion ratio
