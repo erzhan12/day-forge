@@ -29,7 +29,9 @@ _REQUIRED_FIELDS = {
 _TIME_PATTERN = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 
 MAX_TITLE_LEN = 255
-MAX_EXPLANATION_LEN = 500
+# Note: explanation length is capped via ``settings.LLM_MAX_EXPLANATION_CHARS``
+# (default 300). Reading the setting at validation time keeps chat and
+# one-shot endpoints in sync without duplicating the constant here.
 
 
 def _is_hhmm(value) -> bool:
@@ -107,7 +109,14 @@ def validate_action_shape(action, allowed_categories) -> list[str]:
 
 
 def validate_response_envelope(parsed) -> list[str]:
-    """Sanity-check the top-level shape before inspecting individual actions."""
+    """Sanity-check the top-level shape before inspecting individual actions.
+
+    The explanation cap is read from ``settings.LLM_MAX_EXPLANATION_CHARS``
+    so chat and one-shot share a single tunable. Lazy import keeps the
+    module importable without Django settings configured.
+    """
+    from django.conf import settings
+
     if not isinstance(parsed, dict):
         return ["response must be a JSON object"]
 
@@ -123,10 +132,73 @@ def validate_response_envelope(parsed) -> list[str]:
     explanation = parsed.get("explanation", "")
     if not isinstance(explanation, str):
         errors.append("'explanation' must be a string")
-    elif len(explanation) > MAX_EXPLANATION_LEN:
+    elif len(explanation) > settings.LLM_MAX_EXPLANATION_CHARS:
         errors.append(
-            f"'explanation' must be <= {MAX_EXPLANATION_LEN} chars"
+            f"'explanation' must be <= {settings.LLM_MAX_EXPLANATION_CHARS} chars"
         )
+
+    return errors
+
+
+def validate_chat_response_envelope(parsed) -> list[str]:
+    """Sanity-check the chat-mode response envelope before per-action shape.
+
+    Chat adds an ``ask`` field on top of ``actions`` + ``explanation``. The
+    response is mutually exclusive: either commit to actions OR ask one
+    clarifying question. Empty actions + null ask is also valid (chit-chat
+    / "thanks" turn).
+
+    Caps on ``ask`` and ``explanation`` length live in
+    ``settings.LLM_CHAT_MAX_ASK_CHARS`` / ``LLM_MAX_EXPLANATION_CHARS``
+    (the latter is shared with the one-shot envelope so both endpoints
+    stay aligned). Lazy import keeps the module importable without
+    Django settings (``ai/prompts.py`` is also imported at app load time).
+    """
+    from django.conf import settings
+
+    if not isinstance(parsed, dict):
+        return ["response must be a JSON object"]
+
+    errors: list[str] = []
+    actions = parsed.get("actions")
+    if not isinstance(actions, list):
+        errors.append("'actions' must be an array")
+    elif len(actions) > MAX_ACTIONS_PER_COMMAND:
+        errors.append(
+            f"too many actions ({len(actions)} > {MAX_ACTIONS_PER_COMMAND})"
+        )
+
+    explanation = parsed.get("explanation", "")
+    if not isinstance(explanation, str):
+        errors.append("'explanation' must be a string")
+    elif len(explanation) > settings.LLM_MAX_EXPLANATION_CHARS:
+        errors.append(
+            f"'explanation' must be <= {settings.LLM_MAX_EXPLANATION_CHARS} chars"
+        )
+
+    if "ask" not in parsed:
+        errors.append("'ask' is required (use null when not asking)")
+    else:
+        ask = parsed["ask"]
+        if ask is None:
+            pass
+        elif not isinstance(ask, str):
+            errors.append("'ask' must be a string or null")
+        elif ask == "":
+            errors.append("'ask' must be null or a non-empty string")
+        elif len(ask) > settings.LLM_CHAT_MAX_ASK_CHARS:
+            errors.append(
+                f"'ask' must be <= {settings.LLM_CHAT_MAX_ASK_CHARS} chars"
+            )
+
+    # Mutually exclusive: ask set ⇒ no actions; actions set ⇒ ask null.
+    if isinstance(actions, list) and "ask" in parsed:
+        ask = parsed["ask"]
+        if isinstance(ask, str) and ask and len(actions) > 0:
+            errors.append(
+                "'ask' must be null when 'actions' is non-empty (the model "
+                "must commit to applying OR asking, never both)"
+            )
 
     return errors
 

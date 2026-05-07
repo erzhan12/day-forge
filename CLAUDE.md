@@ -22,14 +22,16 @@ See `.claude/rules/` for detailed instructions. Review `tasks/lessons.md` at ses
 
 ## Production Deployment
 
-The AI command endpoint (`POST /api/ai/schedules/<date>/command/`) makes a **synchronous** LLM call that holds a Django worker for up to `LLM_REQUEST_TIMEOUT` seconds (default 15). Under sync workers, N concurrent AI requests starve the worker pool and stall *all* traffic, including manual schedule edits — not just AI traffic. This is acceptable for development and low-concurrency demos; before exposing the AI endpoint to production load, do **one** of:
+The AI command endpoint (`POST /api/ai/schedules/<date>/command/`), draft endpoint (`POST /api/ai/schedules/<date>/generate-draft/`), and chat endpoint (`POST /api/ai/schedules/<date>/chat/`) all make **synchronous** LLM calls that hold a Django worker for up to `LLM_REQUEST_TIMEOUT` seconds (default 15). Under sync workers, N concurrent AI requests starve the worker pool and stall *all* traffic, including manual schedule edits. This is acceptable for development and low-concurrency demos; before exposing the AI endpoints to production load, do **one** of:
 
-- Convert `ai_command` to an `async def` view (Django 4.1+) backed by an async LLM client.
+- Convert the AI views to `async def` (Django 4.1+) backed by an async LLM client.
 - Move the LLM call to a Celery task and return results via polling or a websocket push.
 
 Other production prerequisites (already enforced by the `ai.E001` system check when `LLM_API_KEY` is set):
 
-- Use a **shared cache backend** (Redis or Memcached) for `CACHES['default']`. The default `LocMemCache` is per-process, so the per-user rate limit collapses to `LLM_RATE_LIMIT_PER_HOUR × worker_count` and is trivially bypassed.
+- Use a **shared cache backend** (Redis or Memcached) for `CACHES['default']`. The default `LocMemCache` is per-process, so each AI rate-limit bucket (`ai_cmd_rl`, `ai_draft_rl`, `ai_chat_rl`) collapses to `configured_limit × worker_count` and is trivially bypassed.
+
+**Chat-specific privacy disclosure (feature 0007):** the chat endpoint re-sends the full prior client-supplied transcript to the LLM provider on every turn. This is a strictly larger provider-egress surface than the one-shot command endpoint — even though the DB audit row only stores the latest user turn plus a transcript hash. Users should be advised to use the Clear-thread button (or page reload) before discussing anything sensitive. See `.claude/rules/project.md` for the full privacy note.
 
 ## Key Files
 

@@ -12,17 +12,21 @@ from django.core.checks import Error, register
 
 @register()
 def error_locmem_cache_with_ai_in_production(app_configs, **kwargs):
-    """Block production startup when the AI rate limiter's counter lives
-    in a per-process cache.
+    """Block production startup when any AI rate-limit counter lives in
+    a per-process cache.
 
-    ``ai.views._rate_limit_per_user`` stores its fixed-window counter in
-    Django's default cache. Under the default ``LocMemCache`` that cache
-    is per-worker, so a gunicorn deployment with N workers makes the
-    effective limit ``LLM_RATE_LIMIT_PER_HOUR × N`` — trivially bypassed
-    by any client whose connections round-robin across workers. Runs
-    whenever ``LLM_API_KEY`` is set (AI features actually in use),
-    regardless of ``DEBUG`` — a misconfigured prod with ``DEBUG=True``
-    would otherwise silently ship the per-worker limiter.
+    All three AI rate-limit buckets — ``ai_cmd_rl`` (one-shot command,
+    ``LLM_RATE_LIMIT_PER_HOUR``), ``ai_draft_rl`` (auto/manual draft,
+    ``LLM_DRAFT_RATE_LIMIT_PER_HOUR``), and ``ai_chat_rl`` (multi-turn
+    chat, ``LLM_CHAT_RATE_LIMIT_PER_HOUR``) — share Django's default
+    cache via ``ai.views._consume_rate_limit``. Under the default
+    ``LocMemCache`` that cache is per-worker, so a gunicorn deployment
+    with N workers makes the effective limit on EACH bucket
+    ``configured_limit × N`` — trivially bypassed by any client whose
+    connections round-robin across workers. Runs whenever
+    ``LLM_API_KEY`` is set (AI features actually in use), regardless of
+    ``DEBUG`` — a misconfigured prod with ``DEBUG=True`` would otherwise
+    silently ship the per-worker limiter.
     """
     errors = []
     if not settings.LLM_API_KEY or not settings.LLM_API_KEY.strip():
@@ -31,15 +35,16 @@ def error_locmem_cache_with_ai_in_production(app_configs, **kwargs):
     if backend.endswith(".LocMemCache"):
         errors.append(
             Error(
-                "AI rate limiter is configured with LocMemCache while "
-                "LLM_API_KEY is set. LocMemCache is per-process, so the "
-                "per-user rate limit becomes "
-                "LLM_RATE_LIMIT_PER_HOUR × worker_count and can be "
-                "bypassed at will.",
+                "AI rate limiters (ai_cmd_rl / ai_draft_rl / ai_chat_rl) "
+                "are configured with LocMemCache while LLM_API_KEY is "
+                "set. LocMemCache is per-process, so each bucket's "
+                "effective limit becomes its configured value × "
+                "worker_count and can be bypassed at will.",
                 hint=(
                     "Point CACHES['default']['BACKEND'] at a shared cache "
                     "(e.g. django.core.cache.backends.redis.RedisCache or "
-                    "django_redis) so the counter is global across workers."
+                    "django_redis) so all three counters are global "
+                    "across workers."
                 ),
                 id="ai.E001",
             )

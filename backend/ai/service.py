@@ -29,12 +29,16 @@ from openai import OpenAI
 
 from ai.prompts import (
     SYSTEM_PROMPT,
+    SYSTEM_PROMPT_CHAT,
     SYSTEM_PROMPT_DRAFT,
+    build_chat_user_message,
     build_draft_user_message,
     build_user_message,
+    serialise_prior_turns,
 )
 from ai.schemas import (
     validate_action_shape,
+    validate_chat_response_envelope,
     validate_draft_response,
     validate_response_envelope,
 )
@@ -79,6 +83,22 @@ class AICommandResult:
     raw_response_text: str
     parsed_actions: list[dict]
     explanation: str
+
+
+@dataclass
+class AIChatResult:
+    """Result envelope for ``run_chat`` (feature 0007).
+
+    Carries the same provider raw text + parsed actions as the one-shot
+    ``AICommandResult`` plus an optional ``ask`` clarifying-question
+    string. Exactly one of ``parsed_actions`` (non-empty) or ``ask``
+    (non-null) is set, OR both are empty/null for a chit-chat turn.
+    """
+
+    raw_response_text: str
+    parsed_actions: list[dict]
+    explanation: str
+    ask: str | None
 
 
 @dataclass
@@ -292,4 +312,107 @@ def run_draft(schedule, template, history_schedules, rules, now) -> AIDraftResul
         raw_response_text=raw,
         parsed_actions=list(parsed["actions"]),
         explanation=parsed.get("explanation", ""),
+    )
+
+
+def run_chat(messages, schedule, blocks, now) -> AIChatResult:
+    """Multi-turn chat (feature 0007).
+
+    ``messages`` is the FULL client-supplied transcript ordered
+    chronologically; the LAST entry must have ``role="user"`` and is the
+    turn the user just sent. The view enforces alternation, role
+    membership, and per-message / total length caps before calling here.
+
+    Critically, prior client-supplied turns (everything except the last
+    one) are NOT forwarded to the LLM under the ``assistant`` role. They
+    are flattened into a single ``user``-role transcript block prefixed
+    with the "Untrusted prior transcript" caveat (see
+    ``prompts.serialise_prior_turns``). This closes the privilege-
+    escalation surface where a tampered client could inject a fake
+    ``assistant`` turn that biases the model into destructive actions.
+    """
+    if not settings.LLM_API_KEY or not settings.LLM_API_KEY.strip():
+        raise AIUnavailableError("LLM_API_KEY is not configured")
+
+    # The view layer is responsible for full validation; treat anything
+    # malformed reaching this far as an internal contract violation rather
+    # than a user-visible 400.
+    if not messages or messages[-1].get("role") != "user":
+        raise AIInvalidInputError(
+            "messages must end with a user turn (view should enforce)"
+        )
+
+    schedule_context = build_chat_user_message(schedule, blocks, now)
+    prior_transcript = serialise_prior_turns(messages[:-1])
+    latest_user_turn = messages[-1]["content"]
+
+    chat_messages = [
+        {"role": "system", "content": SYSTEM_PROMPT_CHAT},
+        # Schedule context + the flattened prior transcript live in a
+        # single leading user message so the model treats them as
+        # untrusted input. The latest real user turn stays in its own
+        # user message so the model focuses its response on it.
+        {
+            "role": "user",
+            "content": f"{schedule_context}\n\n{prior_transcript}",
+        },
+        {"role": "user", "content": latest_user_turn},
+    ]
+
+    client = _get_client()
+    try:
+        response = client.chat.completions.create(
+            model=settings.LLM_MODEL,
+            messages=chat_messages,
+            response_format={"type": "json_object"},
+            temperature=0,
+            timeout=settings.LLM_REQUEST_TIMEOUT,
+        )
+    except openai.APITimeoutError as e:
+        logger.warning("AI chat timeout: %s", e)
+        raise AITimeoutError("AI provider timed out") from e
+    except openai.APIError as e:
+        logger.warning("AI chat provider error: %s", e)
+        raise AIProviderError("AI service error") from e
+    except Exception as e:  # network / unexpected
+        logger.exception("AI chat unexpected error")
+        raise AIProviderError("AI service error") from e
+
+    raw = response.choices[0].message.content or ""
+
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise AIParseError(
+            f"AI returned invalid JSON: {e}", raw_response_text=raw
+        ) from e
+
+    envelope_errors = validate_chat_response_envelope(parsed)
+    if envelope_errors:
+        raise AIParseError(
+            "AI chat response failed envelope validation: "
+            + "; ".join(envelope_errors),
+            raw_response_text=raw,
+        )
+
+    from schedules.models import TimeBlock  # local import: avoid app-load cycles
+
+    allowed_categories = {c.value for c in TimeBlock.Category}
+    per_action_errors = []
+    for idx, action in enumerate(parsed["actions"]):
+        errs = validate_action_shape(action, allowed_categories)
+        if errs:
+            per_action_errors.append(f"action[{idx}]: {', '.join(errs)}")
+    if per_action_errors:
+        raise AIParseError(
+            "AI chat response failed action validation: "
+            + "; ".join(per_action_errors),
+            raw_response_text=raw,
+        )
+
+    return AIChatResult(
+        raw_response_text=raw,
+        parsed_actions=list(parsed["actions"]),
+        explanation=parsed.get("explanation", ""),
+        ask=parsed.get("ask"),
     )

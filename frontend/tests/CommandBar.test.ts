@@ -1,33 +1,57 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
-import { mount, VueWrapper } from "@vue/test-utils"
-import { ref, nextTick } from "vue"
+// CommandBar tests after the feature-0007 rewrite. The component is now
+// the bottom-dock chat surface backed by `useChat`; the previous
+// single-shot `useAI` consumer has been retired.
 
-const submitCommand = vi.fn()
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { mount, VueWrapper } from "@vue/test-utils"
+import { nextTick, ref } from "vue"
+
+const setActiveDate = vi.fn()
+const clearThread = vi.fn()
+const submitTurn = vi.fn()
 const isProcessing = ref(false)
 const lastError = ref<string | null>(null)
-const lastExplanation = ref<string | null>(null)
+const pendingAsk = ref<string | null>(null)
 const apiHealthy = ref(true)
-const clearError = vi.fn(() => { lastError.value = null })
+const messages = ref<
+  {
+    role: "user" | "assistant"
+    content: string
+    ask: string | null
+    explanation: string | null
+    ts: number
+  }[]
+>([])
 
-vi.mock("../src/composables/useAI", () => ({
-  useAI: () => ({
-    isProcessing, lastError, lastExplanation, apiHealthy,
-    submitCommand, clearError,
+vi.mock("../src/composables/useChat", () => ({
+  useChat: () => ({
+    messages,
+    isProcessing,
+    lastError,
+    pendingAsk,
+    apiHealthy,
+    setActiveDate,
+    clearThread,
+    submitTurn,
   }),
 }))
 
 import CommandBar from "../src/components/CommandBar.vue"
 
-const BLOCK_A = { id: 1, title: "A", start_time: "09:00", end_time: "10:00", category: "work" as const, is_completed: false, sort_order: 0 }
-const BLOCK_B = { id: 2, title: "Standup", start_time: "10:00", end_time: "10:15", category: "work" as const, is_completed: false, sort_order: 1 }
+const BLOCK_A = {
+  id: 1,
+  title: "A",
+  start_time: "09:00",
+  end_time: "10:00",
+  category: "work" as const,
+  is_completed: false,
+  sort_order: 0,
+}
 
 function makeSnapshot() {
   return [{ ...BLOCK_A }]
 }
 
-// Track the mounted wrapper so `afterEach` can always tear it down — without
-// this the placeholder-rotation `setInterval` in CommandBar.vue keeps ticking
-// against a detached DOM, leaking between tests.
 let wrapper: VueWrapper | null = null
 
 function mountBar(overrides: Record<string, unknown> = {}) {
@@ -43,13 +67,14 @@ function mountBar(overrides: Record<string, unknown> = {}) {
   return wrapper
 }
 
-describe("CommandBar", () => {
+describe("CommandBar (chat dock)", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     isProcessing.value = false
     lastError.value = null
-    lastExplanation.value = null
+    pendingAsk.value = null
     apiHealthy.value = true
+    messages.value = []
   })
 
   afterEach(() => {
@@ -57,98 +82,61 @@ describe("CommandBar", () => {
     wrapper = null
   })
 
-  it("submits on Enter and pushes undo when blocks changed", async () => {
-    // Response includes a new block — schedule changed → undo must be registered.
-    submitCommand.mockResolvedValue({
-      ok: true,
-      explanation: "Added standup",
-      data: { blocks: [BLOCK_A, BLOCK_B] },
-    })
-    const pushUndo = vi.fn()
-    const w = mountBar({ pushUndo })
-
-    const input = w.find(".command-input")
-    await input.setValue("add standup at 10")
-    await w.find("form").trigger("submit")
-    await nextTick()
-
-    expect(submitCommand).toHaveBeenCalledWith("2026-04-18", "add standup at 10")
-    expect(pushUndo).toHaveBeenCalledOnce()
-    const action = pushUndo.mock.calls[0][0]
-    expect(action.type).toBe("ai")
-    expect(action.description).toBe("Added standup")
-    expect(action.scheduleDate).toBe("2026-04-18")
-    // Input clears on success.
-    expect((input.element as HTMLInputElement).value).toBe("")
+  it("registers the active date on mount", () => {
+    mountBar()
+    expect(setActiveDate).toHaveBeenCalledWith("2026-04-18")
   })
 
-  it("does not push undo when AI succeeds but schedule is unchanged (zero actions)", async () => {
-    // LLM replied with a clarification — same blocks back, no mutations applied.
-    submitCommand.mockResolvedValue({
-      ok: true,
-      explanation: "Cannot add block at 23:40 — outside working hours.",
-      data: { blocks: [BLOCK_A] },
-    })
+  it("submits the turn on Enter without Shift", async () => {
+    submitTurn.mockResolvedValue(undefined)
     const pushUndo = vi.fn()
     const w = mountBar({ pushUndo })
 
-    const input = w.find(".command-input")
-    await input.setValue("add call at 23:40 for 5 min")
-    await w.find("form").trigger("submit")
+    const ta = w.find("textarea.command-input")
+    await ta.setValue("add gym")
+    await ta.trigger("keydown", { key: "Enter" })
     await nextTick()
 
-    expect(pushUndo).not.toHaveBeenCalled()
-    // Input still clears — the command was handled successfully.
-    expect((input.element as HTMLInputElement).value).toBe("")
+    expect(submitTurn).toHaveBeenCalledTimes(1)
+    const [text, snap, undo] = submitTurn.mock.calls[0]
+    expect(text).toBe("add gym")
+    expect(typeof snap).toBe("function")
+    expect(undo).toBe(pushUndo)
   })
 
-  it("does not push undo on failure, keeps input contents", async () => {
-    submitCommand.mockResolvedValue({ ok: false, errors: { detail: "nope" } })
-    const pushUndo = vi.fn()
-    const w = mountBar({ pushUndo })
-
-    const input = w.find(".command-input")
-    await input.setValue("bad command")
-    await w.find("form").trigger("submit")
-    await nextTick()
-
-    expect(pushUndo).not.toHaveBeenCalled()
-    expect((input.element as HTMLInputElement).value).toBe("bad command")
+  it("inserts a newline on Shift+Enter without submitting", async () => {
+    const w = mountBar()
+    const ta = w.find("textarea.command-input")
+    await ta.setValue("hello")
+    // Shift+Enter must NOT trigger submit. We simulate the keydown and
+    // verify submitTurn was never called; the textarea's textContent
+    // newline is the browser's job, not ours.
+    await ta.trigger("keydown", { key: "Enter", shiftKey: true })
+    expect(submitTurn).not.toHaveBeenCalled()
   })
 
   it("ignores submit while isProcessing", async () => {
     isProcessing.value = true
     const w = mountBar()
-    await w.find(".command-input").setValue("hi")
-    await w.find("form").trigger("submit")
-    expect(submitCommand).not.toHaveBeenCalled()
+    const ta = w.find("textarea.command-input")
+    await ta.setValue("hi")
+    await ta.trigger("keydown", { key: "Enter" })
+    expect(submitTurn).not.toHaveBeenCalled()
   })
 
-  it("ignores empty / whitespace-only commands", async () => {
+  it("ignores empty / whitespace-only input", async () => {
     const w = mountBar()
-    await w.find(".command-input").setValue("   ")
-    await w.find("form").trigger("submit")
-    expect(submitCommand).not.toHaveBeenCalled()
+    const ta = w.find("textarea.command-input")
+    await ta.setValue("   ")
+    await ta.trigger("keydown", { key: "Enter" })
+    expect(submitTurn).not.toHaveBeenCalled()
   })
 
-  it("takes snapshot via the prop (DataCloneError regression guard)", async () => {
-    submitCommand.mockResolvedValue({
-      ok: true,
-      explanation: "ok",
-      data: { blocks: [BLOCK_A, BLOCK_B] },
-    })
-    const snapshotBlocks = vi.fn(makeSnapshot)
-    const w = mountBar({ snapshotBlocks })
-    await w.find(".command-input").setValue("hi")
-    await w.find("form").trigger("submit")
-    await nextTick()
-    expect(snapshotBlocks).toHaveBeenCalledOnce()
-  })
-
-  it("focuses the input when '/' is pressed outside an editable field", async () => {
+  it("focuses the textarea on '/' when focus is outside form fields", async () => {
     const w = mountBar()
-    const inputEl = w.find(".command-input").element as HTMLInputElement
-    const focusSpy = vi.spyOn(inputEl, "focus")
+    const ta = w.find("textarea.command-input")
+      .element as HTMLTextAreaElement
+    const focusSpy = vi.spyOn(ta, "focus")
 
     const evt = new KeyboardEvent("keydown", { key: "/", cancelable: true })
     document.dispatchEvent(evt)
@@ -158,15 +146,20 @@ describe("CommandBar", () => {
     expect(evt.defaultPrevented).toBe(true)
   })
 
-  it("ignores '/' while typing in another input", async () => {
+  it("ignores '/' while typing in another input/textarea", async () => {
     const w = mountBar()
-    const inputEl = w.find(".command-input").element as HTMLInputElement
-    const focusSpy = vi.spyOn(inputEl, "focus")
+    const ta = w.find("textarea.command-input")
+      .element as HTMLTextAreaElement
+    const focusSpy = vi.spyOn(ta, "focus")
 
-    const other = document.createElement("input")
+    const other = document.createElement("textarea")
     document.body.appendChild(other)
     other.focus()
-    const evt = new KeyboardEvent("keydown", { key: "/", cancelable: true, bubbles: true })
+    const evt = new KeyboardEvent("keydown", {
+      key: "/",
+      cancelable: true,
+      bubbles: true,
+    })
     other.dispatchEvent(evt)
     await nextTick()
 
@@ -174,31 +167,106 @@ describe("CommandBar", () => {
     document.body.removeChild(other)
   })
 
-  it("renders red status dot when apiHealthy is false", () => {
+  it("renders an unhealthy status dot when apiHealthy is false", () => {
     apiHealthy.value = false
     const w = mountBar()
     expect(w.find(".status-dot.unhealthy").exists()).toBe(true)
     expect(w.find(".status-dot.healthy").exists()).toBe(false)
   })
 
-  it("clears the error when the user edits the input", async () => {
-    lastError.value = "stale error"
+  it("renders the latest few messages above the input", () => {
+    messages.value = [
+      {
+        role: "user",
+        content: "hi",
+        ask: null,
+        explanation: null,
+        ts: 1,
+      },
+      {
+        role: "assistant",
+        content: "when?",
+        ask: "when?",
+        explanation: null,
+        ts: 2,
+      },
+    ]
+    pendingAsk.value = "when?"
     const w = mountBar()
-    expect(w.find(".error-row").exists()).toBe(true)
-    await w.find(".command-input").setValue("n")
-    expect(clearError).toHaveBeenCalled()
-    // clearError mock nulls lastError, so the error-row disappears.
-    await nextTick()
-    expect(w.find(".error-row").exists()).toBe(false)
+    const bubbles = w.findAll(".bubble")
+    expect(bubbles.length).toBe(2)
+    expect(bubbles[0].text()).toBe("hi")
+    expect(bubbles[1].text()).toBe("when?")
+    // The assistant bubble that matches `pendingAsk` gets the highlight class.
+    expect(bubbles[1].classes()).toContain("bubble-ask")
   })
 
-  it("clears input and error when Escape is pressed", async () => {
-    lastError.value = "bad"
+  it("Clear button calls clearThread when the thread has messages", async () => {
+    messages.value = [
+      {
+        role: "user",
+        content: "hi",
+        ask: null,
+        explanation: null,
+        ts: 1,
+      },
+    ]
     const w = mountBar()
-    const input = w.find(".command-input")
-    await input.setValue("some text")
-    await input.trigger("keydown", { key: "Escape" })
-    expect((input.element as HTMLInputElement).value).toBe("")
-    expect(clearError).toHaveBeenCalled()
+    await w.find('[data-testid="chat-clear"]').trigger("click")
+    expect(clearThread).toHaveBeenCalledOnce()
+  })
+
+  it("Clear button is hidden when the thread is empty", () => {
+    const w = mountBar()
+    expect(w.find('[data-testid="chat-clear"]').exists()).toBe(false)
+  })
+
+  it("disables the textarea when scheduleDisabled is provided as true", () => {
+    const w = mount(CommandBar, {
+      props: {
+        date: "2026-04-18",
+        snapshotBlocks: makeSnapshot,
+        pushUndo: vi.fn(),
+      },
+      global: {
+        provide: {
+          scheduleDisabled: ref(true),
+        },
+      },
+      attachTo: document.body,
+    })
+    wrapper = w
+    const ta = w.find("textarea.command-input")
+      .element as HTMLTextAreaElement
+    expect(ta.disabled).toBe(true)
+  })
+
+  it("renders on all viewports in PR A (no useMediaQuery hide)", () => {
+    // PR A keeps the bottom dock visible regardless of viewport width;
+    // PR B will introduce the sidebar + flip this assertion.
+    const original = window.innerWidth
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 1440,
+    })
+    try {
+      const w = mountBar()
+      expect(w.find('[data-testid="command-bar"]').exists()).toBe(true)
+    } finally {
+      Object.defineProperty(window, "innerWidth", {
+        configurable: true,
+        value: original,
+      })
+    }
+  })
+
+  it("clears input and blurs on Escape", async () => {
+    const w = mountBar()
+    const ta = w.find("textarea.command-input")
+    const taEl = ta.element as HTMLTextAreaElement
+    await ta.setValue("some text")
+    taEl.focus()
+    await ta.trigger("keydown", { key: "Escape" })
+    expect((taEl as HTMLTextAreaElement).value).toBe("")
   })
 })

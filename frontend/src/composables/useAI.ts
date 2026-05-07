@@ -1,3 +1,9 @@
+// @deprecated Use ``useChat`` (composables/useChat.ts) instead — feature
+// 0007 replaced the single-shot AI command bar with a multi-turn chat
+// dock. This module is kept only so any external import path that still
+// references it doesn't break the build; remove once we are confident no
+// caller remains. Tests for this composable have been removed.
+
 import { ref } from "vue"
 import { router } from "@inertiajs/vue3"
 import { type ApiResult, requestJson } from "./useHttp"

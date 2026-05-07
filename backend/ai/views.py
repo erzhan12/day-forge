@@ -6,6 +6,7 @@ action atomically, and logs every interaction (success or failure).
 """
 import datetime
 import functools
+import hashlib
 import json
 import logging
 
@@ -37,6 +38,7 @@ from ai.service import (
     AIProviderError,
     AITimeoutError,
     AIUnavailableError,
+    run_chat,
     run_command,
     run_draft,
 )
@@ -710,5 +712,268 @@ def ai_generate_draft(request, date):
         {
             "blocks": [block_to_dict(b) for b in result_blocks],
             "explanation": result.explanation,
+        }
+    )
+
+
+# ---------------------------------------------------------------------------
+# Chat (feature 0007): multi-turn AI conversation.
+# ---------------------------------------------------------------------------
+
+
+def _validate_chat_messages(messages) -> str | None:
+    """Return an error string if ``messages`` is malformed, else ``None``.
+
+    Validation order matters: this runs BEFORE ``Schedule.get_or_create``
+    AND BEFORE the rate-limit token is consumed, so a bad body cannot
+    create an empty Schedule row or burn the user's budget.
+    """
+    if not isinstance(messages, list):
+        return "messages must be an array"
+    n = len(messages)
+    if n < 1:
+        return "messages must contain at least one entry"
+    if n > settings.LLM_CHAT_MAX_TURNS:
+        return f"too many messages (max {settings.LLM_CHAT_MAX_TURNS})"
+
+    total_chars = 0
+    for idx, msg in enumerate(messages):
+        if not isinstance(msg, dict):
+            return f"messages[{idx}] must be an object"
+        role = msg.get("role")
+        if role not in ("user", "assistant"):
+            return f"messages[{idx}].role must be 'user' or 'assistant'"
+        content = msg.get("content")
+        if not isinstance(content, str):
+            return f"messages[{idx}].content must be a string"
+        if len(content) < 1:
+            return f"messages[{idx}].content cannot be empty"
+        if len(content) > settings.LLM_MAX_COMMAND_CHARS:
+            return (
+                f"messages[{idx}].content too long "
+                f"(max {settings.LLM_MAX_COMMAND_CHARS} chars)"
+            )
+        total_chars += len(content)
+        # Roles strictly alternate, starting with user.
+        expected = "user" if idx % 2 == 0 else "assistant"
+        if role != expected:
+            return (
+                f"messages[{idx}].role must be {expected!r} "
+                f"(roles must strictly alternate user/assistant)"
+            )
+
+    if total_chars > settings.LLM_CHAT_MAX_TOTAL_CHARS:
+        return (
+            f"total content too long ({total_chars} > "
+            f"{settings.LLM_CHAT_MAX_TOTAL_CHARS} chars)"
+        )
+
+    if messages[-1]["role"] != "user":
+        return "messages must end with a user turn"
+
+    return None
+
+
+def _transcript_sha256(messages) -> str:
+    """Stable hash of the client-supplied transcript for audit rows.
+
+    Uses ``sort_keys=True`` and ``ensure_ascii=False`` so the hash is
+    invariant under JSON re-encoding but does NOT collapse unicode
+    differently than the wire form (we want the hash to match what the
+    client actually sent, which is ``ensure_ascii=False`` after our
+    server's ``json.loads``).
+    """
+    payload = json.dumps(messages, sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _build_chat_audit_response(messages, raw_or_str: str, error_class: str | None) -> str:
+    """Build the JSON-encoded ``ai_response`` payload for a chat audit row.
+
+    Same shape for success and failure rows; ``error_class`` is ``None``
+    for success and the exception class name for failure. Both rows
+    carry the transcript hash so a future audit can group rows that
+    belong to the same client-supplied transcript.
+    """
+    payload = {
+        "transcript_sha256": _transcript_sha256(messages),
+        "turn_count": len(messages),
+        "raw": raw_or_str,
+    }
+    if error_class is not None:
+        payload["error_class"] = error_class
+    return json.dumps(payload, ensure_ascii=False)
+
+
+def _log_chat_failure(schedule, last_user_msg: str, messages, exc) -> None:
+    """Persist the failure-row variant of the chat audit envelope."""
+    raw = getattr(exc, "raw_response_text", "") or str(exc)
+    payload = _build_chat_audit_response(
+        messages, raw, error_class=type(exc).__name__
+    )
+    _log_interaction(schedule, last_user_msg, payload, [])
+
+
+@login_required
+@require_http_methods(["POST"])
+def ai_chat(request, date):
+    """Multi-turn chat endpoint (feature 0007).
+
+    Validation order is deliberate (matches ``ai_generate_draft`` for
+    rate-limit safety, plus message validation BEFORE ``get_or_create``
+    so a malformed request can't auto-create an empty ``Schedule`` row):
+
+      1. Reject oversized body.
+      2. Parse + validate the URL date.
+      3. Parse JSON body.
+      4. Validate ``messages[]`` (length, roles, alternation, content
+         caps). Bad body returns 400 BEFORE any DB write or rate-limit
+         consumption.
+      5. ``Schedule.get_or_create``.
+      6. Consume the chat rate-limit token.
+      7. Snapshot blocks (no transaction — LLM call must not hold locks).
+      8. ``run_chat`` outside any transaction.
+      9. Audit-log this turn (success-row variant; failure-row was
+         logged in the ``except AIError`` branch).
+     10. Apply actions atomically if any, OR return clarifying-question
+         payload, OR return chit-chat (empty actions + null ask).
+    """
+    oversized = reject_oversized_body(request)
+    if oversized is not None:
+        return oversized
+
+    try:
+        parsed_date = datetime.date.fromisoformat(date)
+    except ValueError:
+        return JsonResponse(
+            {"errors": {"date": "Invalid date format."}}, status=400
+        )
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse(
+            {"errors": {"body": "Invalid JSON."}}, status=400
+        )
+    # Non-object JSON roots (``[]``, ``"x"``, ``123``, ``null``) parse
+    # fine but break ``data.get(...)`` with AttributeError → 500. Reject
+    # them as 400 here so the contract from the planning doc holds:
+    # any malformed body returns 4xx, never 5xx.
+    if not isinstance(data, dict):
+        return JsonResponse(
+            {"errors": {"body": "Request body must be a JSON object."}},
+            status=400,
+        )
+
+    messages = data.get("messages")
+    err = _validate_chat_messages(messages)
+    if err is not None:
+        return JsonResponse({"errors": {"messages": err}}, status=400)
+
+    schedule, _ = Schedule.objects.get_or_create(
+        user=request.user, date=parsed_date
+    )
+
+    if not _consume_rate_limit(
+        request.user.id, "ai_chat_rl", settings.LLM_CHAT_RATE_LIMIT_PER_HOUR
+    ):
+        return _rate_limited_response()
+
+    last_user_msg = messages[-1]["content"]
+
+    current_blocks = list(
+        TimeBlock.objects.filter(schedule=schedule).order_by(
+            "start_time", "sort_order"
+        )
+    )
+    now = timezone.localtime()
+
+    try:
+        result = run_chat(messages, schedule, current_blocks, now)
+    except AIError as e:
+        _log_chat_failure(schedule, last_user_msg, messages, e)
+        status = next(
+            (s for cls, s in _AI_ERROR_STATUS.items() if isinstance(e, cls)),
+            None,
+        )
+        if status is None:
+            logger.error(
+                "Unmapped AIError subclass %s — add to _AI_ERROR_STATUS",
+                type(e).__name__,
+            )
+            status = 500
+        return JsonResponse({"errors": {"detail": str(e)}}, status=status)
+
+    audit_response = _build_chat_audit_response(
+        messages, result.raw_response_text, error_class=None
+    )
+    interaction = _log_interaction(
+        schedule, last_user_msg, audit_response, result.parsed_actions
+    )
+
+    # Clarifying-question turn — no mutations, no schedule status flip.
+    if result.ask is not None:
+        _mark_success(interaction)
+        return JsonResponse(
+            {
+                "blocks": None,
+                "explanation": result.explanation,
+                "ask": result.ask,
+                "applied": False,
+            }
+        )
+
+    # Chit-chat / "thanks" turn — empty actions and null ask.
+    if not result.parsed_actions:
+        _mark_success(interaction)
+        return JsonResponse(
+            {
+                "blocks": None,
+                "explanation": result.explanation,
+                "ask": None,
+                "applied": False,
+            }
+        )
+
+    # Apply path: same select_for_update + per-action dispatcher as
+    # ai_command. Re-fetches under the lock so a concurrent edit between
+    # the LLM call and the apply surfaces as a clean per-action error.
+    try:
+        with transaction.atomic():
+            locked_blocks = list(
+                TimeBlock.objects.filter(schedule=schedule).select_for_update()
+            )
+            blocks_by_id = {b.id: b for b in locked_blocks}
+            for idx, action in enumerate(result.parsed_actions):
+                err = _apply_action(schedule, blocks_by_id, action, idx)
+                if err is not None:
+                    raise _Rollback(err)
+    except _Rollback as rb:
+        logger.warning(
+            "AI chat apply failed (user=%s, schedule=%s, actions=%s)",
+            request.user.id,
+            schedule.id,
+            len(result.parsed_actions),
+        )
+        return rb.response
+
+    _mark_success(interaction)
+    schedule.mark_active_on_edit()
+
+    result_blocks = TimeBlock.objects.filter(schedule=schedule).order_by(
+        "start_time", "sort_order"
+    )
+    logger.info(
+        "AI chat applied (user=%s, schedule=%s, actions=%s)",
+        request.user.id,
+        schedule.id,
+        len(result.parsed_actions),
+    )
+    return JsonResponse(
+        {
+            "blocks": [block_to_dict(b) for b in result_blocks],
+            "explanation": result.explanation,
+            "ask": None,
+            "applied": True,
         }
     )
