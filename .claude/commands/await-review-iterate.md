@@ -2,6 +2,14 @@ Run the PR review iteration loop on the current branch's open PR: push → wait 
 
 This is the **iterate-and-fix** variant of a read-only PR-review triage skill — same parsing logic for the bot's comment, but here we actually push commits and loop. The merge step is **never** automatic — see RULES.md § "PR review iteration loop (AI-driven changes)" for the rationale.
 
+> **Run autonomously. Do NOT pause to confirm intermediate steps.** This loop is meant to push, wait, triage, edit code, run tests, push fixes, and repeat without checking in with the user between steps. The user-gated actions are limited to:
+>
+> - Drafting a PR title/body **when no PR exists** (Step 2 — explicit confirmation required before `gh pr create`).
+> - The **final `gh pr merge`** at the end of Step 9 (always user-gated; never auto-merge).
+> - Anything covered by the harness `permissions.ask` allowlist — destructive git ops (`git push --force`, `git reset --hard`, branch deletion, `gh pr close` / `delete`).
+>
+> Everything else — re-running tests after fixes, posting rejection comments, pushing follow-up commits, calling Monitor for the next review cycle, fetching PR comments — runs without prompting. The harness allowlist in `.claude/settings.local.json` is configured to match this expectation; if a tool call still triggers a permission prompt during the loop, that's a missing allowlist entry, not a step that needs user attention. (You may also encounter prompts from Claude itself if it has been overly cautious — those should be silenced too: don't re-ask the user for permission inside an active loop, you already have it from the loop's invocation.)
+
 ## Step 1 — Push if there is anything to push
 
 Run in parallel:
