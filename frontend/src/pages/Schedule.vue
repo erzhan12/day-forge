@@ -9,9 +9,15 @@ import AddBlockForm from "../components/AddBlockForm.vue"
 import NowLine from "../components/NowLine.vue"
 import UndoToast from "../components/UndoToast.vue"
 import CommandBar from "../components/CommandBar.vue"
+import ChatSidebar from "../components/ChatSidebar.vue"
 import DraftBadge from "../components/DraftBadge.vue"
 import RegenerateDraftButton from "../components/RegenerateDraftButton.vue"
 import { todayString } from "../utils/date"
+import { useViewport } from "../composables/useViewport"
+import {
+  readChatSidebarOpen,
+  writeChatSidebarOpen,
+} from "../utils/chatSidebarStorage"
 import {
   DAY_START, DAY_END, DAY_START_MINUTES, DAY_END_MINUTES,
   PX_PER_MINUTE, timeToMinutes, minutesToTime,
@@ -84,7 +90,7 @@ provide("drag", { startDrag, isDragging, dragBlockId, shiftedBlockIds })
 provide("scheduleContainer", scheduleBodyRef)
 
 // Multi-turn chat thread (feature 0007). State lives in `useChat`
-// (module-level) so the bottom dock and the future sidebar share one
+// (module-level) so the bottom dock and the sidebar variant share one
 // thread. Re-anchor the active date here so navigation between days
 // always resets the thread — without this, a follow-up like "ага,
 // добавь его" authored against day A could mutate day B. The watcher is
@@ -95,6 +101,23 @@ watch(
   (d) => setChatActiveDate(d),
   { immediate: true },
 )
+
+// Feature 0008 — viewport-driven chat surface choice.
+// Wide (≥1024px) → ChatSidebar (right-hand panel, controlled open
+// state); narrow → CommandBar dock. `useChat` is module-level so the
+// active thread survives the switch.
+const { isWide } = useViewport()
+const sidebarOpen = ref<boolean>(readChatSidebarOpen())
+watch(sidebarOpen, writeChatSidebarOpen)
+
+const chatSidebarWidth = computed(() => {
+  if (!isWide.value) return "0px"
+  return sidebarOpen.value ? "380px" : "32px"
+})
+
+const schedulePageStyle = computed(() => ({
+  "--chat-sidebar-width": chatSidebarWidth.value,
+}))
 
 // Per-component-instance set of dates the auto-draft has already been
 // attempted for. Inertia's same-component navigation sometimes preserves
@@ -329,7 +352,7 @@ function logout() {
 </script>
 
 <template>
-  <div class="schedule-page">
+  <div class="schedule-page" :style="schedulePageStyle">
     <DateNavigator :date="date">
       <template #status>
         <DraftBadge
@@ -361,7 +384,11 @@ function logout() {
       :initial-end-time="prefillEnd"
     />
 
-    <div ref="scheduleBodyRef" class="schedule-body">
+    <div
+      ref="scheduleBodyRef"
+      class="schedule-body"
+      :class="{ 'has-dock': !isWide }"
+    >
       <div v-if="isGeneratingDraft" class="draft-overlay" aria-live="polite">
         <span class="overlay-spinner" />
         <span class="overlay-text">Generating draft…</span>
@@ -457,26 +484,45 @@ function logout() {
       @dismiss="dismissToast"
     />
 
-    <CommandBar
+    <ChatSidebar
+      v-if="isWide"
+      v-model:open="sidebarOpen"
       :date="date"
       :snapshot-blocks="snapshotBlocks"
       :push-undo="pushUndo"
+    />
+    <CommandBar
+      v-else
+      :date="date"
+      :snapshot-blocks="snapshotBlocks"
+      :push-undo="pushUndo"
+      variant="dock"
     />
   </div>
 </template>
 
 <style scoped>
 .schedule-page {
+  /* Explicit content-box so `padding-right: var(--chat-sidebar-width)`
+     extends the page width without eating into the 640px content area.
+     The global `*` reset in app.css sets border-box; this is a scoped
+     override. */
+  box-sizing: content-box;
   max-width: 640px;
   margin: 0 auto;
   min-height: 100vh;
   background: #f9fafb;
+  padding-right: var(--chat-sidebar-width, 0);
 }
 
 .schedule-body {
   position: relative;
   padding: 8px 16px;
-  /* Bottom padding so the fixed command bar doesn't occlude the last block. */
+}
+
+/* Bottom padding only when the fixed dock is rendered (narrow viewport);
+   wide screens use the sidebar and don't need to clear the dock. */
+.schedule-body.has-dock {
   padding-bottom: 88px;
 }
 

@@ -16,7 +16,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { mount, VueWrapper, flushPromises } from "@vue/test-utils"
-import { ref, type Ref } from "vue"
+import { nextTick, ref, type Ref } from "vue"
 
 // --- mocks ---------------------------------------------------------------
 
@@ -113,8 +113,48 @@ const STUBS = {
   NowLine: true,
   UndoToast: true,
   CommandBar: true,
+  ChatSidebar: true,
   DraftBadge: true,
   RegenerateDraftButton: true,
+}
+
+// JSDOM doesn't ship matchMedia; useViewport() (called on Schedule mount
+// since feature 0008) needs a stub. Default to narrow (matches=false)
+// for the auto-draft tests — they don't care about the chat surface.
+function stubMatchMedia(matches = false): void {
+  vi.stubGlobal(
+    "matchMedia",
+    vi.fn().mockImplementation((query: string) => ({
+      matches,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+    })),
+  )
+}
+
+function stubLocalStorage(): void {
+  const store: Record<string, string> = {}
+  vi.stubGlobal("localStorage", {
+    getItem: vi.fn((key: string) => store[key] ?? null),
+    setItem: vi.fn((key: string, value: string) => {
+      store[key] = String(value)
+    }),
+    removeItem: vi.fn((key: string) => {
+      delete store[key]
+    }),
+    clear: vi.fn(() => {
+      for (const key of Object.keys(store)) delete store[key]
+    }),
+    key: vi.fn((index: number) => Object.keys(store)[index] ?? null),
+    get length() {
+      return Object.keys(store).length
+    },
+  })
 }
 
 let wrapper: VueWrapper | null = null
@@ -141,10 +181,9 @@ function mountPage(props: {
 
 describe("Schedule.vue auto-draft watcher", () => {
   beforeEach(() => {
-    generateDraft.mockClear()
+    stubLocalStorage()
+    stubMatchMedia(false)
     generateDraft.mockResolvedValue({ ok: true, explanation: null })
-    pushUndo.mockClear()
-    snapshotBlocks.mockClear()
     isGeneratingDraft.value = false
     lastDraftError.value = null
   })
@@ -152,6 +191,9 @@ describe("Schedule.vue auto-draft watcher", () => {
   afterEach(() => {
     wrapper?.unmount()
     wrapper = null
+    localStorage.clear()
+    vi.unstubAllGlobals()
+    vi.clearAllMocks()
   })
 
   it("(a) fires generateDraft once on first mount when auto_draft_pending=true and blocks are empty", async () => {
@@ -315,5 +357,100 @@ describe("Schedule.vue auto-draft watcher", () => {
     await flushPromises()
     expect(generateDraft).toHaveBeenCalledTimes(1)
     expect(pushUndo).not.toHaveBeenCalled()
+  })
+})
+
+// --- feature 0008: viewport-driven chat surface routing ----------------
+
+import ChatSidebar from "../src/components/ChatSidebar.vue"
+import CommandBar from "../src/components/CommandBar.vue"
+import { CHAT_SIDEBAR_OPEN_KEY } from "../src/utils/chatSidebarStorage"
+
+describe("Schedule.vue chat surface routing (feature 0008)", () => {
+  beforeEach(() => {
+    stubLocalStorage()
+    stubMatchMedia(false)
+  })
+
+  afterEach(() => {
+    wrapper?.unmount()
+    wrapper = null
+    localStorage.clear()
+    vi.unstubAllGlobals()
+    vi.clearAllMocks()
+  })
+
+  function mountStubbedSchedule() {
+    return mount(Schedule, {
+      props: {
+        schedule: makeSchedule("2026-05-04"),
+        blocks: [],
+        date: "2026-05-04",
+        auto_draft_pending: false,
+        has_template_for_type: true,
+        slot_type: "weekday" as const,
+      },
+      global: { stubs: { ...STUBS, ChatSidebar: true } },
+    })
+  }
+
+  function getSchedulePageStyle(w: VueWrapper): string {
+    return (w.find(".schedule-page").attributes("style") ?? "")
+      .replace(/\s+/g, "")
+      .toLowerCase()
+  }
+
+  it("wide viewport — renders ChatSidebar, not CommandBar; --chat-sidebar-width: 380px", () => {
+    stubMatchMedia(true)
+    wrapper = mountStubbedSchedule()
+    expect(wrapper.findComponent(ChatSidebar).exists()).toBe(true)
+    expect(wrapper.findComponent(CommandBar).exists()).toBe(false)
+    expect(getSchedulePageStyle(wrapper)).toContain("--chat-sidebar-width:380px")
+  })
+
+  it("wide viewport with persisted collapse — renders ChatSidebar with --chat-sidebar-width: 32px", () => {
+    localStorage.setItem(CHAT_SIDEBAR_OPEN_KEY, "false")
+    stubMatchMedia(true)
+    wrapper = mountStubbedSchedule()
+    expect(wrapper.findComponent(ChatSidebar).exists()).toBe(true)
+    expect(wrapper.findComponent(CommandBar).exists()).toBe(false)
+    expect(getSchedulePageStyle(wrapper)).toContain("--chat-sidebar-width:32px")
+  })
+
+  it("wide viewport updates --chat-sidebar-width reactively when ChatSidebar emits collapse", async () => {
+    stubMatchMedia(true)
+    wrapper = mountStubbedSchedule()
+    expect(getSchedulePageStyle(wrapper)).toContain("--chat-sidebar-width:380px")
+
+    wrapper.findComponent(ChatSidebar).vm.$emit("update:open", false)
+    await nextTick()
+
+    expect(getSchedulePageStyle(wrapper)).toContain("--chat-sidebar-width:32px")
+  })
+
+  it("narrow viewport — renders CommandBar dock, not ChatSidebar; --chat-sidebar-width: 0px; .schedule-body has class has-dock", () => {
+    stubMatchMedia(false)
+    wrapper = mountStubbedSchedule()
+    expect(wrapper.findComponent(CommandBar).exists()).toBe(true)
+    expect(wrapper.findComponent(ChatSidebar).exists()).toBe(false)
+    expect(getSchedulePageStyle(wrapper)).toContain("--chat-sidebar-width:0px")
+    expect(wrapper.find(".schedule-body").classes()).toContain("has-dock")
+  })
+
+  it("narrow viewport ignores persisted sidebar=false (precedence rule)", () => {
+    // Even with localStorage saying the sidebar is collapsed, on a
+    // narrow viewport the dock takes over and the CSS var collapses to
+    // 0px so the schedule isn't padded for a non-existent sidebar.
+    localStorage.setItem(CHAT_SIDEBAR_OPEN_KEY, "false")
+    stubMatchMedia(false)
+    wrapper = mountStubbedSchedule()
+    expect(getSchedulePageStyle(wrapper)).toContain("--chat-sidebar-width:0px")
+  })
+
+  it(".schedule-page has box-sizing: content-box (CSS contract for padding-right model)", () => {
+    stubMatchMedia(true)
+    wrapper = mountStubbedSchedule()
+    const el = wrapper.find(".schedule-page").element as HTMLElement
+    expect(window.getComputedStyle(el).boxSizing).toBe("content-box")
   })
 })
