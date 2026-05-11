@@ -5,6 +5,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { mount, VueWrapper } from "@vue/test-utils"
 import { nextTick, ref } from "vue"
+import { clearLocalStorage } from "./helpers/storage"
 
 const setActiveDate = vi.fn()
 const clearThread = vi.fn()
@@ -60,6 +61,7 @@ function mountBar(overrides: Record<string, unknown> = {}) {
       date: "2026-04-18",
       snapshotBlocks: makeSnapshot,
       pushUndo: vi.fn(),
+      variant: "dock" as const,
       ...overrides,
     },
     attachTo: document.body,
@@ -80,6 +82,9 @@ describe("CommandBar (chat dock)", () => {
   afterEach(() => {
     wrapper?.unmount()
     wrapper = null
+    clearLocalStorage()
+    vi.unstubAllGlobals()
+    vi.clearAllMocks()
   })
 
   it("registers the active date on mount", () => {
@@ -227,6 +232,7 @@ describe("CommandBar (chat dock)", () => {
         date: "2026-04-18",
         snapshotBlocks: makeSnapshot,
         pushUndo: vi.fn(),
+        variant: "dock" as const,
       },
       global: {
         provide: {
@@ -241,25 +247,6 @@ describe("CommandBar (chat dock)", () => {
     expect(ta.disabled).toBe(true)
   })
 
-  it("renders on all viewports in PR A (no useMediaQuery hide)", () => {
-    // PR A keeps the bottom dock visible regardless of viewport width;
-    // PR B will introduce the sidebar + flip this assertion.
-    const original = window.innerWidth
-    Object.defineProperty(window, "innerWidth", {
-      configurable: true,
-      value: 1440,
-    })
-    try {
-      const w = mountBar()
-      expect(w.find('[data-testid="command-bar"]').exists()).toBe(true)
-    } finally {
-      Object.defineProperty(window, "innerWidth", {
-        configurable: true,
-        value: original,
-      })
-    }
-  })
-
   it("clears input and blurs on Escape", async () => {
     const w = mountBar()
     const ta = w.find("textarea.command-input")
@@ -268,5 +255,127 @@ describe("CommandBar (chat dock)", () => {
     taEl.focus()
     await ta.trigger("keydown", { key: "Escape" })
     expect((taEl as HTMLTextAreaElement).value).toBe("")
+  })
+
+  // --- feature 0008: variant-aware behavior --------------------------
+
+  it("variant=dock — root and textarea carry variant-dock class", () => {
+    const w = mountBar({ variant: "dock" as const })
+    expect(w.find('[data-testid="command-bar"]').classes()).toContain(
+      "variant-dock",
+    )
+    expect(w.find("textarea.command-input").classes()).toContain("variant-dock")
+  })
+
+  it("variant=sidebar — root and textarea carry variant-sidebar class", () => {
+    const w = mountBar({ variant: "sidebar" as const })
+    expect(w.find('[data-testid="command-bar"]').classes()).toContain(
+      "variant-sidebar",
+    )
+    expect(w.find("textarea.command-input").classes()).toContain(
+      "variant-sidebar",
+    )
+  })
+
+  it("variant=dock — textarea starts with rows=1 attribute", () => {
+    const w = mountBar({ variant: "dock" as const })
+    const ta = w.find("textarea.command-input")
+      .element as HTMLTextAreaElement
+    expect(ta.rows).toBe(1)
+  })
+
+  it("variant=sidebar — textarea starts with rows=6 attribute (Phase 2.2 first-paint contract)", () => {
+    const w = mountBar({ variant: "sidebar" as const })
+    const ta = w.find("textarea.command-input")
+      .element as HTMLTextAreaElement
+    expect(ta.rows).toBe(6)
+  })
+
+  it("variant=dock caps visible messages at 4 (latest only)", () => {
+    messages.value = Array.from({ length: 6 }, (_, i) => ({
+      role: "user" as const,
+      content: `m${i + 1}`,
+      ask: null,
+      explanation: null,
+      ts: i + 1,
+    }))
+    const w = mountBar({ variant: "dock" as const })
+    const bubbles = w.findAll(".bubble")
+    expect(bubbles.length).toBe(4)
+    expect(bubbles[0].text()).toBe("m3")
+    expect(bubbles[3].text()).toBe("m6")
+  })
+
+  it("variant=sidebar shows all messages (no cap)", () => {
+    messages.value = Array.from({ length: 6 }, (_, i) => ({
+      role: "user" as const,
+      content: `m${i + 1}`,
+      ask: null,
+      explanation: null,
+      ts: i + 1,
+    }))
+    const w = mountBar({ variant: "sidebar" as const })
+    const bubbles = w.findAll(".bubble")
+    expect(bubbles.length).toBe(6)
+    expect(bubbles[0].text()).toBe("m1")
+    expect(bubbles[5].text()).toBe("m6")
+  })
+
+  // --- permanent clear-btn regression cases --------------------------
+  // Empirically captured during 0008 design review (see plan Phase
+  // 5.1) — protection against future "simplifications" that would
+  // re-break either the in-flight cancel UX (`ref(false)` should NOT
+  // disable) or the draft-generation lockout (`ref(true)` should).
+
+  it("clear button is enabled when scheduleDisabled is ref(false)", () => {
+    messages.value = [
+      {
+        role: "user" as const,
+        content: "hi",
+        ask: null,
+        explanation: null,
+        ts: 1,
+      },
+    ]
+    const w = mount(CommandBar, {
+      props: {
+        date: "2026-04-18",
+        snapshotBlocks: makeSnapshot,
+        pushUndo: vi.fn(),
+        variant: "dock" as const,
+      },
+      global: { provide: { scheduleDisabled: ref(false) } },
+      attachTo: document.body,
+    })
+    wrapper = w
+    const btn = w.find('[data-testid="chat-clear"]')
+      .element as HTMLButtonElement
+    expect(btn.disabled).toBe(false)
+  })
+
+  it("clear button is disabled when scheduleDisabled is ref(true)", () => {
+    messages.value = [
+      {
+        role: "user" as const,
+        content: "hi",
+        ask: null,
+        explanation: null,
+        ts: 1,
+      },
+    ]
+    const w = mount(CommandBar, {
+      props: {
+        date: "2026-04-18",
+        snapshotBlocks: makeSnapshot,
+        pushUndo: vi.fn(),
+        variant: "dock" as const,
+      },
+      global: { provide: { scheduleDisabled: ref(true) } },
+      attachTo: document.body,
+    })
+    wrapper = w
+    const btn = w.find('[data-testid="chat-clear"]')
+      .element as HTMLButtonElement
+    expect(btn.disabled).toBe(true)
   })
 })

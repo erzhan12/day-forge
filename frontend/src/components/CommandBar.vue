@@ -1,29 +1,36 @@
 <script setup lang="ts">
-// Multi-turn AI chat dock (feature 0007).
+// Multi-turn AI chat (feature 0007 — bottom dock; feature 0008 — right
+// sidebar variant).
 //
-// Replaces the original single-line `<input>` Phase-4 command bar with a
-// chat thread + autogrow `<textarea>`. State lives in `useChat` so the
-// future sidebar (PR B) can share the same module-level thread; this
-// component renders only when the bottom dock is visible.
+// One component, two variants:
+//   * `variant="dock"`     — fixed bottom dock, dark theme, used on
+//     narrow viewports (<1024px).
+//   * `variant="sidebar"`  — flex column inside a right-hand sidebar,
+//     light theme, used on wide viewports (≥1024px) when the sidebar
+//     is open. Larger textarea (min 6 rows, max 20) and unbounded
+//     thread history.
 //
-// Keyboard:
+// State lives in `useChat` (module-level singleton), so the two
+// variants share one thread — switching viewports preserves chat.
+//
+// Keyboard (both variants):
 //   * Enter sends the turn
 //   * Shift+Enter inserts a newline
 //   * Escape clears the input
 //   * `/` (when focus is outside form fields) moves focus into the textarea
-//
-// The latest few messages render above the textarea so the user sees
-// the assistant's clarifying questions inline without a sidebar.
 
 import type { Ref } from "vue"
 import { computed, inject, onMounted, onUnmounted, ref, watch } from "vue"
 import type { TimeBlock, UndoAction } from "../types"
 import { useChat } from "../composables/useChat"
 
+type Variant = "dock" | "sidebar"
+
 const props = defineProps<{
   date: string
   snapshotBlocks: () => TimeBlock[]
   pushUndo: (action: UndoAction) => void
+  variant: Variant
 }>()
 
 const {
@@ -59,26 +66,37 @@ const PLACEHOLDERS = [
 const placeholder = ref(PLACEHOLDERS[0])
 let placeholderTimer: ReturnType<typeof setInterval> | null = null
 
-// Tunables for the bottom dock UI. Pulled out as named constants so the
-// magic numbers don't drift across handlers — `LINE_HEIGHT_PX` must match
-// the `line-height` rule on `.command-input` in <style>; if you change
-// one, change the other.
-const MAX_VISIBLE_MESSAGES = 4
+// Tunables. `LINE_HEIGHT_PX` must match the `line-height` rule on
+// `.command-input` in <style>; the variant-keyed min/max line counts
+// must match the `min-height`/`max-height` rules on the variant-scoped
+// `.command-input.variant-*` selectors below — keep JS and CSS in sync.
+const DOCK_MAX_VISIBLE_MESSAGES = 4
 const LINE_HEIGHT_PX = 20
-const MAX_TEXTAREA_LINES = 10
 const PLACEHOLDER_ROTATION_MS = 6_000
+
+const TEXTAREA_LINES: Record<Variant, { min: number; max: number }> = {
+  dock: { min: 1, max: 10 },
+  sidebar: { min: 6, max: 20 },
+}
+
+const textareaMinLines = computed(() => TEXTAREA_LINES[props.variant].min)
+const textareaMaxLines = computed(() => TEXTAREA_LINES[props.variant].max)
 
 const visibleMessages = computed(() => {
   const arr = messages.value
-  return arr.slice(Math.max(0, arr.length - MAX_VISIBLE_MESSAGES))
+  if (props.variant === "dock") {
+    return arr.slice(Math.max(0, arr.length - DOCK_MAX_VISIBLE_MESSAGES))
+  }
+  return arr
 })
 
 function autosize(): void {
   const el = inputEl.value
   if (!el) return
   el.style.height = "auto"
-  const maxHeight = LINE_HEIGHT_PX * MAX_TEXTAREA_LINES
-  el.style.height = Math.min(el.scrollHeight, maxHeight) + "px"
+  const minHeight = LINE_HEIGHT_PX * textareaMinLines.value
+  const maxHeight = LINE_HEIGHT_PX * textareaMaxLines.value
+  el.style.height = Math.min(Math.max(el.scrollHeight, minHeight), maxHeight) + "px"
 }
 
 async function handleSubmit(): Promise<void> {
@@ -153,7 +171,11 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="command-bar" data-testid="command-bar">
+  <div
+    class="command-bar"
+    :class="`variant-${variant}`"
+    data-testid="command-bar"
+  >
     <!-- Always visible (not gated on visibleMessages) so the warning
          lands before the user types anything, not after. -->
     <div class="privacy-hint" data-testid="chat-privacy-hint">
@@ -184,8 +206,9 @@ onUnmounted(() => {
       <textarea
         ref="inputEl"
         v-model="input"
-        rows="1"
+        :rows="textareaMinLines"
         class="command-input"
+        :class="`variant-${variant}`"
         :placeholder="placeholder + ' (press / to focus, Shift+Enter for newline)'"
         :disabled="inputDisabled"
         autocomplete="off"
@@ -223,6 +246,12 @@ onUnmounted(() => {
 
 <style scoped>
 .command-bar {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  padding: 8px 16px;
+}
+
+/* Dock variant — fixed bottom bar on narrow viewports. */
+.command-bar.variant-dock {
   position: fixed;
   left: 0;
   right: 0;
@@ -231,12 +260,18 @@ onUnmounted(() => {
   color: #e5e7eb;
   border-top: 1px solid #1f2937;
   z-index: 30;
-  padding: 8px 16px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* Sidebar variant — fills the parent (ChatSidebar) as a flex column. */
+.command-bar.variant-sidebar {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  color: #1f2937;
 }
 
 .privacy-hint {
-  max-width: 640px;
   margin: 0 auto 4px;
   font-size: 11px;
   color: #6b7280;
@@ -244,14 +279,27 @@ onUnmounted(() => {
   font-style: italic;
 }
 
-.thread {
+.variant-dock .privacy-hint {
   max-width: 640px;
-  margin: 0 auto 6px;
+}
+
+.thread {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  max-height: 200px;
   overflow-y: auto;
+}
+
+.variant-dock .thread {
+  max-width: 640px;
+  margin: 0 auto 6px;
+  max-height: 200px;
+}
+
+.variant-sidebar .thread {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0 0 6px;
 }
 
 .bubble {
@@ -263,16 +311,32 @@ onUnmounted(() => {
   word-break: break-word;
 }
 
-.bubble-user {
+.variant-dock .bubble-user {
   background: #1e3a8a;
   color: #e0e7ff;
+}
+
+.variant-dock .bubble-assistant {
+  background: #1f2937;
+  color: #d1d5db;
+}
+
+.variant-sidebar .bubble-user {
+  background: #dbeafe;
+  color: #1e3a8a;
+}
+
+.variant-sidebar .bubble-assistant {
+  background: #f3f4f6;
+  color: #1f2937;
+}
+
+.bubble-user {
   align-self: flex-end;
   max-width: 85%;
 }
 
 .bubble-assistant {
-  background: #1f2937;
-  color: #d1d5db;
   align-self: flex-start;
   max-width: 85%;
 }
@@ -282,11 +346,14 @@ onUnmounted(() => {
 }
 
 .command-row {
-  max-width: 640px;
-  margin: 0 auto;
   display: flex;
   align-items: flex-start;
   gap: 8px;
+}
+
+.variant-dock .command-row {
+  max-width: 640px;
+  margin: 0 auto;
 }
 
 .status-dot {
@@ -319,19 +386,27 @@ onUnmounted(() => {
   background: transparent;
   border: none;
   outline: none;
-  color: #f9fafb;
   font: inherit;
   padding: 6px 0;
   resize: none;
-  /* Must equal `LINE_HEIGHT_PX` in <script> — `autosize()` derives the
-     max textarea height as LINE_HEIGHT_PX × MAX_TEXTAREA_LINES, so a
-     drift between this rule and the constant would mis-size the
-     scroll cap. Pinned to a px value rather than a unitless multiplier
-     so font-size changes don't silently break that contract. */
+  /* Must equal `LINE_HEIGHT_PX` in <script>; `autosize()` derives the
+     bounds as LINE_HEIGHT_PX × {min,max}_TEXTAREA_LINES per variant.
+     Pinned to a px value rather than a unitless multiplier so font-size
+     changes don't silently break that contract. */
   line-height: 20px;
-  min-height: 20px;
-  max-height: 200px;
   overflow-y: auto;
+}
+
+.command-input.variant-dock {
+  color: #f9fafb;
+  min-height: 20px; /* 1 line */
+  max-height: 200px; /* 10 lines */
+}
+
+.command-input.variant-sidebar {
+  color: #111827;
+  min-height: 120px; /* 6 lines */
+  max-height: 400px; /* 20 lines */
 }
 
 .command-input::placeholder {
@@ -387,11 +462,18 @@ onUnmounted(() => {
 }
 
 .error-row {
-  max-width: 640px;
   margin: 6px auto 0;
   font-size: 12px;
   padding: 4px 0 0 24px;
-  color: #fca5a5;
   cursor: pointer;
+}
+
+.variant-dock .error-row {
+  max-width: 640px;
+  color: #fca5a5;
+}
+
+.variant-sidebar .error-row {
+  color: #b91c1c;
 }
 </style>
