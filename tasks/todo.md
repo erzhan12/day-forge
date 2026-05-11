@@ -237,3 +237,23 @@
   `run_draft` stubbed, and asserts `assertNumQueries(<expected>)`.
   Out of scope for feature 0007 because it tests a Phase-6 codepath.
   Suggested by `claude-review` on PR #15 iter 6.
+
+- [ ] **PR #16 — defensive-runtime suggestions rejected as
+  false-positives.** Five P2/P3 findings from `claude-review` on PR #16
+  asked for runtime guards that contradict CLAUDE.md's "Don't add error
+  handling for scenarios that can't happen" rule and the
+  defensive-runtime entry in this file's false-positive catalogue:
+  (1) `TEXTAREA_LINES[props.variant] ?? TEXTAREA_LINES.dock` fallback —
+  TypeScript enforces the union, Vue's prop validator gates the
+  boundary; (2) `typeof sidebarOpen.value === 'boolean'` check in
+  `chatSidebarWidth` — the ref is typed `boolean` and initialised from
+  a `boolean`-returning helper; (3) `if (typeof window === 'undefined')
+  throw` in `useViewport` — the plan's Phase-1 design note explicitly
+  rejects an SSR guard because Inertia renders client-side; (4) JSDOM
+  unit tests for `autosize()` min/max clamps — `scrollHeight` is `0`
+  under JSDOM (no layout engine), so any clamp test would assert
+  against a degenerate value, not real browser behaviour; (5) `if
+  (!target) return` in `handleGlobalKeydown` — `target?.tagName?.…`
+  already optional-chains the null case and falls through to the
+  no-op branch. Rejected per the iteration loop's P0/P1-only-deep-
+  triage rule (skill docs § Step 6/7).

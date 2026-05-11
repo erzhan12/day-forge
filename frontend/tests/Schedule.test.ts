@@ -447,6 +447,38 @@ describe("Schedule.vue chat surface routing (feature 0008)", () => {
     expect(getSchedulePageStyle(wrapper)).toContain("--chat-sidebar-width:0px")
   })
 
+  it("flipping the matchMedia listener from narrow to wide unmounts CommandBar and mounts ChatSidebar", async () => {
+    // Capture the change handler the composable registers so we can
+    // fire a synthetic media-query change after mount and verify the
+    // routing swaps the children without a remount loop.
+    let changeHandler: ((e: { matches: boolean }) => void) | null = null
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn().mockImplementation((query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn((_evt: string, h: (e: { matches: boolean }) => void) => {
+          changeHandler = h
+        }),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+      })),
+    )
+    wrapper = mountStubbedSchedule()
+    expect(wrapper.findComponent(CommandBar).exists()).toBe(true)
+    expect(wrapper.findComponent(ChatSidebar).exists()).toBe(false)
+
+    expect(changeHandler).not.toBeNull()
+    changeHandler!({ matches: true })
+    await nextTick()
+
+    expect(wrapper.findComponent(ChatSidebar).exists()).toBe(true)
+    expect(wrapper.findComponent(CommandBar).exists()).toBe(false)
+  })
+
   it(".schedule-page has box-sizing: content-box (CSS contract for padding-right model)", () => {
     stubMatchMedia(true)
     wrapper = mountStubbedSchedule()
