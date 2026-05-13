@@ -14,6 +14,7 @@ const isProcessing = ref(false)
 const lastError = ref<string | null>(null)
 const pendingAsk = ref<string | null>(null)
 const apiHealthy = ref(true)
+const draftInput = ref("")
 const messages = ref<
   {
     role: "user" | "assistant"
@@ -31,6 +32,7 @@ vi.mock("../src/composables/useChat", () => ({
     lastError,
     pendingAsk,
     apiHealthy,
+    draftInput,
     setActiveDate,
     clearThread,
     submitTurn,
@@ -76,6 +78,7 @@ describe("CommandBar (chat dock)", () => {
     lastError.value = null
     pendingAsk.value = null
     apiHealthy.value = true
+    draftInput.value = ""
     messages.value = []
   })
 
@@ -255,6 +258,19 @@ describe("CommandBar (chat dock)", () => {
     taEl.focus()
     await ta.trigger("keydown", { key: "Escape" })
     expect((taEl as HTMLTextAreaElement).value).toBe("")
+  })
+
+  it("preserves an unsent draft across CommandBar remounts", async () => {
+    const w = mountBar({ variant: "sidebar" as const })
+    await w.find("textarea.command-input").setValue("schedule review prep")
+
+    w.unmount()
+    wrapper = null
+    const remounted = mountBar({ variant: "sidebar" as const })
+    const ta = remounted.find("textarea.command-input")
+      .element as HTMLTextAreaElement
+
+    expect(ta.value).toBe("schedule review prep")
   })
 
   // --- feature 0008: variant-aware behavior --------------------------

@@ -33,6 +33,7 @@ const isProcessing = ref(false)
 const lastError = ref<string | null>(null)
 const pendingAsk = ref<string | null>(null)
 const apiHealthy = ref(true)
+const draftInput = ref("")
 
 // Module-level counter, intentionally NOT a ref — it never participates
 // in rendering. Every `submitTurn` bumps it; `clearThread` (and via it,
@@ -93,7 +94,7 @@ function extractErrorMessage(
  * `clearThread()` is a logical cancel: it bumps the token, clears the
  * spinner directly (safe because the bump invalidates any in-flight
  * resolver), and resets the message list / pendingAsk / lastError —
- * but preserves `activeDate`.
+ * but preserves `activeDate` and the unsent draft input.
  */
 export function useChat() {
   function setActiveDate(date: string): void {
@@ -253,6 +254,7 @@ export function useChat() {
     lastError,
     pendingAsk,
     apiHealthy,
+    draftInput,
     setActiveDate,
     clearThread,
     submitTurn,
@@ -269,6 +271,7 @@ export function _resetChatStateForTests(): void {
   lastError.value = null
   pendingAsk.value = null
   apiHealthy.value = true
+  draftInput.value = ""
   latestRequestId = 0
 }
 
