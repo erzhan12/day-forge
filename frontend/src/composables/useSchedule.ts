@@ -1,9 +1,8 @@
 import { router } from "@inertiajs/vue3"
+import { type DateSource, readDate } from "../utils/dateSource"
 import { type ApiResult, requestJson } from "./useHttp"
 
 export type { ApiResult }
-
-type DateSource = string | (() => string)
 
 async function apiFetch(
   url: string,
@@ -15,10 +14,6 @@ async function apiFetch(
     router.reload({ only: ["blocks", "schedule"] })
   }
   return result
-}
-
-function readDate(date: DateSource): string {
-  return typeof date === "function" ? date() : date
 }
 
 export function useSchedule(date: DateSource) {

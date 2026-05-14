@@ -1,6 +1,7 @@
 import { ref } from "vue"
 import type { TimeBlock, UndoAction } from "../types"
 import type { ApiResult } from "./useSchedule"
+import { type DateSource, readDate } from "../utils/dateSource"
 import {
   DAY_START_MINUTES,
   DAY_END_MINUTES,
@@ -9,12 +10,6 @@ import {
   timeToMinutes,
   minutesToTime,
 } from "../utils/scheduleTime"
-
-type DateSource = string | (() => string)
-
-function readDate(date: DateSource): string {
-  return typeof date === "function" ? date() : date
-}
 
 /**
  * Resolve overlap conflicts after moving a block to a new time slot.
