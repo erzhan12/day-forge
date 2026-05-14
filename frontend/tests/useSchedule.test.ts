@@ -47,6 +47,52 @@ describe("useSchedule", () => {
     expect(router.reload).toHaveBeenCalledWith({ only: ["blocks", "schedule"] })
   })
 
+  it("accepts a plain string date (backward compatibility)", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      text: () => Promise.resolve('{"id":1}'),
+    })
+    vi.stubGlobal("fetch", fetchSpy)
+
+    const { createBlock } = useSchedule("2026-05-14")
+
+    await createBlock({
+      title: "Static-date add",
+      start_time: "09:00",
+      end_time: "10:00",
+      category: "work",
+    })
+
+    expect(fetchSpy).toHaveBeenCalledOnce()
+    expect(fetchSpy.mock.calls[0][0]).toBe(
+      "/api/schedules/2026-05-14/blocks/",
+    )
+  })
+
+  it("resolves createBlock date lazily from a getter", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      text: () => Promise.resolve('{"id":1}'),
+    })
+    vi.stubGlobal("fetch", fetchSpy)
+
+    let currentDate = "2026-04-10"
+    const { createBlock } = useSchedule(() => currentDate)
+    currentDate = "2026-04-11"
+
+    await createBlock({
+      title: "Moved-day add",
+      start_time: "09:00",
+      end_time: "10:00",
+      category: "work",
+    })
+
+    expect(fetchSpy).toHaveBeenCalledOnce()
+    expect(fetchSpy.mock.calls[0][0]).toBe(
+      "/api/schedules/2026-04-11/blocks/",
+    )
+  })
+
   it("returns errors on 400", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
       ok: false,

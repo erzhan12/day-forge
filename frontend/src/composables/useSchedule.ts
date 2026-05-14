@@ -1,4 +1,5 @@
 import { router } from "@inertiajs/vue3"
+import { type DateSource, readDate } from "../utils/dateSource"
 import { type ApiResult, requestJson } from "./useHttp"
 
 export type { ApiResult }
@@ -15,14 +16,14 @@ async function apiFetch(
   return result
 }
 
-export function useSchedule(date: string) {
+export function useSchedule(date: DateSource) {
   function createBlock(data: {
     title: string
     start_time: string
     end_time: string
     category: string
   }): Promise<ApiResult> {
-    return apiFetch(`/api/schedules/${date}/blocks/`, "POST", data)
+    return apiFetch(`/api/schedules/${readDate(date)}/blocks/`, "POST", data)
   }
 
   function updateBlock(

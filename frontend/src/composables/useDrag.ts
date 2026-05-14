@@ -1,6 +1,7 @@
 import { ref } from "vue"
 import type { TimeBlock, UndoAction } from "../types"
 import type { ApiResult } from "./useSchedule"
+import { type DateSource, readDate } from "../utils/dateSource"
 import {
   DAY_START_MINUTES,
   DAY_END_MINUTES,
@@ -175,7 +176,7 @@ export function resolveConflicts(
 }
 
 export function useDrag(
-  date: string,
+  date: DateSource,
   getCurrentBlocks: () => TimeBlock[],
   reorderBlocks: (
     updates: Array<{
@@ -399,7 +400,7 @@ export function useDrag(
         description: `Moved "${title}" to ${targetTime}`,
         type: "drag",
         previousBlocks: savedSnapshot,
-        scheduleDate: date,
+        scheduleDate: readDate(date),
       })
     }
   }

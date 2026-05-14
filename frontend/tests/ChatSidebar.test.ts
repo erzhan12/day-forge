@@ -14,6 +14,7 @@ const isProcessing = ref(false)
 const lastError = ref<string | null>(null)
 const pendingAsk = ref<string | null>(null)
 const apiHealthy = ref(true)
+const draftInput = ref("")
 const messages = ref<
   Array<{
     role: "user" | "assistant"
@@ -31,6 +32,7 @@ vi.mock("../src/composables/useChat", () => ({
     lastError,
     pendingAsk,
     apiHealthy,
+    draftInput,
     setActiveDate,
     clearThread,
     submitTurn,
@@ -47,6 +49,7 @@ beforeEach(() => {
   lastError.value = null
   pendingAsk.value = null
   apiHealthy.value = true
+  draftInput.value = ""
   messages.value = []
 })
 
@@ -147,5 +150,18 @@ describe("ChatSidebar — toggle behavior", () => {
     await wrapper.find('[data-testid="chat-sidebar-toggle"]').trigger("click")
     expect(getItem).not.toHaveBeenCalled()
     expect(setItem).not.toHaveBeenCalled()
+  })
+
+  it("preserves an unsent draft when collapsed and expanded", async () => {
+    wrapper = mountSidebar(true)
+    await wrapper.find("textarea.command-input").setValue("plan tomorrow")
+
+    await wrapper.setProps({ open: false })
+    expect(wrapper.find('[data-testid="command-bar"]').exists()).toBe(false)
+
+    await wrapper.setProps({ open: true })
+    const ta = wrapper.find("textarea.command-input")
+      .element as HTMLTextAreaElement
+    expect(ta.value).toBe("plan tomorrow")
   })
 })

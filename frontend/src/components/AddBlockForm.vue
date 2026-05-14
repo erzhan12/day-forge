@@ -10,7 +10,7 @@ const props = defineProps<{
   initialEndTime?: string
 }>()
 
-const { createBlock } = useSchedule(props.date)
+const { createBlock } = useSchedule(() => props.date)
 
 const undo = inject<{
   pushUndo: (action: UndoAction) => void
