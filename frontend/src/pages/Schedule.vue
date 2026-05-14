@@ -80,7 +80,7 @@ const {
   isDragging, dragBlockId, ghostTop, previewStartTime, previewEndTime,
   previewBlocks, shiftedBlockIds, startDrag, endDrag, cancelDrag,
 } = useDrag(
-  props.date, getBlocks, reorderBlocks, pushUndo, snapshotBlocks,
+  () => props.date, getBlocks, reorderBlocks, pushUndo, snapshotBlocks,
   () => scheduleDisabled.value,
 )
 

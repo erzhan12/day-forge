@@ -39,6 +39,7 @@ const {
   lastError,
   pendingAsk,
   apiHealthy,
+  draftInput,
   setActiveDate,
   clearThread,
   submitTurn,
@@ -55,7 +56,7 @@ const inputDisabled = computed(
   () => isProcessing.value || Boolean(scheduleDisabled?.value),
 )
 
-const input = ref("")
+const input = draftInput
 const inputEl = ref<HTMLTextAreaElement | null>(null)
 
 const PLACEHOLDERS = [
