@@ -10,6 +10,12 @@ import {
   minutesToTime,
 } from "../utils/scheduleTime"
 
+type DateSource = string | (() => string)
+
+function readDate(date: DateSource): string {
+  return typeof date === "function" ? date() : date
+}
+
 /**
  * Resolve overlap conflicts after moving a block to a new time slot.
  *
@@ -175,7 +181,7 @@ export function resolveConflicts(
 }
 
 export function useDrag(
-  date: string,
+  date: DateSource,
   getCurrentBlocks: () => TimeBlock[],
   reorderBlocks: (
     updates: Array<{
@@ -399,7 +405,7 @@ export function useDrag(
         description: `Moved "${title}" to ${targetTime}`,
         type: "drag",
         previousBlocks: savedSnapshot,
-        scheduleDate: date,
+        scheduleDate: readDate(date),
       })
     }
   }

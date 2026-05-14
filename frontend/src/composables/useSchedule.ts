@@ -3,6 +3,8 @@ import { type ApiResult, requestJson } from "./useHttp"
 
 export type { ApiResult }
 
+type DateSource = string | (() => string)
+
 async function apiFetch(
   url: string,
   method: string,
@@ -15,14 +17,18 @@ async function apiFetch(
   return result
 }
 
-export function useSchedule(date: string) {
+function readDate(date: DateSource): string {
+  return typeof date === "function" ? date() : date
+}
+
+export function useSchedule(date: DateSource) {
   function createBlock(data: {
     title: string
     start_time: string
     end_time: string
     category: string
   }): Promise<ApiResult> {
-    return apiFetch(`/api/schedules/${date}/blocks/`, "POST", data)
+    return apiFetch(`/api/schedules/${readDate(date)}/blocks/`, "POST", data)
   }
 
   function updateBlock(
