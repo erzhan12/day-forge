@@ -177,7 +177,7 @@ describe("useChat", () => {
   })
 
   describe("clearThread (logical cancel)", () => {
-    it("resets messages, pendingAsk, lastError; preserves activeDate", () => {
+    it("resets messages, pendingAsk, lastError; preserves activeDate and draftInput", () => {
       const chat = useChat()
       chat.setActiveDate("2026-05-07")
       chat.messages.value = [
@@ -185,6 +185,7 @@ describe("useChat", () => {
       ]
       chat.pendingAsk.value = "?"
       chat.lastError.value = "err"
+      chat.draftInput.value = "unsent message"
 
       chat.clearThread()
 
@@ -192,6 +193,7 @@ describe("useChat", () => {
       expect(chat.pendingAsk.value).toBe(null)
       expect(chat.lastError.value).toBe(null)
       expect(chat.activeDate.value).toBe("2026-05-07")
+      expect(chat.draftInput.value).toBe("unsent message")
     })
 
     it("bumps the request token", () => {
