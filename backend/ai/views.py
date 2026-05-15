@@ -440,8 +440,14 @@ def _apply_action(
 # ---------------------------------------------------------------------------
 
 
-def _apply_command_sync(schedule, result) -> None:
-    """Apply the AICommandResult under one atomic+select_for_update lock."""
+def _apply_actions_sync(schedule, result) -> None:
+    """Apply parsed actions under one atomic+select_for_update lock.
+
+    Used by both ``ai_command`` and ``ai_chat`` (the command-style apply
+    path). ``_apply_draft_sync`` stays separate because the draft path
+    locks the parent ``Schedule`` row and re-checks emptiness — different
+    semantics that don't merge cleanly.
+    """
     with transaction.atomic():
         locked_blocks = list(
             TimeBlock.objects.filter(schedule=schedule).select_for_update()
@@ -478,19 +484,6 @@ def _apply_draft_sync(schedule, result) -> None:
         blocks_by_id: dict = {}
         for idx, action in enumerate(result.parsed_actions):
             err = _apply_add(schedule, blocks_by_id, action, idx)
-            if err is not None:
-                raise _Rollback(err)
-
-
-def _apply_chat_sync(schedule, result) -> None:
-    """Apply the AIChatResult under the same lock pattern as command."""
-    with transaction.atomic():
-        locked_blocks = list(
-            TimeBlock.objects.filter(schedule=schedule).select_for_update()
-        )
-        blocks_by_id = {b.id: b for b in locked_blocks}
-        for idx, action in enumerate(result.parsed_actions):
-            err = _apply_action(schedule, blocks_by_id, action, idx)
             if err is not None:
                 raise _Rollback(err)
 
@@ -573,7 +566,7 @@ async def ai_command(request, date):
     )
 
     try:
-        await sync_to_async(_apply_command_sync, thread_sensitive=True)(
+        await sync_to_async(_apply_actions_sync, thread_sensitive=True)(
             schedule, result
         )
     except _Rollback as rb:
@@ -1008,7 +1001,7 @@ async def ai_chat(request, date):
     # ai_command. Re-fetches under the lock so a concurrent edit between
     # the LLM call and the apply surfaces as a clean per-action error.
     try:
-        await sync_to_async(_apply_chat_sync, thread_sensitive=True)(
+        await sync_to_async(_apply_actions_sync, thread_sensitive=True)(
             schedule, result
         )
     except _Rollback as rb:
