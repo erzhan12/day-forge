@@ -112,10 +112,17 @@ def _rate_limited_response() -> JsonResponse:
 def _rate_limit_per_user(view_func):
     """Fixed-window per-user rate limit decorator for the command endpoint.
 
-    Used by ``ai_command``. The draft endpoint does **not** use a
-    decorator — its rate limit is consumed inline after precondition
-    checks pass, so a 422 / 409 / oversized-body / invalid-date does not
-    burn the 10/hr draft budget.
+    **Async-only** (feature 0009): the wrapper is ``async def`` and
+    ``await``s both ``_consume_rate_limit`` and ``view_func``. Applying
+    this decorator to a sync view will cause the wrapper's
+    ``await view_func(...)`` to raise ``TypeError: object JsonResponse
+    can't be used in 'await' expression`` on the first request.
+    ``ai_command`` is the only call site and is itself ``async def``.
+
+    Used by ``ai_command``. The draft and chat endpoints do **not** use
+    a decorator — their rate limits are consumed inline after
+    precondition checks pass, so a 422 / 409 / oversized-body /
+    invalid-date does not burn the 10/hr draft or 60/hr chat budgets.
     """
     @functools.wraps(view_func)
     async def wrapper(request, *args, **kwargs):

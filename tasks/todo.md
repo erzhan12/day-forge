@@ -294,3 +294,20 @@
   because it crosses the backend/frontend boundary and changes a public
   API surface. Run the full `pytest backend/tests/` + `cd frontend &&
   npm test` and a chat-script smoke before merging.
+
+- [ ] **Explicit regression test for `_Rollback` propagation across
+  `sync_to_async`.** PR #22 `claude-review` iter-2 P2 [TESTING] flagged
+  this. Currently the `_Rollback` exception path through
+  `await sync_to_async(_apply_actions_sync, thread_sensitive=True)(...)`
+  is covered *implicitly* by `test_mid_batch_failure_rolls_back` in
+  `test_ai_views.py` and the analogous draft / chat tests — each
+  asserts a 400 / 409 response after an action error mid-batch, which
+  can only land if the exception crossed the thread boundary cleanly.
+  An explicit test (e.g. unit-level: call `_apply_actions_sync` from
+  an `async def` test body via `sync_to_async`, raise `_Rollback`
+  inside, assert it surfaces with the stashed `JsonResponse` intact)
+  would document the asgiref re-raise contract directly. Low priority
+  — defense-in-depth; the implicit coverage already catches a
+  regression. Pin if the contract ever changes (e.g., asgiref version
+  bump that affects exception propagation) or if a future bug actually
+  shows the implicit tests missing something.
