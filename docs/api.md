@@ -240,7 +240,9 @@ All-or-nothing: if any block is invalid, no changes are applied.
 
 ---
 
-### `POST /api/ai/schedules/{date}/command/`
+### `POST /api/ai/schedules/{date}/command/` (DEPRECATED)
+
+> ⚠️ **DEPRECATED.** As of feature 0007 (PR #15) the `CommandBar` UI no longer routes here — it submits to the multi-turn `/chat/` endpoint below. This endpoint remains registered and unit-tested for backward compatibility with any external callers, but has no production frontend caller. Scheduled for removal — see `tasks/todo.md` § Follow-ups ("Remove the orphan `/api/ai/schedules/<date>/command/` endpoint and the `useAI` composable"). For new integrations use the `/chat/` endpoint.
 
 Translate a natural-language command (English or Russian) into schedule mutations via the configured LLM, apply them atomically, and return the updated block list. Every call is logged to `AIInteraction`, success or failure — PRD §6.5.
 
