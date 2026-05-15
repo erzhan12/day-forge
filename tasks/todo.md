@@ -16,7 +16,14 @@
 - [x] Wire CommandBar into `Schedule.vue`; extend `UndoAction["type"]`
 - [x] Frontend tests (`useAI`, `CommandBar`)
 - [x] Document endpoint in `docs/api.md` + env vars in `.claude/rules/project.md`
-- [ ] Manual end-to-end test with a real `LLM_API_KEY` (English + Russian commands)
+- [x] Manual end-to-end test with a real `LLM_API_KEY` (English + Russian commands)
+  - Phase-4 single-shot `/command/` endpoint is no longer wired to the UI after the
+    feature-0007 chat rewrite; the equivalent behavior is covered by the chat surface.
+    Validated end-to-end with real LLM on 2026-05-15 via
+    `ai-chat-single-turn-apply.mjs` (EN: "add 30-minute focus block at 10:00" →
+    block created, status flipped to active) and `ai-chat-clarifying-question.mjs`
+    (RU: "запланируй встречу" → assistant `ask` in Russian → "в 14:00 на час, рабочая"
+    → block created).
 
 ## Phase 5 — Templates, Rules & Drafts
 
@@ -63,7 +70,12 @@
 - [x] `docs/api.md`: templates + rules + draft endpoints
 - [x] `RULES.md`: status-flip rules, ownership, partial-reload props
 - [x] `docs/features/0005_MANUAL_TEST.md`
-- [ ] Manual end-to-end test with a real `LLM_API_KEY`
+- [x] Manual end-to-end test with a real `LLM_API_KEY`
+  - Validated 2026-05-15 via `regenerate-422-fallback.mjs` against real LLM
+    (Regenerate-button enable/disable contracts across template/no-template states all
+    hold). Prompt-content invariants (per-day completion suffix) were validated
+    separately on 2026-05-14 via `draft-prompt-history-suffix.mjs` with
+    `LLM_DRAFT_CAPTURE_PROMPT_PATH` opt-in capture.
 
 ### Deploy notes
 
@@ -105,7 +117,12 @@
 - [x] `docs/api.md`: analytics endpoints
 - [x] `RULES.md`: status matrix, conditional UPDATE rationale, body-after-lock rationale, streak/skipped semantics, frozen-vs-recompute
 - [x] `docs/features/0006_MANUAL_TEST.md`
-- [ ] Manual end-to-end test with a real `LLM_API_KEY`
+- [x] Manual end-to-end test with a real `LLM_API_KEY`
+  - Validated 2026-05-15 via `analytics-unfreeze-on-edit.mjs` (steps A-F: unfreeze on
+    drag / inline-edit / delete / restore + status-flow invariants all hold; Step G
+    targets the now-removed Phase-4 `/command/` UI and is superseded by the chat
+    scripts) and `skipped-tasks-today-aware.mjs` (today-aware skipped-task filter holds
+    across past/today/future analytics pages).
 
 ## Follow-ups (discovered during manual testing)
 
