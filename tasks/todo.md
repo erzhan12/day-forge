@@ -179,18 +179,31 @@
   discoverable from `make help` and the invocation is one keystroke.
   Suggested by `claude-review` on PR #13.
 
-- [ ] **`frontend/scripts/playwright/README.md`.** Up to PR #13 we
-  have 4 e2e scripts; deferred earlier as "premature for 2". Add a
-  short README documenting: prereqs (Django + Vite + ``playwright``
-  test user creation snippet), how to run individual scripts and any
-  shared assumptions (seed dates, idempotent setup, etc.). Pair with
-  the Makefile follow-up above. Suggested by `claude-review` on PR
-  #13 and PR #11.
+- [ ] **`frontend/scripts/playwright/README.md`.** As of PR #27 we
+  have 10 e2e scripts (6 chat + 2 command + 2 draft); deferred earlier
+  as "premature for 2". Add a short README documenting: prereqs
+  (Django + Vite + ``playwright`` test user creation snippet), how to
+  run individual scripts, expected cost/duration per script (some make
+  real LLM calls, the 409 draft script short-circuits), and shared
+  assumptions (seed dates, idempotent setup, etc.). Pair with the
+  Makefile follow-up above. Suggested by `claude-review` on PR #11,
+  PR #13, and PR #27.
 
 - [ ] **Extract magic numbers in playwright scripts.** `await page.waitForTimeout(1500)`,
   the 30-iteration login wait loops, etc. Pull out as named
   `WAIT_FOR_PATCH_MS` / `LOGIN_POLL_MAX_TRIES` / etc. Trivial
-  readability cleanup. Suggested by `claude-review` on PR #13.
+  readability cleanup. Suggested by `claude-review` on PR #13 and
+  PR #27 (more urgent now that 10 scripts share inconsistent values).
+
+- [ ] **N+1 regression test for draft history.** `ai-draft-on-empty-day.mjs`
+  has a `// TODO: N+1 sanity` comment because capturing Django SQL
+  during a request from a Playwright harness needs either DEBUG=True
+  + SQL log capture or a connection-instrumented harness. Cover this
+  with a backend pytest using `django.test.utils.CaptureQueriesContext`
+  on `/generate-draft/` with `LLM_HISTORY_DAYS=3`: assert the
+  `analytics_dailyreview` query count is 1, not N. The original
+  N+1 fix was PR #15 (`select_related("daily_review")` in the draft
+  history query). Suggested by `claude-review` on PR #27.
 
 - [ ] **Cleanup test data in `finally` for playwright scripts.** Currently
   scripts seed via `update_or_create` (idempotent across re-runs) and
