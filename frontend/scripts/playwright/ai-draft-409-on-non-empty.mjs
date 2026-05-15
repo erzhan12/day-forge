@@ -279,13 +279,15 @@ print('STATUS', s.status)
   if (afterMap.AI_AFTER !== beforeMap.AI_BEFORE) {
     fail(
       `AIInteraction count changed: before=${beforeMap.AI_BEFORE} after=${afterMap.AI_AFTER}. ` +
-        `409 must short-circuit BEFORE _log_interaction (backend/ai/views.py:653-664).`,
+        `409 must short-circuit BEFORE _log_interaction (the non-empty ` +
+        `schedule check precedes the audit-row write).`,
     )
   }
   if (afterMap.RATE_AFTER !== beforeMap.RATE_BEFORE) {
     fail(
       `ai_draft_rl counter changed: before=${beforeMap.RATE_BEFORE} after=${afterMap.RATE_AFTER}. ` +
-        `409 must short-circuit BEFORE _consume_rate_limit (backend/ai/views.py:686).`,
+        `409 must short-circuit BEFORE _consume_rate_limit (the non-empty ` +
+        `schedule check precedes the rate-limit increment).`,
     )
   }
   if (afterMap.STATUS !== "draft") {

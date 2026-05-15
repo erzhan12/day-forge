@@ -239,8 +239,9 @@ else:
   if (dbMap.STATUS !== "draft") {
     fail(
       `NON-PROMOTION REGRESSION: schedule.status expected to stay "draft" ` +
-        `after a successful draft generation (drafts NEVER promote), got ` +
-        `${JSON.stringify(dbMap.STATUS)}. See backend/ai/views.py:763-765.`,
+        `after a successful draft generation (drafts NEVER promote to ` +
+        `active — only /command/ does, gated on non-empty actions), got ` +
+        `${JSON.stringify(dbMap.STATUS)}.`,
     )
   }
   const blockCount = Number(dbMap.BLOCKS || "0")

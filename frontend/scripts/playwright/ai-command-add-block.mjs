@@ -228,7 +228,7 @@ try {
         fail("request body is not JSON")
       }
       if (parsedReq && parsedReq.command !== PROMPT) {
-        fail(`request.command expected ${JSON.stringify(PROMPT)}, got ${JSON.stringify(parsedReq?.command)}`)
+        fail(`request.command expected ${JSON.stringify(PROMPT)}, got ${JSON.stringify(parsedReq.command)}`)
       }
     }
   }
@@ -294,8 +294,8 @@ else:
     if (Number(dbMap.ACTIONS_LEN || "0") < 1) {
       fail(`AIInteraction.actions_json expected ≥1 entry, got ${dbMap.ACTIONS_LEN}`)
     }
-    if (!(dbMap.USER_COMMAND || "").startsWith(PROMPT.slice(0, 30))) {
-      fail(`AIInteraction.user_command unexpected: ${JSON.stringify(dbMap.USER_COMMAND).slice(0, 120)}`)
+    if (!(dbMap.USER_COMMAND || "").includes(PROMPT)) {
+      fail(`AIInteraction.user_command expected to contain the full prompt, got ${JSON.stringify(dbMap.USER_COMMAND).slice(0, 120)}`)
     }
   }
 
