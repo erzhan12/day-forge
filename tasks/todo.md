@@ -120,9 +120,12 @@
 - [x] Manual end-to-end test with a real `LLM_API_KEY`
   - Validated 2026-05-15 via `analytics-unfreeze-on-edit.mjs` (steps A-F: unfreeze on
     drag / inline-edit / delete / restore + status-flow invariants all hold; Step G
-    targets the now-removed Phase-4 `/command/` UI and is superseded by the chat
-    scripts) and `skipped-tasks-today-aware.mjs` (today-aware skipped-task filter holds
-    across past/today/future analytics pages).
+    targeted the Phase-4 `/command/` endpoint via `waitForResponse(...'/command/')`,
+    but `CommandBar.vue` now submits to `/chat/` after feature 0007 (PR #15) so the
+    response matcher never fired and the script timed out — superseded by
+    `ai-chat-single-turn-apply.mjs` which exercises the same `mark_active_on_edit`
+    invariant against the current chat surface) and `skipped-tasks-today-aware.mjs`
+    (today-aware skipped-task filter holds across past/today/future analytics pages).
 
 ## Follow-ups (discovered during manual testing)
 
@@ -274,3 +277,20 @@
   already optional-chains the null case and falls through to the
   no-op branch. Rejected per the iteration loop's P0/P1-only-deep-
   triage rule (skill docs § Step 6/7).
+
+- [ ] **Remove the orphan `/api/ai/schedules/<date>/command/` endpoint
+  and the `useAI` composable.** After feature 0007 (PR #15) `CommandBar.vue`
+  routes through `useChat → /chat/`. The `/command/` view in
+  `backend/ai/views.py` and `frontend/src/composables/useAI.ts` still
+  exist; `useAI` is partially imported by
+  `frontend/src/components/RegenerateDraftButton.vue` but only for the
+  module-level shared state (`isProcessing`, `apiHealthy`), not for
+  `submit()`. Touch points to delete cleanly: (a) backend view +
+  URL route + dedicated tests, (b) `useAI.ts` whole file plus the
+  `useAI()` import in `RegenerateDraftButton.vue` (refactor the spinner
+  state to a shared module, or fold it into `useDraft.ts`), (c) any
+  stragglers in `docs/api.md`. Filed in response to PR #20 `claude-review`
+  P2 [QUALITY] finding — out of scope for the e2e-script cleanup PR
+  because it crosses the backend/frontend boundary and changes a public
+  API surface. Run the full `pytest backend/tests/` + `cd frontend &&
+  npm test` and a chat-script smoke before merging.
