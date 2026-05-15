@@ -1,17 +1,21 @@
 // Manual Test 4 (0006): editing a reviewed schedule unfreezes it
 // (mark_active_on_edit). Covers: analytics → schedule link, completion
 // toggle + PATCH, return to analytics (Active + Mark reviewed), then
-// Add Block, drag reorder, delete, and AI command bar — each after
-// re-freezing via Mark reviewed.
+// Add Block, drag reorder, delete — each after re-freezing via Mark
+// reviewed.
 //
-// 💸 The AI step issues one real LLM request (same as ai-command-noop.mjs);
-//    LLM_MODEL (gpt-4o-mini by default) ≈ $0.001-$0.003 per run as of 2026-05.
+// AI-triggered unfreeze (mark_active_on_edit via apply_actions) used to
+// live as "Step G" here against the Phase-4 /command/ endpoint. That
+// path was removed when the chat rewrite (feature 0007) replaced the
+// single-shot CommandBar UI; the AI-edit invariant is now covered by
+// ai-chat-single-turn-apply.mjs against the current /chat/ surface.
 //
 // Run from frontend/:
 //   node scripts/playwright/analytics-unfreeze-on-edit.mjs
 //
 // Pre-reqs: Django :8006, Vite :5173, user ``playwright`` (see other
-// scripts for the shell one-liner), LLM_API_KEY for the final step.
+// scripts for the shell one-liner). No LLM_API_KEY required — this
+// script is LLM-free after the Step-G removal.
 
 import { chromium } from "@playwright/test"
 import { execSync } from "node:child_process"
@@ -203,25 +207,15 @@ try {
   await assertAnalyticsActive()
   await markReviewedFromPanel()
 
-  console.log("→ Step G: AI command bar (one LLM call)…")
-  await page.goto(`${BASE}/schedule/${DATE}/`, { waitUntil: "networkidle" })
-  const cmd = page.locator(".command-input")
-  await cmd.waitFor({ state: "visible", timeout: 5000 })
-  // Backend only calls mark_active_on_edit when parsed_actions is non-empty.
-  await cmd.fill("add a block titled LLMProbe at 16:00 for 30 minutes")
-  await Promise.all([
-    page.waitForResponse(
-      (r) =>
-        r.request().method() === "POST" &&
-        r.url().includes(`/api/ai/schedules/${DATE}/command/`) &&
-        r.status() === 200,
-      { timeout: 120_000 },
-    ),
-    cmd.press("Enter"),
-  ])
-  await assertAnalyticsActive()
+  // Step G (Phase-4 AI command bar one-shot via /command/) was removed:
+  // after feature 0007 the CommandBar surface submits to /api/ai/.../chat/
+  // (multi-turn) instead of /command/ (single-shot), so the original probe
+  // here would hang waiting for a response that never matches. The
+  // mark_active_on_edit invariant for AI-triggered edits is covered
+  // separately by ai-chat-single-turn-apply.mjs, which exercises the
+  // current chat surface end-to-end against a real LLM.
 
-  console.log("\n✅ PASS — Test 4 Playwright path complete (toggle, add, reorder, delete, AI).")
+  console.log("\n✅ PASS — Test 4 Playwright path complete (toggle, add, reorder, delete).")
   process.exitCode = 0
 } catch (err) {
   console.error("\nScript error:")
