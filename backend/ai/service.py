@@ -1,31 +1,50 @@
-"""OpenAI-compatible client wrapper for the AI command endpoint.
+"""OpenAI-compatible async client wrapper for the AI endpoints.
 
-Module-level sync client constructed from ``settings.LLM_*`` env vars,
-``response_format={"type": "json_object"}`` (see note below), schema
-embedded in the system prompt (see ``prompts.SYSTEM_PROMPT``), and a
-single public ``run_command()`` entrypoint.
+Three public entrypoints — all ``async def`` since feature 0009:
 
-**On ``response_format``**: the original Phase 4 plan called for OpenAI
-Structured Outputs (``{"type": "json_schema", …, "strict": true}``), which
-would reject non-conforming responses at the provider. We deliberately use
-the weaker ``json_object`` mode instead: ``settings.LLM_BASE_URL`` lets
-this client point at OpenRouter / self-hosted proxies, and not every
-OpenAI-compatible provider implements ``json_schema`` mode. Post-parse
-validation via ``validate_response_envelope`` and ``validate_action_shape``
-in ``ai/schemas.py`` covers the safety gap — a malformed response raises
-``AIParseError`` with the raw text preserved for the interaction log.
+* ``run_command(user_command, schedule, blocks, now)`` — one-shot
+  natural-language command. Backs ``POST /api/ai/schedules/<date>/command/``.
+* ``run_draft(schedule, template, history_schedules, rules, now)`` —
+  whole-day draft generation. Backs ``POST /api/ai/schedules/<date>/generate-draft/``.
+* ``run_chat(messages, schedule, blocks, now)`` — multi-turn chat
+  (feature 0007). Backs ``POST /api/ai/schedules/<date>/chat/``.
 
-The view in ``backend/ai/views.py`` maps the errors below to HTTP status
-codes; tests monkeypatch ``_get_client()`` so they never hit the network.
+Each awaits ``openai.AsyncOpenAI`` configured from ``settings.LLM_*`` env
+vars. ``_get_client()`` caches the client per running event loop
+(``weakref.WeakKeyDictionary``) rather than module-globally because
+``httpx.AsyncClient`` binds its connection pool to the loop that first
+opens a connection — under Django's WSGI→async adaptation, a
+module-level singleton would crash on the second request when asgiref
+ran the view on a different loop. Under ASGI (Phase 7) the cache holds
+one entry for the process lifetime, preserving full connection pooling.
+
+**Wire format**: every call uses ``response_format={"type": "json_object"}``
+with the schema embedded in the system prompt (see ``ai/prompts.py``).
+The original Phase 4 plan called for OpenAI Structured Outputs
+(``{"type": "json_schema", …, "strict": true}``), which would reject
+non-conforming responses at the provider, but the weaker ``json_object``
+mode is used so ``settings.LLM_BASE_URL`` can point at OpenRouter or
+self-hosted proxies that don't implement ``json_schema`` mode. The
+post-parse validators in ``ai/schemas.py`` (``validate_response_envelope``,
+``validate_chat_response_envelope``, ``validate_draft_response``,
+``validate_action_shape``) close the safety gap — a malformed response
+raises ``AIParseError`` with the raw text preserved for the interaction
+log.
+
+The views in ``backend/ai/views.py`` map the exception taxonomy below to
+HTTP status codes; tests monkeypatch ``_get_client()`` so they never hit
+the network.
 """
+import asyncio
 import json
 import logging
 import os
+import weakref
 from dataclasses import dataclass
 
 import openai
 from django.conf import settings
-from openai import OpenAI
+from openai import AsyncOpenAI
 
 from ai.prompts import (
     SYSTEM_PROMPT,
@@ -115,20 +134,49 @@ class AIDraftResult:
     explanation: str
 
 
-_client: OpenAI | None = None
+# Cache AsyncOpenAI per running event loop, NOT module-globally.
+#
+# Under WSGI/sync gunicorn (the current production deployment), Django
+# adapts each async-view invocation via ``asgiref.sync.async_to_sync``,
+# which spins up a fresh ``asyncio`` event loop per call. The underlying
+# ``httpx.AsyncClient`` that ``AsyncOpenAI`` wraps ties its connection
+# pool to whichever loop first opened a connection — so a single
+# module-level singleton would succeed on request #1 and crash on
+# request #2 with a "Future attached to a different loop" error from
+# anyio. ``WeakKeyDictionary`` lets us key on the live loop object and
+# drop the cache entry automatically when the loop is GC'd, so the
+# previous loop's id can't be reused for a stale client.
+#
+# Under ASGI (Phase 7) the process has one event loop for its lifetime
+# and this cache will hold exactly one entry — full httpx connection
+# pooling, same as the original singleton intent.
+_clients_by_loop: weakref.WeakKeyDictionary[
+    asyncio.AbstractEventLoop, AsyncOpenAI
+] = weakref.WeakKeyDictionary()
 
 
-def _get_client() -> OpenAI:
-    """Lazily construct the module-level OpenAI client.
+def _get_client() -> AsyncOpenAI:
+    """Return the ``AsyncOpenAI`` client bound to the current event loop.
 
-    Deferred so tests can run without ``LLM_API_KEY`` set and so the
-    ``AIUnavailableError`` branch in ``run_command`` fires before any
-    network object is created.
+    Constructed lazily on first use within each loop so tests can run
+    without ``LLM_API_KEY`` set and so the ``AIUnavailableError`` branch
+    in ``run_command`` fires before any client object is created.
+    Constructor itself does no I/O.
     """
-    global _client
-    if _client is None:
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        # ``_get_client`` is only invoked from an awaited service
+        # function — there is always a running loop at that point. If
+        # this ever fires, it is a programming error, not a user-facing
+        # failure mode.
+        logger.error("_get_client called without a running event loop")
+        raise AIProviderError("AI client requires a running event loop") from None
+
+    client = _clients_by_loop.get(loop)
+    if client is None:
         try:
-            _client = OpenAI(
+            client = AsyncOpenAI(
                 api_key=settings.LLM_API_KEY,
                 base_url=settings.LLM_BASE_URL,
             )
@@ -139,10 +187,11 @@ def _get_client() -> OpenAI:
             # ``from None`` suppresses chaining for the same reason.
             logger.warning("AI client init failed: %s", type(e).__name__)
             raise AIProviderError("AI client initialization failed") from None
-    return _client
+        _clients_by_loop[loop] = client
+    return client
 
 
-def run_command(user_command: str, schedule, blocks, now) -> AICommandResult:
+async def run_command(user_command: str, schedule, blocks, now) -> AICommandResult:
     """Call the LLM for one user command. See module docstring for errors."""
     if not settings.LLM_API_KEY or not settings.LLM_API_KEY.strip():
         raise AIUnavailableError("LLM_API_KEY is not configured")
@@ -161,7 +210,7 @@ def run_command(user_command: str, schedule, blocks, now) -> AICommandResult:
 
     client = _get_client()
     try:
-        response = client.chat.completions.create(
+        response = await client.chat.completions.create(
             model=settings.LLM_MODEL,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
@@ -221,7 +270,7 @@ def run_command(user_command: str, schedule, blocks, now) -> AICommandResult:
     )
 
 
-def run_draft(schedule, template, history_schedules, rules, now) -> AIDraftResult:
+async def run_draft(schedule, template, history_schedules, rules, now) -> AIDraftResult:
     """Call the LLM to generate a draft schedule.
 
     Same exception taxonomy as ``run_command`` so the view can map errors
@@ -269,7 +318,12 @@ def run_draft(schedule, template, history_schedules, rules, now) -> AIDraftResul
 
     client = _get_client()
     try:
-        response = client.chat.completions.create(
+        # NOTE: ``LLM_DRAFT_CAPTURE_PROMPT_PATH`` above is intentionally
+        # sync (``os.open``/``os.fdopen``) — dev/test-only, gated by
+        # ``ai.E002`` so it can never run under DEBUG=False. The
+        # microsecond block on the event loop is acceptable; adding an
+        # aiofiles dep for a test-capture path was rejected in plan D6.
+        response = await client.chat.completions.create(
             model=settings.LLM_DRAFT_MODEL,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT_DRAFT},
@@ -315,7 +369,7 @@ def run_draft(schedule, template, history_schedules, rules, now) -> AIDraftResul
     )
 
 
-def run_chat(messages, schedule, blocks, now) -> AIChatResult:
+async def run_chat(messages, schedule, blocks, now) -> AIChatResult:
     """Multi-turn chat (feature 0007).
 
     ``messages`` is the FULL client-supplied transcript ordered
@@ -361,7 +415,7 @@ def run_chat(messages, schedule, blocks, now) -> AIChatResult:
 
     client = _get_client()
     try:
-        response = client.chat.completions.create(
+        response = await client.chat.completions.create(
             model=settings.LLM_MODEL,
             messages=chat_messages,
             response_format={"type": "json_object"},

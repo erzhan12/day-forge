@@ -27,7 +27,9 @@ def _post(client, url=URL):
 
 
 def _patch_run(monkeypatch, behaviour):
-    def _run(*args, **kwargs):
+    """``ai.views.run_draft`` is async (feature 0009) — replacement must be ``async def``."""
+
+    async def _run(*args, **kwargs):
         if isinstance(behaviour, Exception):
             raise behaviour
         return behaviour
@@ -125,7 +127,7 @@ class TestPreconditions:
         )
         called = {"v": False}
 
-        def _should_not_run(*a, **k):
+        async def _should_not_run(*a, **k):
             called["v"] = True
             return _ok_result()
 
@@ -138,7 +140,7 @@ class TestPreconditions:
     def test_422_when_no_template(self, auth_client, user, monkeypatch):
         called = {"v": False}
 
-        def _should_not_run(*a, **k):
+        async def _should_not_run(*a, **k):
             called["v"] = True
             return _ok_result()
 
@@ -158,7 +160,7 @@ class TestPreconditions:
         # The current user has no template — should still 422.
         called = {"v": False}
 
-        def _should_not_run(*a, **k):
+        async def _should_not_run(*a, **k):
             called["v"] = True
             return _ok_result()
 
@@ -252,7 +254,7 @@ class TestRateLimitDoesNotFireOnPreconditionFailure:
         # No template fixture → 422.
         called = {"v": False}
 
-        def _fail(*a, **k):
+        async def _fail(*a, **k):
             called["v"] = True
             return _ok_result()
 
@@ -379,7 +381,7 @@ class TestStatusFlow:
             user=user, date=datetime.date(2026, 5, 4)
         )
 
-        def _run(*args, **kwargs):
+        async def _run(*args, **kwargs):
             return AICommandResult(
                 raw_response_text="{}",
                 parsed_actions=[],
@@ -405,7 +407,7 @@ class TestStatusFlow:
             user=user, date=datetime.date(2026, 5, 4)
         )
 
-        def _run(*args, **kwargs):
+        async def _run(*args, **kwargs):
             return AICommandResult(
                 raw_response_text="{}",
                 parsed_actions=[

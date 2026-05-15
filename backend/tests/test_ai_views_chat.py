@@ -34,9 +34,12 @@ def _post(client, body, url=URL):
 
 
 def _patch_run_chat(monkeypatch, behaviour):
-    """``behaviour`` is either an ``AIChatResult`` or an exception."""
+    """``behaviour`` is either an ``AIChatResult`` or an exception.
 
-    def _run(*args, **kwargs):
+    ``ai.views.run_chat`` is async (feature 0009) — replacement must be ``async def``.
+    """
+
+    async def _run(*args, **kwargs):
         if isinstance(behaviour, Exception):
             raise behaviour
         return behaviour
@@ -180,7 +183,7 @@ class TestValidation:
         # — the test is about validation, not provider behaviour.
         from ai.service import AIChatResult
 
-        def _ok(*a, **kw):
+        async def _ok(*a, **kw):
             return AIChatResult(
                 raw_response_text="{}",
                 parsed_actions=[],
@@ -231,7 +234,7 @@ class TestValidation:
         settings.LLM_CHAT_MAX_TURNS = 5
         from ai.service import AIChatResult
 
-        def _ok(*a, **kw):
+        async def _ok(*a, **kw):
             return AIChatResult(
                 raw_response_text="{}",
                 parsed_actions=[],

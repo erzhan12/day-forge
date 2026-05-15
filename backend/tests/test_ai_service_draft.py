@@ -13,10 +13,24 @@ from ai.service import (
     AIDraftResult,
     AIParseError,
     AIUnavailableError,
-    run_draft,
 )
+from ai.service import (
+    run_draft as _async_run_draft,
+)
+from asgiref.sync import async_to_sync
 from schedules.models import Schedule
 from templates_mgr.models import Template
+
+
+def run_draft(*args, **kwargs):
+    """Sync wrapper around the now-async ``ai.service.run_draft`` (feature 0009).
+
+    Keeps the 10+ sync ORM setup sites in this file's test bodies as-is —
+    each test still does ``Schedule.objects.create(...)`` /
+    ``Template.objects.create(...)`` directly without the
+    ``SynchronousOnlyOperation`` an ``async def test_`` would impose.
+    """
+    return async_to_sync(_async_run_draft)(*args, **kwargs)
 
 
 class _FakeChoice:
@@ -34,7 +48,7 @@ class _FakeChat:
         self._captured = captured
         self._content = content
 
-    def create(self, **kwargs):
+    async def create(self, **kwargs):
         self._captured.update(kwargs)
         return _FakeResponse(self._content)
 

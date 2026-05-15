@@ -10,6 +10,7 @@ import hashlib
 import json
 import logging
 
+from asgiref.sync import sync_to_async
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
@@ -66,13 +67,13 @@ _MAX_COMMAND_LOG_LEN = 2_000
 _RATE_LIMIT_WINDOW_SECONDS = 3600
 
 
-def _consume_rate_limit(user_id: int, key_prefix: str, limit: int) -> bool:
+async def _consume_rate_limit(user_id: int, key_prefix: str, limit: int) -> bool:
     """Increment the per-user fixed-window counter under ``key_prefix``.
 
     Returns True when the call is within budget (caller proceeds), False
-    when exceeded (caller returns 429). ``cache.add`` anchors the TTL to
+    when exceeded (caller returns 429). ``cache.aadd`` anchors the TTL to
     the first call in each window so it doesn't slide forward on every
-    request; falls back to ``cache.set`` if a backend evicts the key
+    request; falls back to ``cache.aset`` if a backend evicts the key
     mid-window.
 
     LocMem note: the default ``LocMemCache`` is per-worker, so in
@@ -81,13 +82,13 @@ def _consume_rate_limit(user_id: int, key_prefix: str, limit: int) -> bool:
     cache backend is shared (Redis / Memcached).
     """
     key = f"{key_prefix}:{user_id}"
-    if cache.add(key, 1, _RATE_LIMIT_WINDOW_SECONDS):
+    if await cache.aadd(key, 1, _RATE_LIMIT_WINDOW_SECONDS):
         count = 1
     else:
         try:
-            count = cache.incr(key)
+            count = await cache.aincr(key)
         except ValueError:
-            cache.set(key, 1, _RATE_LIMIT_WINDOW_SECONDS)
+            await cache.aset(key, 1, _RATE_LIMIT_WINDOW_SECONDS)
             count = 1
     if count > limit:
         logger.warning(
@@ -117,16 +118,25 @@ def _rate_limit_per_user(view_func):
     burn the 10/hr draft budget.
     """
     @functools.wraps(view_func)
-    def wrapper(request, *args, **kwargs):
-        if not _consume_rate_limit(
-            request.user.id, "ai_cmd_rl", settings.LLM_RATE_LIMIT_PER_HOUR
+    async def wrapper(request, *args, **kwargs):
+        # Resolve the authenticated user via the async ORM path. The
+        # decorator wrapper executes BEFORE the view body, so it must own
+        # the first ``await request.auser()`` — the lazy ``request.user``
+        # proxy would otherwise trigger ``SynchronousOnlyOperation`` in
+        # an async context. Django caches the resolved user on
+        # ``request._acached_user``, so the view body's own
+        # ``await request.auser()`` is an ``hasattr`` short-circuit, not
+        # a second DB hit.
+        user = await request.auser()
+        if not await _consume_rate_limit(
+            user.id, "ai_cmd_rl", settings.LLM_RATE_LIMIT_PER_HOUR
         ):
             return _rate_limited_response()
-        return view_func(request, *args, **kwargs)
+        return await view_func(request, *args, **kwargs)
     return wrapper
 
 
-def _log_interaction(
+async def _log_interaction(
     schedule,
     command: str,
     response_text: str,
@@ -158,7 +168,7 @@ def _log_interaction(
     ``_mark_success`` updates.
     """
     try:
-        return AIInteraction.objects.create(
+        return await AIInteraction.objects.acreate(
             schedule=schedule,
             user_command=command[:_MAX_COMMAND_LOG_LEN],
             ai_response=response_text[:_MAX_AI_RESPONSE_LOG_LEN],
@@ -172,14 +182,14 @@ def _log_interaction(
         return None
 
 
-def _mark_success(interaction: AIInteraction | None) -> None:
+async def _mark_success(interaction: AIInteraction | None) -> None:
     """Flip a just-logged AIInteraction row to ``success=True``. No-op if
     the initial log write failed (``interaction is None``)."""
     if interaction is None:
         return
     try:
         interaction.success = True
-        interaction.save(update_fields=["success"])
+        await interaction.asave(update_fields=["success"])
     except Exception:
         logger.exception(
             "Failed to mark AIInteraction success (id=%s)", interaction.id
@@ -415,10 +425,80 @@ def _apply_action(
     return handler(schedule, blocks_by_id, action, action_index)
 
 
+# ---------------------------------------------------------------------------
+# Sync helpers for the mutation atomic blocks. Lifted verbatim out of the
+# (now async) views so the ``with transaction.atomic():`` boundary stays
+# synchronous — Django 5.2.12 has no ``transaction.aatomic``. The async
+# views call these via ``await sync_to_async(_apply_*_sync,
+# thread_sensitive=True)(...)``.
+#
+# The ``_Rollback`` exception-as-control-flow is preserved: a normal
+# return from inside ``transaction.atomic()`` commits the partial writes,
+# so the only correct way to abort + return is to raise. ``asgiref``'s
+# ``SyncToAsync`` re-raises across the thread boundary, so the calling
+# async view catches ``_Rollback`` and returns ``rb.response`` unchanged.
+# ---------------------------------------------------------------------------
+
+
+def _apply_command_sync(schedule, result) -> None:
+    """Apply the AICommandResult under one atomic+select_for_update lock."""
+    with transaction.atomic():
+        locked_blocks = list(
+            TimeBlock.objects.filter(schedule=schedule).select_for_update()
+        )
+        blocks_by_id = {b.id: b for b in locked_blocks}
+        for idx, action in enumerate(result.parsed_actions):
+            err = _apply_action(schedule, blocks_by_id, action, idx)
+            if err is not None:
+                raise _Rollback(err)
+
+
+def _apply_draft_sync(schedule, result) -> None:
+    """Apply the AIDraftResult; re-check schedule emptiness under the lock."""
+    with transaction.atomic():
+        # Lock the SCHEDULE row, not the empty ``TimeBlock`` queryset —
+        # see the comment in the original ai_generate_draft for the
+        # full rationale.
+        Schedule.objects.select_for_update().get(pk=schedule.pk)
+        locked_blocks = list(TimeBlock.objects.filter(schedule=schedule))
+        if locked_blocks:
+            raise _Rollback(
+                JsonResponse(
+                    {
+                        "errors": {
+                            "detail": (
+                                "Schedule already has blocks; delete "
+                                "them before regenerating."
+                            )
+                        }
+                    },
+                    status=409,
+                )
+            )
+        blocks_by_id: dict = {}
+        for idx, action in enumerate(result.parsed_actions):
+            err = _apply_add(schedule, blocks_by_id, action, idx)
+            if err is not None:
+                raise _Rollback(err)
+
+
+def _apply_chat_sync(schedule, result) -> None:
+    """Apply the AIChatResult under the same lock pattern as command."""
+    with transaction.atomic():
+        locked_blocks = list(
+            TimeBlock.objects.filter(schedule=schedule).select_for_update()
+        )
+        blocks_by_id = {b.id: b for b in locked_blocks}
+        for idx, action in enumerate(result.parsed_actions):
+            err = _apply_action(schedule, blocks_by_id, action, idx)
+            if err is not None:
+                raise _Rollback(err)
+
+
 @login_required
 @require_http_methods(["POST"])
 @_rate_limit_per_user
-def ai_command(request, date):
+async def ai_command(request, date):
     oversized = reject_oversized_body(request)
     if oversized is not None:
         return oversized
@@ -437,7 +517,13 @@ def ai_command(request, date):
     if not isinstance(command, str):
         return JsonResponse({"errors": {"command": "command must be a string."}}, status=400)
 
-    schedule, _ = Schedule.objects.get_or_create(user=request.user, date=parsed_date)
+    # ``await request.auser()`` is cached on ``request._acached_user`` by
+    # Django's auth middleware; the decorator wrapper resolved it once
+    # already so this call is an ``hasattr`` short-circuit, not a second
+    # DB hit. ``request.user`` (the lazy proxy) cannot be touched from
+    # an async context without raising ``SynchronousOnlyOperation``.
+    user = await request.auser()
+    schedule, _ = await Schedule.objects.aget_or_create(user=user, date=parsed_date)
     now = timezone.localtime()
 
     # Run the LLM call OUTSIDE any transaction — a 15s network call should
@@ -446,23 +532,22 @@ def ai_command(request, date):
     # against the locked state, so concurrent edits (delete/insert
     # between the LLM call and the apply step) surface cleanly as 400
     # "block not found" or "overlap" errors.
-    current_blocks = list(
-        TimeBlock.objects.filter(schedule=schedule).order_by("start_time", "sort_order")
-    )
-    # BLOCKING — PRODUCTION SCALE BLOCKER: synchronous network call can
-    # consume up to LLM_REQUEST_TIMEOUT (~15s) and holds the worker thread
-    # for its duration. N concurrent AI requests starve the worker pool
-    # and stall ALL traffic, including manual schedule edits. Acceptable
-    # for dev and low-concurrency demos; before exposing this endpoint to
-    # production load, migrate to an async view (Django 4.1+
-    # ``async def``) or a task queue (Celery + polling / websocket push).
-    # See CLAUDE.md § Production Deployment for the same warning at
-    # operational level.
+    current_blocks = [
+        b
+        async for b in TimeBlock.objects.filter(schedule=schedule).order_by(
+            "start_time", "sort_order"
+        )
+    ]
+    # Async view: the await on the LLM client yields the event loop while
+    # the network call is in flight. Under WSGI/sync gunicorn this still
+    # runs in Django's thread-pool executor (no concurrency win); under
+    # an ASGI runner (Phase 7) the worker is freed during the await. See
+    # docs/features/0009_async_ai_views_PLAN.md § D5.
     try:
-        result = run_command(command, schedule, current_blocks, now)
+        result = await run_command(command, schedule, current_blocks, now)
     except AIError as e:
         raw = getattr(e, "raw_response_text", "") or str(e)
-        _log_interaction(schedule, command, raw, [])
+        await _log_interaction(schedule, command, raw, [])
         # Walk MRO so a future subclass (e.g. ``AIRateLimitError``) resolves
         # to its parent's status instead of raising ``KeyError``. If a new
         # AIError subclass is ever added with no mapped parent, fall back to
@@ -483,30 +568,24 @@ def ai_command(request, date):
     # atomic so it survives a mid-batch rollback — PRD §6.5 requires every
     # interaction to be logged. Row starts pessimistic (``success=False``)
     # and is flipped to True post-apply via ``_mark_success``.
-    interaction = _log_interaction(
+    interaction = await _log_interaction(
         schedule, command, result.raw_response_text, result.parsed_actions
     )
 
     try:
-        with transaction.atomic():
-            locked_blocks = list(
-                TimeBlock.objects.filter(schedule=schedule).select_for_update()
-            )
-            blocks_by_id = {b.id: b for b in locked_blocks}
-            for idx, action in enumerate(result.parsed_actions):
-                err = _apply_action(schedule, blocks_by_id, action, idx)
-                if err is not None:
-                    raise _Rollback(err)
+        await sync_to_async(_apply_command_sync, thread_sensitive=True)(
+            schedule, result
+        )
     except _Rollback as rb:
         logger.warning(
             "AI action apply failed (user=%s, schedule=%s, actions=%s)",
-            request.user.id,
+            user.id,
             schedule.id,
             len(result.parsed_actions),
         )
         return rb.response
 
-    _mark_success(interaction)
+    await _mark_success(interaction)
 
     # Status flip is gated on actions being non-empty: RULES.md treats a
     # 200 with ``actions: []`` as a successful no-op (LLM ambiguity /
@@ -514,14 +593,17 @@ def ai_command(request, date):
     # Promoting a draft to active on a no-op LLM response would lie about
     # user intent.
     if len(result.parsed_actions) > 0:
-        schedule.mark_active_on_edit()
+        await sync_to_async(schedule.mark_active_on_edit, thread_sensitive=True)()
 
-    result_blocks = TimeBlock.objects.filter(schedule=schedule).order_by(
-        "start_time", "sort_order"
-    )
+    result_blocks = [
+        b
+        async for b in TimeBlock.objects.filter(schedule=schedule).order_by(
+            "start_time", "sort_order"
+        )
+    ]
     logger.info(
         "AI command applied (user=%s, schedule=%s, actions=%s)",
-        request.user.id,
+        user.id,
         schedule.id,
         len(result.parsed_actions),
     )
@@ -535,7 +617,7 @@ def ai_command(request, date):
 
 @login_required
 @require_http_methods(["POST"])
-def ai_generate_draft(request, date):
+async def ai_generate_draft(request, date):
     """Generate a draft schedule for an empty day.
 
     Refuses if the schedule already has any blocks (409) or if the user
@@ -563,11 +645,12 @@ def ai_generate_draft(request, date):
     except ValueError:
         return JsonResponse({"errors": {"date": "Invalid date format."}}, status=400)
 
-    schedule, _ = Schedule.objects.get_or_create(
-        user=request.user, date=parsed_date
+    user = await request.auser()
+    schedule, _ = await Schedule.objects.aget_or_create(
+        user=user, date=parsed_date
     )
 
-    if TimeBlock.objects.filter(schedule=schedule).exists():
+    if await TimeBlock.objects.filter(schedule=schedule).aexists():
         return JsonResponse(
             {
                 "errors": {
@@ -581,9 +664,9 @@ def ai_generate_draft(request, date):
         )
 
     slot_type = Template.slot_type_for_date(parsed_date)
-    template = Template.objects.filter(
-        user=request.user, type=slot_type
-    ).first()
+    template = await Template.objects.filter(
+        user=user, type=slot_type
+    ).afirst()
     if template is None:
         return JsonResponse(
             {
@@ -600,8 +683,8 @@ def ai_generate_draft(request, date):
     # Rate limit consumption goes here, AFTER all preconditions pass and
     # BEFORE the LLM call. Earlier 400 / 409 / 413 / 422 paths must not
     # increment the counter — see the docstring above.
-    if not _consume_rate_limit(
-        request.user.id,
+    if not await _consume_rate_limit(
+        user.id,
         "ai_draft_rl",
         settings.LLM_DRAFT_RATE_LIMIT_PER_HOUR,
     ):
@@ -610,9 +693,10 @@ def ai_generate_draft(request, date):
     history_start = parsed_date - datetime.timedelta(
         days=settings.LLM_HISTORY_DAYS
     )
-    history = list(
-        Schedule.objects.filter(
-            user=request.user,
+    history = [
+        s
+        async for s in Schedule.objects.filter(
+            user=user,
             date__lt=parsed_date,
             date__gte=history_start,
             status__in=[Schedule.Status.ACTIVE, Schedule.Status.REVIEWED],
@@ -621,21 +705,24 @@ def ai_generate_draft(request, date):
         # ``prompts.build_draft_user_message`` reads ``past.daily_review``
         # for each schedule (Phase-6 completion-ratio suffix). Without
         # ``select_related`` that's an N+1 — one extra query per past
-        # day. Pre-existing perf issue surfaced during PR #15 review;
-        # one-line tag-along, not part of feature 0007 proper.
+        # day. ``async for`` honours ``select_related`` /
+        # ``prefetch_related`` identically to sync iteration.
         .select_related("daily_review")
         .prefetch_related("time_blocks")
-    )
-    rules = list(
-        Rule.objects.filter(user=request.user, is_active=True).order_by("-priority")
-    )
+    ]
+    rules = [
+        r
+        async for r in Rule.objects.filter(user=user, is_active=True).order_by(
+            "-priority"
+        )
+    ]
 
     now = timezone.localtime()
     try:
-        result = run_draft(schedule, template, history, rules, now)
+        result = await run_draft(schedule, template, history, rules, now)
     except AIError as e:
         raw = getattr(e, "raw_response_text", "") or str(e)
-        _log_interaction(
+        await _log_interaction(
             schedule, "[DRAFT]", raw, [], kind=AIInteraction.Kind.DRAFT
         )
         status = next(
@@ -650,7 +737,7 @@ def ai_generate_draft(request, date):
             status = 500
         return JsonResponse({"errors": {"detail": str(e)}}, status=status)
 
-    interaction = _log_interaction(
+    interaction = await _log_interaction(
         schedule,
         "[DRAFT]",
         result.raw_response_text,
@@ -659,62 +746,32 @@ def ai_generate_draft(request, date):
     )
 
     try:
-        with transaction.atomic():
-            # Lock the SCHEDULE row, not the empty ``TimeBlock`` queryset.
-            # On an empty schedule (the normal case for a draft) a
-            # ``SELECT ... FOR UPDATE WHERE schedule_id = ?`` against
-            # ``TimeBlock`` matches no rows and so acquires no locks —
-            # two concurrent draft requests would both pass the check
-            # and both insert. Locking the parent row serialises every
-            # potential writer for this schedule (drafts, manual block
-            # creation, reorder, etc.) through one queue.
-            #
-            # SQLite ignores ``select_for_update`` silently (see
-            # ``schedules.W001``); PostgreSQL honours it.
-            Schedule.objects.select_for_update().get(pk=schedule.pk)
-            locked_blocks = list(TimeBlock.objects.filter(schedule=schedule))
-            # Re-check emptiness under the row lock — a concurrent
-            # ``create_block`` or draft could have raced in between the
-            # initial ``.exists()`` check and this point.
-            if locked_blocks:
-                raise _Rollback(
-                    JsonResponse(
-                        {
-                            "errors": {
-                                "detail": (
-                                    "Schedule already has blocks; delete "
-                                    "them before regenerating."
-                                )
-                            }
-                        },
-                        status=409,
-                    )
-                )
-            blocks_by_id: dict = {}
-            for idx, action in enumerate(result.parsed_actions):
-                err = _apply_add(schedule, blocks_by_id, action, idx)
-                if err is not None:
-                    raise _Rollback(err)
+        await sync_to_async(_apply_draft_sync, thread_sensitive=True)(
+            schedule, result
+        )
     except _Rollback as rb:
         logger.warning(
             "AI draft apply failed (user=%s, schedule=%s, actions=%s)",
-            request.user.id,
+            user.id,
             schedule.id,
             len(result.parsed_actions),
         )
         return rb.response
 
-    _mark_success(interaction)
+    await _mark_success(interaction)
 
     # Drafts intentionally do NOT flip ``schedule.status``. The badge
     # stays "draft" until the user makes a real edit (which happens
     # through one of the forward-mutating endpoints in schedules.api).
-    result_blocks = TimeBlock.objects.filter(schedule=schedule).order_by(
-        "start_time", "sort_order"
-    )
+    result_blocks = [
+        b
+        async for b in TimeBlock.objects.filter(schedule=schedule).order_by(
+            "start_time", "sort_order"
+        )
+    ]
     logger.info(
         "AI draft applied (user=%s, schedule=%s, actions=%s)",
-        request.user.id,
+        user.id,
         schedule.id,
         len(result.parsed_actions),
     )
@@ -815,18 +872,18 @@ def _build_chat_audit_response(messages, raw_or_str: str, error_class: str | Non
     return json.dumps(payload, ensure_ascii=False)
 
 
-def _log_chat_failure(schedule, last_user_msg: str, messages, exc) -> None:
+async def _log_chat_failure(schedule, last_user_msg: str, messages, exc) -> None:
     """Persist the failure-row variant of the chat audit envelope."""
     raw = getattr(exc, "raw_response_text", "") or str(exc)
     payload = _build_chat_audit_response(
         messages, raw, error_class=type(exc).__name__
     )
-    _log_interaction(schedule, last_user_msg, payload, [])
+    await _log_interaction(schedule, last_user_msg, payload, [])
 
 
 @login_required
 @require_http_methods(["POST"])
-def ai_chat(request, date):
+async def ai_chat(request, date):
     """Multi-turn chat endpoint (feature 0007).
 
     Validation order is deliberate (matches ``ai_generate_draft`` for
@@ -880,28 +937,30 @@ def ai_chat(request, date):
     if err is not None:
         return JsonResponse({"errors": {"messages": err}}, status=400)
 
-    schedule, _ = Schedule.objects.get_or_create(
-        user=request.user, date=parsed_date
+    user = await request.auser()
+    schedule, _ = await Schedule.objects.aget_or_create(
+        user=user, date=parsed_date
     )
 
-    if not _consume_rate_limit(
-        request.user.id, "ai_chat_rl", settings.LLM_CHAT_RATE_LIMIT_PER_HOUR
+    if not await _consume_rate_limit(
+        user.id, "ai_chat_rl", settings.LLM_CHAT_RATE_LIMIT_PER_HOUR
     ):
         return _rate_limited_response()
 
     last_user_msg = messages[-1]["content"]
 
-    current_blocks = list(
-        TimeBlock.objects.filter(schedule=schedule).order_by(
+    current_blocks = [
+        b
+        async for b in TimeBlock.objects.filter(schedule=schedule).order_by(
             "start_time", "sort_order"
         )
-    )
+    ]
     now = timezone.localtime()
 
     try:
-        result = run_chat(messages, schedule, current_blocks, now)
+        result = await run_chat(messages, schedule, current_blocks, now)
     except AIError as e:
-        _log_chat_failure(schedule, last_user_msg, messages, e)
+        await _log_chat_failure(schedule, last_user_msg, messages, e)
         status = next(
             (s for cls, s in _AI_ERROR_STATUS.items() if isinstance(e, cls)),
             None,
@@ -917,13 +976,13 @@ def ai_chat(request, date):
     audit_response = _build_chat_audit_response(
         messages, result.raw_response_text, error_class=None
     )
-    interaction = _log_interaction(
+    interaction = await _log_interaction(
         schedule, last_user_msg, audit_response, result.parsed_actions
     )
 
     # Clarifying-question turn — no mutations, no schedule status flip.
     if result.ask is not None:
-        _mark_success(interaction)
+        await _mark_success(interaction)
         return JsonResponse(
             {
                 "blocks": None,
@@ -935,7 +994,7 @@ def ai_chat(request, date):
 
     # Chit-chat / "thanks" turn — empty actions and null ask.
     if not result.parsed_actions:
-        _mark_success(interaction)
+        await _mark_success(interaction)
         return JsonResponse(
             {
                 "blocks": None,
@@ -949,33 +1008,30 @@ def ai_chat(request, date):
     # ai_command. Re-fetches under the lock so a concurrent edit between
     # the LLM call and the apply surfaces as a clean per-action error.
     try:
-        with transaction.atomic():
-            locked_blocks = list(
-                TimeBlock.objects.filter(schedule=schedule).select_for_update()
-            )
-            blocks_by_id = {b.id: b for b in locked_blocks}
-            for idx, action in enumerate(result.parsed_actions):
-                err = _apply_action(schedule, blocks_by_id, action, idx)
-                if err is not None:
-                    raise _Rollback(err)
+        await sync_to_async(_apply_chat_sync, thread_sensitive=True)(
+            schedule, result
+        )
     except _Rollback as rb:
         logger.warning(
             "AI chat apply failed (user=%s, schedule=%s, actions=%s)",
-            request.user.id,
+            user.id,
             schedule.id,
             len(result.parsed_actions),
         )
         return rb.response
 
-    _mark_success(interaction)
-    schedule.mark_active_on_edit()
+    await _mark_success(interaction)
+    await sync_to_async(schedule.mark_active_on_edit, thread_sensitive=True)()
 
-    result_blocks = TimeBlock.objects.filter(schedule=schedule).order_by(
-        "start_time", "sort_order"
-    )
+    result_blocks = [
+        b
+        async for b in TimeBlock.objects.filter(schedule=schedule).order_by(
+            "start_time", "sort_order"
+        )
+    ]
     logger.info(
         "AI chat applied (user=%s, schedule=%s, actions=%s)",
-        request.user.id,
+        user.id,
         schedule.id,
         len(result.parsed_actions),
     )
