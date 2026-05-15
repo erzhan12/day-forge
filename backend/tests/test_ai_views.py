@@ -31,9 +31,13 @@ def _post(client, body, url=URL):
 
 
 def _patch_run(monkeypatch, behaviour):
-    """``behaviour`` is either an ``AICommandResult`` or an exception."""
+    """``behaviour`` is either an ``AICommandResult`` or an exception.
 
-    def _run(*args, **kwargs):
+    ``ai.views.run_command`` is async (feature 0009), so the replacement
+    must be ``async def`` — the view ``await``s the call.
+    """
+
+    async def _run(*args, **kwargs):
         if isinstance(behaviour, Exception):
             raise behaviour
         return behaviour
@@ -614,9 +618,13 @@ class TestRateLimit:
     def test_cache_incr_value_error_reseeds_counter(
         self, auth_client, today_schedule, monkeypatch
     ):
-        """If the key evicts between ``cache.add`` returning False and
-        ``cache.incr`` firing, ``incr`` raises ``ValueError``. The
-        decorator must recover by re-seeding the counter, not 500."""
+        """If the key evicts between ``cache.aadd`` returning False and
+        ``cache.aincr`` firing, ``aincr`` raises ``ValueError``. The
+        decorator must recover by re-seeding the counter, not 500.
+
+        (Feature 0009: production code now calls the async cache API
+        ``cache.aincr``; the replacement must be ``async def`` since the
+        call site is awaited.)"""
         _patch_run(
             monkeypatch,
             AICommandResult(
@@ -628,10 +636,10 @@ class TestRateLimit:
         # Seed the cache with a first successful call.
         assert _post(auth_client, {"command": "seed"}).status_code == 200
 
-        def _raise_value_error(_key):
+        async def _raise_value_error(_key):
             raise ValueError("key missing")
 
-        monkeypatch.setattr("ai.views.cache.incr", _raise_value_error)
+        monkeypatch.setattr("ai.views.cache.aincr", _raise_value_error)
         # Second call enters the ``incr`` branch, hits ValueError, and
         # the except clause re-seeds the counter so the request succeeds.
         resp = _post(auth_client, {"command": "after-evict"})

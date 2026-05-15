@@ -27,6 +27,29 @@ uv run pytest backend/tests/ -v                    # All tests
 uv run pytest backend/tests/test_file.py -v        # Specific file
 ```
 
+## Manual Testing (browser smoke)
+End-to-end browser smoke testing requires the **full dev stack** running
+(Django on :8006 and Vite on :5173 — see § Run). Visit
+http://localhost:5173/, log in (`createsuperuser` first if no account),
+and exercise the feature in the actual browser.
+
+Endpoints without Playwright coverage that need manual smoke after any
+schedule-mutation refactor:
+- `POST /api/ai/schedules/<date>/command/` — AI command bar
+- `POST /api/ai/schedules/<date>/generate-draft/` — draft button on an
+  empty day
+
+The 6 chat-flow Playwright scripts at `frontend/scripts/playwright/
+ai-chat-*.mjs` cover `POST /api/ai/schedules/<date>/chat/` but make real
+LLM calls — they need `LLM_API_KEY` set and burn provider tokens.
+
+For the no-autoreload variant of the Django server (useful when stepping
+through with a debugger or doing manual smoke testing where you don't
+want code edits to restart the backend mid-session):
+```bash
+uv run python backend/manage.py runserver 8006 --noreload
+```
+
 ## Database
 ```bash
 uv run python backend/manage.py makemigrations     # Create migrations

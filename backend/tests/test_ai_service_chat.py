@@ -21,8 +21,16 @@ from ai.service import (
     AIInvalidInputError,
     AIParseError,
     AIUnavailableError,
-    run_chat,
 )
+from ai.service import (
+    run_chat as _async_run_chat,
+)
+from asgiref.sync import async_to_sync
+
+
+def run_chat(*args, **kwargs):
+    """Sync wrapper around the now-async ``ai.service.run_chat`` (feature 0009)."""
+    return async_to_sync(_async_run_chat)(*args, **kwargs)
 
 
 class FakeCompletions:
@@ -30,7 +38,7 @@ class FakeCompletions:
         self.behaviour = behaviour
         self.calls = []
 
-    def create(self, **kwargs):
+    async def create(self, **kwargs):
         self.calls.append(kwargs)
         if callable(self.behaviour):
             return self.behaviour()

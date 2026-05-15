@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Day Forge is an AI-powered daily schedule assistant. Django 5.x backend with SQLite, Python 3.14, managed with uv. Vue 3 + Inertia.js frontend served via Vite.
 
-> ⚠️  **WARNING: Production scale blocker** — the AI endpoints (command, draft, chat) are currently synchronous. Read **Production Deployment** below before exposing this app to concurrent load.
+> ⚠️  **WARNING: Production scale blocker** — the AI endpoints (command, draft, chat) are `async def` since feature 0009, but the deployment is still WSGI/sync gunicorn so every async view runs through asgiref's thread-pool executor — **no concurrency win lands until Phase 7** (ASGI runner + middleware async-capability audit). Read **Production Deployment** below before exposing this app to concurrent load.
 
 See `.claude/rules/` for detailed instructions. Review `tasks/lessons.md` at session start.
 
@@ -24,12 +24,12 @@ See `.claude/rules/` for detailed instructions. Review `tasks/lessons.md` at ses
 
 ## Production Deployment
 
-> ⚠️  **WARNING: CRITICAL — PRODUCTION SCALE BLOCKER:** the AI endpoints are currently synchronous and will starve the worker pool under concurrent load. This is acceptable for development and demos but MUST be addressed before production deployment. See conversion options below.
+> ⚠️  **WARNING: CRITICAL — PRODUCTION SCALE BLOCKER:** feature 0009 ported the AI views to `async def` and the service layer to `openai.AsyncOpenAI`, removing the **code-level** barrier to concurrent LLM requests. The **operational** barrier still exists because the deployment is WSGI/sync gunicorn — every async view runs through asgiref's thread-pool executor, so each in-flight LLM call still occupies one worker thread. **The concurrency win lands in Phase 7**, not in this branch. Do not promote this branch to a production deploy that fronts concurrent AI load until Phase 7 ships.
 
-The AI command endpoint (`POST /api/ai/schedules/<date>/command/`), draft endpoint (`POST /api/ai/schedules/<date>/generate-draft/`), and chat endpoint (`POST /api/ai/schedules/<date>/chat/`) all make **synchronous** LLM calls that hold a Django worker for up to `LLM_REQUEST_TIMEOUT` seconds (default 15). Under sync workers, N concurrent AI requests starve the worker pool and stall *all* traffic, including manual schedule edits. This is acceptable for development and low-concurrency demos; before exposing the AI endpoints to production load, do **one** of:
+All three AI endpoints (`POST /api/ai/schedules/<date>/command/`, `/generate-draft/`, `/chat/`) hold one worker thread per in-flight request for up to `LLM_REQUEST_TIMEOUT` seconds (default 15) under the current sync-gunicorn worker model. N concurrent AI requests still starve the worker pool and stall all traffic, including manual schedule edits — same operational profile as the pre-0009 sync version. Acceptable for development and low-concurrency demos; before exposing the AI endpoints to production load:
 
-- Convert the AI views to `async def` (Django 4.1+) backed by an async LLM client.
-- Move the LLM call to a Celery task and return results via polling or a websocket push.
+- **Phase 7 (recommended)**: switch the WSGI runner to ASGI (`uvicorn` or `gunicorn --worker-class uvicorn.workers.UvicornWorker`). Under ASGI a single worker process can serve N concurrent async views off one event loop, freeing the worker thread during each `await` on the LLM call. The async-port preparatory work is already in place; the switch needs an **async-capability audit of every middleware** in `MIDDLEWARE` (e.g., `WhiteNoiseMiddleware` and `InertiaMiddleware` are sync-only and would still pay a per-request `sync_to_async` bridge under ASGI). See `docs/features/0009_async_ai_views_PLAN.md` § D5 for the full audit checklist.
+- **Alternative**: move the LLM call to a Celery task and return results via polling or a websocket push.
 
 Other production prerequisites (already enforced by the `ai.E001` system check when `LLM_API_KEY` is set):
 
