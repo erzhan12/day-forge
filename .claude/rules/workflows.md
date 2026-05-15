@@ -45,6 +45,12 @@ server-side and makes no LLM call). They also require `LLM_API_KEY`.
 After any schedule-mutation refactor, run the relevant scripts instead
 of doing a manual browser smoke pass.
 
+Run the `ai-*.mjs` scripts **serially**, not in parallel — they share
+the `playwright` user's `ai_cmd_rl` / `ai_draft_rl` rate-limit
+counters, and concurrent runs would race the counter and produce a
+false failure in `ai-draft-409-on-non-empty.mjs`'s "no consumption"
+assertion.
+
 For the no-autoreload variant of the Django server (useful when stepping
 through with a debugger or doing manual smoke testing where you don't
 want code edits to restart the backend mid-session):

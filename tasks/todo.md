@@ -192,7 +192,18 @@
 - [ ] **Extract magic numbers in playwright scripts.** `await page.waitForTimeout(1500)`,
   the 30-iteration login wait loops, etc. Pull out as named
   `WAIT_FOR_PATCH_MS` / `LOGIN_POLL_MAX_TRIES` / etc. Trivial
-  readability cleanup. Suggested by `claude-review` on PR #13.
+  readability cleanup. Suggested by `claude-review` on PR #13 and
+  PR #27 (more urgent now that 10 scripts share inconsistent values).
+
+- [ ] **N+1 regression test for draft history.** `ai-draft-on-empty-day.mjs`
+  has a `// TODO: N+1 sanity` comment because capturing Django SQL
+  during a request from a Playwright harness needs either DEBUG=True
+  + SQL log capture or a connection-instrumented harness. Cover this
+  with a backend pytest using `django.test.utils.CaptureQueriesContext`
+  on `/generate-draft/` with `LLM_HISTORY_DAYS=3`: assert the
+  `analytics_dailyreview` query count is 1, not N. The original
+  N+1 fix was PR #15 (`select_related("daily_review")` in the draft
+  history query). Suggested by `claude-review` on PR #27.
 
 - [ ] **Cleanup test data in `finally` for playwright scripts.** Currently
   scripts seed via `update_or_create` (idempotent across re-runs) and
