@@ -207,6 +207,7 @@ export function useDrag(
   let blockDuration = 0
   let grabOffsetY = 0
   let dropValid = true
+  let dragScheduleDate = ""
   let rafId = 0
   let pointerId = -1
 
@@ -300,6 +301,7 @@ export function useDrag(
     // disable signal). Without this, the disable on TimeBlock /
     // GapSlot would be decorative — drag bypasses click-based mutation.
     if (isDisabled && isDisabled()) return
+    dragScheduleDate = readDate(date)
     snapshot = snapshotBlocks()
     originalBlock = block
     containerEl = container
@@ -360,6 +362,7 @@ export function useDrag(
     //      before this drag's `pushUndo` runs — so the first drag's
     //      undo would get the second drag's snapshot.
     const savedSnapshot = snapshot
+    const savedScheduleDate = dragScheduleDate
     const title = originalBlock.title
     const targetTime = previewStartTime.value
 
@@ -400,7 +403,7 @@ export function useDrag(
         description: `Moved "${title}" to ${targetTime}`,
         type: "drag",
         previousBlocks: savedSnapshot,
-        scheduleDate: readDate(date),
+        scheduleDate: savedScheduleDate,
       })
     }
   }
@@ -449,6 +452,7 @@ export function useDrag(
     containerPaddingTop = 0
     grabOffsetY = 0
     snapshot = []
+    dragScheduleDate = ""
     dropValid = true
   }
 

@@ -119,6 +119,27 @@ describe("AddBlockForm", () => {
     )
   })
 
+  it("keeps add undo bound to the date submitted", async () => {
+    let resolveCreate!: (value: { ok: true }) => void
+    mockCreateBlock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveCreate = resolve
+      }),
+    )
+    const wrapper = mountForm({ date: "2026-04-10" })
+    await wrapper.find(".add-btn").trigger("click")
+    await wrapper.find(".title-input").setValue("New Block")
+    await wrapper.find("form").trigger("submit")
+
+    await wrapper.setProps({ date: "2026-04-11" })
+    resolveCreate({ ok: true })
+    await vi.dynamicImportSettled()
+
+    expect(mockPushUndo).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "add", scheduleDate: "2026-04-10" }),
+    )
+  })
+
   it("pushUndo NOT called on failed add", async () => {
     mockCreateBlock.mockResolvedValue({ ok: false, errors: { title: "Required" } })
     const wrapper = mountForm({ date: "2026-04-10" })

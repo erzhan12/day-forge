@@ -150,14 +150,15 @@ watch(
 )
 
 async function runDraft() {
+  const scheduleDate = props.date
   const snapshot = snapshotBlocks()
-  const result = await generateDraft(props.date)
+  const result = await generateDraft(scheduleDate)
   if (result.ok) {
     pushUndo({
       description: result.explanation || "Generated draft",
       type: "draft",
       previousBlocks: snapshot,
-      scheduleDate: props.date,
+      scheduleDate,
     })
   }
 }

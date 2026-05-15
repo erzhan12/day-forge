@@ -91,6 +91,7 @@ async function saveTitle() {
   // hit the ``!editing.value`` early-return above.
   editing.value = false
 
+  const scheduleDate = props.date
   const snapshot = undo?.snapshotBlocks()
   const result = await updateBlock(props.block.id, { title: trimmed })
   if (result.ok) {
@@ -99,7 +100,7 @@ async function saveTitle() {
         description: `Renamed "${props.block.title}" to "${trimmed}"`,
         type: "edit",
         previousBlocks: snapshot,
-        scheduleDate: props.date,
+        scheduleDate,
       })
     }
   } else {
@@ -117,6 +118,7 @@ function cancelEditing() {
 async function toggleCompleted() {
   if (isDisabled()) return
   errorMessage.value = ""
+  const scheduleDate = props.date
   const snapshot = undo?.snapshotBlocks()
   const result = await updateBlock(props.block.id, {
     is_completed: !props.block.is_completed,
@@ -128,7 +130,7 @@ async function toggleCompleted() {
         description: `${action} "${props.block.title}"`,
         type: "toggle",
         previousBlocks: snapshot,
-        scheduleDate: props.date,
+        scheduleDate,
       })
     }
   } else {
@@ -140,6 +142,7 @@ async function handleDelete() {
   if (isDisabled()) return
   if (!window.confirm("Delete this block?")) return
   errorMessage.value = ""
+  const scheduleDate = props.date
   const snapshot = undo?.snapshotBlocks()
   const result = await deleteBlock(props.block.id)
   if (result.ok) {
@@ -148,7 +151,7 @@ async function handleDelete() {
         description: `Deleted "${props.block.title}"`,
         type: "delete",
         previousBlocks: snapshot,
-        scheduleDate: props.date,
+        scheduleDate,
       })
     }
   } else {

@@ -210,6 +210,25 @@ describe("TimeBlock", () => {
     )
   })
 
+  it("keeps toggle undo bound to the date that started the update", async () => {
+    let resolveUpdate!: (value: { ok: true }) => void
+    mockUpdateBlock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveUpdate = resolve
+      }),
+    )
+    const wrapper = mountWithProvide({ block: makeBlock(), date: "2026-04-10" })
+    await wrapper.find(".checkbox").trigger("change")
+
+    await wrapper.setProps({ block: makeBlock(), date: "2026-04-11" })
+    resolveUpdate({ ok: true })
+    await flushPromises()
+
+    expect(mockPushUndo).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "toggle", scheduleDate: "2026-04-10" }),
+    )
+  })
+
   it("pushUndo called on successful delete", async () => {
     mockDeleteBlock.mockResolvedValue({ ok: true })
     vi.spyOn(window, "confirm").mockReturnValue(true)

@@ -42,6 +42,7 @@ async function handleSubmit() {
   if (!title.value.trim()) return
   submitting.value = true
   errorMessage.value = ""
+  const scheduleDate = props.date
   const snapshot = undo?.snapshotBlocks()
   const blockTitle = title.value.trim()
   const result = await createBlock({
@@ -57,7 +58,7 @@ async function handleSubmit() {
         description: `Added "${blockTitle}"`,
         type: "add",
         previousBlocks: snapshot,
-        scheduleDate: props.date,
+        scheduleDate,
       })
     }
     title.value = ""

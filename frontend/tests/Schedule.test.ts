@@ -346,6 +346,38 @@ describe("Schedule.vue auto-draft watcher", () => {
     expect(action.description).toBe("Built from weekday template")
   })
 
+  it("keeps draft undo bound to the date that started generation", async () => {
+    let resolveDraft!: (value: { ok: true; explanation: string }) => void
+    generateDraft.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveDraft = resolve
+      }),
+    )
+    const w = mountPage({
+      schedule: makeSchedule("2026-05-04"),
+      blocks: [],
+      date: "2026-05-04",
+      auto_draft_pending: true,
+    })
+
+    expect(generateDraft).toHaveBeenCalledWith("2026-05-04")
+
+    await w.setProps({
+      schedule: makeSchedule("2026-05-05"),
+      blocks: [makeBlock(1)],
+      date: "2026-05-05",
+      auto_draft_pending: false,
+      has_template_for_type: true,
+      slot_type: "weekday",
+    })
+
+    resolveDraft({ ok: true, explanation: "Built from weekday template" })
+    await flushPromises()
+
+    expect(pushUndo).toHaveBeenCalledTimes(1)
+    expect(pushUndo.mock.calls[0][0].scheduleDate).toBe("2026-05-04")
+  })
+
   it("does NOT push undo when generateDraft fails", async () => {
     generateDraft.mockResolvedValueOnce({ ok: false, status: 503, errors: { detail: "down" } })
     mountPage({
