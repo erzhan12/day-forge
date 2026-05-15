@@ -31,6 +31,13 @@
 //   * Test user `playwright`
 //   * `LLM_API_KEY` set
 //
+// Concurrency: run this script SERIALLY with the other ai-*.mjs scripts.
+// They share the `playwright` user and the `ai_cmd_rl` / `ai_draft_rl`
+// rate-limit counters, so parallel execution will race on the counters
+// and may produce false failures in the 409 script's "no consumption"
+// assertion. Different seed dates prevent DB conflicts; the shared
+// counters do not.
+//
 // ⚠️  WARNING — LOCAL DEVELOPMENT ONLY. The seed step truncates the
 // target schedule's blocks.
 

@@ -26,6 +26,13 @@
 // Run from frontend/:
 //   node scripts/playwright/ai-command-rollback-on-overlap.mjs
 //
+// Concurrency: run this script SERIALLY with the other ai-*.mjs scripts.
+// They share the `playwright` user and the `ai_cmd_rl` / `ai_draft_rl`
+// rate-limit counters, so parallel execution will race on the counters
+// and may produce false failures in the 409 script's "no consumption"
+// assertion. Different seed dates prevent DB conflicts; the shared
+// counters do not.
+//
 // ⚠️  WARNING — LOCAL DEVELOPMENT ONLY.
 
 import { chromium } from "@playwright/test"
