@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help install dev run frontend-dev frontend-install frontend-build \
+.PHONY: help install dev run run-manual frontend-dev frontend-install frontend-build \
         lint lint-fix format typecheck test test-backend test-frontend check \
         migrate makemigrations seed superuser shell \
         docker docker-build docker-down clean
@@ -20,6 +20,9 @@ dev: ## Print the two commands needed to run the full dev stack
 
 run: ## Start Django dev server on :8006
 	uv run python backend/manage.py runserver 8006
+
+run-manual: ## Start Django dev server on :8006 without auto-reload
+	uv run python backend/manage.py runserver 8006 --noreload
 
 shell: ## Open Django shell
 	uv run python backend/manage.py shell
