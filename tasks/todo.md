@@ -179,13 +179,15 @@
   discoverable from `make help` and the invocation is one keystroke.
   Suggested by `claude-review` on PR #13.
 
-- [ ] **`frontend/scripts/playwright/README.md`.** Up to PR #13 we
-  have 4 e2e scripts; deferred earlier as "premature for 2". Add a
-  short README documenting: prereqs (Django + Vite + ``playwright``
-  test user creation snippet), how to run individual scripts and any
-  shared assumptions (seed dates, idempotent setup, etc.). Pair with
-  the Makefile follow-up above. Suggested by `claude-review` on PR
-  #13 and PR #11.
+- [ ] **`frontend/scripts/playwright/README.md`.** As of PR #27 we
+  have 10 e2e scripts (6 chat + 2 command + 2 draft); deferred earlier
+  as "premature for 2". Add a short README documenting: prereqs
+  (Django + Vite + ``playwright`` test user creation snippet), how to
+  run individual scripts, expected cost/duration per script (some make
+  real LLM calls, the 409 draft script short-circuits), and shared
+  assumptions (seed dates, idempotent setup, etc.). Pair with the
+  Makefile follow-up above. Suggested by `claude-review` on PR #11,
+  PR #13, and PR #27.
 
 - [ ] **Extract magic numbers in playwright scripts.** `await page.waitForTimeout(1500)`,
   the 30-iteration login wait loops, etc. Pull out as named

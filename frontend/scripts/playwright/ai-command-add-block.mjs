@@ -186,7 +186,10 @@ try {
   const call = commandCalls[0]
   let parsedResp = null
   if (!call) {
-    // soft-fail short-circuit; see iter-3 review notes
+    // Skip the rest of the wire-level block if no call was captured;
+    // the count assertion above already recorded the failure, and
+    // dereferencing `call.*` would crash the aggregator before the
+    // verdict line runs.
   } else {
     if (call.status !== 200) {
       fail(`response expected 200, got ${call.status}; body=${call.responseBody.slice(0, 300)}`)

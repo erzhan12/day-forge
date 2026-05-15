@@ -167,7 +167,10 @@ try {
   }
   const call = draftCalls[0]
   if (!call) {
-    // soft-fail short-circuit; see iter-3 review notes
+    // Skip the rest of the wire-level block if no call was captured;
+    // the count assertion above already recorded the failure, and
+    // dereferencing `call.*` would crash the aggregator before the
+    // verdict line runs.
   } else {
     if (call.responseBody && call.responseBody.includes("SynchronousOnlyOperation")) {
       fail(

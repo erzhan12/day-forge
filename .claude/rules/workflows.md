@@ -33,15 +33,17 @@ End-to-end browser smoke testing requires the **full dev stack** running
 http://localhost:5173/, log in (`createsuperuser` first if no account),
 and exercise the feature in the actual browser.
 
-Endpoints without Playwright coverage that need manual smoke after any
-schedule-mutation refactor:
-- `POST /api/ai/schedules/<date>/command/` — AI command bar
-- `POST /api/ai/schedules/<date>/generate-draft/` — draft button on an
-  empty day
-
 The 6 chat-flow Playwright scripts at `frontend/scripts/playwright/
 ai-chat-*.mjs` cover `POST /api/ai/schedules/<date>/chat/` but make real
 LLM calls — they need `LLM_API_KEY` set and burn provider tokens.
+
+The 4 follow-up scripts at `frontend/scripts/playwright/ai-command-*.mjs`
+and `ai-draft-*.mjs` cover `POST /api/ai/schedules/<date>/command/` and
+`POST /api/ai/schedules/<date>/generate-draft/` end-to-end (real LLM
+calls; the `ai-draft-409-on-non-empty.mjs` script short-circuits
+server-side and makes no LLM call). They also require `LLM_API_KEY`.
+After any schedule-mutation refactor, run the relevant scripts instead
+of doing a manual browser smoke pass.
 
 For the no-autoreload variant of the Django server (useful when stepping
 through with a debugger or doing manual smoke testing where you don't
