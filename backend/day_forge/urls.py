@@ -50,6 +50,13 @@ urlpatterns = [
         templates_api.rule_detail,
         name="rule_detail",
     ),
+    # Per-user UI preferences (theme, future settings). Distinct from
+    # templates_mgr.Template (schedule templates) despite the shared app.
+    path(
+        "api/user/preferences/",
+        templates_api.user_preferences,
+        name="user_preferences",
+    ),
     # API: AI
     path(
         "api/ai/schedules/<str:date>/command/",

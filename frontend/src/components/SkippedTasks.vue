@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue"
 import type { TimeBlock } from "../types"
-import { categoryColors } from "../utils/categoryColors"
+import { getCategoryColor } from "../utils/categoryColors"
+import { useActiveTheme } from "../composables/useActiveTheme"
 import { todayString } from "../utils/date"
 
 const props = defineProps<{
@@ -12,6 +13,10 @@ const props = defineProps<{
 // Match Schedule.vue's nowMinutes cadence so blocks transition into
 // the list as their windows close. Without this, a block that ends at
 // 11:00 would still appear "active" at 11:30 until the page reloads.
+// Tracks the active theme reactively so the marker-dot color updates
+// when the user switches themes while this component is mounted.
+const activeTheme = useActiveTheme()
+
 const NOW_UPDATE_INTERVAL_MS = 60_000
 const currentHHMM = ref(getCurrentHHMM())
 let interval: ReturnType<typeof setInterval> | null = null
@@ -53,7 +58,7 @@ onUnmounted(() => {
       <li v-for="b in skipped" :key="b.id" class="skipped-row">
         <span
           class="swatch"
-          :style="{ background: categoryColors[b.category] }"
+          :style="{ background: getCategoryColor(b.category, activeTheme) }"
           aria-hidden="true"
         />
         <span class="time">{{ b.start_time }}–{{ b.end_time }}</span>
@@ -65,7 +70,7 @@ onUnmounted(() => {
 
 <style scoped>
 .skipped-tasks {
-  background: white;
+  background: var(--bg-panel);
   border-radius: 8px;
   padding: 16px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
@@ -73,7 +78,7 @@ onUnmounted(() => {
 .skipped-tasks h3 {
   margin: 0 0 8px;
   font-size: 14px;
-  color: #111827;
+  color: var(--text-primary);
 }
 ul {
   list-style: none;
@@ -87,7 +92,7 @@ ul {
   align-items: center;
   gap: 8px;
   padding: 6px 8px;
-  background: #fef2f2;
+  background: var(--danger-surface);
   border-radius: 6px;
   font-size: 13px;
 }
@@ -99,12 +104,12 @@ ul {
 }
 .time {
   font-size: 11px;
-  color: #6b7280;
+  color: var(--text-muted);
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
 }
 .title {
-  color: #1f2937;
+  color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

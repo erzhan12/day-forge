@@ -12,6 +12,13 @@ vi.mock("../src/composables/useSchedule", () => ({
   }),
 }))
 
+// TimeBlock now uses useActiveTheme, which reads usePage().props.
+// Default to Classic for the existing tests; the dedicated theme
+// reactivity test file exercises the reactive path explicitly.
+vi.mock("@inertiajs/vue3", () => ({
+  usePage: () => ({ props: { ui_preferences: { theme: "classic" } } }),
+}))
+
 import TimeBlock from "../src/components/TimeBlock.vue"
 import type { TimeBlock as TimeBlockType } from "../src/types"
 

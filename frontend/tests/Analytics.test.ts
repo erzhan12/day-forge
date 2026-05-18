@@ -4,6 +4,7 @@ import { mount } from "@vue/test-utils"
 vi.mock("@inertiajs/vue3", () => ({
   Link: { template: "<a><slot /></a>" },
   router: { reload: vi.fn() },
+  usePage: () => ({ props: {} }),
 }))
 
 import Analytics from "../src/pages/Analytics.vue"

@@ -1,5 +1,14 @@
-import { describe, it, expect } from "vitest"
+import { describe, it, expect, vi } from "vitest"
 import { mount } from "@vue/test-utils"
+
+// CategoryBreakdown now reads `usePage().props.ui_preferences?.theme`
+// to keep its color resolution reactive when the user switches themes.
+// Provide a default-classic mock so the existing assertions don't need
+// to know about the theming concern.
+vi.mock("@inertiajs/vue3", () => ({
+  usePage: () => ({ props: { ui_preferences: { theme: "classic" } } }),
+}))
+
 import CategoryBreakdown from "../src/components/CategoryBreakdown.vue"
 
 describe("CategoryBreakdown", () => {

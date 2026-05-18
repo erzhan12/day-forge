@@ -32,6 +32,7 @@ from django.views.decorators.http import require_http_methods
 from inertia import render as inertia_render
 from schedules.http import reject_oversized_body
 from schedules.models import Schedule, TimeBlock
+from templates_mgr.preferences import get_user_preferences
 
 from analytics.models import DailyReview
 from analytics.services import compute_streak, recompute_review_from_schedule
@@ -153,6 +154,7 @@ def analytics_view(request, date):
     blocks = list(
         schedule.time_blocks.all().order_by("start_time", "sort_order")
     )
+    prefs = get_user_preferences(request.user)
     return inertia_render(
         request,
         "Analytics",
@@ -166,7 +168,9 @@ def analytics_view(request, date):
             },
             "blocks": [_block_to_dict(b) for b in blocks],
             "date": parsed_date.isoformat(),
+            "ui_preferences": {"theme": prefs.theme},
         },
+        template_data={"initial_theme": prefs.theme},
     )
 
 

@@ -76,3 +76,24 @@ export interface StreakInfo {
   threshold: number
   window_days: number
 }
+
+// SYNC ALERT: when adding/renaming a theme id, also update
+// `backend/templates_mgr/models.py:UserPreferences.Theme` and the
+// registry in `frontend/src/utils/themes.ts`.
+export type ThemeId = "classic" | "strategic" | "light_premium"
+
+export interface UiPreferences {
+  theme: ThemeId
+}
+
+// Augment Inertia's shared PageProps so every `usePage()` call site can
+// reach `page.props.ui_preferences` without an inline generic.
+//
+// The augmentation target is @inertiajs/core (where PageProps is defined),
+// not @inertiajs/vue3 — augmenting the latter would miss the actual type
+// and leave the property typed as `unknown`.
+declare module "@inertiajs/core" {
+  interface PageProps {
+    ui_preferences?: UiPreferences
+  }
+}

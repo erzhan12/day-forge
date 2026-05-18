@@ -1,8 +1,13 @@
 <script setup lang="ts">
 import { computed } from "vue"
 import type { CategoryMinutes, TimeBlock } from "../types"
-import { categoryColors } from "../utils/categoryColors"
+import { getCategoryColor } from "../utils/categoryColors"
+import { useActiveTheme } from "../composables/useActiveTheme"
 import { DAY_END_MINUTES, DAY_START_MINUTES } from "../utils/scheduleTime"
+
+// Reactive dep so the rows computed re-runs when the user switches
+// themes (shared with TimeBlock / SkippedTasks; see composable).
+const activeTheme = useActiveTheme()
 
 const props = defineProps<{
   planned: CategoryMinutes
@@ -35,9 +40,16 @@ interface Row {
   // other categories compare.
   plannedPct: number
   completedPctOfPlanned: number
+  // Resolved hex (may differ from the base palette under a theme that
+  // overrides this category for WCAG 3:1 — see categoryColors.ts).
+  color: string
 }
 
 const rows = computed<Row[]>(() => {
+  // Read once so all three usages (swatch, alpha tint, solid bar) share
+  // the same resolved color and a future theme change re-derives them
+  // together.
+  const theme = activeTheme.value
   return categoryOrder.map((key) => {
     const planned = props.planned[key] || 0
     const completed = props.completed[key] || 0
@@ -49,6 +61,7 @@ const rows = computed<Row[]>(() => {
       plannedPct: Math.min(100, (planned / DAY_WINDOW_MINUTES) * 100),
       completedPctOfPlanned:
         planned > 0 ? Math.min(100, (completed / planned) * 100) : 0,
+      color: getCategoryColor(key, theme),
     }
   })
 })
@@ -71,7 +84,7 @@ function formatMinutes(m: number): string {
     <ul class="rows">
       <li v-for="row in rows" :key="row.key" class="row">
         <span class="label">
-          <span class="swatch" :style="{ background: categoryColors[row.key] }" />
+          <span class="swatch" :style="{ background: row.color }" />
           {{ row.label }}
         </span>
         <div class="bar-track">
@@ -79,14 +92,14 @@ function formatMinutes(m: number): string {
             class="bar-planned"
             :style="{
               width: `${row.plannedPct}%`,
-              background: `${categoryColors[row.key]}33`,
+              background: `${row.color}33`,
             }"
           >
             <div
               class="bar-completed"
               :style="{
                 width: `${row.completedPctOfPlanned}%`,
-                background: categoryColors[row.key],
+                background: row.color,
               }"
             />
           </div>
@@ -101,7 +114,7 @@ function formatMinutes(m: number): string {
 
 <style scoped>
 .category-breakdown {
-  background: white;
+  background: var(--bg-panel);
   border-radius: 8px;
   padding: 16px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
@@ -115,11 +128,11 @@ function formatMinutes(m: number): string {
 .header h3 {
   margin: 0;
   font-size: 14px;
-  color: #111827;
+  color: var(--text-primary);
 }
 .total {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--text-muted);
 }
 .rows {
   list-style: none;
@@ -139,7 +152,7 @@ function formatMinutes(m: number): string {
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  color: #374151;
+  color: var(--text-secondary);
 }
 .swatch {
   width: 10px;
@@ -148,7 +161,7 @@ function formatMinutes(m: number): string {
   display: inline-block;
 }
 .bar-track {
-  background: #f3f4f6;
+  background: var(--bg-schedule-gap);
   height: 12px;
   border-radius: 6px;
   overflow: hidden;
@@ -166,7 +179,7 @@ function formatMinutes(m: number): string {
 .minutes {
   text-align: right;
   font-size: 11px;
-  color: #6b7280;
+  color: var(--text-muted);
   font-variant-numeric: tabular-nums;
 }
 </style>

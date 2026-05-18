@@ -246,6 +246,20 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+/*
+ * CommandBar is intentionally theme-invariant. It is the AI command
+ * cockpit — a dark, terminal-style surface that does NOT participate
+ * in the Classic / Strategic / Light Premium theme system from
+ * feature 0010. The literal dark/blue colors below are deliberate
+ * (the chat thread reads like a terminal in every theme), so do NOT
+ * convert them to `var(--bg-panel)` / `var(--text-primary)` / etc.
+ *
+ * Plan §Open technical constraints allowed partial token migration
+ * ("Prioritize visible surfaces and interaction states") and this
+ * component's "cockpit" aesthetic is the canonical example. If a
+ * future product decision is to theme the command bar, that's a
+ * separate feature — not a regression of 0010 Phase 6.
+ */
 .command-bar {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   padding: 8px 16px;
@@ -268,14 +282,14 @@ onUnmounted(() => {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: #ffffff;
-  color: #1f2937;
+  background: var(--bg-panel);
+  color: var(--text-primary);
 }
 
 .privacy-hint {
   margin: 0 auto 4px;
   font-size: 11px;
-  color: #6b7280;
+  color: var(--text-muted);
   text-align: center;
   font-style: italic;
 }
@@ -328,8 +342,8 @@ onUnmounted(() => {
 }
 
 .variant-sidebar .bubble-assistant {
-  background: #f3f4f6;
-  color: #1f2937;
+  background: var(--bg-schedule-gap);
+  color: var(--text-primary);
 }
 
 .bubble-user {
@@ -405,13 +419,13 @@ onUnmounted(() => {
 }
 
 .command-input.variant-sidebar {
-  color: #111827;
+  color: var(--text-primary);
   min-height: 120px; /* 6 lines */
   max-height: 400px; /* 20 lines */
 }
 
 .command-input::placeholder {
-  color: #6b7280;
+  color: var(--text-muted);
 }
 
 .command-input:focus {
@@ -426,7 +440,7 @@ onUnmounted(() => {
 
 .clear-btn {
   background: transparent;
-  color: #6b7280;
+  color: var(--text-muted);
   border: 1px solid #374151;
   font: inherit;
   font-size: 11px;
@@ -439,7 +453,7 @@ onUnmounted(() => {
 
 .clear-btn:hover:not(:disabled) {
   color: #d1d5db;
-  border-color: #4b5563;
+  border-color: var(--text-secondary);
 }
 
 .clear-btn:disabled {
@@ -475,6 +489,6 @@ onUnmounted(() => {
 }
 
 .variant-sidebar .error-row {
-  color: #b91c1c;
+  color: var(--danger-text);
 }
 </style>

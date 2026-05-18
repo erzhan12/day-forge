@@ -1,3 +1,17 @@
+/* ===========================================================================
+ * Day Forge — global tokens and base layout
+ * ---------------------------------------------------------------------------
+ * Three themes share a single token vocabulary. The `:root` block holds the
+ * legacy Classic palette so any element that hasn't been migrated to tokens
+ * still reads sensible values. Each `html[data-theme="…"]` block overrides
+ * the same tokens for its theme.
+ *
+ * Token-name freeze (feature 0010 P4): once Phase 4 ships, the names listed
+ * here are stable. Phase 6 may add new tokens but must NOT rename existing
+ * ones — every themed component depends on these identifiers.
+ * =========================================================================*/
+
+/* -- Reset -------------------------------------------------------------- */
 *,
 *::before,
 *::after {
@@ -6,12 +20,234 @@
   padding: 0;
 }
 
-body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+/* -- Default tokens (Classic) ------------------------------------------- */
+:root {
+  /* Surfaces */
+  --bg-page: #f5f5f5;
+  --bg-panel: #ffffff;
+  --bg-elevated: #ffffff;
+  --bg-input: #ffffff;
+  --bg-schedule-block: #ffffff;
+  --bg-schedule-gap: #f9fafb;
+  --bg-chat-sidebar: #ffffff;
+
+  /* Text */
+  --text-primary: #111827;
+  --text-secondary: #374151;
+  --text-muted: #6b7280;
+  --text-faint: #9ca3af;
+
+  /* Borders */
+  --border: #e5e7eb;
+  --border-strong: #d1d5db;
+
+  /* Accents */
+  --accent: #3b82f6;
+  --accent-hover: #2563eb;
+  --accent-contrast: #ffffff;
+
+  /* Semantic states */
+  --danger-surface: #fef2f2;
+  --danger-text: #b91c1c;
+  --danger-border: #fecaca;
+  --success-surface: #ecfdf5;
+  --success-text: #047857;
+  --success-border: #a7f3d0;
+  --warning-surface: #fffbeb;
+  --warning-text: #b45309;
+  --warning-border: #fde68a;
+  --info-surface: #dbeafe;
+  --info-text: #1e40af;
+  --info-border: #93c5fd;
+
+  /* Misc */
+  --focus-ring: rgba(59, 130, 246, 0.45);
+  --shadow-card: 0 4px 6px rgba(0, 0, 0, 0.07);
+  --shadow-panel: 0 2px 4px rgba(0, 0, 0, 0.06);
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 999px;
+
+  /* Typography */
+  --font-family-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
+  --font-family-display: var(--font-family-body);
+}
+
+/* -- Classic (explicit, same as :root) ---------------------------------- */
+html[data-theme="classic"] {
+  --bg-page: #f5f5f5;
+  --bg-panel: #ffffff;
+  --bg-elevated: #ffffff;
+  --bg-input: #ffffff;
+  --bg-schedule-block: #ffffff;
+  --bg-schedule-gap: #f9fafb;
+  --bg-chat-sidebar: #ffffff;
+
+  --text-primary: #111827;
+  --text-secondary: #374151;
+  --text-muted: #6b7280;
+  --text-faint: #9ca3af;
+
+  --border: #e5e7eb;
+  --border-strong: #d1d5db;
+
+  --accent: #3b82f6;
+  --accent-hover: #2563eb;
+  --accent-contrast: #ffffff;
+
+  --danger-surface: #fef2f2;
+  --danger-text: #b91c1c;
+  --danger-border: #fecaca;
+  --success-surface: #ecfdf5;
+  --success-text: #047857;
+  --success-border: #a7f3d0;
+  --warning-surface: #fffbeb;
+  --warning-text: #b45309;
+  --warning-border: #fde68a;
+  --info-surface: #dbeafe;
+  --info-text: #1e40af;
+  --info-border: #93c5fd;
+
+  --focus-ring: rgba(59, 130, 246, 0.45);
+  --shadow-card: 0 4px 6px rgba(0, 0, 0, 0.07);
+  --shadow-panel: 0 2px 4px rgba(0, 0, 0, 0.06);
+
+  --font-family-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-family-display: var(--font-family-body);
+}
+
+/* -- Strategic ---------------------------------------------------------- *
+ * Dark smoky background with cold blue accents and editorial serif headings.
+ * Atmosphere is generated via a layered radial-gradient + svg turbulence
+ * filter (inline data URI, ~1KB) so we keep the constraint "no external
+ * image assets" while preserving the soft-glow / subtle-grain feel.
+ * --------------------------------------------------------------------- */
+html[data-theme="strategic"] {
+  --bg-page: #0b1220;
+  --bg-panel: rgba(20, 28, 48, 0.78);
+  --bg-elevated: rgba(28, 38, 60, 0.92);
+  --bg-input: rgba(11, 17, 32, 0.85);
+  --bg-schedule-block: rgba(20, 28, 48, 0.78);
+  --bg-schedule-gap: rgba(15, 22, 38, 0.55);
+  --bg-chat-sidebar: rgba(14, 21, 38, 0.92);
+
+  --text-primary: #e6ecf5;
+  --text-secondary: #c2cbdc;
+  --text-muted: #8b95ac;
+  --text-faint: #5e6a82;
+
+  --border: rgba(120, 140, 180, 0.18);
+  --border-strong: rgba(140, 160, 200, 0.32);
+
+  --accent: #5aa6ff;
+  --accent-hover: #7cbbff;
+  --accent-contrast: #0b1220;
+
+  --danger-surface: rgba(127, 29, 29, 0.35);
+  --danger-text: #fca5a5;
+  --danger-border: rgba(248, 113, 113, 0.45);
+  --success-surface: rgba(6, 78, 59, 0.35);
+  --success-text: #6ee7b7;
+  --success-border: rgba(52, 211, 153, 0.45);
+  --warning-surface: rgba(120, 53, 15, 0.35);
+  --warning-text: #fcd34d;
+  --warning-border: rgba(253, 224, 71, 0.4);
+  --info-surface: rgba(90, 166, 255, 0.18);
+  --info-text: #93c5fd;
+  --info-border: rgba(90, 166, 255, 0.4);
+
+  --focus-ring: rgba(125, 187, 255, 0.55);
+  --shadow-card: 0 18px 40px -16px rgba(0, 0, 0, 0.65);
+  --shadow-panel: 0 8px 18px -10px rgba(0, 0, 0, 0.55);
+
+  --font-family-body: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-family-display: Georgia, "Iowan Old Style", "Apple Garamond",
+    "Times New Roman", serif;
+}
+
+/* -- Light Premium ----------------------------------------------------- *
+ * Warm porcelain background, refined borders, editorial serif headings.
+ * Same density as Classic; differs in chrome only.
+ * --------------------------------------------------------------------- */
+html[data-theme="light_premium"] {
+  --bg-page: #f6f1ea;
+  --bg-panel: #fffdf8;
+  --bg-elevated: #fffaf2;
+  --bg-input: #fffdf8;
+  --bg-schedule-block: #fffdf8;
+  --bg-schedule-gap: #f1ebe1;
+  --bg-chat-sidebar: #fffdf8;
+
+  --text-primary: #1f2024;
+  --text-secondary: #36373d;
+  --text-muted: #6b6c75;
+  --text-faint: #a5a6ad;
+
+  --border: #e5dccc;
+  --border-strong: #cdbfa6;
+
+  --accent: #2a6f97;
+  --accent-hover: #1f5775;
+  --accent-contrast: #fffdf8;
+
+  --danger-surface: #fdecec;
+  --danger-text: #9b1c1c;
+  --danger-border: #f4c2c2;
+  --success-surface: #ecf6ef;
+  --success-text: #1f6a40;
+  --success-border: #b8dcc5;
+  --warning-surface: #fdf3df;
+  --warning-text: #8a6a1b;
+  --warning-border: #e7d6a3;
+  --info-surface: #e1eaf4;
+  --info-text: #1f5775;
+  --info-border: #b0c8df;
+
+  --focus-ring: rgba(42, 111, 151, 0.4);
+  --shadow-card: 0 8px 20px -10px rgba(75, 60, 40, 0.18);
+  --shadow-panel: 0 4px 10px -6px rgba(75, 60, 40, 0.15);
+
+  --font-family-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-family-display: Georgia, "Iowan Old Style", "Apple Garamond",
+    "Times New Roman", serif;
+}
+
+/* -- Base ---------------------------------------------------------------- */
+html,
+body {
+  background-color: var(--bg-page);
+}
+
+/* Strategic atmosphere — layered radial + inline svg grain for soft glow. */
+html[data-theme="strategic"] body {
+  background-color: var(--bg-page);
+  background-image:
+    radial-gradient(
+      1200px 800px at 25% -10%,
+      rgba(90, 166, 255, 0.18),
+      transparent 60%
+    ),
+    radial-gradient(
+      900px 600px at 110% 110%,
+      rgba(60, 90, 180, 0.18),
+      transparent 60%
+    ),
+    url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.035 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-attachment: fixed, fixed, fixed;
+  background-repeat: no-repeat, no-repeat, repeat;
+  min-height: 100vh;
+}
+
+body {
+  font-family: var(--font-family-body);
   line-height: 1.5;
-  color: #1a1a1a;
-  background-color: #f5f5f5;
+  color: var(--text-primary);
+  background-color: var(--bg-page);
 }
 
 input,

@@ -31,7 +31,7 @@ const ratio = computed(() =>
 
 <style scoped>
 .completion-bar {
-  background: white;
+  background: var(--bg-panel);
   border-radius: 8px;
   padding: 16px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
@@ -39,7 +39,7 @@ const ratio = computed(() =>
 .rest-day {
   margin: 0;
   font-size: 14px;
-  color: #6b7280;
+  color: var(--text-muted);
 }
 .header {
   display: flex;
@@ -49,16 +49,16 @@ const ratio = computed(() =>
 }
 .ratio {
   font-size: 13px;
-  color: #6b7280;
+  color: var(--text-muted);
 }
 .percent {
   font-size: 20px;
   font-weight: 600;
-  color: #111827;
+  color: var(--text-primary);
 }
 .track {
   height: 10px;
-  background: #f3f4f6;
+  background: var(--bg-schedule-gap);
   border-radius: 999px;
   overflow: hidden;
 }

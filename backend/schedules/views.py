@@ -10,8 +10,20 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
 from inertia import render as inertia_render
 from templates_mgr.models import Template
+from templates_mgr.preferences import get_user_preferences
 
 from schedules.models import Schedule, TimeBlock
+
+# Login renders Strategic statically — no user preference exists pre-auth.
+# Centralized so every login render path gets the same template_data; a
+# missed call would silently fall back to ``'classic'`` via base.html.
+_LOGIN_TEMPLATE_DATA = {"initial_theme": "strategic"}
+
+
+def _render_login(request, props: dict):
+    return inertia_render(
+        request, "Login", props, template_data=_LOGIN_TEMPLATE_DATA
+    )
 
 
 def root_redirect(request):
@@ -26,15 +38,15 @@ def login_view(request):
         return redirect("root")
 
     if request.method == "GET":
-        return inertia_render(request, "Login", {"errors": {}})
+        return _render_login(request, {"errors": {}})
 
     # Inertia may send JSON or form data
     if request.content_type == "application/json":
         try:
             body = json.loads(request.body)
         except json.JSONDecodeError:
-            return inertia_render(
-                request, "Login", {"errors": {"non_field": "Invalid request body."}}
+            return _render_login(
+                request, {"errors": {"non_field": "Invalid request body."}}
             )
         username = body.get("username", "")
         password = body.get("password", "")
@@ -46,8 +58,8 @@ def login_view(request):
         login(request, user)
         today = datetime.date.today().isoformat()
         return redirect("schedule", date=today)
-    return inertia_render(
-        request, "Login", {"errors": {"non_field": "Invalid credentials"}}
+    return _render_login(
+        request, {"errors": {"non_field": "Invalid credentials"}}
     )
 
 
@@ -91,6 +103,7 @@ def schedule_view(request, date):
         user=request.user, type=slot_type
     ).exists()
     api_key_set = bool(settings.LLM_API_KEY and settings.LLM_API_KEY.strip())
+    prefs = get_user_preferences(request.user)
 
     return inertia_render(
         request,
@@ -117,5 +130,7 @@ def schedule_view(request, date):
             # paint, so it can't double as a capability signal.
             "has_template_for_type": template_exists,
             "slot_type": slot_type,
+            "ui_preferences": {"theme": prefs.theme},
         },
+        template_data={"initial_theme": prefs.theme},
     )

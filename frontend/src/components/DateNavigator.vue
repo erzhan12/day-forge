@@ -60,24 +60,24 @@ function navigate(date: string) {
   align-items: center;
   justify-content: space-between;
   padding: 16px;
-  background: white;
+  background: var(--bg-panel);
 }
 
 .nav-btn {
   width: 40px;
   height: 40px;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--border-strong);
   border-radius: 8px;
-  background: white;
+  background: var(--bg-panel);
   font-size: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #374151;
+  color: var(--text-secondary);
 }
 
 .nav-btn:hover {
-  background: #f3f4f6;
+  background: var(--bg-schedule-gap);
 }
 
 .date-display {
@@ -90,20 +90,20 @@ function navigate(date: string) {
 .date-text {
   font-size: 18px;
   font-weight: 600;
-  color: #111827;
+  color: var(--text-primary);
 }
 
 .today-btn {
   font-size: 12px;
   padding: 2px 10px;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--border-strong);
   border-radius: 12px;
-  background: white;
-  color: #6b7280;
+  background: var(--bg-panel);
+  color: var(--text-muted);
 }
 
 .today-btn:hover {
-  background: #f3f4f6;
+  background: var(--bg-schedule-gap);
 }
 
 .right-controls {
@@ -114,10 +114,10 @@ function navigate(date: string) {
 
 .settings-btn {
   text-decoration: none;
-  color: #374151;
+  color: var(--text-secondary);
 }
 
 .settings-btn:hover {
-  background: #f3f4f6;
+  background: var(--bg-schedule-gap);
 }
 </style>

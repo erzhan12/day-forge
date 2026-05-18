@@ -237,7 +237,7 @@ async function confirmDelete(rule: Rule) {
 
 <style scoped>
 .rules-list {
-  background: white;
+  background: var(--bg-panel);
   border-radius: 8px;
   padding: 16px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
@@ -261,15 +261,15 @@ async function confirmDelete(rule: Rule) {
 }
 
 .input {
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
   padding: 8px 10px;
   font-size: 14px;
 }
 
 .primary-btn {
-  background: #3b82f6;
-  color: white;
+  background: var(--accent);
+  color: var(--accent-contrast);
   border: none;
   border-radius: 6px;
   padding: 8px 16px;
@@ -278,7 +278,7 @@ async function confirmDelete(rule: Rule) {
 }
 
 .primary-btn:hover:not(:disabled) {
-  background: #2563eb;
+  background: var(--accent-hover);
 }
 
 .primary-btn:disabled {
@@ -287,16 +287,16 @@ async function confirmDelete(rule: Rule) {
 }
 
 .ghost-btn {
-  background: white;
-  color: #6b7280;
-  border: 1px solid #d1d5db;
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
   padding: 8px 16px;
   cursor: pointer;
 }
 
 .error-text {
-  color: #b91c1c;
+  color: var(--danger-text);
   font-size: 13px;
   margin: 0;
 }
@@ -320,7 +320,7 @@ async function confirmDelete(rule: Rule) {
 }
 
 .rule-row:hover {
-  background: #f9fafb;
+  background: var(--bg-schedule-gap);
 }
 
 .priority-controls {
@@ -332,14 +332,14 @@ async function confirmDelete(rule: Rule) {
 .arrow-btn {
   background: transparent;
   border: none;
-  color: #6b7280;
+  color: var(--text-muted);
   font-size: 11px;
   cursor: pointer;
   padding: 1px 4px;
 }
 
 .arrow-btn:hover:not(:disabled) {
-  color: #111827;
+  color: var(--text-primary);
 }
 
 .arrow-btn:disabled {
@@ -352,7 +352,7 @@ async function confirmDelete(rule: Rule) {
   background: transparent;
   border: 1px solid transparent;
   font-size: 14px;
-  color: #111827;
+  color: var(--text-primary);
   padding: 4px 8px;
   border-radius: 6px;
   cursor: text;
@@ -360,13 +360,13 @@ async function confirmDelete(rule: Rule) {
 }
 
 .rule-text:hover {
-  border-color: #d1d5db;
-  background: white;
+  border-color: var(--border-strong);
+  background: var(--bg-panel);
 }
 
 .rule-text.inactive {
   text-decoration: line-through;
-  color: #9ca3af;
+  color: var(--text-faint);
 }
 
 .priority-badge {
@@ -409,12 +409,12 @@ async function confirmDelete(rule: Rule) {
   grid-column: 1 / -1;
   margin: 0;
   font-size: 12px;
-  color: #b91c1c;
+  color: var(--danger-text);
 }
 
 .empty-text {
   margin: 0;
-  color: #9ca3af;
+  color: var(--text-faint);
   font-style: italic;
   font-size: 13px;
 }

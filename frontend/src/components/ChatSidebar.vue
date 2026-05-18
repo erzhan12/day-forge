@@ -72,8 +72,8 @@ function toggle(): void {
   right: 0;
   bottom: 0;
   width: 380px;
-  background: #ffffff;
-  border-left: 1px solid #e5e7eb;
+  background: var(--bg-panel);
+  border-left: 1px solid var(--border);
   box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
   z-index: 30;
   display: flex;
@@ -94,22 +94,22 @@ function toggle(): void {
   align-items: center;
   justify-content: space-between;
   padding: 8px 12px;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
 .chat-sidebar-title {
   font-size: 13px;
   font-weight: 600;
-  color: #374151;
+  color: var(--text-secondary);
   letter-spacing: 0.02em;
 }
 
 .chat-sidebar-toggle {
   background: transparent;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--border-strong);
   border-radius: 4px;
-  color: #6b7280;
+  color: var(--text-muted);
   cursor: pointer;
   width: 32px;
   height: 32px;
@@ -122,8 +122,8 @@ function toggle(): void {
 }
 
 .chat-sidebar-toggle:hover {
-  color: #1f2937;
-  border-color: #9ca3af;
+  color: var(--text-primary);
+  border-color: var(--text-faint);
 }
 
 .chat-sidebar-toggle:focus-visible {

@@ -263,7 +263,7 @@ async function confirmDelete() {
 
 <style scoped>
 .template-editor {
-  background: white;
+  background: var(--bg-panel);
   border-radius: 8px;
   padding: 16px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
@@ -281,7 +281,7 @@ async function confirmDelete() {
 .editor-header h3 {
   margin: 0;
   font-size: 16px;
-  color: #111827;
+  color: var(--text-primary);
 }
 
 .slot-tag {
@@ -302,7 +302,7 @@ async function confirmDelete() {
 
 .empty-text {
   margin: 0;
-  color: #6b7280;
+  color: var(--text-muted);
   font-size: 14px;
 }
 
@@ -317,7 +317,7 @@ async function confirmDelete() {
   flex-direction: column;
   gap: 4px;
   font-size: 12px;
-  color: #6b7280;
+  color: var(--text-muted);
 }
 
 .field-label {
@@ -325,7 +325,7 @@ async function confirmDelete() {
 }
 
 .input {
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
   padding: 8px 10px;
   font-size: 14px;
@@ -345,20 +345,20 @@ async function confirmDelete() {
   justify-content: space-between;
   font-size: 13px;
   font-weight: 500;
-  color: #374151;
+  color: var(--text-secondary);
 }
 
 .add-row-btn {
   font-size: 13px;
-  background: white;
-  border: 1px solid #d1d5db;
-  color: #374151;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-strong);
+  color: var(--text-secondary);
   border-radius: 6px;
   padding: 4px 10px;
 }
 
 .add-row-btn:hover {
-  background: #f9fafb;
+  background: var(--bg-schedule-gap);
 }
 
 .blocks-table {
@@ -370,9 +370,9 @@ async function confirmDelete() {
 .blocks-table th {
   text-align: left;
   padding: 4px 6px 6px;
-  color: #6b7280;
+  color: var(--text-muted);
   font-weight: 500;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--border);
 }
 
 .blocks-table td {
@@ -397,14 +397,14 @@ async function confirmDelete() {
 .empty-blocks {
   margin: 0;
   font-size: 13px;
-  color: #9ca3af;
+  color: var(--text-faint);
   font-style: italic;
 }
 
 .block-errors {
   margin: 4px 0 0;
   padding-left: 18px;
-  color: #b91c1c;
+  color: var(--danger-text);
   font-size: 12px;
 }
 
@@ -415,8 +415,8 @@ async function confirmDelete() {
 
 .primary-btn {
   padding: 8px 20px;
-  background: #3b82f6;
-  color: white;
+  background: var(--accent);
+  color: var(--accent-contrast);
   border: none;
   border-radius: 6px;
   font-weight: 500;
@@ -424,7 +424,7 @@ async function confirmDelete() {
 }
 
 .primary-btn:hover:not(:disabled) {
-  background: #2563eb;
+  background: var(--accent-hover);
 }
 
 .primary-btn:disabled {
@@ -434,9 +434,9 @@ async function confirmDelete() {
 
 .danger-btn {
   padding: 8px 20px;
-  background: white;
+  background: var(--bg-panel);
   border: 1px solid #fca5a5;
-  color: #b91c1c;
+  color: var(--danger-text);
   border-radius: 6px;
   cursor: pointer;
 }
@@ -446,8 +446,8 @@ async function confirmDelete() {
 }
 
 .error-banner {
-  background: #fef2f2;
-  color: #b91c1c;
+  background: var(--danger-surface);
+  color: var(--danger-text);
   padding: 8px 12px;
   border-radius: 6px;
   font-size: 13px;

@@ -17,9 +17,9 @@ defineProps<{
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #92400e;
-  background: #fef3c7;
-  border: 1px solid #fcd34d;
+  color: var(--warning-text);
+  background: var(--warning-surface);
+  border: 1px solid var(--warning-border);
   border-radius: 999px;
   padding: 2px 10px;
   margin-top: 4px;

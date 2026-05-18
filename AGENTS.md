@@ -6,7 +6,7 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 Day Forge is an AI-powered daily schedule assistant. Django 5.x backend with SQLite, Python 3.14, managed with uv. Vue 3 + Inertia.js frontend served via Vite.
 
-See `.Codex/rules/` for detailed instructions. Review `tasks/lessons.md` at session start.
+Review `tasks/lessons.md` at session start.
 
 ## Commands
 

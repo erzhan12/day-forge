@@ -2,6 +2,50 @@ from django.conf import settings
 from django.db import models
 
 
+class UserPreferences(models.Model):
+    """Per-user UI preferences (theme, future settings).
+
+    Co-located in ``templates_mgr`` for v1 since there is no dedicated
+    users/preferences app and `/settings/` already routes here. If
+    preferences grow beyond UI theme, split into a dedicated app (see
+    feature 0010 plan for the cleanup path).
+
+    Schema notes:
+      * ``user`` is a ``OneToOneField`` which Django implements as a
+        ``ForeignKey`` with ``unique=True``. The unique constraint
+        creates an implicit index — no explicit ``db_index=True`` or
+        ``UniqueConstraint`` is needed (would be a no-op duplicate).
+    """
+
+    class Theme(models.TextChoices):
+        # SYNC ALERT: when adding/renaming a theme id, also update
+        # `frontend/src/types/index.ts:ThemeId` and the registry in
+        # `frontend/src/utils/themes.ts`.
+        CLASSIC = "classic", "Classic"
+        STRATEGIC = "strategic", "Strategic"
+        LIGHT_PREMIUM = "light_premium", "Light Premium"
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="preferences",
+    )
+    # max_length=32 leaves headroom for future theme ids without a schema
+    # migration; the longest current value (light_premium) is 13 chars.
+    theme = models.CharField(
+        max_length=32, choices=Theme.choices, default=Theme.CLASSIC
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "User preferences"
+        verbose_name_plural = "User preferences"
+
+    def __str__(self):
+        return f"{self.user} preferences"
+
+
 class Template(models.Model):
     class Type(models.TextChoices):
         WEEKDAY = "weekday", "Weekday"
