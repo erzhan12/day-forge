@@ -98,6 +98,8 @@ async function saveTitle() {
   editing.value = false
 
   const snapshot = undo?.snapshotBlocks()
+  // Bind undo to the date active when the mutation starts (see issue #21).
+  const scheduleDate = props.date
   const result = await updateBlock(props.block.id, { title: trimmed })
   if (result.ok) {
     if (undo && snapshot) {
@@ -105,7 +107,7 @@ async function saveTitle() {
         description: `Renamed "${props.block.title}" to "${trimmed}"`,
         type: "edit",
         previousBlocks: snapshot,
-        scheduleDate: props.date,
+        scheduleDate,
       })
     }
   } else {
@@ -124,6 +126,7 @@ async function toggleCompleted() {
   if (isDisabled()) return
   errorMessage.value = ""
   const snapshot = undo?.snapshotBlocks()
+  const scheduleDate = props.date
   const result = await updateBlock(props.block.id, {
     is_completed: !props.block.is_completed,
   })
@@ -134,7 +137,7 @@ async function toggleCompleted() {
         description: `${action} "${props.block.title}"`,
         type: "toggle",
         previousBlocks: snapshot,
-        scheduleDate: props.date,
+        scheduleDate,
       })
     }
   } else {
@@ -147,6 +150,7 @@ async function handleDelete() {
   if (!window.confirm("Delete this block?")) return
   errorMessage.value = ""
   const snapshot = undo?.snapshotBlocks()
+  const scheduleDate = props.date
   const result = await deleteBlock(props.block.id)
   if (result.ok) {
     if (undo && snapshot) {
@@ -154,7 +158,7 @@ async function handleDelete() {
         description: `Deleted "${props.block.title}"`,
         type: "delete",
         previousBlocks: snapshot,
-        scheduleDate: props.date,
+        scheduleDate,
       })
     }
   } else {

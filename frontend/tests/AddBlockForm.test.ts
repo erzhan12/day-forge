@@ -128,4 +128,28 @@ describe("AddBlockForm", () => {
     await vi.dynamicImportSettled()
     expect(mockPushUndo).not.toHaveBeenCalled()
   })
+
+  it("pushUndo binds scheduleDate to the date active when the request started, not when it resolved (issue #21)", async () => {
+    // Simulate user navigating to a new date while createBlock is in
+    // flight: without the fix, ``pushUndo`` would read ``props.date``
+    // after the await and capture the new date, so undo would restore
+    // 2026-04-10's snapshot onto 2026-04-11.
+    let resolveCreate: (v: { ok: boolean }) => void = () => {}
+    mockCreateBlock.mockReturnValueOnce(
+      new Promise<{ ok: boolean }>((res) => {
+        resolveCreate = res
+      }),
+    )
+    const wrapper = mountForm({ date: "2026-04-10" })
+    await wrapper.find(".add-btn").trigger("click")
+    await wrapper.find(".title-input").setValue("New Block")
+    await wrapper.find("form").trigger("submit")
+    // Navigate mid-flight.
+    await wrapper.setProps({ date: "2026-04-11" })
+    resolveCreate({ ok: true })
+    await vi.dynamicImportSettled()
+    expect(mockPushUndo).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "add", scheduleDate: "2026-04-10" }),
+    )
+  })
 })
