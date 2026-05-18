@@ -44,6 +44,13 @@ def normalize_theme(raw: str) -> str:
 def get_user_preferences(user) -> UserPreferencesDTO:
     """Return the user's preferences as a frozen DTO.
 
+    **Single-user contract**: this helper is for request-scoped lookups
+    (one call per authenticated page render). If a future caller needs
+    preferences for multiple users at once, query ``UserPreferences``
+    directly with ``select_related("user")`` rather than calling this
+    helper in a loop — looping would re-issue ``get_or_create`` per user
+    and produce an N+1 query pattern.
+
     ``get_or_create`` is required (not "try fetch, else insert") because
     two concurrent first-visit requests on a cold session would otherwise
     both miss the row and both INSERT, hitting the OneToOne unique

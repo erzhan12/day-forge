@@ -18,6 +18,9 @@ class UserPreferences(models.Model):
     """
 
     class Theme(models.TextChoices):
+        # SYNC ALERT: when adding/renaming a theme id, also update
+        # `frontend/src/types/index.ts:ThemeId` and the registry in
+        # `frontend/src/utils/themes.ts`.
         CLASSIC = "classic", "Classic"
         STRATEGIC = "strategic", "Strategic"
         LIGHT_PREMIUM = "light_premium", "Light Premium"

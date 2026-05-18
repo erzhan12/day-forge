@@ -19,6 +19,10 @@ const isSaving = ref(false)
 const pendingThemeId = ref<ThemeId | null>(null)
 const errorMessage = ref<string>("")
 const warningMessage = ref<string>("")
+// Plain boolean (not ref()) — only read inside post-resolve callbacks
+// (`router.reload` onSuccess/onError/onFinish, awaited PATCH continuation)
+// to short-circuit DOM/state mutations after navigation. Reactivity would
+// add overhead with no consumer; no template / computed reads this.
 let isMounted = true
 
 onBeforeUnmount(() => {

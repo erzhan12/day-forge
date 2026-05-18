@@ -255,6 +255,24 @@ def test_patch_non_string_theme_returns_structured_400(auth_client, payload):
     assert resp.headers["Cache-Control"] == "private, no-store"
 
 
+def test_patch_oversized_body_returns_413_with_cache_control(auth_client):
+    """The 413 path goes through `reject_oversized_body` and is rewrapped
+    via `_prefs_response` so the Cache-Control invariant holds even when
+    the body is rejected without parsing. Pins that re-wrap."""
+    # MAX_REQUEST_BODY_BYTES = 100_000 in schedules.http; build a payload
+    # ~100 KB+ via a padding key (silently ignored by the field extractor,
+    # but counts toward the body-size check).
+    huge_body = json.dumps({"theme": "classic", "padding": "x" * 100_001})
+    resp = auth_client.patch(
+        reverse("user_preferences"),
+        data=huge_body,
+        content_type="application/json",
+    )
+    assert resp.status_code == 413
+    assert resp.json() == {"errors": {"body": "Request body too large."}}
+    assert resp.headers["Cache-Control"] == "private, no-store"
+
+
 def test_patch_invalid_json_returns_400(auth_client):
     resp = auth_client.patch(
         reverse("user_preferences"),

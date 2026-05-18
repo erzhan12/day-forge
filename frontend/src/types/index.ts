@@ -77,6 +77,9 @@ export interface StreakInfo {
   window_days: number
 }
 
+// SYNC ALERT: when adding/renaming a theme id, also update
+// `backend/templates_mgr/models.py:UserPreferences.Theme` and the
+// registry in `frontend/src/utils/themes.ts`.
 export type ThemeId = "classic" | "strategic" | "light_premium"
 
 export interface UiPreferences {
