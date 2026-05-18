@@ -236,4 +236,63 @@ describe("TimeBlock", () => {
     await vi.dynamicImportSettled()
     expect(mockPushUndo).not.toHaveBeenCalled()
   })
+
+  // Issue #21: if the user navigates to a different date while a
+  // mutation is in flight, the undo entry must still restore to the
+  // date the mutation started on, not whatever ``props.date`` happens
+  // to read at pushUndo time.
+
+  it("toggle binds scheduleDate to the date active when the request started (issue #21)", async () => {
+    let resolveUpdate: (v: { ok: boolean }) => void = () => {}
+    mockUpdateBlock.mockReturnValueOnce(
+      new Promise<{ ok: boolean }>((res) => {
+        resolveUpdate = res
+      }),
+    )
+    const wrapper = mountWithProvide({ block: makeBlock(), date: "2026-04-10" })
+    await wrapper.find(".checkbox").trigger("change")
+    await wrapper.setProps({ date: "2026-04-11" })
+    resolveUpdate({ ok: true })
+    await flushPromises()
+    expect(mockPushUndo).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "toggle", scheduleDate: "2026-04-10" }),
+    )
+  })
+
+  it("edit binds scheduleDate to the date active when the request started (issue #21)", async () => {
+    let resolveUpdate: (v: { ok: boolean }) => void = () => {}
+    mockUpdateBlock.mockReturnValueOnce(
+      new Promise<{ ok: boolean }>((res) => {
+        resolveUpdate = res
+      }),
+    )
+    const wrapper = mountWithProvide({ block: makeBlock(), date: "2026-04-10" })
+    await wrapper.find(".title").trigger("click")
+    await wrapper.find(".title-input").setValue("Renamed")
+    await wrapper.find(".title-input").trigger("keydown.enter")
+    await wrapper.setProps({ date: "2026-04-11" })
+    resolveUpdate({ ok: true })
+    await flushPromises()
+    expect(mockPushUndo).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "edit", scheduleDate: "2026-04-10" }),
+    )
+  })
+
+  it("delete binds scheduleDate to the date active when the request started (issue #21)", async () => {
+    let resolveDelete: (v: { ok: boolean }) => void = () => {}
+    mockDeleteBlock.mockReturnValueOnce(
+      new Promise<{ ok: boolean }>((res) => {
+        resolveDelete = res
+      }),
+    )
+    vi.spyOn(window, "confirm").mockReturnValue(true)
+    const wrapper = mountWithProvide({ block: makeBlock(), date: "2026-04-10" })
+    await wrapper.find(".delete-btn").trigger("click")
+    await wrapper.setProps({ date: "2026-04-11" })
+    resolveDelete({ ok: true })
+    await flushPromises()
+    expect(mockPushUndo).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "delete", scheduleDate: "2026-04-10" }),
+    )
+  })
 })

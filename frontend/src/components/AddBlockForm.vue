@@ -44,6 +44,11 @@ async function handleSubmit() {
   errorMessage.value = ""
   const snapshot = undo?.snapshotBlocks()
   const blockTitle = title.value.trim()
+  // Bind undo to the date active when the mutation starts, not when the
+  // response resolves — if the user navigates dates while the request is
+  // in flight, ``props.date`` would shift and undo would restore this
+  // day's snapshot onto a different date. Issue #21.
+  const scheduleDate = props.date
   const result = await createBlock({
     title: blockTitle,
     start_time: startTime.value,
@@ -57,7 +62,7 @@ async function handleSubmit() {
         description: `Added "${blockTitle}"`,
         type: "add",
         previousBlocks: snapshot,
-        scheduleDate: props.date,
+        scheduleDate,
       })
     }
     title.value = ""

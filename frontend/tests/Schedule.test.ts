@@ -359,6 +359,34 @@ describe("Schedule.vue auto-draft watcher", () => {
     expect(generateDraft).toHaveBeenCalledTimes(1)
     expect(pushUndo).not.toHaveBeenCalled()
   })
+
+  it("draft binds scheduleDate to the date active when the request started, not when it resolved (issue #21)", async () => {
+    // Simulate user navigating to a new date while generateDraft is in
+    // flight: without the fix, ``pushUndo`` would read ``props.date``
+    // after the await and capture the new date, so undo would restore
+    // 2026-05-04's empty snapshot onto 2026-05-05.
+    let resolveDraft: (v: { ok: boolean; explanation: string | null }) => void =
+      () => {}
+    generateDraft.mockReturnValueOnce(
+      new Promise<{ ok: boolean; explanation: string | null }>((res) => {
+        resolveDraft = res
+      }),
+    )
+    const w = mountPage({
+      schedule: makeSchedule("2026-05-04"),
+      blocks: [],
+      date: "2026-05-04",
+      auto_draft_pending: true,
+    })
+    // Allow the watcher to fire generateDraft.
+    await nextTick()
+    await w.setProps({ date: "2026-05-05", auto_draft_pending: false })
+    resolveDraft({ ok: true, explanation: "drafted" })
+    await flushPromises()
+    expect(pushUndo).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "draft", scheduleDate: "2026-05-04" }),
+    )
+  })
 })
 
 // --- feature 0008: viewport-driven chat surface routing ----------------

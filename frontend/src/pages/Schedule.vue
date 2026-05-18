@@ -154,13 +154,18 @@ watch(
 
 async function runDraft() {
   const snapshot = snapshotBlocks()
-  const result = await generateDraft(props.date)
+  // Bind undo to the date active when the draft request starts — if the
+  // user navigates dates while the LLM call is in flight, ``props.date``
+  // would shift and undo would restore this day's empty snapshot onto a
+  // different date. Issue #21.
+  const scheduleDate = props.date
+  const result = await generateDraft(scheduleDate)
   if (result.ok) {
     pushUndo({
       description: result.explanation || "Generated draft",
       type: "draft",
       previousBlocks: snapshot,
-      scheduleDate: props.date,
+      scheduleDate,
     })
   }
 }
