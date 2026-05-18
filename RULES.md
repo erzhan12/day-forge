@@ -166,4 +166,41 @@ Any new authenticated Inertia page MUST do both of:
 1. **Backend**: the view passes `ui_preferences={"theme": prefs.theme}` in its Inertia props AND `template_data={"initial_theme": prefs.theme}` to `inertia_render`. Resolve `prefs` exactly once per request via `templates_mgr.preferences.get_user_preferences(request.user)`. Without `template_data`, `base.html` falls back to the `'classic'` default and Strategic users see a Classic-light flash on the first paint.
 2. **Frontend**: the page component calls `useThemeFromProps()` (`frontend/src/composables/useThemeFromProps.ts`) once in its `setup()` block. Without it, partial Inertia reloads that include `ui_preferences` do not propagate to `<html data-theme>`.
 
+### Concrete wiring example
+
+```python
+# backend/<app>/views.py
+from inertia import render as inertia_render
+from templates_mgr.preferences import get_user_preferences
+
+@login_required
+def my_new_page_view(request):
+    # Resolve once — both the prop and the SSR template_data use the same value.
+    prefs = get_user_preferences(request.user)
+    return inertia_render(
+        request,
+        "MyNewPage",
+        {
+            # ...your page's own props...
+            "ui_preferences": {"theme": prefs.theme},
+        },
+        template_data={"initial_theme": prefs.theme},
+    )
+```
+
+```vue
+<!-- frontend/src/pages/MyNewPage.vue -->
+<script setup lang="ts">
+import { useThemeFromProps } from "../composables/useThemeFromProps"
+import "../app.css"
+
+// One line, in setup(). Without this, the SSR data-theme is correct on
+// first paint but won't follow user theme changes via partial reload.
+useThemeFromProps()
+// ...rest of your script setup...
+</script>
+```
+
+If the page renders TimeBlock / SkippedTasks / CategoryBreakdown (or any future component that needs `getCategoryColor()`), also import `useActiveTheme()` from `../composables/useActiveTheme` and pass its computed value into `getCategoryColor(category, activeTheme)`. The category color resolver is non-reactive otherwise.
+
 The P7 SSR first-paint test and the static-scan test enforce (1) and (2) at CI; the rule is documented here so the convention survives session boundaries.

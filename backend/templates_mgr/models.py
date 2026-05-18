@@ -9,6 +9,12 @@ class UserPreferences(models.Model):
     users/preferences app and `/settings/` already routes here. If
     preferences grow beyond UI theme, split into a dedicated app (see
     feature 0010 plan for the cleanup path).
+
+    Schema notes:
+      * ``user`` is a ``OneToOneField`` which Django implements as a
+        ``ForeignKey`` with ``unique=True``. The unique constraint
+        creates an implicit index — no explicit ``db_index=True`` or
+        ``UniqueConstraint`` is needed (would be a no-op duplicate).
     """
 
     class Theme(models.TextChoices):

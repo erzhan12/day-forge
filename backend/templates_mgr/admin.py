@@ -45,7 +45,7 @@ User = get_user_model()
 
 
 class UserAdminWithPreferences(UserAdmin):
-    inlines = list(UserAdmin.inlines) + [UserPreferencesInline]
+    inlines = UserAdmin.inlines + (UserPreferencesInline,)
 
 
 try:

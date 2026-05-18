@@ -334,6 +334,32 @@ def test_preferences_isolated_per_user(db):
     assert resp.json() == {"theme": "light_premium"}
 
 
+def test_patch_does_not_leak_across_users(db):
+    """Write isolation: a PATCH from one user must NOT modify another
+    user's preferences row. The endpoint is scoped by request.user and
+    there's no path param exposing another user's id, but a regression
+    here would silently let any authenticated user reshape every other
+    user's theme — pin it explicitly.
+    """
+    alice = User.objects.create_user(username="alice2", password="pw")
+    bob = User.objects.create_user(username="bob2", password="pw")
+    UserPreferences.objects.create(user=alice, theme="classic")
+    UserPreferences.objects.create(user=bob, theme="strategic")
+
+    client = Client()
+    client.login(username="alice2", password="pw")
+    resp = client.patch(
+        reverse("user_preferences"),
+        data=json.dumps({"theme": "light_premium"}),
+        content_type="application/json",
+    )
+    assert resp.status_code == 200
+    # Alice's row updated.
+    assert UserPreferences.objects.get(user=alice).theme == "light_premium"
+    # Bob's row UNTOUCHED.
+    assert UserPreferences.objects.get(user=bob).theme == "strategic"
+
+
 # ---------------------------------------------------------------------------
 # Inertia page-prop contract
 # ---------------------------------------------------------------------------
