@@ -25,11 +25,11 @@ const tooltip = computed(
   gap: 6px;
   padding: 4px 10px;
   border-radius: 999px;
-  background: #fef3c7;
-  color: #92400e;
+  background: var(--warning-surface);
+  color: var(--warning-text);
   font-size: 12px;
   font-weight: 500;
-  border: 1px solid #fcd34d;
+  border: 1px solid var(--warning-border);
 }
 .emoji {
   font-size: 13px;

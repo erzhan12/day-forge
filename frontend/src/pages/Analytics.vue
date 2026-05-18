@@ -8,7 +8,10 @@ import StreakCounter from "../components/StreakCounter.vue"
 import SkippedTasks from "../components/SkippedTasks.vue"
 import { useAnalytics } from "../composables/useAnalytics"
 import { parseLocalDate } from "../utils/date"
+import { useThemeFromProps } from "../composables/useThemeFromProps"
 import "../app.css"
+
+useThemeFromProps()
 
 const props = defineProps<{
   review: DailyReview
@@ -138,7 +141,7 @@ async function onMarkReviewed() {
   max-width: 640px;
   margin: 0 auto;
   padding: 16px;
-  background: #f9fafb;
+  background: var(--bg-schedule-gap);
   min-height: 100vh;
 }
 
@@ -148,7 +151,7 @@ async function onMarkReviewed() {
 
 .back-link {
   font-size: 13px;
-  color: #2563eb;
+  color: var(--accent-hover);
   text-decoration: none;
 }
 
@@ -164,7 +167,7 @@ async function onMarkReviewed() {
   margin: 0;
   font-size: 20px;
   font-weight: 600;
-  color: #111827;
+  color: var(--text-primary);
 }
 
 .status-badge {
@@ -176,23 +179,27 @@ async function onMarkReviewed() {
   font-weight: 600;
 }
 .status-active {
-  background: #dbeafe;
-  color: #1e40af;
-  border: 1px solid #93c5fd;
+  /* Info badge family: each theme defines --info-text and --info-surface
+     as a contrast-verified pair (≥ 4.5:1 in every theme — see
+     frontend/tests/semanticContrast.test.ts). Previously used a
+     same-accent-token derivation that collapsed to ~2.8:1 on Classic. */
+  background: var(--info-surface);
+  color: var(--info-text);
+  border: 1px solid var(--info-border);
 }
 .status-reviewed {
-  background: #d1fae5;
-  color: #065f46;
-  border: 1px solid #6ee7b7;
+  background: var(--success-surface);
+  color: var(--success-text);
+  border: 1px solid var(--success-border);
 }
 
 .mark-reviewed-btn {
   margin-left: auto;
   padding: 6px 14px;
   border-radius: 6px;
-  border: 1px solid #2563eb;
-  background: #2563eb;
-  color: white;
+  border: 1px solid var(--accent-hover);
+  background: var(--accent-hover);
+  color: var(--accent-contrast);
   font-size: 13px;
   cursor: pointer;
 }
@@ -204,8 +211,8 @@ async function onMarkReviewed() {
 .error {
   margin: 8px 0 0;
   padding: 8px 12px;
-  background: #fef2f2;
-  color: #b91c1c;
+  background: var(--danger-surface);
+  color: var(--danger-text);
   border-radius: 6px;
   font-size: 13px;
 }
@@ -224,7 +231,7 @@ async function onMarkReviewed() {
 }
 
 .notes-card {
-  background: white;
+  background: var(--bg-panel);
   border-radius: 8px;
   padding: 16px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
@@ -232,12 +239,12 @@ async function onMarkReviewed() {
 .notes-card h3 {
   margin: 0 0 8px;
   font-size: 14px;
-  color: #111827;
+  color: var(--text-primary);
 }
 .notes-input {
   width: 100%;
   min-height: 96px;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
   padding: 8px 10px;
   font-size: 14px;

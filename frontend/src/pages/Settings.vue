@@ -4,8 +4,14 @@ import { Link, router } from "@inertiajs/vue3"
 import type { Rule, Template } from "../types"
 import TemplateEditor from "../components/TemplateEditor.vue"
 import RulesList from "../components/RulesList.vue"
+import DesignSelector from "../components/DesignSelector.vue"
 import { todayString } from "../utils/date"
+// Keeps `<html data-theme>` in sync with ui_preferences across reloads.
+// Required convention for every authenticated page — see RULES.md.
+import { useThemeFromProps } from "../composables/useThemeFromProps"
 import "../app.css"
+
+useThemeFromProps()
 
 const props = defineProps<{
   templates: Template[]
@@ -53,6 +59,10 @@ const today = todayString()
       <Link :href="`/schedule/${today}/`" class="back-link">← Back to schedule</Link>
       <h1>Settings</h1>
     </header>
+
+    <section class="section">
+      <DesignSelector />
+    </section>
 
     <section class="section">
       <h2 class="section-title">Templates</h2>
@@ -117,7 +127,7 @@ const today = todayString()
 
 .back-link {
   font-size: 13px;
-  color: #3b82f6;
+  color: var(--accent);
   text-decoration: none;
 }
 
@@ -127,8 +137,9 @@ const today = todayString()
 
 .page-header h1 {
   margin: 0;
-  font-size: 24px;
-  color: #111827;
+  font-size: 26px;
+  color: var(--text-primary);
+  font-family: var(--font-family-display);
 }
 
 .section {
@@ -140,13 +151,13 @@ const today = todayString()
 .section-title {
   margin: 0;
   font-size: 18px;
-  color: #111827;
+  color: var(--text-primary);
 }
 
 .section-subtitle {
   margin: 0;
   font-size: 13px;
-  color: #6b7280;
+  color: var(--text-muted);
 }
 
 .template-grid {

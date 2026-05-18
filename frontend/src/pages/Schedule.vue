@@ -27,7 +27,10 @@ import { useUndo } from "../composables/useUndo"
 import { useDrag } from "../composables/useDrag"
 import { useDraft } from "../composables/useDraft"
 import { useChat } from "../composables/useChat"
+import { useThemeFromProps } from "../composables/useThemeFromProps"
 import "../app.css"
+
+useThemeFromProps()
 
 // Extend RenderItem with overlay variants for items containing the current time
 interface DisplayItem {
@@ -511,7 +514,7 @@ function logout() {
   max-width: 640px;
   margin: 0 auto;
   min-height: 100vh;
-  background: #f9fafb;
+  background: var(--bg-schedule-gap);
   padding-right: var(--chat-sidebar-width, 0);
 }
 
@@ -534,18 +537,23 @@ function logout() {
   align-items: center;
   justify-content: center;
   gap: 12px;
-  background: rgba(249, 250, 251, 0.85);
+  /* Theme-aware overlay: a softened wash of the page background so the
+     overlay text (theme-token foreground) is always readable. Avoids
+     adding a new --draft-overlay-bg token without breaking the P4 freeze. */
+  background: color-mix(in srgb, var(--bg-page) 85%, transparent);
   z-index: 25;
   font-size: 14px;
-  color: #374151;
+  color: var(--text-secondary);
   pointer-events: auto;
 }
 
 .overlay-spinner {
   width: 24px;
   height: 24px;
-  border: 3px solid #e5e7eb;
-  border-top-color: #3b82f6;
+  /* Track uses the theme's strong-border token so it remains visible
+     against both light and dark overlay washes. */
+  border: 3px solid var(--border-strong);
+  border-top-color: var(--accent);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -562,8 +570,8 @@ function logout() {
   max-width: 640px;
   margin: 0 auto;
   padding: 8px 16px;
-  background: #fef2f2;
-  color: #b91c1c;
+  background: var(--danger-surface);
+  color: var(--danger-text);
   border-radius: 8px;
   font-size: 13px;
 }
@@ -638,7 +646,7 @@ function logout() {
 
 .ghost-time {
   font-size: 12px;
-  color: #3b82f6;
+  color: var(--accent);
   font-weight: 500;
   flex-shrink: 0;
 }
@@ -649,7 +657,7 @@ function logout() {
 
 .ghost-title {
   font-size: 15px;
-  color: #1f2937;
+  color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -680,31 +688,31 @@ function logout() {
 .logout-btn {
   font-size: 12px;
   padding: 4px 12px;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
-  background: white;
-  color: #6b7280;
+  background: var(--bg-panel);
+  color: var(--text-muted);
   cursor: pointer;
 }
 
 .logout-btn:hover {
-  background: #fee2e2;
-  color: #dc2626;
-  border-color: #fca5a5;
+  background: var(--danger-surface);
+  color: var(--danger-text);
+  border-color: var(--danger-border);
 }
 
 .analytics-link {
   font-size: 12px;
   padding: 4px 10px;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
-  background: white;
-  color: #374151;
+  background: var(--bg-panel);
+  color: var(--text-secondary);
   text-decoration: none;
 }
 
 .analytics-link:hover {
-  background: #f3f4f6;
-  color: #1f2937;
+  background: var(--bg-schedule-gap);
+  color: var(--text-primary);
 }
 </style>

@@ -51,16 +51,16 @@ function handleClick() {
   border: 1px dashed #d1d5db;
   border-radius: 8px;
   cursor: pointer;
-  color: #9ca3af;
+  color: var(--text-faint);
   font-size: 13px;
   box-sizing: border-box;
   height: 100%;
 }
 
 .gap-slot:hover {
-  background: #f9fafb;
-  border-color: #9ca3af;
-  color: #6b7280;
+  background: var(--bg-schedule-gap);
+  border-color: var(--text-faint);
+  color: var(--text-muted);
 }
 
 .gap-slot.disabled {
@@ -70,8 +70,8 @@ function handleClick() {
 
 .gap-slot.disabled:hover {
   background: transparent;
-  border-color: #d1d5db;
-  color: #9ca3af;
+  border-color: var(--border-strong);
+  color: var(--text-faint);
 }
 
 .gap-label {

@@ -23,6 +23,7 @@ import { nextTick, ref, type Ref } from "vue"
 vi.mock("@inertiajs/vue3", () => ({
   router: { reload: vi.fn(), visit: vi.fn(), post: vi.fn() },
   Link: { name: "Link", template: "<a><slot /></a>" },
+  usePage: () => ({ props: {} }),
 }))
 
 const generateDraft = vi.fn()

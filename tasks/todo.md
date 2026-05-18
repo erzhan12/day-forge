@@ -127,6 +127,38 @@
     invariant against the current chat surface) and `skipped-tasks-today-aware.mjs`
     (today-aware skipped-task filter holds across past/today/future analytics pages).
 
+## Feature 0010 — Selectable Design Templates
+
+Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010_REVIEW.md`.
+
+### Phases
+
+- [x] **P1 — Backend preferences data.** `UserPreferences` model + `Theme` TextChoices, migration `0003_user_preferences.py`, admin (`UserPreferencesAdmin` + `UserPreferencesInline` on `User`), `preferences.py` helper (frozen DTO, read-side normalization).
+- [x] **P2 — Backend API + Inertia props + SSR.** `GET`/`PATCH /api/user/preferences/`, `_prefs_response` Cache-Control helper, `ui_preferences` prop + `template_data={"initial_theme": …}` on `schedule_view` / `settings_view` / `analytics_view`, `_render_login` helper for all three login render paths, `base.html` `data-theme="{{ initial_theme|default:'classic' }}"`.
+- [x] **P3 — Frontend theme registry + composable.** `theme.ts` (`isKnownTheme` / `normalizeTheme` / `applyTheme`), `themes.ts` (registry + preview tokens), `useThemeFromProps`, `@inertiajs/core` `PageProps` augmentation, wiring in Schedule/Settings/Analytics, `Login.vue` defensive `applyTheme('strategic')`, `RULES.md` checklist.
+- [x] **P4 — CSS token system.** `app.css` tokens for Classic, Strategic (radial gradient + inline-SVG turbulence), Light Premium. Token-name freeze observed.
+- [x] **P5 — Settings selector.** `DesignSelector.vue` with radio group, single-source-of-truth (`page.props.ui_preferences.theme`), PATCH → `router.reload({only,onSuccess,onError,onFinish})`, all-three-disabled during save, `onError` fallback `applyTheme(normalizeTheme(id))` + `aria-live` warning, full a11y (Arrow nav, Space/Enter activation, `aria-disabled` on keyboard guard).
+- [x] **P6 — Page/component theming pass.** 17 components + page shells migrated to `var(--…)` tokens via the shared P4/P6 checklist file list.
+- [x] **P7 — Tests.** Backend 26 tests (DTO, normalization, PATCH happy/error/healing, Cache-Control on success + 400 paths, page-prop contract, hard-load SSR data-theme for login + parametrized authenticated pages, concurrent first-visit `TransactionTestCase`). Frontend 32 tests (`theme.test.ts`, `useThemeFromProps.test.ts`, `themeWiring.test.ts` static-scan, `DesignSelector.test.ts`). Playwright `theme-switch-persistence.mjs` with fail-closed JS-blocked SSR check.
+
+### Cross-phase prerequisites
+
+- [x] `base.html` `data-theme` wiring with `template_data=` on every `inertia_render` call site (P2).
+- [x] `_render_login` helper enforces Strategic on all three login render paths (P2).
+- [x] Category color contrast audit + per-theme hex overrides (P4 exit gate). Audit table in `categoryColors.ts` source comment; `health` overridden to `#059669` on Classic + Light Premium to clear 3:1 against panel surfaces. All other (theme, category) cells pass the base palette.
+- [x] Unmounted-component guard in the Settings selector PATCH handler (`isMounted` flag set in `onBeforeUnmount`).
+- [x] Drift-check `RULES.md` snippet vs final composable signature (matches current `useThemeFromProps()` import path and prop shape).
+
+### 0010 follow-ups (post-merge)
+
+- [ ] **0010-followup: user_preferences PATCH rate limit (v1.1).** Plan §Phase 2 deferred. Prerequisites: (a) extract a shared `backend/common/rate_limit.py` with sync + async entry points wrapping the same cache key scheme, (b) extend the `ai.E001` Django system check (or add a sibling) to cover any newly-registered bucket name via a registry, (c) add `USER_PREFERENCES_RATE_LIMIT_PER_HOUR` env var and wire the PATCH handler. Reason for v1 deferral: endpoint is authenticated + CSRF-protected + low-volume; worst-case abuse is one user thrashing their own preference row.
+- [ ] **0010-followup: category contrast audit re-verification after Strategic font swap.** If/when a self-hosted variable serif lands for Strategic display headings (v1.1 path in plan §Phase 4), re-run the contrast audit — heavier serif strokes may shift effective contrast on small text adjacent to category swatches.
+- [ ] **0010-followup: split `templates_mgr` if a second preference field is added.** When a second non-template preference lands (notifications, locale, time format, etc.), promote `UserPreferences` to a dedicated `users` or `preferences` app to avoid the junk-drawer pattern. Plan §Phase 1 forward-pointing note.
+- [ ] **0010-followup: Strategic editorial serif (Fraunces / Playfair Display / Source Serif 4).** v1 ships Georgia stack which under-delivers the editorial feel that motivated the Strategic theme. Pre-approved path: self-hosted OFL variable serif, subset Latin + Cyrillic, woff2 ~50–80 KB, served from `frontend/public/fonts/` via Vite — no CDN dependency. Update `--font-family-display` under `html[data-theme="strategic"]` only.
+- [ ] **0010-followup: link `theme-switch-persistence.mjs` from the feature manual-test doc.** The persistence + fail-closed FOUC script is on disk but not yet referenced in any `docs/features/*_MANUAL_TEST.md`. When a `0010_MANUAL_TEST.md` is written (or 0008's gets re-flowed), add it to the script index alongside the `ai-*.mjs` entries.
+- [ ] **0010-followup: `BroadcastChannel("ui_preferences")` for cross-tab convergence (v1.1 if needed).** v1 accepts per-tab serialization + cross-tab last-write-wins (loser tab self-heals on next navigation). Plan §Phase 5 cross-tab scope statement. Don't ship without a demonstrated need — theme switching is a low-frequency action.
+- [ ] **0010-followup: Cache-Control on 405/302 from preferences endpoint.** Plan §Phase 2 literal bullet listed 405/302 in the no-store list. Implementation does not cover them — Django's `@require_http_methods` / `@login_required` decorators run before the view so the helper never sees those paths. Practical risk is nil (405 body is empty, 302 has no body, no per-user state leak surface) — retrofit would need middleware. Document the delta or fix; do not silently leave.
+
 ## Follow-ups (discovered during manual testing)
 
 ### UX / Rules

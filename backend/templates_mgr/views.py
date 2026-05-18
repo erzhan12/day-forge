@@ -3,6 +3,7 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from inertia import render as inertia_render
 
 from templates_mgr.models import Rule, Template
+from templates_mgr.preferences import get_user_preferences
 
 
 @ensure_csrf_cookie
@@ -21,6 +22,9 @@ def settings_view(request):
     rules = list(
         Rule.objects.filter(user=request.user).order_by("-priority", "id")
     )
+    # Resolve preferences exactly once per render so the SSR data-theme
+    # and the Inertia ``ui_preferences`` prop always agree.
+    prefs = get_user_preferences(request.user)
 
     return inertia_render(
         request,
@@ -44,5 +48,7 @@ def settings_view(request):
                 }
                 for r in rules
             ],
+            "ui_preferences": {"theme": prefs.theme},
         },
+        template_data={"initial_theme": prefs.theme},
     )

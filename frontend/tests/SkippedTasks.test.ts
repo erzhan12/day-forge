@@ -1,5 +1,13 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest"
 import { mount, flushPromises } from "@vue/test-utils"
+
+// SkippedTasks now uses useActiveTheme, which reads usePage().props.
+// Default to Classic for the existing tests; the dedicated theme
+// reactivity test file exercises the reactive path explicitly.
+vi.mock("@inertiajs/vue3", () => ({
+  usePage: () => ({ props: { ui_preferences: { theme: "classic" } } }),
+}))
+
 import SkippedTasks from "../src/components/SkippedTasks.vue"
 import type { TimeBlock } from "../src/types"
 

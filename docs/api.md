@@ -405,6 +405,46 @@ Deletes the rule. Cross-user PK → `404`.
 
 ---
 
+## User Preferences
+
+Per-user UI preferences (theme, future settings). Each user has exactly one preferences row, created on first authenticated access. Distinct from `/api/templates/` (schedule templates) despite the shared `templates_mgr` app.
+
+All responses from `GET` and `PATCH` set `Cache-Control: private, no-store` — including 400/413 error responses, which is exercised by tests. The bodies of success responses are per-user state (the saved theme); the bodies of error responses are fixed strings (`"Invalid theme."`, `"Invalid JSON."`, etc.) that do NOT echo the client-supplied value. A misconfigured CDN/proxy must never cache any path regardless, so the helper applies the header uniformly. (The header is NOT attached to 405/302 responses produced by Django's `@require_http_methods` / `@login_required` decorators before the view runs; those bodies are empty or a redirect Location, with no per-user state leak surface.)
+
+### `GET /api/user/preferences/`
+
+Returns the current user's preferences. Creates a default row (theme `"classic"`) if none exists.
+
+```json
+{"theme": "classic"}
+```
+
+`theme` is always one of `classic`, `strategic`, `light_premium`. An invalid persisted value (e.g. retired theme id, fixture typo) is normalized to `classic` on read **without** rewriting the DB row.
+
+### `PATCH /api/user/preferences/`
+
+Partial update. Currently only `theme` is editable.
+
+**Body**
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `theme` | string | `classic`, `strategic`, or `light_premium`. |
+
+Unknown keys are silently ignored (forward-compatibility — matches the `/api/rules/{pk}/` PATCH pattern). A body containing zero recognized fields returns `400` with `errors.body = "No editable fields supplied."`; this is reserved for that case only — a PATCH with the same value as the persisted theme is a valid `200` no-op.
+
+**Errors**
+
+| Status | `errors` key | Meaning |
+|--------|--------------|---------|
+| `400` | `body` | Invalid JSON, non-object body, or no recognized fields supplied. |
+| `400` | `theme` | Value is not one of the allowed theme ids. |
+| `413` | `body` | Request body exceeds 100 KB. |
+
+Unauthenticated requests follow the conventions header — Django's `@login_required` returns a `302` redirect to `/accounts/login/`, NOT a JSON `401`.
+
+---
+
 ## Analytics
 
 Per-day review panel + Mark-reviewed flow. The Inertia page route

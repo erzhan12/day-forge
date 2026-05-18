@@ -26,7 +26,8 @@ from schedules.http import (
     validate_time_range,
 )
 
-from templates_mgr.models import Rule, Template
+from templates_mgr.models import Rule, Template, UserPreferences
+from templates_mgr.preferences import get_user_preferences
 
 logger = logging.getLogger(__name__)
 
@@ -390,6 +391,105 @@ def rule_detail(request, pk):
     return JsonResponse(_rule_to_dict(rule))
 
 
+# ---------------------------------------------------------------------------
+# User preferences
+# ---------------------------------------------------------------------------
+
+
+_VALID_THEMES = frozenset(UserPreferences.Theme.values)
+
+
+def _prefs_response(payload: dict, status: int = 200) -> JsonResponse:
+    """Every response from ``user_preferences`` is per-user state — wrap
+    so error and success paths share the same ``Cache-Control`` rule and
+    no future edit can accidentally leak a 4xx body through a proxy.
+
+    Spec delta from feature 0010 plan §Phase 2: the plan listed 405 and
+    302 in the no-store bullet, but neither response is produced by this
+    view. ``@require_http_methods`` returns 405 and ``@login_required``
+    returns 302 before any view code runs, so the helper never sees them.
+    Practical risk is nil — 405 body is empty and 302 has no body, with
+    no per-user state leak surface. Tracked as a 0010-followup in
+    ``tasks/todo.md`` so the gap doesn't get lost between releases.
+    """
+    resp = JsonResponse(payload, status=status)
+    resp["Cache-Control"] = "private, no-store"
+    return resp
+
+
+def _prefs_to_dict(prefs: UserPreferences) -> dict:
+    """Serialize a ``UserPreferences`` row using the same normalization
+    rule as the read-side DTO. Used by ``PATCH`` after a write."""
+    from templates_mgr.preferences import normalize_theme
+
+    return {"theme": normalize_theme(prefs.theme)}
+
+
+@login_required
+@require_http_methods(["GET", "PATCH"])
+def user_preferences(request):
+    """Read or update the authenticated user's UI preferences.
+
+    See feature 0010 plan for the corruption-healing PATCH semantics and
+    the ``Cache-Control: private, no-store`` invariant.
+    """
+    if request.method == "GET":
+        prefs = get_user_preferences(request.user)
+        return _prefs_response({"theme": prefs.theme})
+
+    oversized = reject_oversized_body(request)
+    if oversized is not None:
+        # ``reject_oversized_body`` returns a raw 413 JsonResponse; rebuild
+        # it through the cache-header helper so the proxy invariant holds.
+        return _prefs_response(
+            {"errors": {"body": "Request body too large."}}, status=413
+        )
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return _prefs_response({"errors": {"body": "Invalid JSON."}}, status=400)
+
+    if not isinstance(data, dict):
+        return _prefs_response(
+            {"errors": {"body": "Request body must be a JSON object."}},
+            status=400,
+        )
+
+    # Extract recognized fields only (matches the existing PATCH pattern
+    # in ``rule_detail``). Unknown keys are silently ignored.
+    cleaned: dict = {}
+    if "theme" in data:
+        theme = data["theme"]
+        # `isinstance(theme, str)` guard is load-bearing: `_VALID_THEMES`
+        # is a frozenset, so an unhashable value (list, dict) reaches
+        # `in` and raises `TypeError`, bypassing this helper and producing
+        # an unhandled 500 with no Cache-Control header. Pre-check the
+        # type to keep the failure path inside `_prefs_response`.
+        if not isinstance(theme, str) or theme not in _VALID_THEMES:
+            return _prefs_response(
+                {"errors": {"theme": "Invalid theme."}}, status=400
+            )
+        cleaned["theme"] = theme
+
+    if not cleaned:
+        return _prefs_response(
+            {"errors": {"body": "No editable fields supplied."}}, status=400
+        )
+
+    # Always write recognized fields (no "skip if unchanged" optimization)
+    # so that a corrupted ``theme`` row is healed on the next PATCH —
+    # the read-side helper normalizes invalid values without writing.
+    prefs, _ = UserPreferences.objects.get_or_create(
+        user=request.user,
+        defaults={"theme": UserPreferences.Theme.CLASSIC},
+    )
+    for field, value in cleaned.items():
+        setattr(prefs, field, value)
+    prefs.save(update_fields=list(cleaned.keys()))
+    return _prefs_response(_prefs_to_dict(prefs))
+
+
 # Imports kept at end so unused-import lint doesn't trip on
 # ``parse_time_or_error`` / ``validate_five_minute_or_error`` /
 # ``validate_time_range`` — they are intentionally re-exported for tests
@@ -400,6 +500,7 @@ __all__ = [
     "template_detail",
     "rules_collection",
     "rule_detail",
+    "user_preferences",
     "validate_template_blocks",
     "parse_time_or_error",
     "validate_five_minute_or_error",

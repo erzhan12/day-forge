@@ -133,27 +133,27 @@ function cancel() {
   border: 2px dashed #d1d5db;
   border-radius: 8px;
   background: transparent;
-  color: #6b7280;
+  color: var(--text-muted);
   font-size: 15px;
   font-weight: 500;
 }
 
 .add-btn:hover {
-  border-color: #9ca3af;
-  color: #374151;
-  background: #f9fafb;
+  border-color: var(--text-faint);
+  color: var(--text-secondary);
+  background: var(--bg-schedule-gap);
 }
 
 .error-banner {
-  background: #fef2f2;
-  color: #dc2626;
+  background: var(--danger-surface);
+  color: var(--danger-text);
   padding: 8px 12px;
   border-radius: 6px;
   font-size: 13px;
 }
 
 .add-form {
-  background: white;
+  background: var(--bg-panel);
   border-radius: 8px;
   padding: 16px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
@@ -163,7 +163,7 @@ function cancel() {
 }
 
 .input {
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
   padding: 8px 10px;
   font-size: 14px;
@@ -183,7 +183,7 @@ function cancel() {
   flex-direction: column;
   gap: 4px;
   font-size: 12px;
-  color: #6b7280;
+  color: var(--text-muted);
   font-weight: 500;
 }
 
@@ -194,26 +194,26 @@ function cancel() {
 
 .submit-btn {
   padding: 8px 20px;
-  background: #3b82f6;
-  color: white;
+  background: var(--accent);
+  color: var(--accent-contrast);
   border: none;
   border-radius: 6px;
   font-weight: 500;
 }
 
 .submit-btn:hover {
-  background: #2563eb;
+  background: var(--accent-hover);
 }
 
 .cancel-btn {
   padding: 8px 20px;
-  background: white;
-  border: 1px solid #d1d5db;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
-  color: #6b7280;
+  color: var(--text-muted);
 }
 
 .cancel-btn:hover {
-  background: #f3f4f6;
+  background: var(--bg-schedule-gap);
 }
 </style>

@@ -61,16 +61,18 @@ function handleClick() {
 .regen-btn {
   font-size: 12px;
   padding: 4px 12px;
-  border: 1px solid #fcd34d;
+  border: 1px solid var(--warning-border);
   border-radius: 12px;
-  background: #fef3c7;
-  color: #92400e;
+  background: var(--warning-surface);
+  color: var(--warning-text);
   cursor: pointer;
   font-weight: 500;
 }
 
 .regen-btn:hover:not(:disabled) {
-  background: #fde68a;
+  /* Slightly stronger than the resting surface; uses the border token
+     which is a more saturated step in the same warning family. */
+  background: var(--warning-border);
 }
 
 .regen-btn.disabled,
@@ -82,6 +84,6 @@ function handleClick() {
 .reason {
   margin: 0;
   font-size: 11px;
-  color: #92400e;
+  color: var(--warning-text);
 }
 </style>

@@ -3,7 +3,8 @@ import { ref, computed, nextTick, inject } from "vue"
 import type { Ref } from "vue"
 import type { TimeBlock, UndoAction } from "../types"
 import { useSchedule } from "../composables/useSchedule"
-import { categoryColors } from "../utils/categoryColors"
+import { getCategoryColor } from "../utils/categoryColors"
+import { useActiveTheme } from "../composables/useActiveTheme"
 
 const props = defineProps<{
   block: TimeBlock
@@ -11,6 +12,11 @@ const props = defineProps<{
 }>()
 
 const { updateBlock, deleteBlock } = useSchedule(props.date)
+// Tracks the active theme reactively so the left-border color updates
+// when the user switches themes while this block is mounted (without
+// it, `getCategoryColor()` reads dataset.theme at call time only, with
+// no Vue-tracked dep).
+const activeTheme = useActiveTheme()
 
 const undo = inject<{
   pushUndo: (action: UndoAction) => void
@@ -166,7 +172,7 @@ async function handleDelete() {
       dragging: drag?.isDragging.value && drag?.dragBlockId.value === block.id,
       shifting: drag?.shiftedBlockIds.value.has(block.id),
     }"
-    :style="{ borderLeftColor: categoryColors[block.category] }"
+    :style="{ borderLeftColor: getCategoryColor(block.category, activeTheme) }"
   >
     <div
       class="drag-handle"
@@ -243,7 +249,7 @@ async function handleDelete() {
 .block-error {
   margin-top: 4px;
   font-size: 12px;
-  color: #dc2626;
+  color: var(--danger-text);
 }
 
 .time-block {
@@ -251,7 +257,7 @@ async function handleDelete() {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  background: white;
+  background: var(--bg-panel);
   border-left: 4px solid #6b7280;
   border-radius: 8px;
   padding: 12px 16px 12px 32px;
@@ -329,7 +335,7 @@ async function handleDelete() {
 }
 
 .drag-handle:hover {
-  color: #6b7280;
+  color: var(--text-muted);
 }
 
 .drag-handle:active {
@@ -345,13 +351,13 @@ async function handleDelete() {
 
 .time-badge {
   font-size: 12px;
-  color: #6b7280;
+  color: var(--text-muted);
   font-weight: 500;
 }
 
 .duration {
   font-size: 12px;
-  color: #9ca3af;
+  color: var(--text-faint);
 }
 
 .delete-btn {
@@ -361,7 +367,7 @@ async function handleDelete() {
   border: none;
   border-radius: 4px;
   background: transparent;
-  color: #9ca3af;
+  color: var(--text-faint);
   font-size: 18px;
   display: flex;
   align-items: center;
@@ -392,17 +398,17 @@ async function handleDelete() {
 }
 
 .title:hover {
-  color: #3b82f6;
+  color: var(--accent);
 }
 
 .title-completed {
   text-decoration: line-through;
-  color: #9ca3af;
+  color: var(--text-faint);
 }
 
 .title-input {
   flex: 1;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--border-strong);
   border-radius: 4px;
   padding: 2px 6px;
   font-size: 15px;

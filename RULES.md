@@ -158,3 +158,12 @@ These have shown up repeatedly from `claude-review` and were rejected with the u
 - **Adding indexes that already exist by Django default** (e.g. on a `OneToOneField`'s implicit unique index, or an `UniqueConstraint(fields=['a', 'b'])`'s composite index). Verify with `sqlite_master` / `pg_indexes` before agreeing.
 
 When in doubt: **a written rejection on the PR > silent ignoring > complying with bad advice**. The conversation log of "here's why we rejected this" is itself useful context for the next reviewer pass.
+
+## New authenticated Inertia page checklist (feature 0010)
+
+Any new authenticated Inertia page MUST do both of:
+
+1. **Backend**: the view passes `ui_preferences={"theme": prefs.theme}` in its Inertia props AND `template_data={"initial_theme": prefs.theme}` to `inertia_render`. Resolve `prefs` exactly once per request via `templates_mgr.preferences.get_user_preferences(request.user)`. Without `template_data`, `base.html` falls back to the `'classic'` default and Strategic users see a Classic-light flash on the first paint.
+2. **Frontend**: the page component calls `useThemeFromProps()` (`frontend/src/composables/useThemeFromProps.ts`) once in its `setup()` block. Without it, partial Inertia reloads that include `ui_preferences` do not propagate to `<html data-theme>`.
+
+The P7 SSR first-paint test and the static-scan test enforce (1) and (2) at CI; the rule is documented here so the convention survives session boundaries.

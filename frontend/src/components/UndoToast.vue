@@ -68,7 +68,7 @@ const emit = defineEmits<{
 .toast-close-btn {
   background: none;
   border: none;
-  color: #9ca3af;
+  color: var(--text-faint);
   font-size: 18px;
   cursor: pointer;
   padding: 2px 4px;
@@ -85,7 +85,7 @@ const emit = defineEmits<{
   bottom: 0;
   left: 0;
   height: 3px;
-  background: #3b82f6;
+  background: var(--accent);
   animation: shrink 8s linear forwards;
 }
 
