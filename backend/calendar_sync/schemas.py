@@ -68,7 +68,7 @@ def validate_account_payload(data: dict) -> tuple[dict, dict]:
     if not isinstance(password, str) or not password:
         errors["password"] = "password is required."
     elif len(password) > 128:
-        # Apple app-specific passwords are 16-27 chars; 128 is 4x the
+        # Apple app-specific passwords are 16-27 chars; 128 is ~5x the
         # longest realistic value and tight enough to reject pathological
         # payloads before they reach Fernet or the DAVClient.
         errors["password"] = "password is too long (max 128 characters)."

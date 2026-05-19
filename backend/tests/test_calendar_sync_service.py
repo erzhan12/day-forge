@@ -148,6 +148,30 @@ class TestFetchEventsForDate:
         with pytest.raises(service.CalDAVTimeoutError):
             service.fetch_events_for_date(account, datetime.date(2026, 5, 7))
 
+    def test_vevent_with_duration_but_no_dtend(self):
+        """A timed VEVENT with DURATION but no DTEND must compute
+        ``end = start + DURATION`` (review iter-5 P1 TESTING coverage
+        for the DURATION fallback branch in `_normalize_vevent`)."""
+        import icalendar
+        VEVENT_DURATION = """BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Test//EN
+BEGIN:VEVENT
+UID:duration-001@example.com
+DTSTAMP:20260507T000000Z
+DTSTART:20260507T140000Z
+DURATION:PT1H30M
+SUMMARY:Meeting
+END:VEVENT
+END:VCALENDAR
+"""
+        cal = icalendar.Calendar.from_ical(VEVENT_DURATION)
+        vevent = next(c for c in cal.walk() if c.name == "VEVENT")
+        ev = service._normalize_vevent(vevent, "TestCal")
+        assert ev is not None
+        assert ev.title == "Meeting"
+        assert (ev.end - ev.start) == datetime.timedelta(hours=1, minutes=30)
+
     def test_vevent_without_dtend_or_duration_uses_rfc5545_default(self):
         """RFC 5545 §3.6.1: timed event without DTEND/DURATION has zero
         duration; all-day event spans exactly one day (review iter-4
