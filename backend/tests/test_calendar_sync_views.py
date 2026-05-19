@@ -181,6 +181,23 @@ class TestAccountPost:
         assert "base_url" in body["errors"]
         assert not CalDAVAccount.objects.filter(user=user).exists()
 
+    def test_post_password_too_long_returns_400_per_field(self, auth_client, user):
+        """Reject a > 1024-char password before it hits Fernet/DAVClient
+        (review iter-3 P1 SECURITY)."""
+        resp = auth_client.post(
+            "/api/calendar/account/",
+            data={
+                "apple_id": "alice@example.com",
+                "password": "x" * 2000,
+            },
+            content_type="application/json",
+        )
+        assert resp.status_code == 400
+        body = resp.json()
+        assert "password" in body["errors"]
+        assert "too long" in body["errors"]["password"]
+        assert not CalDAVAccount.objects.filter(user=user).exists()
+
     def test_post_empty_base_url_falls_back_to_default(self, auth_client, user):
         """Empty/whitespace base_url is NOT a validation error — view
         substitutes settings.CALDAV_DEFAULT_BASE_URL."""

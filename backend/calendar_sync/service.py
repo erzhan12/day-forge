@@ -188,13 +188,22 @@ def _expand_events(events_iter: Iterable, start: dt, end: dt) -> list:
     for raw_event in events_iter:
         try:
             ical_inst = raw_event.icalendar_instance
-        except Exception:
-            logger.exception("Failed to parse caldav.Event; skipping")
+        except (ValueError, AttributeError, KeyError) as e:
+            # Malformed iCalendar payload — log + skip the event,
+            # don't fail the whole fetch. Bug-class errors (NameError,
+            # ImportError) propagate so real defects surface.
+            logger.warning(
+                "Failed to parse caldav.Event (%s: %s); skipping",
+                type(e).__name__, e,
+            )
             continue
         try:
             occurrences = recurring_ical_events.of(ical_inst).between(start, end)
-        except Exception:
-            logger.exception("recurring_ical_events expansion failed; skipping")
+        except (ValueError, AttributeError, KeyError, TypeError) as e:
+            logger.warning(
+                "recurring_ical_events expansion failed (%s: %s); skipping",
+                type(e).__name__, e,
+            )
             continue
         out.extend(occurrences)
     return out

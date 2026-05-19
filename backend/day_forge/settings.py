@@ -237,6 +237,19 @@ CALDAV_REQUEST_TIMEOUT = float(os.environ.get("CALDAV_REQUEST_TIMEOUT", "10"))
 # calendar_sync/cache.py) keep correctness intact regardless of backend;
 # the ``calendar_sync.W001`` check warns when the backend is non-shared.
 CALDAV_CACHE_TTL_SECONDS = int(os.environ.get("CALDAV_CACHE_TTL_SECONDS", "300"))
+# Match the ANALYTICS_STREAK_* import-time validation pattern: fail
+# loudly on a misconfigured deploy rather than silently producing
+# zero-TTL caches (every request a cache miss, hammering iCloud).
+if CALDAV_CACHE_TTL_SECONDS <= 0:
+    raise ValueError(
+        "CALDAV_CACHE_TTL_SECONDS must be a positive integer; "
+        f"got {CALDAV_CACHE_TTL_SECONDS!r}"
+    )
+if CALDAV_REQUEST_TIMEOUT <= 0:
+    raise ValueError(
+        "CALDAV_REQUEST_TIMEOUT must be a positive number; "
+        f"got {CALDAV_REQUEST_TIMEOUT!r}"
+    )
 
 # Analytics / streak. Validated at import time so a misconfigured value
 # fails the worker boot loudly instead of silently producing ``streak=0``

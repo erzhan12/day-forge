@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { computed } from "vue"
 import type { NormalizedEvent } from "../types/calendar"
 
-const props = defineProps<{
+defineProps<{
   events: NormalizedEvent[]
   loading: boolean
   error: string | null
@@ -17,8 +16,6 @@ function formatTime(iso: string): string {
   const d = new Date(iso)
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })
 }
-
-const visibleEvents = computed(() => props.events)
 </script>
 
 <template>
@@ -34,9 +31,9 @@ const visibleEvents = computed(() => props.events)
       <button type="button" class="ee-retry" @click="emit('retry')">Retry</button>
     </div>
 
-    <ul v-else-if="!loading && visibleEvents.length > 0" class="ee-list">
+    <ul v-else-if="!loading && events.length > 0" class="ee-list">
       <li
-        v-for="ev in visibleEvents"
+        v-for="ev in events"
         :key="ev.external_uid"
         class="ee-item"
         data-testid="external-event"

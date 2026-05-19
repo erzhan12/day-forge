@@ -148,6 +148,31 @@ class TestFetchEventsForDate:
         with pytest.raises(service.CalDAVTimeoutError):
             service.fetch_events_for_date(account, datetime.date(2026, 5, 7))
 
+    def test_malformed_vevent_is_skipped_not_crash(self, caplog):
+        """A VEVENT with a missing required field (e.g. DTSTART) must be
+        skipped (logged warning) rather than crashing the whole fetch
+        (review iter-3 P2 TESTING). Direct unit-level test on
+        ``_normalize_vevent`` — narrow catch list returns None for the
+        documented error types.
+        """
+        # Build a real Calendar with a VEVENT, then drop DTSTART.
+        import icalendar
+        cal = icalendar.Calendar.from_ical(VEVENT_TIMED)
+        vevent = next(c for c in cal.walk() if c.name == "VEVENT")
+        del vevent["DTSTART"]
+
+        with caplog.at_level(logging.WARNING):
+            result = service._normalize_vevent(vevent, "TestCal")
+
+        assert result is None
+        assert any(
+            "Failed to normalize VEVENT" in r.getMessage()
+            for r in caplog.records
+        )
+        # Type name appears in the warning so ops can identify recurring
+        # data-quality issues.
+        assert any("KeyError" in r.getMessage() for r in caplog.records)
+
     def test_fetch_per_calendar_dav_error_propagates(self, account, patched_dav_client):
         """A DAVError raised by ``calendar.date_search`` MUST propagate
         as a CalDAVProviderError — silently skipping the calendar would
