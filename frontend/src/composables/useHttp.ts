@@ -5,6 +5,14 @@
 // `X-XSRF-TOKEN` header. The matching Django settings live in
 // backend/day_forge/settings.py as CSRF_COOKIE_NAME and CSRF_HEADER_NAME —
 // if either side changes, change both.
+//
+// Cancellation: pass `{ signal }` as the fourth arg to abort an in-flight
+// request. `AbortError` propagates as a thrown rejection (not the usual
+// `{ok: false, errors: {...}}` envelope) so callers can swallow it cleanly
+// in the stale-response guard pattern used by `useCalendar` / `useCalendarAccount`.
+// GET-call shape footgun: pass `undefined` as the third positional arg, NOT
+// the options object — `requestJson(url, "GET", { signal })` would serialise
+// the options as the JSON body.
 
 export function getCsrfToken(): string {
   const match = document.cookie.match(/XSRF-TOKEN=([^;]+)/)
@@ -28,10 +36,15 @@ export interface ApiResult {
  * Callers add their own side-effects (e.g. `router.reload`, health-state
  * flips) on top.
  */
+export interface RequestOptions {
+  signal?: AbortSignal
+}
+
 export async function requestJson(
   url: string,
   method: string,
   body?: Record<string, unknown>,
+  options?: RequestOptions,
 ): Promise<ApiResult> {
   let resp: Response
   try {
@@ -42,8 +55,15 @@ export async function requestJson(
         "X-XSRF-TOKEN": getCsrfToken(),
       },
       body: body ? JSON.stringify(body) : undefined,
+      signal: options?.signal,
     })
-  } catch {
+  } catch (err) {
+    // Rethrow `AbortError` so callers in the stale-response guard pattern
+    // (`useCalendar`, `useCalendarAccount`) can swallow it without flipping
+    // their `loading` / `error` state — the superseding op owns that.
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw err
+    }
     return {
       ok: false,
       errors: { detail: "Network error. Please check your connection." },
