@@ -19,7 +19,7 @@ from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ImproperlyConfigured
 from django.db import transaction
-from django.http import JsonResponse
+from django.http import HttpRequest, JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 from schedules.http import reject_oversized_body
@@ -86,7 +86,7 @@ def _service_error_response(exc: Exception) -> JsonResponse:
 
 @login_required
 @require_http_methods(["GET", "POST", "DELETE"])
-def account(request):
+def account(request: HttpRequest) -> JsonResponse:
     if request.method == "GET":
         try:
             acc = request.user.caldav_account
@@ -150,7 +150,7 @@ def account(request):
 
 @login_required
 @require_http_methods(["GET"])
-def events(request, date):
+def events(request: HttpRequest, date: str) -> JsonResponse:
     try:
         parsed_date = datetime.date.fromisoformat(date)
     except ValueError:

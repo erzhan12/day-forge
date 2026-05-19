@@ -396,3 +396,27 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
   debug session, but adds API surface and a `DEBUG` branch in a path
   with no current production user-complaints. Pin when a real
   debugging incident calls for it.
+
+- [ ] **CalDAV: `LLM_*`-style per-user rate limit on `/api/calendar/*`.**
+  PR #30 `claude-review` iter-2 P1 [SECURITY] flagged the absence of a
+  `CALDAV_RATE_LIMIT_PER_HOUR` bucket on `calendar_sync/views.py`. The
+  server-side per-(user, date, account.updated_at) cache absorbs the
+  common-case abuse (repeat fetches of the same day), and cache-miss
+  spam is bounded by the number of distinct dates a single user can
+  enumerate. No measured iCloud throttling complaint exists today, so
+  the work is deferred rather than scope-crept into the V1 PR. Pin if
+  iCloud starts rate-limiting Day Forge, or if a real abuse pattern
+  surfaces in the audit log. Implementation reference: mirror
+  `ai/views.py:_consume_rate_limit` with a fresh `caldav_rl` bucket
+  and update `ai.E001` (or split into `calendar_sync.E002`) to cover
+  the new bucket under the same LocMemCache prod guard.
+
+- [ ] **CalDAV: cache the `Fernet(key)` instance.** PR #30
+  `claude-review` iter-2 P2 [PERFORMANCE] suggested an
+  `@lru_cache(maxsize=1)` on `_fernet()` in
+  `backend/calendar_sync/crypto.py`. The constructor cost is
+  microseconds (base64 decode + key length check); no measured hot
+  path. Naive `lru_cache` would also leak across `override_settings`
+  test contexts unless the cache is keyed on the settings value. Pin
+  when a measured-hot-path complaint surfaces or when the encrypt /
+  decrypt call rate climbs (e.g., bulk re-key migration).

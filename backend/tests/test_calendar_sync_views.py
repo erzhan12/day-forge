@@ -397,6 +397,31 @@ class TestCacheInvalidation:
 # ---- Authentication guard -----------------------------------------------
 
 
+class TestCsrfGuard:
+    """Confirm CSRF middleware is active on the mutating endpoints —
+    regression-catches an accidental ``@csrf_exempt`` (review iter-2 P2)."""
+
+    def test_post_without_csrf_token_returns_403(self, db):
+        from django.test import Client
+        User.objects.create_user(username="csrf-cal", password="x")
+        client = Client(enforce_csrf_checks=True)
+        client.login(username="csrf-cal", password="x")
+        resp = client.post(
+            "/api/calendar/account/",
+            data='{"apple_id": "a@b.com", "password": "x"}',
+            content_type="application/json",
+        )
+        assert resp.status_code == 403
+
+    def test_delete_without_csrf_token_returns_403(self, db):
+        from django.test import Client
+        User.objects.create_user(username="csrf-cal2", password="x")
+        client = Client(enforce_csrf_checks=True)
+        client.login(username="csrf-cal2", password="x")
+        resp = client.delete("/api/calendar/account/")
+        assert resp.status_code == 403
+
+
 class TestAuthGuard:
     def test_anonymous_account_get_redirects_to_login(self, db):
         client = Client()

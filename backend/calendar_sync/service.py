@@ -149,8 +149,19 @@ def _normalize_vevent(vevent, calendar_name: str) -> NormalizedEvent | None:
             all_day=all_day,
             external_uid=uid,
         )
-    except Exception:
-        logger.exception("Failed to normalize VEVENT; skipping")
+    except (KeyError, ValueError, AttributeError, TypeError) as e:
+        # Narrow to the exception types that ``icalendar`` /
+        # ``recurring_ical_events`` actually raise on malformed input:
+        # missing required field (KeyError), bad dt parse (ValueError),
+        # accessing ``.dt`` on something that lacks it (AttributeError),
+        # arithmetic between incompatible date/datetime (TypeError).
+        # Anything else (NameError, ImportError, runtime bugs) propagates
+        # — silently dropping bug-class errors would mask real defects.
+        logger.warning(
+            "Failed to normalize VEVENT (%s: %s); skipping",
+            type(e).__name__,
+            e,
+        )
         return None
 
 
