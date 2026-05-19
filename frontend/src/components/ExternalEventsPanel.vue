@@ -50,6 +50,8 @@ function formatTime(iso: string): string {
     <p v-else-if="loading" class="ee-skeleton" aria-hidden="true">
       <span class="ee-skel-row"></span>
       <span class="ee-skel-row"></span>
+      <span class="ee-skel-row"></span>
+      <span class="ee-skel-row"></span>
     </p>
 
     <p v-else class="ee-empty">No Apple Calendar events for this day.</p>

@@ -649,7 +649,11 @@ set to `now()`; `updated_at` advances (rotates the events cache key).
 - `502` — `CalDAVProviderError`.
 - `504` — `CalDAVTimeoutError`.
 - `500` — `Calendar service is misconfigured` (server-side
-  encryption-key issue; ops-only).
+  encryption-key issue; ops-only). **Operator action**: confirm
+  `CALDAV_ENCRYPTION_KEY` matches the value used when the
+  `CalDAVAccount` row was last written. If the key rotated, see
+  `.claude/rules/project.md` § "CalDAV key rotation note" for the
+  re-encrypt or instruct-reconnect playbook.
 
 All non-`2xx` use `{"errors": {"detail": "<message>", ...}}`.
 
@@ -704,6 +708,6 @@ each occurrence is unique.
 | `502` | `CalDAVProviderError` — iCloud DAV failure (incl. per-calendar `date_search` errors). |
 | `503` | No `CalDAVAccount` configured for this user. |
 | `504` | `CalDAVTimeoutError` — request exceeded `CALDAV_REQUEST_TIMEOUT`. |
-| `500` | `Calendar service is misconfigured` — `CALDAV_ENCRYPTION_KEY` cannot decrypt the stored row (e.g. key rotation without re-write). |
+| `500` | `Calendar service is misconfigured` — `CALDAV_ENCRYPTION_KEY` cannot decrypt the stored row (e.g. key rotation without re-write). **Operator action**: see `.claude/rules/project.md` § "CalDAV key rotation note". |
 
 All non-`2xx` use `{"errors": {"detail": "<message>"}}`.

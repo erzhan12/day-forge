@@ -263,3 +263,8 @@ class TestCredentialsNeverLogged:
 
         joined = "\n".join(r.getMessage() for r in caplog.records)
         assert password_plain not in joined
+        # Defence-in-depth: the *ciphertext* must also never appear in
+        # logs — leaking it over time could give an attacker key
+        # material to chip away at (review iter-6 P2 TESTING).
+        ciphertext_hex = bytes(account.password_encrypted).hex()
+        assert ciphertext_hex not in joined

@@ -230,6 +230,11 @@ def fetch_events_for_date(account, target_date: date) -> list[NormalizedEvent]:
         )
         principal = client.principal()
         normalized: list[NormalizedEvent] = []
+        # V1 fetches calendars sequentially. For users with many shared
+        # calendars this adds one iCloud RTT per calendar. A future
+        # optimisation could parallelise via asyncio.gather + an async
+        # CalDAV client, but the V1 budget (per-(user, date) cache +
+        # CALDAV_REQUEST_TIMEOUT) keeps the worst-case bounded.
         for calendar in principal.calendars():
             calendar_name = _calendar_display_name(calendar)
             try:
