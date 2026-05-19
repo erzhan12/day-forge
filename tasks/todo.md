@@ -358,3 +358,41 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
   regression. Pin if the contract ever changes (e.g., asgiref version
   bump that affects exception propagation) or if a future bug actually
   shows the implicit tests missing something.
+
+- [ ] **CalDAV: drop-counter / metrics for malformed VEVENT skips.**
+  PR #30 `claude-review` iter-1 P1 [QUALITY] flagged
+  `backend/calendar_sync/service.py:_normalize_vevent`'s broad
+  `except Exception` — it logs each failure but provides no aggregate
+  visibility. The project has no metrics infra (no Prometheus / StatsD
+  sink), so a bare `counter += 1` would be dead code. Defer until
+  either a metrics surface lands or a real-world incident shows the
+  per-event logs are noisy enough to need aggregation. Cheap
+  alternative when it comes up: emit a single `logger.warning` summary
+  per-fetch with `(drops, total)` counts.
+
+- [ ] **CalDAV: concurrent `POST /api/calendar/account/` regression
+  test for the same user.** PR #30 `claude-review` iter-1 P2 [TESTING]
+  asked for a threaded test that two simultaneous POSTs serialize
+  cleanly via the `select_for_update` + `get_or_create` flow in
+  `calendar_sync/views.py:account`. SQLite (Day Forge's dev DB) only
+  weakly honours `SELECT ... FOR UPDATE` — `schedules.W001` already
+  warns about this — so a threaded test would be flaky on SQLite and
+  meaningful only against Postgres. Pin to whichever PR moves
+  `schedules` to a real concurrency-supporting DB (probably the same
+  PR that satisfies `schedules.W001`); add the test alongside any
+  other deferred concurrency coverage.
+
+- [ ] **CalDAV admin: at-a-glance "connected" column.**
+  PR #30 `claude-review` iter-1 P3 [DOCS] suggested adding a
+  `connected_status` field to `CalDAVAccountAdmin.list_display` that
+  renders "✓ Connected" or empty. Cosmetic; the existing columns
+  (`user`, `apple_id`, `base_url`, `last_verified_at`) already convey
+  the same info. Pin when an ops person actually reports needing it.
+
+- [ ] **CalDAV: debug-only `?nocache=1` query param on
+  `GET /api/calendar/events/<date>/`.** PR #30 `claude-review` iter-1
+  P3 [QUALITY] suggested a dev-only escape hatch that bypasses
+  `get_cached_events`. Useful for the rare "events not updating"
+  debug session, but adds API surface and a `DEBUG` branch in a path
+  with no current production user-complaints. Pin when a real
+  debugging incident calls for it.

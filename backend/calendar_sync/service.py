@@ -253,7 +253,9 @@ def fetch_events_for_date(account, target_date: date) -> list[NormalizedEvent]:
     except Exception as e:
         raise CalDAVProviderError("CalDAV provider error") from e
     finally:
-        # Defensive: drop local reference so the plaintext doesn't linger
-        # in a frame any longer than necessary. CPython will still hold
-        # it in the local until the frame unwinds; this is best-effort.
-        password = None  # noqa: F841
+        # Defensive: drop the local binding so the plaintext doesn't
+        # linger in the frame's locals dict any longer than necessary.
+        # ``del`` makes intent explicit; the binding is unreachable
+        # afterwards. Best-effort — Python may still hold the string
+        # via interning or refcount cycles.
+        del password

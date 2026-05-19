@@ -76,31 +76,62 @@ def warn_ineffective_cache_with_calendar_sync(app_configs, **kwargs):
 
 @register()
 def error_caldav_encryption_key_missing_in_production(app_configs, **kwargs):
-    """Block production startup when CALDAV_ENCRYPTION_KEY is unset.
+    """Block production startup when CALDAV_ENCRYPTION_KEY is unset OR
+    malformed.
 
     Only reads ``settings`` — no DB query — so this is safe to run before
     any migration. A silent fallback to an empty key would silently break
     every password write/read, so a loud ``Error`` is the right shape.
+
+    Also validates the key by instantiating ``Fernet(key)``. Without this
+    second check, a malformed key (e.g. wrong length, not base64) would
+    pass the "non-empty" gate, the deploy would boot, the first POST
+    would crash inside ``set_password`` with ``ImproperlyConfigured``,
+    and the user would see a 500 instead of catching the problem at
+    startup. ``Fernet(...)`` is pure crypto — no DB or filesystem
+    access — so it's safe to run during ``manage.py check``.
     """
     errors = []
     if settings.DEBUG:
         return errors
     key = getattr(settings, "CALDAV_ENCRYPTION_KEY", "") or ""
-    if key:
-        return errors
-    errors.append(
-        Error(
-            "CALDAV_ENCRYPTION_KEY is not set while DEBUG=False. The "
-            "CalDAV integration cannot encrypt or decrypt stored "
-            "passwords without it; all account writes will fail with "
-            "ImproperlyConfigured at request time.",
-            hint=(
-                "Generate a key with "
-                "`python -c \"from cryptography.fernet import Fernet; "
-                "print(Fernet.generate_key().decode())\"` and set "
-                "CALDAV_ENCRYPTION_KEY in your production environment."
-            ),
-            id="calendar_sync.E001",
+    if not key:
+        errors.append(
+            Error(
+                "CALDAV_ENCRYPTION_KEY is not set while DEBUG=False. The "
+                "CalDAV integration cannot encrypt or decrypt stored "
+                "passwords without it; all account writes will fail with "
+                "ImproperlyConfigured at request time.",
+                hint=(
+                    "Generate a key with "
+                    "`python -c \"from cryptography.fernet import Fernet; "
+                    "print(Fernet.generate_key().decode())\"` and set "
+                    "CALDAV_ENCRYPTION_KEY in your production environment."
+                ),
+                id="calendar_sync.E001",
+            )
         )
-    )
+        return errors
+
+    # Local import so the check module stays import-light when the key
+    # is unset (most dev cases).
+    from cryptography.fernet import Fernet
+    try:
+        Fernet(key.encode() if isinstance(key, str) else key)
+    except (ValueError, TypeError) as e:
+        errors.append(
+            Error(
+                "CALDAV_ENCRYPTION_KEY is set but is not a valid Fernet "
+                f"key ({type(e).__name__}: {e}). The first POST to "
+                "/api/calendar/account/ would crash inside set_password "
+                "with ImproperlyConfigured.",
+                hint=(
+                    "Regenerate the key with "
+                    "`python -c \"from cryptography.fernet import Fernet; "
+                    "print(Fernet.generate_key().decode())\"` and replace "
+                    "CALDAV_ENCRYPTION_KEY in your production environment."
+                ),
+                id="calendar_sync.E001",
+            )
+        )
     return errors

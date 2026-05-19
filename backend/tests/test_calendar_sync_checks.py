@@ -108,3 +108,18 @@ class TestE001EncryptionKeyMissing:
     def test_e001_silent_when_key_set_in_prod(self):
         with override_settings(DEBUG=False, CALDAV_ENCRYPTION_KEY=FERNET_KEY):
             assert error_caldav_encryption_key_missing_in_production(app_configs=None) == []
+
+    def test_e001_fires_when_key_is_malformed_in_prod(self):
+        """A non-empty but invalid Fernet key would let prod boot, then
+        crash on the first POST with ImproperlyConfigured. The check
+        must catch the malformed key at startup (review iter-1 P1)."""
+        with override_settings(DEBUG=False, CALDAV_ENCRYPTION_KEY="not-a-valid-fernet-key"):
+            errors = error_caldav_encryption_key_missing_in_production(app_configs=None)
+        assert len(errors) == 1
+        assert errors[0].id == "calendar_sync.E001"
+        assert "not a valid Fernet key" in errors[0].msg
+
+    def test_e001_silent_when_malformed_key_in_debug(self):
+        """Dev mode tolerates a malformed key — only the prod gate fires."""
+        with override_settings(DEBUG=True, CALDAV_ENCRYPTION_KEY="not-a-valid-fernet-key"):
+            assert error_caldav_encryption_key_missing_in_production(app_configs=None) == []
