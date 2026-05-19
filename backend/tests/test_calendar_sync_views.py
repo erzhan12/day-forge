@@ -182,13 +182,14 @@ class TestAccountPost:
         assert not CalDAVAccount.objects.filter(user=user).exists()
 
     def test_post_password_too_long_returns_400_per_field(self, auth_client, user):
-        """Reject a > 1024-char password before it hits Fernet/DAVClient
-        (review iter-3 P1 SECURITY)."""
+        """Reject a > 128-char password before it hits Fernet/DAVClient.
+        Apple app-specific passwords are 16-27 chars (review iter-3 P1
+        SECURITY; cap tightened from 1024 → 128 per iter-4 P1)."""
         resp = auth_client.post(
             "/api/calendar/account/",
             data={
                 "apple_id": "alice@example.com",
-                "password": "x" * 2000,
+                "password": "x" * 200,
             },
             content_type="application/json",
         )

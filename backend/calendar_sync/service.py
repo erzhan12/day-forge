@@ -126,10 +126,13 @@ def _normalize_vevent(vevent, calendar_name: str) -> NormalizedEvent | None:
             dtend_native = dtstart + vevent["DURATION"].dt
             dtend = dtend_native
         else:
+            # RFC 5545 §3.6.1: when neither DTEND nor DURATION is
+            # specified, all-day events span exactly one day, and
+            # timed events have zero duration (instantaneous).
             dtend = (
                 dtstart + datetime.timedelta(days=1)
                 if _is_all_day(dtstart)
-                else dtstart + datetime.timedelta(hours=1)
+                else dtstart
             )
         all_day = _is_all_day(dtstart)
         start_utc = _to_utc(dtstart)

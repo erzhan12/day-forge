@@ -420,3 +420,29 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
   test contexts unless the cache is keyed on the settings value. Pin
   when a measured-hot-path complaint surfaces or when the encrypt /
   decrypt call rate climbs (e.g., bulk re-key migration).
+
+- [ ] **CalDAV: edge-case regression tests for iCalendar surface.**
+  PR #30 `claude-review` iter-4 P3 [TESTING] asked for three explicit
+  test cases: (a) VEVENT with DURATION but no DTEND, (b) recurring
+  events with EXDATE exclusions, (c) events spanning DST transitions.
+  The broad `_normalize_vevent` + `_expand_events` catch lists already
+  protect against malformed inputs from these paths, but explicit
+  regression tests would lock in the parse contract for the
+  recurring-ical-events lib. Defer because: (a) requires constructing
+  a DURATION-only VEVENT, exercising the existing fallback path in
+  `_normalize_vevent`; (b) requires a real EXDATE fixture that
+  recurring_ical_events knows how to exclude; (c) requires a tz like
+  America/New_York and a date around 2026-03-08. Cheap individually
+  but they're test scaffolding work; pin if/when the upstream lib
+  ships a breaking change to the expansion API.
+
+- [ ] **CalDAV: ERROR-level escalation for repeated malformed-event
+  drops within one fetch.** PR #30 `claude-review` iter-4 P2 [QUALITY]
+  suggested escalating from `logger.warning` to `logger.error` when
+  > 5 events fail to normalize in a single fetch, on the theory that
+  isolated corruption is noise but systemic corruption is signal.
+  Requires a per-fetch counter passed into `_normalize_vevent` /
+  `_expand_events`. Defer until either iCloud throws a known
+  corruption pattern at us in the audit log, or the project gains a
+  metrics-emission infra (see also: iter-1 P1 [QUALITY] deferral
+  above for the drop-counter / metrics work).

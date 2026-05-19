@@ -48,6 +48,7 @@ Other production prerequisites (already enforced by the `ai.E001` system check w
 - `tasks/lessons.md` — Corrections and patterns learned (review at session start)
 - `docs/features/` — Feature planning documents (created by planner agent)
 - `docs/api.md` — JSON API reference (endpoints, request/response, errors)
+- `.claude/rules/project.md` — Environment-variable reference, including the LLM_* (AI), ANALYTICS_* (streak), and CALDAV_* (Apple Calendar feature 0011) blocks.
 
 ## Architecture
 

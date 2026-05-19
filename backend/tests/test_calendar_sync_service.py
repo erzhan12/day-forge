@@ -148,6 +148,28 @@ class TestFetchEventsForDate:
         with pytest.raises(service.CalDAVTimeoutError):
             service.fetch_events_for_date(account, datetime.date(2026, 5, 7))
 
+    def test_vevent_without_dtend_or_duration_uses_rfc5545_default(self):
+        """RFC 5545 §3.6.1: timed event without DTEND/DURATION has zero
+        duration; all-day event spans exactly one day (review iter-4
+        P1 BUG — previous code used +1h for timed, which violated RFC)."""
+        import icalendar
+
+        # Timed: zero duration.
+        timed_cal = icalendar.Calendar.from_ical(VEVENT_TIMED)
+        timed_vevent = next(c for c in timed_cal.walk() if c.name == "VEVENT")
+        del timed_vevent["DTEND"]
+        ev = service._normalize_vevent(timed_vevent, "TestCal")
+        assert ev is not None
+        assert ev.start == ev.end  # zero duration per RFC
+
+        # All-day: one-day span.
+        allday_cal = icalendar.Calendar.from_ical(VEVENT_ALL_DAY)
+        allday_vevent = next(c for c in allday_cal.walk() if c.name == "VEVENT")
+        del allday_vevent["DTEND"]
+        ev = service._normalize_vevent(allday_vevent, "TestCal")
+        assert ev is not None
+        assert (ev.end - ev.start) == datetime.timedelta(days=1)
+
     def test_malformed_vevent_is_skipped_not_crash(self, caplog):
         """A VEVENT with a missing required field (e.g. DTSTART) must be
         skipped (logged warning) rather than crashing the whole fetch
