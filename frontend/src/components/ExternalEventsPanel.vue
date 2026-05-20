@@ -20,9 +20,9 @@ function formatTime(iso: string): string {
 
 <template>
   <!-- When not connected, render nothing (V1 simplification per the plan). -->
-  <section v-if="connected" class="external-events" aria-label="Apple Calendar events">
+  <section v-if="connected" class="external-events" aria-label="External calendar events">
     <header class="ee-header">
-      <span class="ee-title">Apple Calendar</span>
+      <span class="ee-title">External Calendars</span>
       <span v-if="loading" class="ee-loading" aria-live="polite">Loading…</span>
     </header>
 
@@ -54,7 +54,7 @@ function formatTime(iso: string): string {
       <span class="ee-skel-row"></span>
     </p>
 
-    <p v-else class="ee-empty">No Apple Calendar events for this day.</p>
+    <p v-else class="ee-empty">No external calendar events for this day.</p>
   </section>
 </template>
 

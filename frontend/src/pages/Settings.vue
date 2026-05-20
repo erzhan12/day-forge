@@ -148,10 +148,15 @@ async function handleCalendarDisconnect() {
     </section>
 
     <section class="section">
-      <h2 class="section-title">Apple Calendar</h2>
+      <h2 class="section-title">External Calendars</h2>
       <p class="section-subtitle">
-        Connect via CalDAV to display Apple Calendar events alongside the
-        daily schedule (read-only). Use an
+        Connect calendar accounts so Day Forge can display their events
+        read-only alongside your daily schedule.
+      </p>
+
+      <h3 class="subsection-title">Apple Calendar</h3>
+      <p class="section-subtitle">
+        Connects via iCloud CalDAV. Use an
         <a
           href="https://support.apple.com/en-us/HT204397"
           target="_blank"
@@ -324,6 +329,13 @@ async function handleCalendarDisconnect() {
   .template-grid {
     grid-template-columns: 1fr 1fr;
   }
+}
+
+.subsection-title {
+  margin: 8px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
 .cal-status {
