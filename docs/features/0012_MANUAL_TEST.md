@@ -97,6 +97,13 @@ without Unicode escaping.
 
 ## Sign-off
 
+> Check these boxes only after you've run the manual real-LLM tests
+> above against a live provider. Automated CI proves **prompt wiring**
+> (rule strings reach the model); the boxes below attest **model
+> compliance** (the model actually used the rule to fill defaults
+> instead of asking). Leave unchecked until a real human has verified
+> the model behaviour end-to-end.
+
 - [ ] Test 1 passed
 - [ ] Test 2 passed
 - [ ] Test 3 passed (rule does not over-suppress clarifying questions)

@@ -74,12 +74,18 @@ async def _load_active_rules(user) -> list[Rule]:
     all three AI endpoints inject the same rule set into their prompt
     context. Active/user-owned filtering lives here; the prompt builders
     just render whatever they're handed.
+
+    ``.only("text", "priority")`` defers the unused columns (``id``,
+    ``user_id``, ``created_at``, ``is_active``) — the prompt formatter
+    only reads ``.text``, and we already filter on ``is_active=True``
+    so re-fetching that flag is wasted bytes. Per-user rule counts are
+    small, so the saving is modest, but it costs one line.
     """
     return [
         r
-        async for r in Rule.objects.filter(user=user, is_active=True).order_by(
-            "-priority"
-        )
+        async for r in Rule.objects.filter(user=user, is_active=True)
+        .only("text", "priority")
+        .order_by("-priority")
     ]
 
 
