@@ -204,3 +204,50 @@ useThemeFromProps()
 If the page renders TimeBlock / SkippedTasks / CategoryBreakdown (or any future component that needs `getCategoryColor()`), also import `useActiveTheme()` from `../composables/useActiveTheme` and pass its computed value into `getCategoryColor(category, activeTheme)`. The category color resolver is non-reactive otherwise.
 
 The P7 SSR first-paint test and the static-scan test enforce (1) and (2) at CI; the rule is documented here so the convention survives session boundaries.
+
+## CalDAV / Apple Calendar (feature 0011)
+
+### Service-boundary owns the secret
+`backend/calendar_sync/service.py:fetch_events_for_date` is the **only**
+function that calls `account.get_password()`. Views pass the
+`CalDAVAccount` instance through; they never touch the plaintext. If a
+new code path needs the password, add it inside `service.py` rather than
+in the view, otherwise the "credentials never logged" regression test
+(`test_calendar_sync_service.py::TestCredentialsNeverLogged`) becomes a
+liar.
+
+### Versioned cache keys + the `auto_now` footgun
+`backend/calendar_sync/cache.py` keys events by
+`account.updated_at.isoformat()` (microsecond precision). Any mutating
+call site **must** either call plain `account.save()` (no `update_fields`)
+or include `"updated_at"` in the `update_fields` list — a partial save
+that omits it bypasses `auto_now=True` and the cache version doesn't
+rotate, serving stale events to every worker. The docstring on
+`CalDAVAccount.set_password` calls this out at review time;
+`test_cache_invalidates_on_account_update` catches the runtime symptom.
+
+### `event.icalendar_instance` is the pinned parse accessor
+The Phase 0 spike (`backend/tests/test_caldav_parse_spike.py`) pinned
+`event.icalendar_instance` (returns an `icalendar.Calendar`) as the
+canonical accessor for `recurring_ical_events.of(...).between(start, end)`.
+Don't switch to `icalendar.Calendar.from_ical(event.data)` — it re-parses
+on every call and duplicates the work the lib already did.
+
+### `requestJson` cancellation contract
+`frontend/src/composables/useHttp.ts:requestJson` accepts an optional
+fourth `{ signal }` arg. `AbortError` propagates as a thrown rejection
+(unlike normal network failures, which map to `{ok: false, errors: {...}}`).
+Stale-response-guard consumers (`useCalendar`, `useCalendarAccount`)
+catch and swallow `AbortError` so the superseded op doesn't flip their
+`loading` / `error` state. GET-call shape footgun: pass `undefined` as
+the third positional arg — `requestJson(url, "GET", { signal })` would
+serialise the options object as the JSON body.
+
+### Stale-response guard requires BOTH date and seq tokens
+`useCalendar.fetchEvents` uses two commit tokens
+(`latestRequestedEventDate` + `eventsRequestSeq`) — date alone is
+insufficient because two fetches for the same date can interleave (retry,
+`onMounted` + `watch` double-trigger). `useCalendarAccount` splits reads
+and writes onto separate seqs and adds `writeCompletionTick` so a read
+can never supersede a write. See `useCalendarAccount.ts` header comment
+for the full design and the scenario that motivates each guard.

@@ -1,5 +1,6 @@
 from ai import views as ai_views
 from analytics import views as analytics_views
+from calendar_sync import views as calendar_views
 from django.contrib import admin
 from django.urls import path
 from schedules import api as schedules_api
@@ -72,6 +73,17 @@ urlpatterns = [
         "api/ai/schedules/<str:date>/chat/",
         ai_views.ai_chat,
         name="ai_chat",
+    ),
+    # API: CalDAV / Apple Calendar (feature 0011)
+    path(
+        "api/calendar/account/",
+        calendar_views.account,
+        name="caldav_account",
+    ),
+    path(
+        "api/calendar/events/<str:date>/",
+        calendar_views.events,
+        name="caldav_events",
     ),
     # Analytics
     path(

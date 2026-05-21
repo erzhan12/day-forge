@@ -5,10 +5,14 @@ description = "AI-powered daily schedule assistant"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
+    "caldav>=3.2.0",
+    "cryptography>=48.0.0",
     "django>=5.0,<6.0",
+    "icalendar>=7.1.1",
     "inertia-django>=1.0",
     "openai>=2.8.1",
     "python-dotenv>=1.2.2",
+    "recurring-ical-events>=3.8.2",
     "whitenoise>=6.0",
 ]
 

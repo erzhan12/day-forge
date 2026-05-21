@@ -27,7 +27,9 @@ import { useUndo } from "../composables/useUndo"
 import { useDrag } from "../composables/useDrag"
 import { useDraft } from "../composables/useDraft"
 import { useChat } from "../composables/useChat"
+import { useCalendar } from "../composables/useCalendar"
 import { useThemeFromProps } from "../composables/useThemeFromProps"
+import ExternalEventsPanel from "../components/ExternalEventsPanel.vue"
 import "../app.css"
 
 useThemeFromProps()
@@ -91,6 +93,19 @@ const {
 provide("undo", { pushUndo, snapshotBlocks })
 provide("drag", { startDrag, isDragging, dragBlockId, shiftedBlockIds })
 provide("scheduleContainer", scheduleBodyRef)
+
+// Apple Calendar (feature 0011): read-only events alongside the schedule.
+// Per-instance composable — each Schedule page owns its own state.
+const calendar = useCalendar()
+calendar.fetchAccountStatus()
+watch(
+  () => props.date,
+  (d) => calendar.fetchEvents(d),
+  { immediate: true },
+)
+function retryFetchEvents() {
+  calendar.fetchEvents(props.date)
+}
 
 // Multi-turn chat thread (feature 0007). State lives in `useChat`
 // (module-level) so the bottom dock and the sidebar variant share one
@@ -385,6 +400,14 @@ function logout() {
     </DateNavigator>
 
     <p v-if="lastDraftError" class="draft-error">{{ lastDraftError }}</p>
+
+    <ExternalEventsPanel
+      :events="calendar.state.events"
+      :loading="calendar.state.loading"
+      :error="calendar.state.error"
+      :connected="calendar.state.connected"
+      @retry="retryFetchEvents"
+    />
 
     <AddBlockForm
       :date="date"

@@ -358,3 +358,91 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
   regression. Pin if the contract ever changes (e.g., asgiref version
   bump that affects exception propagation) or if a future bug actually
   shows the implicit tests missing something.
+
+- [ ] **CalDAV: drop-counter / metrics for malformed VEVENT skips.**
+  PR #30 `claude-review` iter-1 P1 [QUALITY] flagged
+  `backend/calendar_sync/service.py:_normalize_vevent`'s broad
+  `except Exception` — it logs each failure but provides no aggregate
+  visibility. The project has no metrics infra (no Prometheus / StatsD
+  sink), so a bare `counter += 1` would be dead code. Defer until
+  either a metrics surface lands or a real-world incident shows the
+  per-event logs are noisy enough to need aggregation. Cheap
+  alternative when it comes up: emit a single `logger.warning` summary
+  per-fetch with `(drops, total)` counts.
+
+- [ ] **CalDAV: concurrent `POST /api/calendar/account/` regression
+  test for the same user.** PR #30 `claude-review` iter-1 P2 [TESTING]
+  asked for a threaded test that two simultaneous POSTs serialize
+  cleanly via the `select_for_update` + `get_or_create` flow in
+  `calendar_sync/views.py:account`. SQLite (Day Forge's dev DB) only
+  weakly honours `SELECT ... FOR UPDATE` — `schedules.W001` already
+  warns about this — so a threaded test would be flaky on SQLite and
+  meaningful only against Postgres. Pin to whichever PR moves
+  `schedules` to a real concurrency-supporting DB (probably the same
+  PR that satisfies `schedules.W001`); add the test alongside any
+  other deferred concurrency coverage.
+
+- [ ] **CalDAV admin: at-a-glance "connected" column.**
+  PR #30 `claude-review` iter-1 P3 [DOCS] suggested adding a
+  `connected_status` field to `CalDAVAccountAdmin.list_display` that
+  renders "✓ Connected" or empty. Cosmetic; the existing columns
+  (`user`, `apple_id`, `base_url`, `last_verified_at`) already convey
+  the same info. Pin when an ops person actually reports needing it.
+
+- [ ] **CalDAV: debug-only `?nocache=1` query param on
+  `GET /api/calendar/events/<date>/`.** PR #30 `claude-review` iter-1
+  P3 [QUALITY] suggested a dev-only escape hatch that bypasses
+  `get_cached_events`. Useful for the rare "events not updating"
+  debug session, but adds API surface and a `DEBUG` branch in a path
+  with no current production user-complaints. Pin when a real
+  debugging incident calls for it.
+
+- [ ] **CalDAV: `LLM_*`-style per-user rate limit on `/api/calendar/*`.**
+  PR #30 `claude-review` iter-2 P1 [SECURITY] flagged the absence of a
+  `CALDAV_RATE_LIMIT_PER_HOUR` bucket on `calendar_sync/views.py`. The
+  server-side per-(user, date, account.updated_at) cache absorbs the
+  common-case abuse (repeat fetches of the same day), and cache-miss
+  spam is bounded by the number of distinct dates a single user can
+  enumerate. No measured iCloud throttling complaint exists today, so
+  the work is deferred rather than scope-crept into the V1 PR. Pin if
+  iCloud starts rate-limiting Day Forge, or if a real abuse pattern
+  surfaces in the audit log. Implementation reference: mirror
+  `ai/views.py:_consume_rate_limit` with a fresh `caldav_rl` bucket
+  and update `ai.E001` (or split into `calendar_sync.E002`) to cover
+  the new bucket under the same LocMemCache prod guard.
+
+- [ ] **CalDAV: cache the `Fernet(key)` instance.** PR #30
+  `claude-review` iter-2 P2 [PERFORMANCE] suggested an
+  `@lru_cache(maxsize=1)` on `_fernet()` in
+  `backend/calendar_sync/crypto.py`. The constructor cost is
+  microseconds (base64 decode + key length check); no measured hot
+  path. Naive `lru_cache` would also leak across `override_settings`
+  test contexts unless the cache is keyed on the settings value. Pin
+  when a measured-hot-path complaint surfaces or when the encrypt /
+  decrypt call rate climbs (e.g., bulk re-key migration).
+
+- [ ] **CalDAV: edge-case regression tests for iCalendar surface.**
+  PR #30 `claude-review` iter-4 P3 [TESTING] asked for three explicit
+  test cases: (a) VEVENT with DURATION but no DTEND, (b) recurring
+  events with EXDATE exclusions, (c) events spanning DST transitions.
+  The broad `_normalize_vevent` + `_expand_events` catch lists already
+  protect against malformed inputs from these paths, but explicit
+  regression tests would lock in the parse contract for the
+  recurring-ical-events lib. Defer because: (a) requires constructing
+  a DURATION-only VEVENT, exercising the existing fallback path in
+  `_normalize_vevent`; (b) requires a real EXDATE fixture that
+  recurring_ical_events knows how to exclude; (c) requires a tz like
+  America/New_York and a date around 2026-03-08. Cheap individually
+  but they're test scaffolding work; pin if/when the upstream lib
+  ships a breaking change to the expansion API.
+
+- [ ] **CalDAV: ERROR-level escalation for repeated malformed-event
+  drops within one fetch.** PR #30 `claude-review` iter-4 P2 [QUALITY]
+  suggested escalating from `logger.warning` to `logger.error` when
+  > 5 events fail to normalize in a single fetch, on the theory that
+  isolated corruption is noise but systemic corruption is signal.
+  Requires a per-fetch counter passed into `_normalize_vevent` /
+  `_expand_events`. Defer until either iCloud throws a known
+  corruption pattern at us in the audit log, or the project gains a
+  metrics-emission infra (see also: iter-1 P1 [QUALITY] deferral
+  above for the drop-counter / metrics work).

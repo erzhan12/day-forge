@@ -586,3 +586,128 @@ curl -c cookies.txt -b cookies.txt -X DELETE \
   -H "X-XSRF-TOKEN: $CSRF" \
   http://localhost:8006/api/blocks/1/
 ```
+
+## Calendar (CalDAV) — feature 0011
+
+Read-only Apple Calendar integration via iCloud CalDAV. The user's
+credentials are encrypted at rest with `cryptography.Fernet`
+(`CALDAV_ENCRYPTION_KEY`); the service layer is the only code path
+that decrypts them.
+
+### `GET /api/calendar/account/`
+
+Returns the calling user's CalDAV account status. Never returns a
+password-shaped field.
+
+**Success — `200 OK`**
+
+```json
+{
+  "connected": true,
+  "apple_id": "alice@example.com",
+  "base_url": "https://caldav.icloud.com/",
+  "last_verified_at": "2026-05-07T09:00:00+00:00",
+  "default_base_url": "https://caldav.icloud.com/"
+}
+```
+
+When disconnected:
+
+```json
+{
+  "connected": false,
+  "apple_id": null,
+  "base_url": null,
+  "last_verified_at": null,
+  "default_base_url": "https://caldav.icloud.com/"
+}
+```
+
+`default_base_url` echoes `settings.CALDAV_DEFAULT_BASE_URL` regardless
+of `connected` so the Settings form populates its advanced field
+without hardcoding the default on the frontend.
+
+### `POST /api/calendar/account/`
+
+Verify credentials with iCloud and upsert the per-user `CalDAVAccount`
+row. Password is encrypted before persistence; `last_verified_at` is
+set to `now()`; `updated_at` advances (rotates the events cache key).
+
+**Request body**
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `apple_id` | string | yes | Must be a valid email. |
+| `password` | string | yes | App-specific password (never logged). |
+| `base_url` | string | no | http/https only. Empty → `default_base_url`. |
+
+**Responses**
+
+- `200 OK` — same shape as `GET /api/calendar/account/`.
+- `400` — malformed body, missing fields, bad email/URL format.
+- `401` — `CalDAVAuthError` from iCloud.
+- `502` — `CalDAVProviderError`.
+- `504` — `CalDAVTimeoutError`.
+- `500` — `Calendar service is misconfigured` (server-side
+  encryption-key issue; ops-only). **Operator action**: confirm
+  `CALDAV_ENCRYPTION_KEY` matches the value used when the
+  `CalDAVAccount` row was last written. If the key rotated, see
+  `.claude/rules/project.md` § "CalDAV key rotation note" for the
+  re-encrypt or instruct-reconnect playbook.
+
+All non-`2xx` use `{"errors": {"detail": "<message>", ...}}`.
+
+### `DELETE /api/calendar/account/`
+
+Idempotent delete. Versioned cache keys make stale entries
+unreachable (no explicit cache enumeration).
+
+**Success — `200 OK`** — shape identical to a disconnected
+`GET /api/calendar/account/`.
+
+### `GET /api/calendar/events/{date}/`
+
+Fetch normalised events for one day. Server-side per-`(user, date,
+account_version)` cache (TTL = `CALDAV_CACHE_TTL_SECONDS`, default
+`300`). Date-range is single-day in V1.
+
+**Path params**
+
+| Name | Type | Notes |
+|------|------|-------|
+| `date` | string | `YYYY-MM-DD`. Invalid → `400`. |
+
+**Success — `200 OK`**
+
+```json
+{
+  "events": [
+    {
+      "title": "Lunch with Pat",
+      "start": "2026-05-07T14:00:00+00:00",
+      "end":   "2026-05-07T15:00:00+00:00",
+      "calendar_name": "Personal",
+      "all_day": false,
+      "external_uid": "uid@example.com"
+    }
+  ]
+}
+```
+
+All-day events have `all_day: true` and a `[date 00:00 UTC, next-day
+00:00 UTC)` range. Recurring events return one entry per occurrence
+inside the window; `external_uid` includes the `RECURRENCE-ID` so
+each occurrence is unique.
+
+**Error responses**
+
+| Status | Cause |
+|--------|-------|
+| `400` | Malformed `date` path param. |
+| `401` | `CalDAVAuthError` — Apple rejected stored credentials. |
+| `502` | `CalDAVProviderError` — iCloud DAV failure (incl. per-calendar `date_search` errors). |
+| `503` | No `CalDAVAccount` configured for this user. |
+| `504` | `CalDAVTimeoutError` — request exceeded `CALDAV_REQUEST_TIMEOUT`. |
+| `500` | `Calendar service is misconfigured` — `CALDAV_ENCRYPTION_KEY` cannot decrypt the stored row (e.g. key rotation without re-write). **Operator action**: see `.claude/rules/project.md` § "CalDAV key rotation note". |
+
+All non-`2xx` use `{"errors": {"detail": "<message>"}}`.

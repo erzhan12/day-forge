@@ -35,6 +35,8 @@ Other production prerequisites (already enforced by the `ai.E001` system check w
 
 - Use a **shared cache backend** (Redis or Memcached) for `CACHES['default']`. The default `LocMemCache` is per-process, so each AI rate-limit bucket (`ai_cmd_rl`, `ai_draft_rl`, `ai_chat_rl`) collapses to `configured_limit × worker_count` and is trivially bypassed.
 
+**CalDAV cache note (feature 0011)**: a shared cache backend is *also* preferable for the `caldav_events:*` keys written by `calendar_sync/cache.py`, but the impact is **perf only — not correctness**. Versioned cache keys (the key embeds `account.updated_at.isoformat()`) mean credential rotation invalidates every worker's entries independently, so a per-process backend never serves stale events; it just causes each worker to hit iCloud once per `(user, date, version)` on first lookup. The `calendar_sync.W001` system check surfaces this as a `Warning` (not the startup-blocking `Error` used by `ai.E001`), because the AI bypass is a security issue and the CalDAV one is not.
+
 **Chat-specific privacy disclosure (feature 0007):** the chat endpoint re-sends the full prior client-supplied transcript to the LLM provider on every turn. This is a strictly larger provider-egress surface than the one-shot command endpoint — even though the DB audit row only stores the latest user turn plus a transcript hash. Users should be advised to use the Clear-thread button (or page reload) before discussing anything sensitive. See `.claude/rules/project.md` for the full privacy note.
 
 ## Key Files
@@ -46,6 +48,7 @@ Other production prerequisites (already enforced by the `ai.E001` system check w
 - `tasks/lessons.md` — Corrections and patterns learned (review at session start)
 - `docs/features/` — Feature planning documents (created by planner agent)
 - `docs/api.md` — JSON API reference (endpoints, request/response, errors)
+- `.claude/rules/project.md` — Environment-variable reference, including the LLM_* (AI), ANALYTICS_* (streak), and CALDAV_* (Apple Calendar feature 0011) blocks.
 
 ## Architecture
 

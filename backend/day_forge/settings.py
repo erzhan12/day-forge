@@ -34,6 +34,7 @@ INSTALLED_APPS = [
     "templates_mgr",
     "ai",
     "analytics",
+    "calendar_sync",
 ]
 
 MIDDLEWARE = [
@@ -214,6 +215,41 @@ for _name, _value in (
             f"{_name} must be a positive integer; got {_value!r}"
         )
 del _name, _value
+
+# ---------------------------------------------------------------------------
+# CalDAV / Apple Calendar (feature 0011)
+# ---------------------------------------------------------------------------
+# Fernet symmetric encryption key (URL-safe base64, 32 bytes). No insecure
+# default — empty value is tolerated only when DEBUG=True. The
+# ``calendar_sync.E001`` system check blocks DEBUG=False startup if unset
+# and ``calendar_sync.crypto`` raises ImproperlyConfigured at use time.
+CALDAV_ENCRYPTION_KEY = os.environ.get("CALDAV_ENCRYPTION_KEY", "")
+# Default base URL used by the connect-flow when the user doesn't provide
+# one. Echoed back via GET /api/calendar/account/ so the frontend never
+# hardcodes the default.
+CALDAV_DEFAULT_BASE_URL = os.environ.get(
+    "CALDAV_DEFAULT_BASE_URL", "https://caldav.icloud.com/"
+)
+# Hard cap on each CalDAV HTTP call. Same risk profile as
+# LLM_REQUEST_TIMEOUT — a hung iCloud connection must not pin a worker.
+CALDAV_REQUEST_TIMEOUT = float(os.environ.get("CALDAV_REQUEST_TIMEOUT", "10"))
+# Per-(user, date) event-list cache window. Versioned keys (see
+# calendar_sync/cache.py) keep correctness intact regardless of backend;
+# the ``calendar_sync.W001`` check warns when the backend is non-shared.
+CALDAV_CACHE_TTL_SECONDS = int(os.environ.get("CALDAV_CACHE_TTL_SECONDS", "300"))
+# Match the ANALYTICS_STREAK_* import-time validation pattern: fail
+# loudly on a misconfigured deploy rather than silently producing
+# zero-TTL caches (every request a cache miss, hammering iCloud).
+if CALDAV_CACHE_TTL_SECONDS <= 0:
+    raise ValueError(
+        "CALDAV_CACHE_TTL_SECONDS must be a positive integer; "
+        f"got {CALDAV_CACHE_TTL_SECONDS!r}"
+    )
+if CALDAV_REQUEST_TIMEOUT <= 0:
+    raise ValueError(
+        "CALDAV_REQUEST_TIMEOUT must be a positive number; "
+        f"got {CALDAV_REQUEST_TIMEOUT!r}"
+    )
 
 # Analytics / streak. Validated at import time so a misconfigured value
 # fails the worker boot loudly instead of silently producing ``streak=0``
