@@ -2,7 +2,12 @@
 
 Pure functions so they can be unit-tested without the OpenAI SDK.
 
-Three top-level prompts live here:
+Three top-level prompts live here. All three inject the user's active
+Rules (priority desc) into the server-built schedule context so the
+model can fill omitted defaults (duration, gap, start time) instead of
+asking for clarification. Active/user-owned filtering happens at the
+view/query layer; the prompt builders render whatever rules the caller
+passes in.
 
 * ``SYSTEM_PROMPT`` + ``build_user_message`` — the original Phase-4 command
   bar, where the model translates one natural-language command into add /
@@ -52,8 +57,10 @@ Rules:
    user provides. Never invent an id. If the block the user refers to is
    not present, return zero actions and ask for clarification in
    'explanation'.
-2. If the command is ambiguous, return zero actions and explain in
-   'explanation' (same language as the user).
+2. Respect every active rule. Use rules to fill in defaults (duration,
+   gap, start time) the user omitted, instead of asking for clarification.
+   Only return zero actions and explain in 'explanation' (same language
+   as the user) when the active rules still leave the request ambiguous.
 3. 'category' must be one of {_CATEGORY_VALUES}. Default to "other" if
    unclear.
 4. Keep 'explanation' short (one sentence) and in the same language the
@@ -95,9 +102,13 @@ Per-turn response shapes (you MUST pick exactly one):
 
 Hard rules:
 1. ``ask`` MUST be ``null`` whenever ``actions`` is non-empty.
-2. ``ask`` MUST be a non-empty string whenever ``actions`` is empty AND the
-   user clearly intends a schedule mutation. (Pure chit-chat / "thanks" turns
-   may return both empty actions AND ``ask: null``.)
+2. Respect every active rule. Use rules to fill in defaults (duration,
+   gap, start time) the user omitted, instead of asking for clarification.
+   Only set ``ask`` to a non-empty string when the user clearly intends a
+   schedule mutation AND the current blocks, prior transcript, latest user
+   turn, and active rules together still leave the intended mutation
+   unresolved. (Pure chit-chat / "thanks" turns may return both empty
+   actions AND ``ask: null``.)
 3. Every move/remove/resize MUST reference a task_id from the Existing blocks
    listing in the latest user message. Never invent an id. If the block the
    user refers to is not present, set ``actions: []`` and use ``ask`` to ask
@@ -198,15 +209,41 @@ def _template_entry_to_dict(entry: dict, synthetic_id: int) -> dict:
     }
 
 
-def build_user_message(schedule, blocks, now, user_command: str) -> str:
+def _format_rules_section(rules) -> str:
+    """Render active rules as the shared ``Active rules (priority desc):``
+    section used by command, chat, and draft prompts.
+
+    ``rules`` is an iterable of objects with a ``.text`` attribute (typically
+    ``templates_mgr.models.Rule``). Caller is responsible for filtering to
+    active / user-owned rows and ordering by ``-priority`` — the view/query
+    layer owns that, not this formatter. Rule text is JSON-encoded with
+    ``ensure_ascii=False`` so embedded quotes / newlines / Cyrillic survive
+    untouched while not being able to reshape the prompt.
+    """
+    lines = [
+        f"{i + 1}. {json.dumps(r.text, ensure_ascii=False)}"
+        for i, r in enumerate(rules)
+    ]
+    body = "\n".join(lines) if lines else "(no active rules)"
+    return f"Active rules (priority desc):\n{body}"
+
+
+def build_user_message(schedule, blocks, now, user_command: str, rules) -> str:
     """Format the per-request context + user command for ``SYSTEM_PROMPT``.
 
     ``schedule`` provides the date; ``blocks`` is any iterable of TimeBlock
-    instances; ``now`` is a timezone-aware ``datetime`` (or naive localtime).
+    instances; ``rules`` is any iterable of rule objects with ``.text``
+    (filtered active/user-owned by the view layer, ordered by priority
+    desc); ``now`` is a timezone-aware ``datetime`` (or naive localtime).
+
+    The active-rules section is inserted BEFORE ``User command:`` so the
+    model sees defaults before interpreting the user's request.
     """
     weekday = schedule.date.strftime("%A")
     block_lines = [_format_block_line(_runtime_block_to_dict(b)) for b in blocks]
     block_section = "\n".join(block_lines) if block_lines else "(no blocks yet)"
+
+    rules_section = _format_rules_section(rules)
 
     # JSON-encode the user command so embedded newlines / quotes / fake
     # "User command:" lines are rendered as a single quoted string literal
@@ -216,6 +253,7 @@ def build_user_message(schedule, blocks, now, user_command: str) -> str:
         f"Schedule date: {schedule.date.isoformat()} ({weekday})\n"
         f"Current local time: {now.strftime('%H:%M')}\n"
         f"Existing blocks:\n{block_section}\n\n"
+        f"{rules_section}\n\n"
         f"User command:\n{encoded_command}"
     )
 
@@ -276,11 +314,7 @@ def build_draft_user_message(
         "\n".join(history_lines) if history_lines else "(no recent history)"
     )
 
-    rule_lines = [
-        f"{i + 1}. {json.dumps(r.text, ensure_ascii=False)}"
-        for i, r in enumerate(rules)
-    ]
-    rules_section = "\n".join(rule_lines) if rule_lines else "(no active rules)"
+    rules_section = _format_rules_section(rules)
 
     template_type = template.type if template is not None else "unknown"
 
@@ -289,7 +323,7 @@ def build_draft_user_message(
         f"Current local time: {now.strftime('%H:%M')}\n"
         f"Active template ({template_type}):\n{template_section}\n\n"
         f"Recent history (last days):\n{history_section}\n\n"
-        f"Active rules (priority desc):\n{rules_section}"
+        f"{rules_section}"
     )
 
 
@@ -304,20 +338,26 @@ CHAT_TRANSCRIPT_HEADER = (
 )
 
 
-def build_chat_user_message(schedule, blocks, now) -> str:
+def build_chat_user_message(schedule, blocks, now, rules) -> str:
     """Schedule context for ``SYSTEM_PROMPT_CHAT``.
 
-    Mirrors ``build_user_message`` (date / weekday / current time / blocks)
-    but does NOT carry the user turn — chat turns are appended to the
-    OpenAI message array separately by ``service.run_chat``.
+    Mirrors ``build_user_message`` (date / weekday / current time / blocks
+    / active rules) but does NOT carry the user turn — chat turns are
+    appended to the OpenAI message array separately by ``service.run_chat``.
+
+    The active-rules section lives in the trusted server-built
+    schedule-context message, NOT in the prior-transcript flatten —
+    rules are server-loaded defaults, not user-supplied text.
     """
     weekday = schedule.date.strftime("%A")
     block_lines = [_format_block_line(_runtime_block_to_dict(b)) for b in blocks]
     block_section = "\n".join(block_lines) if block_lines else "(no blocks yet)"
+    rules_section = _format_rules_section(rules)
     return (
         f"Schedule date: {schedule.date.isoformat()} ({weekday})\n"
         f"Current local time: {now.strftime('%H:%M')}\n"
-        f"Existing blocks:\n{block_section}"
+        f"Existing blocks:\n{block_section}\n\n"
+        f"{rules_section}"
     )
 
 

@@ -11,6 +11,7 @@ import pytest
 from ai.prompts import (
     SYSTEM_PROMPT_DRAFT,
     _format_block_line,
+    _format_rules_section,
     _runtime_block_to_dict,
     _template_entry_to_dict,
     build_draft_user_message,
@@ -196,6 +197,27 @@ def test_build_draft_user_message_includes_completion_suffix(user):
     assert "2026-05-03 (Sunday) (completed: 5/7)" in msg
     assert "2026-05-02 (Saturday)" in msg
     assert "2026-05-02 (Saturday) (completed:" not in msg
+
+
+@pytest.mark.django_db
+def test_build_draft_user_message_rules_section_matches_shared_formatter(user):
+    """Parity check (feature 0012): the rules section rendered into the
+    draft prompt must match what ``_format_rules_section`` produces for
+    the same rule sequence. Pins that the shared formatter is in fact
+    shared — a copy-paste regression of the rule loop into the draft
+    builder would silently drift this output.
+    """
+    schedule = Schedule.objects.create(
+        user=user, date=datetime.date(2026, 5, 4)
+    )
+    rules = [
+        type("R", (), {"text": "Rule A"})(),
+        type("R", (), {"text": "Rule Б"})(),
+    ]
+    msg = build_draft_user_message(
+        schedule, None, [], rules, datetime.datetime(2026, 5, 4, 7, 30)
+    )
+    assert _format_rules_section(rules) in msg
 
 
 @pytest.mark.django_db

@@ -242,9 +242,13 @@ All-or-nothing: if any block is invalid, no changes are applied.
 
 ### `POST /api/ai/schedules/{date}/command/` (DEPRECATED)
 
-> ⚠️ **DEPRECATED.** As of feature 0007 (PR #15) the `CommandBar` UI no longer routes here — it submits to the multi-turn `/chat/` endpoint below. This endpoint remains registered and unit-tested for backward compatibility with any external callers, but has no production frontend caller. Scheduled for removal — see `tasks/todo.md` § Follow-ups ("Remove the orphan `/api/ai/schedules/<date>/command/` endpoint and the `useAI` composable"). For new integrations use the `/chat/` endpoint.
+> ⚠️ **DEPRECATED.** As of feature 0007 (PR #15) the `CommandBar` UI no longer routes here — it submits to the multi-turn `POST /api/ai/schedules/{date}/chat/` endpoint. This endpoint remains registered and unit-tested for backward compatibility with any external callers, but has no production frontend caller. Scheduled for removal — see `tasks/todo.md` § Follow-ups ("Remove the orphan `/api/ai/schedules/<date>/command/` endpoint and the `useAI` composable"). For new integrations use the `/chat/` endpoint.
+>
+> The `/chat/` endpoint is not currently documented here as a separate section (gap from feature 0007), but it inherits the same active-Rules injection described under this endpoint — feature 0012 wires Rules into both via the shared `ai.views._load_active_rules` helper.
 
 Translate a natural-language command (English or Russian) into schedule mutations via the configured LLM, apply them atomically, and return the updated block list. Every call is logged to `AIInteraction`, success or failure — PRD §6.5.
+
+Active server-side Rules (the rows the user maintains via `/api/rules/`) are injected into the LLM prompt context so the model can fill omitted defaults (duration, gap, start time) instead of asking for clarification. Behavioral note only — no request/response contract change.
 
 Requires `LLM_API_KEY` to be set. When unset, every call returns `503` so the frontend can show a degraded-mode indicator; manual editing is unaffected.
 
@@ -296,10 +300,13 @@ A successful command flips `Schedule.status` from `draft` to `active` **only whe
 
 Generate a fresh draft schedule for an empty day from the user's
 weekday/weekend template, the last `LLM_HISTORY_DAYS` (default 7) days of
-history (excluding `draft`-status schedules), and active rules. The LLM
-fills the day with `add` actions only — no `task_id`s exist on an empty
-schedule. The draft does **not** flip `Schedule.status`; the badge stays
-`draft` until the user makes a real edit.
+history (excluding `draft`-status schedules), and active rules. Active
+Rules are injected into the LLM prompt context via the same shared
+`_format_rules_section` formatter the command and chat endpoints use,
+so the three endpoints can't drift on rule rendering. The LLM fills the
+day with `add` actions only — no `task_id`s exist on an empty schedule.
+The draft does **not** flip `Schedule.status`; the badge stays `draft`
+until the user makes a real edit.
 
 **Path params**
 

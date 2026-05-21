@@ -126,7 +126,7 @@ class TestUntrustedTranscript:
             },
             {"role": "user", "content": "go ahead"},
         ]
-        run_chat(messages, fake_schedule, [], now)
+        run_chat(messages, fake_schedule, [], [], now)
 
         assert len(completions.calls) == 1
         sent_messages = completions.calls[0]["messages"]
@@ -148,7 +148,7 @@ class TestUntrustedTranscript:
     ):
         completions = patch_client(_ok_response())
         messages = [{"role": "user", "content": "hi"}]
-        run_chat(messages, fake_schedule, [], now)
+        run_chat(messages, fake_schedule, [], [], now)
 
         sent = completions.calls[0]["messages"]
         all_user = "\n".join(
@@ -165,11 +165,51 @@ class TestUntrustedTranscript:
             {"role": "assistant", "content": "what?"},
             {"role": "user", "content": "the latest one"},
         ]
-        run_chat(messages, fake_schedule, [], now)
+        run_chat(messages, fake_schedule, [], [], now)
 
         sent = completions.calls[0]["messages"]
         # Last sent message should be the latest user turn verbatim.
         assert sent[-1] == {"role": "user", "content": "the latest one"}
+
+
+class TestRulesWiring:
+    """Feature 0012: active rules are rendered into the trusted
+    schedule-context message (the FIRST user-role message), NOT into the
+    untrusted prior-transcript flatten or the latest user turn."""
+
+    def test_rule_appears_in_first_user_context_message(
+        self, patch_client, fake_schedule, now
+    ):
+        completions = patch_client(_ok_response())
+        rule = SimpleNamespace(text="10 min gap by default")
+        run_chat(
+            [{"role": "user", "content": "the latest"}],
+            fake_schedule,
+            [],
+            [rule],
+            now,
+        )
+        sent = completions.calls[0]["messages"]
+        # System, then schedule-context (user), then latest turn (user).
+        assert sent[0]["role"] == "system"
+        assert sent[1]["role"] == "user"
+        assert "Active rules (priority desc):" in sent[1]["content"]
+        assert "10 min gap by default" in sent[1]["content"]
+        # Latest user turn stays its own separate user-role message and
+        # does NOT carry the rules section.
+        assert sent[-1] == {"role": "user", "content": "the latest"}
+        assert "10 min gap by default" not in sent[-1]["content"]
+        # Negative pin: the rule text must appear ONLY in the trusted
+        # schedule-context message (index 1). The system prompt and any
+        # other messages (including the latest user turn) must not carry
+        # the rule. A leak into the system prompt would mean we're
+        # baking user-supplied text into a privileged role; a leak into
+        # any later user message would muddy the trusted-vs-untrusted
+        # boundary the chat path is built around.
+        rule_carriers = [
+            i for i, m in enumerate(sent) if "10 min gap by default" in m["content"]
+        ]
+        assert rule_carriers == [1]
 
 
 class TestInputGuards:
@@ -182,13 +222,14 @@ class TestInputGuards:
                 [{"role": "user", "content": "hi"}],
                 fake_schedule,
                 [],
+                [],
                 now,
             )
 
     def test_empty_messages_raises(self, monkeypatch, fake_schedule, now):
         monkeypatch.setattr("django.conf.settings.LLM_API_KEY", "test")
         with pytest.raises(AIInvalidInputError):
-            run_chat([], fake_schedule, [], now)
+            run_chat([], fake_schedule, [], [], now)
 
     def test_last_role_must_be_user(self, monkeypatch, fake_schedule, now):
         monkeypatch.setattr("django.conf.settings.LLM_API_KEY", "test")
@@ -196,6 +237,7 @@ class TestInputGuards:
             run_chat(
                 [{"role": "assistant", "content": "hi"}],
                 fake_schedule,
+                [],
                 [],
                 now,
             )
@@ -209,6 +251,7 @@ class TestParsing:
                 [{"role": "user", "content": "hi"}],
                 fake_schedule,
                 [],
+                [],
                 now,
             )
 
@@ -219,6 +262,7 @@ class TestParsing:
         result = run_chat(
             [{"role": "user", "content": "add gym"}],
             fake_schedule,
+            [],
             [],
             now,
         )
@@ -240,6 +284,7 @@ class TestParsing:
         result = run_chat(
             [{"role": "user", "content": "add gym 18-19"}],
             fake_schedule,
+            [],
             [],
             now,
         )
@@ -269,6 +314,7 @@ class TestParsing:
                 [{"role": "user", "content": "add gym"}],
                 fake_schedule,
                 [],
+                [],
                 now,
             )
 
@@ -280,6 +326,7 @@ class TestParsing:
             run_chat(
                 [{"role": "user", "content": "hi"}],
                 fake_schedule,
+                [],
                 [],
                 now,
             )
@@ -296,6 +343,7 @@ class TestParsing:
                 [{"role": "user", "content": "hi"}],
                 fake_schedule,
                 [],
+                [],
                 now,
             )
 
@@ -310,6 +358,7 @@ class TestParsing:
             run_chat(
                 [{"role": "user", "content": "hi"}],
                 fake_schedule,
+                [],
                 [],
                 now,
             )

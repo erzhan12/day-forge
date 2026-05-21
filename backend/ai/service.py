@@ -1,12 +1,15 @@
 """OpenAI-compatible async client wrapper for the AI endpoints.
 
-Three public entrypoints — all ``async def`` since feature 0009:
+Three public entrypoints — all ``async def`` since feature 0009. All
+three accept ``rules`` (active user-defined Rules, ordered by priority
+desc) so the model can fill omitted defaults from rules instead of
+asking for clarification:
 
-* ``run_command(user_command, schedule, blocks, now)`` — one-shot
+* ``run_command(user_command, schedule, blocks, rules, now)`` — one-shot
   natural-language command. Backs ``POST /api/ai/schedules/<date>/command/``.
 * ``run_draft(schedule, template, history_schedules, rules, now)`` —
   whole-day draft generation. Backs ``POST /api/ai/schedules/<date>/generate-draft/``.
-* ``run_chat(messages, schedule, blocks, now)`` — multi-turn chat
+* ``run_chat(messages, schedule, blocks, rules, now)`` — multi-turn chat
   (feature 0007). Backs ``POST /api/ai/schedules/<date>/chat/``.
 
 Each awaits ``openai.AsyncOpenAI`` configured from ``settings.LLM_*`` env
@@ -191,8 +194,15 @@ def _get_client() -> AsyncOpenAI:
     return client
 
 
-async def run_command(user_command: str, schedule, blocks, now) -> AICommandResult:
-    """Call the LLM for one user command. See module docstring for errors."""
+async def run_command(
+    user_command: str, schedule, blocks, rules, now
+) -> AICommandResult:
+    """Call the LLM for one user command. See module docstring for errors.
+
+    ``rules`` is the iterable of active, user-owned ``Rule`` rows ordered
+    by ``-priority`` — fetched in the view layer (``_load_active_rules``)
+    and forwarded unchanged so the model can fill omitted defaults.
+    """
     if not settings.LLM_API_KEY or not settings.LLM_API_KEY.strip():
         raise AIUnavailableError("LLM_API_KEY is not configured")
 
@@ -206,7 +216,7 @@ async def run_command(user_command: str, schedule, blocks, now) -> AICommandResu
             f"command too long (max {settings.LLM_MAX_COMMAND_CHARS} chars)"
         )
 
-    user_message = build_user_message(schedule, blocks, now, trimmed)
+    user_message = build_user_message(schedule, blocks, now, trimmed, rules)
 
     client = _get_client()
     try:
@@ -369,13 +379,18 @@ async def run_draft(schedule, template, history_schedules, rules, now) -> AIDraf
     )
 
 
-async def run_chat(messages, schedule, blocks, now) -> AIChatResult:
+async def run_chat(messages, schedule, blocks, rules, now) -> AIChatResult:
     """Multi-turn chat (feature 0007).
 
     ``messages`` is the FULL client-supplied transcript ordered
     chronologically; the LAST entry must have ``role="user"`` and is the
     turn the user just sent. The view enforces alternation, role
     membership, and per-message / total length caps before calling here.
+
+    ``rules`` is the iterable of active, user-owned ``Rule`` rows ordered
+    by ``-priority``. They are rendered into the trusted server-built
+    schedule-context message (NOT the prior-transcript flatten) so a
+    tampered client cannot impersonate or shadow the user's defaults.
 
     Critically, prior client-supplied turns (everything except the last
     one) are NOT forwarded to the LLM under the ``assistant`` role. They
@@ -396,7 +411,7 @@ async def run_chat(messages, schedule, blocks, now) -> AIChatResult:
             "messages must end with a user turn (view should enforce)"
         )
 
-    schedule_context = build_chat_user_message(schedule, blocks, now)
+    schedule_context = build_chat_user_message(schedule, blocks, now, rules)
     prior_transcript = serialise_prior_turns(messages[:-1])
     latest_user_turn = messages[-1]["content"]
 

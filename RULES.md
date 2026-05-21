@@ -104,6 +104,13 @@ The frontend refreshes `currentHHMM` on a 1-minute interval (matches `Schedule.v
 - All API queries are scoped by `request.user`. Cross-user PK access returns **404 (not 403)** to avoid id enumeration — same convention as `block_detail`.
 - POST/PUT to `/api/templates/` wrap saves in `transaction.atomic()` and catch `IntegrityError` → `409`. Without the catch the unique-constraint failure becomes a 500 and leaves the transaction in a broken state for any follow-up queries.
 
+## Active Rules injection across all three AI endpoints
+
+- The command bar (`POST /api/ai/schedules/<date>/command/`), chat (`POST /api/ai/schedules/<date>/chat/`), and draft generator (`POST /api/ai/schedules/<date>/generate-draft/`) all inject the user's active Rules into their server-built prompt context so the model can fill omitted defaults (duration, gap, start time) instead of asking a clarifying question.
+- Active/user-owned filtering stays at the **view/query layer**, in the shared `ai.views._load_active_rules(user)` helper. Prompt builders (`build_user_message`, `build_chat_user_message`, `build_draft_user_message`) just render whatever rules they're handed via the shared `_format_rules_section` formatter — they do not query the DB and do not re-filter. Drift between the three endpoints means a bug in one of them, not in the prompt layer.
+- Caller orders rules by `-priority` before passing them in; the formatter preserves caller order, so a future "filter inactive at the prompt layer" refactor would silently break the priority-desc invariant.
+- Chat-specific: rules render into the **trusted** schedule-context message (the first user-role message), not the untrusted prior-transcript flatten. A tampered client must not be able to impersonate or shadow the user's defaults — see `backend/ai/service.py:run_chat`.
+
 ## Locking an empty child queryset locks nothing
 
 - `SELECT ... FOR UPDATE WHERE parent_id = ?` against a child table acquires zero row locks when the child set is empty. Two concurrent writers both pass the in-lock emptiness check and both insert.

@@ -18,8 +18,10 @@ from ai.service import (
     AITimeoutError,
     AIUnavailableError,
 )
+from django.contrib.auth.models import User
 from django.core.cache import cache
 from schedules.models import Schedule, TimeBlock
+from templates_mgr.models import Rule
 
 URL = "/api/ai/schedules/2026-04-18/chat/"
 
@@ -511,3 +513,45 @@ class TestAuditEnvelope:
             assert payload["raw"] == "not-json"
         else:
             assert payload["raw"] == str(exc)
+
+
+class TestActiveRulesWiring:
+    """Feature 0012: ``ai_chat`` must pass only the authenticated user's
+    ACTIVE rules to ``run_chat``, ordered by ``-priority``. Same shape as
+    ``test_ai_views.TestActiveRulesWiring`` so chat and command can't
+    drift in their rule-loading contract.
+    """
+
+    @pytest.mark.django_db
+    def test_only_authenticated_users_active_rules_are_passed(
+        self, auth_client, user, today_schedule, monkeypatch
+    ):
+        Rule.objects.create(
+            user=user, text="HIGH rule", priority=10, is_active=True
+        )
+        Rule.objects.create(
+            user=user, text="LOW rule", priority=1, is_active=True
+        )
+        Rule.objects.create(
+            user=user, text="INACTIVE", priority=99, is_active=False
+        )
+        other_user = User.objects.create_user(username="other", password="x")
+        Rule.objects.create(
+            user=other_user, text="OTHER USER", priority=99, is_active=True
+        )
+
+        captured = {}
+
+        async def _capture(messages, schedule, blocks, rules, now):
+            captured["rules_texts"] = [r.text for r in rules]
+            return AIChatResult(
+                raw_response_text="{}",
+                parsed_actions=[],
+                explanation="",
+                ask=None,
+            )
+
+        monkeypatch.setattr("ai.views.run_chat", _capture)
+        resp = _post(auth_client, {"messages": [_user_turn("hi")]})
+        assert resp.status_code == 200
+        assert captured["rules_texts"] == ["HIGH rule", "LOW rule"]
