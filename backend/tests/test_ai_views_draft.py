@@ -17,7 +17,7 @@ from ai.service import (
 )
 from django.contrib.auth.models import User
 from schedules.models import Schedule, TimeBlock
-from templates_mgr.models import Template
+from templates_mgr.models import Rule, Template
 
 URL = "/api/ai/schedules/2026-05-04/generate-draft/"
 
@@ -431,3 +431,47 @@ class TestStatusFlow:
         assert resp.status_code == 200
         schedule.refresh_from_db()
         assert schedule.status == Schedule.Status.ACTIVE
+
+
+class TestActiveRulesWiring:
+    """Feature 0012: ``ai_generate_draft`` must pass only the
+    authenticated user's ACTIVE rules to ``run_draft``, ordered by
+    ``-priority``. Same shape as the command and chat view assertions so
+    the three endpoints can't drift on the rule-loading contract — the
+    refactor moved the inline query into the shared
+    ``_load_active_rules`` helper, and this test pins the invariant for
+    the draft side.
+    """
+
+    @pytest.mark.django_db
+    def test_only_authenticated_users_active_rules_are_passed(
+        self, auth_client, user, template, monkeypatch
+    ):
+        Rule.objects.create(
+            user=user, text="HIGH rule", priority=10, is_active=True
+        )
+        Rule.objects.create(
+            user=user, text="LOW rule", priority=1, is_active=True
+        )
+        Rule.objects.create(
+            user=user, text="INACTIVE", priority=99, is_active=False
+        )
+        other_user = User.objects.create_user(username="other", password="x")
+        Rule.objects.create(
+            user=other_user, text="OTHER USER", priority=99, is_active=True
+        )
+
+        captured = {}
+
+        async def _capture(schedule, tmpl, history, rules, now):
+            captured["rules_texts"] = [r.text for r in rules]
+            return AIDraftResult(
+                raw_response_text="{}",
+                parsed_actions=[],
+                explanation="ok",
+            )
+
+        monkeypatch.setattr("ai.views.run_draft", _capture)
+        resp = _post(auth_client)
+        assert resp.status_code == 200
+        assert captured["rules_texts"] == ["HIGH rule", "LOW rule"]

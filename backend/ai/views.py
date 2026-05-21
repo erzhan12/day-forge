@@ -67,6 +67,22 @@ _MAX_COMMAND_LOG_LEN = 2_000
 _RATE_LIMIT_WINDOW_SECONDS = 3600
 
 
+async def _load_active_rules(user) -> list:
+    """Load the user's active rules, ordered by ``-priority``.
+
+    Shared by ``ai_command``, ``ai_chat``, and ``ai_generate_draft`` so
+    all three AI endpoints inject the same rule set into their prompt
+    context. Active/user-owned filtering lives here; the prompt builders
+    just render whatever they're handed.
+    """
+    return [
+        r
+        async for r in Rule.objects.filter(user=user, is_active=True).order_by(
+            "-priority"
+        )
+    ]
+
+
 async def _consume_rate_limit(user_id: int, key_prefix: str, limit: int) -> bool:
     """Increment the per-user fixed-window counter under ``key_prefix``.
 
@@ -538,13 +554,14 @@ async def ai_command(request, date):
             "start_time", "sort_order"
         )
     ]
+    rules = await _load_active_rules(user)
     # Async view: the await on the LLM client yields the event loop while
     # the network call is in flight. Under WSGI/sync gunicorn this still
     # runs in Django's thread-pool executor (no concurrency win); under
     # an ASGI runner (Phase 7) the worker is freed during the await. See
     # docs/features/0009_async_ai_views_PLAN.md § D5.
     try:
-        result = await run_command(command, schedule, current_blocks, now)
+        result = await run_command(command, schedule, current_blocks, rules, now)
     except AIError as e:
         raw = getattr(e, "raw_response_text", "") or str(e)
         await _log_interaction(schedule, command, raw, [])
@@ -710,12 +727,7 @@ async def ai_generate_draft(request, date):
         .select_related("daily_review")
         .prefetch_related("time_blocks")
     ]
-    rules = [
-        r
-        async for r in Rule.objects.filter(user=user, is_active=True).order_by(
-            "-priority"
-        )
-    ]
+    rules = await _load_active_rules(user)
 
     now = timezone.localtime()
     try:
@@ -955,10 +967,11 @@ async def ai_chat(request, date):
             "start_time", "sort_order"
         )
     ]
+    rules = await _load_active_rules(user)
     now = timezone.localtime()
 
     try:
-        result = await run_chat(messages, schedule, current_blocks, now)
+        result = await run_chat(messages, schedule, current_blocks, rules, now)
     except AIError as e:
         await _log_chat_failure(schedule, last_user_msg, messages, e)
         status = next(

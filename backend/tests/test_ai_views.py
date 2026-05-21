@@ -17,6 +17,7 @@ from ai.service import (
 )
 from django.contrib.auth.models import User
 from schedules.models import Schedule, TimeBlock
+from templates_mgr.models import Rule
 
 URL = "/api/ai/schedules/2026-04-18/command/"
 
@@ -644,3 +645,51 @@ class TestRateLimit:
         # the except clause re-seeds the counter so the request succeeds.
         resp = _post(auth_client, {"command": "after-evict"})
         assert resp.status_code == 200
+
+
+class TestActiveRulesWiring:
+    """Feature 0012: ``ai_command`` must pass only the authenticated
+    user's ACTIVE rules to ``run_command``, ordered by ``-priority``.
+
+    Inactive rules and other users' rules must be filtered out at the
+    view/query layer (``_load_active_rules``). Prompt builders render
+    whatever they're handed, so this filtering is a view-level invariant.
+    """
+
+    @pytest.mark.django_db
+    def test_only_authenticated_users_active_rules_are_passed(
+        self, auth_client, user, today_schedule, monkeypatch
+    ):
+        # Active rules for the authenticated user — both should be passed,
+        # high-priority first.
+        Rule.objects.create(
+            user=user, text="HIGH rule", priority=10, is_active=True
+        )
+        Rule.objects.create(
+            user=user, text="LOW rule", priority=1, is_active=True
+        )
+        # Inactive rule for same user — must be filtered out.
+        Rule.objects.create(
+            user=user, text="INACTIVE", priority=99, is_active=False
+        )
+        # Active rule for OTHER user — must be filtered out.
+        other_user = User.objects.create_user(username="other", password="x")
+        Rule.objects.create(
+            user=other_user, text="OTHER USER", priority=99, is_active=True
+        )
+
+        captured = {}
+
+        async def _capture(command, schedule, blocks, rules, now):
+            captured["rules_texts"] = [r.text for r in rules]
+            return AICommandResult(
+                raw_response_text="{}",
+                parsed_actions=[],
+                explanation="ok",
+            )
+
+        monkeypatch.setattr("ai.views.run_command", _capture)
+        resp = _post(auth_client, {"command": "do thing"})
+        assert resp.status_code == 200
+        # Exactly the two active, user-owned rules, ordered high → low.
+        assert captured["rules_texts"] == ["HIGH rule", "LOW rule"]

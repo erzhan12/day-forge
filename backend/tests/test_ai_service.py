@@ -96,49 +96,49 @@ class TestInputValidation:
     def test_missing_api_key_raises_unavailable(self, monkeypatch, fake_schedule, now):
         monkeypatch.setattr("django.conf.settings.LLM_API_KEY", "")
         with pytest.raises(AIUnavailableError):
-            run_command("add standup", fake_schedule, [], now)
+            run_command("add standup", fake_schedule, [], [], now)
 
     def test_non_string_command_raises(self, monkeypatch, fake_schedule, now):
         monkeypatch.setattr("django.conf.settings.LLM_API_KEY", "test")
         with pytest.raises(AIInvalidInputError):
-            run_command(None, fake_schedule, [], now)  # type: ignore[arg-type]
+            run_command(None, fake_schedule, [], [], now)  # type: ignore[arg-type]
 
     def test_empty_command_raises(self, monkeypatch, fake_schedule, now):
         monkeypatch.setattr("django.conf.settings.LLM_API_KEY", "test")
         with pytest.raises(AIInvalidInputError):
-            run_command("   ", fake_schedule, [], now)
+            run_command("   ", fake_schedule, [], [], now)
 
     def test_oversized_command_raises(self, monkeypatch, fake_schedule, now):
         monkeypatch.setattr("django.conf.settings.LLM_API_KEY", "test")
         monkeypatch.setattr("django.conf.settings.LLM_MAX_COMMAND_CHARS", 10)
         with pytest.raises(AIInvalidInputError):
-            run_command("a" * 50, fake_schedule, [], now)
+            run_command("a" * 50, fake_schedule, [], [], now)
 
 
 class TestProviderErrors:
     def test_timeout_maps_to_ai_timeout(self, patch_client, fake_schedule, now):
         patch_client(openai.APITimeoutError(request=None))
         with pytest.raises(AITimeoutError):
-            run_command("do thing", fake_schedule, [], now)
+            run_command("do thing", fake_schedule, [], [], now)
 
     def test_api_error_maps_to_provider(self, patch_client, fake_schedule, now):
         patch_client(openai.APIError("boom", request=None, body=None))
         with pytest.raises(AIProviderError):
-            run_command("do thing", fake_schedule, [], now)
+            run_command("do thing", fake_schedule, [], [], now)
 
     def test_unexpected_exception_maps_to_provider(
         self, patch_client, fake_schedule, now
     ):
         patch_client(RuntimeError("network down"))
         with pytest.raises(AIProviderError):
-            run_command("do thing", fake_schedule, [], now)
+            run_command("do thing", fake_schedule, [], [], now)
 
 
 class TestParsing:
     def test_invalid_json_raises_parse(self, patch_client, fake_schedule, now):
         patch_client("not-json")
         with pytest.raises(AIParseError) as exc:
-            run_command("do thing", fake_schedule, [], now)
+            run_command("do thing", fake_schedule, [], [], now)
         assert exc.value.raw_response_text == "not-json"
 
     def test_missing_actions_envelope_raises(
@@ -146,7 +146,7 @@ class TestParsing:
     ):
         patch_client(json.dumps({"explanation": "hi"}))
         with pytest.raises(AIParseError):
-            run_command("do thing", fake_schedule, [], now)
+            run_command("do thing", fake_schedule, [], [], now)
 
     def test_invalid_action_shape_raises(self, patch_client, fake_schedule, now):
         patch_client(
@@ -156,7 +156,7 @@ class TestParsing:
             })
         )
         with pytest.raises(AIParseError):
-            run_command("do thing", fake_schedule, [], now)
+            run_command("do thing", fake_schedule, [], [], now)
 
     def test_move_without_time_field_raises(self, patch_client, fake_schedule, now):
         """A ``move`` action with only ``task_id`` is a silent no-op and
@@ -168,7 +168,7 @@ class TestParsing:
             })
         )
         with pytest.raises(AIParseError):
-            run_command("do thing", fake_schedule, [], now)
+            run_command("do thing", fake_schedule, [], [], now)
 
     def test_resize_without_time_field_raises(self, patch_client, fake_schedule, now):
         patch_client(
@@ -178,7 +178,7 @@ class TestParsing:
             })
         )
         with pytest.raises(AIParseError):
-            run_command("do thing", fake_schedule, [], now)
+            run_command("do thing", fake_schedule, [], [], now)
 
     def test_success_returns_parsed(self, patch_client, fake_schedule, now):
         payload = {
@@ -194,7 +194,8 @@ class TestParsing:
             "explanation": "Added standup",
         }
         completions = patch_client(json.dumps(payload))
-        result = run_command("add standup", fake_schedule, [], now)
+        rule = SimpleNamespace(text="25 min default duration")
+        result = run_command("add standup", fake_schedule, [], [rule], now)
 
         assert result.explanation == "Added standup"
         assert len(result.parsed_actions) == 1
@@ -206,7 +207,12 @@ class TestParsing:
         assert call["response_format"] == {"type": "json_object"}
         roles = [m["role"] for m in call["messages"]]
         assert roles == ["system", "user"]
-        assert "add standup" in call["messages"][1]["content"]
+        user_content = call["messages"][1]["content"]
+        assert "add standup" in user_content
+        # Feature 0012: the active rule appears in the provider's user
+        # message under the shared "Active rules (priority desc):" header.
+        assert "Active rules (priority desc):" in user_content
+        assert "25 min default duration" in user_content
 
 
 class TestClientPerLoop:
