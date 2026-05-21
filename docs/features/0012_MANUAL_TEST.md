@@ -76,10 +76,16 @@ curl -X POST http://localhost:8006/api/ai/schedules/$(date +%F)/command/ \
 If you suspect a rendering bug, enable `LLM_DRAFT_CAPTURE_PROMPT_PATH`
 for `generate-draft` to dump the rendered prompt to disk (see
 `backend/ai/service.py`). The command and chat endpoints have no
-equivalent capture switch; instead, set a log point at
-`backend/ai/service.py:run_command` / `run_chat` to print the user
-message before the SDK call. The trusted schedule-context message
-should contain:
+equivalent capture switch; instead, temporarily add a log line in
+`backend/ai/service.py` immediately after the `build_user_message(...)`
+call (around line 219), e.g.:
+
+```python
+logger.info("Full prompt: %s", user_message)
+```
+
+Remove the line before committing — it dumps user PII to the dev log.
+The trusted schedule-context message should contain:
 
 ```
 Active rules (priority desc):

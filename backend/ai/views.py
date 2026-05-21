@@ -67,7 +67,7 @@ _MAX_COMMAND_LOG_LEN = 2_000
 _RATE_LIMIT_WINDOW_SECONDS = 3600
 
 
-async def _load_active_rules(user) -> list:
+async def _load_active_rules(user) -> list[Rule]:
     """Load the user's active rules, ordered by ``-priority``.
 
     Shared by ``ai_command``, ``ai_chat``, and ``ai_generate_draft`` so

@@ -199,6 +199,17 @@ class TestRulesWiring:
         # does NOT carry the rules section.
         assert sent[-1] == {"role": "user", "content": "the latest"}
         assert "10 min gap by default" not in sent[-1]["content"]
+        # Negative pin: the rule text must appear ONLY in the trusted
+        # schedule-context message (index 1). The system prompt and any
+        # other messages (including the latest user turn) must not carry
+        # the rule. A leak into the system prompt would mean we're
+        # baking user-supplied text into a privileged role; a leak into
+        # any later user message would muddy the trusted-vs-untrusted
+        # boundary the chat path is built around.
+        rule_carriers = [
+            i for i, m in enumerate(sent) if "10 min gap by default" in m["content"]
+        ]
+        assert rule_carriers == [1]
 
 
 class TestInputGuards:
