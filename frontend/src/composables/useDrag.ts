@@ -200,6 +200,7 @@ export function useDrag(
 
   // Internal state (not reactive — used only during drag)
   let snapshot: TimeBlock[] = []
+  let snapshotDate = ""
   let originalBlock: TimeBlock | null = null
   let containerEl: HTMLElement | null = null
   let containerRect: DOMRect | null = null
@@ -301,6 +302,7 @@ export function useDrag(
     // GapSlot would be decorative — drag bypasses click-based mutation.
     if (isDisabled && isDisabled()) return
     snapshot = snapshotBlocks()
+    snapshotDate = readDate(date)
     originalBlock = block
     containerEl = container
     containerRect = container.getBoundingClientRect()
@@ -360,6 +362,7 @@ export function useDrag(
     //      before this drag's `pushUndo` runs — so the first drag's
     //      undo would get the second drag's snapshot.
     const savedSnapshot = snapshot
+    const savedScheduleDate = snapshotDate
     const title = originalBlock.title
     const targetTime = previewStartTime.value
 
@@ -400,7 +403,7 @@ export function useDrag(
         description: `Moved "${title}" to ${targetTime}`,
         type: "drag",
         previousBlocks: savedSnapshot,
-        scheduleDate: readDate(date),
+        scheduleDate: savedScheduleDate,
       })
     }
   }
@@ -449,6 +452,7 @@ export function useDrag(
     containerPaddingTop = 0
     grabOffsetY = 0
     snapshot = []
+    snapshotDate = ""
     dropValid = true
   }
 
