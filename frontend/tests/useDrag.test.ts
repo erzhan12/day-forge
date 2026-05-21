@@ -320,6 +320,49 @@ describe("useDrag.endDrag (undo snapshot)", () => {
     expect(pushUndo.mock.calls[0][0].scheduleDate).toBe("2026-04-17")
   })
 
+  it("binds drag undo to the date that was active at drag start, not at drop", async () => {
+    // Regression: pointer capture blocks date nav during the drag itself,
+    // but cleanup() releases the pointer before `await reorderBlocks`.
+    // During that await the user can navigate dates — and the undo must
+    // still target the day the drag actually mutated, not the day the
+    // user happens to be looking at when pushUndo fires.
+    const original: TimeBlock[] = [
+      { id: 1, title: "A", start_time: "09:00", end_time: "10:00",
+        category: "work", is_completed: false, sort_order: 0 },
+    ]
+    const snapshotBlocks = vi.fn(() => original.map((b) => ({ ...b })))
+    const getCurrentBlocks = vi.fn(() => original)
+    const reorderBlocks = vi.fn(async () => ({ ok: true as const }))
+    const pushUndo = vi.fn<(a: UndoAction) => void>()
+    let currentDate = "2026-04-16"
+
+    const drag = useDrag(
+      () => currentDate,
+      getCurrentBlocks,
+      reorderBlocks,
+      pushUndo,
+      snapshotBlocks,
+    )
+
+    drag.startDrag(
+      { pointerId: 1, clientY: 0 } as PointerEvent,
+      original[0],
+      makeFakeContainer(),
+    )
+    // Simulate the user navigating to a different day between drag start
+    // and pushUndo (the window opened by `await reorderBlocks`).
+    currentDate = "2026-04-17"
+    drag.previewBlocks.value = [
+      { ...original[0], start_time: "11:00", end_time: "12:00" },
+    ]
+    drag.previewStartTime.value = "11:00"
+
+    await drag.endDrag()
+
+    expect(pushUndo).toHaveBeenCalledOnce()
+    expect(pushUndo.mock.calls[0][0].scheduleDate).toBe("2026-04-16")
+  })
+
   it("first drag's undo keeps its own snapshot when a second drag starts mid-await", async () => {
     // Race version of the same bug. While drag 1's reorderBlocks promise
     // is in-flight, the user starts drag 2 — startDrag would overwrite
