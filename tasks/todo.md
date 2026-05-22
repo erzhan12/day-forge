@@ -161,6 +161,8 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
 
 - [ ] **0010-followup: extract a `useIsMounted()` composable.** `DesignSelector.vue` uses a `let isMounted = true` + `onBeforeUnmount(() => isMounted = false)` pattern in ~4 callback sites to guard against post-unmount mutations from `router.reload` callbacks. The pattern would also fit any future component that wires async navigation callbacks. Premature to extract for a single consumer — wait until a second consumer needs the same guard, then refactor to `frontend/src/composables/useIsMounted.ts` returning `() => boolean` so callers do `if (!isMounted()) return`. Don't preempt; the inline pattern is fine for v1.
 
+- [ ] **0013-followup: explicit `useNowMinutes` wiring assertion in `SkippedTasks.test.ts`.** Existing tests already exercise the composable via behaviour ("list grows when interval advances past block end") but never directly assert `SkippedTasks.vue` subscribes to `currentHHMM`. Adding a focused mock-and-verify test would harden against a future refactor that accidentally drops the `useNowMinutes` call. Deferred from claude-review on PR #36 — current coverage proven adequate by the existing suite passing across all the day-boundary scenarios in `useNowMinutes.test.ts`.
+
 ## Follow-ups (discovered during manual testing)
 
 ### UX / Rules

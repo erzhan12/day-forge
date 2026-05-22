@@ -208,9 +208,10 @@ const effectiveBlocks = computed(() =>
     : props.blocks,
 )
 
-const currentBlock = computed(() =>
-  findCurrentBlock(effectiveBlocks.value, nowMinutes.value ?? 0, nowDate.value)
-)
+const currentBlock = computed(() => {
+  if (nowMinutes.value === null || nowDate.value === null) return null
+  return findCurrentBlock(effectiveBlocks.value, nowMinutes.value, nowDate.value)
+})
 const currentBlockRemaining = computed(() =>
   currentBlock.value && nowMinutes.value !== null
     ? remainingMinutesForBlock(currentBlock.value, nowMinutes.value)
