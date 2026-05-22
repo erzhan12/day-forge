@@ -1,4 +1,5 @@
 // Shared constants and time helpers for schedule layout
+import type { TimeBlock } from "../types"
 
 export const DAY_START = "06:00"
 export const DAY_END = "23:00"
@@ -24,4 +25,52 @@ export function snapToGrid(minutes: number): number {
 
 export function clampToDay(minutes: number): number {
   return Math.max(DAY_START_MINUTES, Math.min(DAY_END_MINUTES, minutes))
+}
+
+export function findCurrentBlock(
+  blocks: TimeBlock[],
+  nowMinutes: number,
+  nowDate: string | null,
+): TimeBlock | null {
+  if (nowDate === null) return null
+
+  const matchingBlocks = blocks
+    .filter((block) => {
+      const start = timeToMinutes(block.start_time)
+      const end = timeToMinutes(block.end_time)
+      return start <= nowMinutes && nowMinutes < end
+    })
+    // Overlap should not happen, but choose the same ordered block the API
+    // and NowLine iteration would surface first.
+    .sort((a, b) => {
+      const startDelta = timeToMinutes(a.start_time) - timeToMinutes(b.start_time)
+      return startDelta !== 0 ? startDelta : a.sort_order - b.sort_order
+    })
+
+  return matchingBlocks[0] ?? null
+}
+
+export function remainingMinutesForBlock(
+  block: TimeBlock,
+  nowMinutes: number,
+): number | null {
+  const start = timeToMinutes(block.start_time)
+  const end = timeToMinutes(block.end_time)
+  if (nowMinutes < start || nowMinutes >= end) return null
+
+  return end - nowMinutes
+}
+
+export function formatDurationMinutes(minutes: number): string {
+  // Negative minutes are a caller error; keep this leaf formatter non-throwing.
+  if (minutes <= 0) return "0m"
+  if (minutes < 60) return `${minutes}m`
+
+  const hours = Math.floor(minutes / 60)
+  const remainder = minutes % 60
+  return remainder === 0 ? `${hours}h` : `${hours}h ${remainder}m`
+}
+
+export function formatRemainingMinutes(minutes: number): string {
+  return `${formatDurationMinutes(minutes)} left`
 }

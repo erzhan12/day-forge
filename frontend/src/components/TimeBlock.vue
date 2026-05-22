@@ -5,11 +5,24 @@ import type { TimeBlock, UndoAction } from "../types"
 import { useSchedule } from "../composables/useSchedule"
 import { getCategoryColor } from "../utils/categoryColors"
 import { useActiveTheme } from "../composables/useActiveTheme"
+import {
+  formatDurationMinutes,
+  formatRemainingMinutes,
+  timeToMinutes,
+} from "../utils/scheduleTime"
 
-const props = defineProps<{
-  block: TimeBlock
-  date: string
-}>()
+const props = withDefaults(
+  defineProps<{
+    block: TimeBlock
+    date: string
+    isCurrent?: boolean
+    remainingMinutes?: number | null
+  }>(),
+  {
+    isCurrent: false,
+    remainingMinutes: null,
+  },
+)
 
 const { updateBlock, deleteBlock } = useSchedule(props.date)
 // Tracks the active theme reactively so the left-border color updates
@@ -51,22 +64,18 @@ const errorMessage = ref("")
 const titleInput = ref<HTMLInputElement | null>(null)
 
 const durationMinutes = computed(() => {
-  const [sh, sm] = props.block.start_time.split(":").map(Number)
-  const [eh, em] = props.block.end_time.split(":").map(Number)
-  return eh * 60 + em - (sh * 60 + sm)
+  return timeToMinutes(props.block.end_time) - timeToMinutes(props.block.start_time)
 })
 
-const duration = computed(() => {
-  const mins = durationMinutes.value
-  if (mins >= 60) {
-    const h = Math.floor(mins / 60)
-    const m = mins % 60
-    return m > 0 ? `${h}h ${m}m` : `${h}h`
-  }
-  return `${mins}m`
-})
+const duration = computed(() => formatDurationMinutes(durationMinutes.value))
 
 const isCompact = computed(() => durationMinutes.value <= 30)
+const remainingLabel = computed(() => {
+  if (!props.isCurrent || props.remainingMinutes === null || props.remainingMinutes <= 0) {
+    return null
+  }
+  return formatRemainingMinutes(props.remainingMinutes)
+})
 
 async function startEditing() {
   if (isDisabled()) return
@@ -193,6 +202,7 @@ async function handleDelete() {
           @change="toggleCompleted"
         />
         <span class="time-badge">{{ block.start_time }}–{{ block.end_time }}</span>
+        <span v-if="remainingLabel" class="remaining-badge">{{ remainingLabel }}</span>
         <input
           v-if="editing"
           ref="titleInput"
@@ -217,6 +227,7 @@ async function handleDelete() {
       <div class="block-header">
         <span class="time-badge">{{ block.start_time }} – {{ block.end_time }}</span>
         <span class="duration">{{ duration }}</span>
+        <span v-if="remainingLabel" class="remaining-badge">{{ remainingLabel }}</span>
         <button class="delete-btn" @click="handleDelete">&times;</button>
       </div>
       <div class="block-body">
@@ -362,6 +373,15 @@ async function handleDelete() {
 .duration {
   font-size: 12px;
   color: var(--text-faint);
+}
+
+.remaining-badge {
+  flex-shrink: 0;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--accent);
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .delete-btn {

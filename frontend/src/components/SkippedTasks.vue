@@ -1,30 +1,19 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue"
+import { computed, toRef } from "vue"
 import type { TimeBlock } from "../types"
 import { getCategoryColor } from "../utils/categoryColors"
 import { useActiveTheme } from "../composables/useActiveTheme"
 import { todayString } from "../utils/date"
+import { useNowMinutes } from "../composables/useNowMinutes"
 
 const props = defineProps<{
   blocks: TimeBlock[]
   date: string
 }>()
 
-// Match Schedule.vue's nowMinutes cadence so blocks transition into
-// the list as their windows close. Without this, a block that ends at
-// 11:00 would still appear "active" at 11:30 until the page reloads.
-// Tracks the active theme reactively so the marker-dot color updates
-// when the user switches themes while this component is mounted.
 const activeTheme = useActiveTheme()
-
-const NOW_UPDATE_INTERVAL_MS = 60_000
-const currentHHMM = ref(getCurrentHHMM())
-let interval: ReturnType<typeof setInterval> | null = null
-
-function getCurrentHHMM(): string {
-  const d = new Date()
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
-}
+// Tick `currentHHMM` so today's blocks roll into Skipped as their window closes.
+const { currentHHMM } = useNowMinutes(toRef(props, "date"))
 
 const isPastDay = computed(() => props.date < todayString())
 const isToday = computed(() => props.date === todayString())
@@ -40,15 +29,6 @@ const skipped = computed<TimeBlock[]>(() => {
   })
 })
 
-onMounted(() => {
-  if (!isToday.value) return
-  interval = setInterval(() => {
-    currentHHMM.value = getCurrentHHMM()
-  }, NOW_UPDATE_INTERVAL_MS)
-})
-onUnmounted(() => {
-  if (interval) clearInterval(interval)
-})
 </script>
 
 <template>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, provide, onMounted, onUnmounted, watch } from "vue"
+import { computed, ref, provide, toRef, watch } from "vue"
 import { Link, router } from "@inertiajs/vue3"
 import type { TimeBlock as TimeBlockType, Schedule, RenderItem } from "../types"
 import DateNavigator from "../components/DateNavigator.vue"
@@ -20,7 +20,8 @@ import {
 } from "../utils/chatSidebarStorage"
 import {
   DAY_START, DAY_END, DAY_START_MINUTES, DAY_END_MINUTES,
-  PX_PER_MINUTE, timeToMinutes, minutesToTime,
+  PX_PER_MINUTE, timeToMinutes, minutesToTime, findCurrentBlock,
+  remainingMinutesForBlock,
 } from "../utils/scheduleTime"
 import { useSchedule } from "../composables/useSchedule"
 import { useUndo } from "../composables/useUndo"
@@ -29,6 +30,7 @@ import { useDraft } from "../composables/useDraft"
 import { useChat } from "../composables/useChat"
 import { useCalendar } from "../composables/useCalendar"
 import { useThemeFromProps } from "../composables/useThemeFromProps"
+import { useNowMinutes } from "../composables/useNowMinutes"
 import ExternalEventsPanel from "../components/ExternalEventsPanel.vue"
 import "../app.css"
 
@@ -189,8 +191,6 @@ function handleRegenerateClick() {
   runDraft()
 }
 
-const isToday = computed(() => props.date === todayString())
-
 // Analytics is past-/today-only AND meaningless on a never-edited
 // (draft) day — analytics_view returns 400 for future and 404 for
 // missing schedules, but a stale link in the nav would still feel
@@ -199,32 +199,22 @@ const showAnalyticsLink = computed(() => {
   return props.date <= todayString() && props.schedule.status !== "draft"
 })
 
-// Reactive current-minute counter so display list recomputes as time passes
-const NOW_UPDATE_INTERVAL_MS = 60_000
-const nowMinutes = ref(getCurrentMinutes())
-let nowInterval: ReturnType<typeof setInterval> | null = null
-
-function getCurrentMinutes(): number {
-  const now = new Date()
-  return now.getHours() * 60 + now.getMinutes()
-}
-
-onMounted(() => {
-  if (!isToday.value) return
-  nowInterval = setInterval(() => {
-    nowMinutes.value = getCurrentMinutes()
-  }, NOW_UPDATE_INTERVAL_MS)
-})
-
-onUnmounted(() => {
-  if (nowInterval) clearInterval(nowInterval)
-})
+const { nowMinutes, nowDate } = useNowMinutes(toRef(props, "date"))
 
 // During drag, use preview blocks for real-time visual feedback
 const effectiveBlocks = computed(() =>
   isDragging.value && previewBlocks.value.length > 0
     ? previewBlocks.value
     : props.blocks,
+)
+
+const currentBlock = computed(() =>
+  findCurrentBlock(effectiveBlocks.value, nowMinutes.value ?? 0, nowDate.value)
+)
+const currentBlockRemaining = computed(() =>
+  currentBlock.value && nowMinutes.value !== null
+    ? remainingMinutesForBlock(currentBlock.value, nowMinutes.value)
+    : null
 )
 
 // Ghost element computed properties
@@ -313,7 +303,7 @@ const displayList = computed<DisplayItem[]>(() => {
   }
 
   // If not today, return as-is (no now marker)
-  if (!isToday.value) {
+  if (nowDate.value === null || nowMinutes.value === null) {
     return baseItems as DisplayItem[]
   }
 
@@ -357,6 +347,7 @@ function itemHeight(item: DisplayItem): string {
 }
 
 function nowOffsetPercent(item: DisplayItem): string {
+  if (nowMinutes.value === null) return "0%"
   const start = timeToMinutes(item.start_time)
   const end = timeToMinutes(item.end_time)
   const span = end - start
@@ -454,7 +445,12 @@ function logout() {
           class="schedule-slot"
           :style="{ height: itemHeight(item) }"
         >
-          <TimeBlock :block="item.block" :date="date" />
+          <TimeBlock
+            :block="item.block"
+            :date="date"
+            :is-current="item.block?.id === currentBlock?.id"
+            :remaining-minutes="item.block?.id === currentBlock?.id ? currentBlockRemaining : null"
+          />
           <NowLine
             class="now-overlay"
             :style="{ top: nowOffsetPercent(item) }"
@@ -484,7 +480,12 @@ function logout() {
           class="schedule-slot"
           :style="{ height: itemHeight(item) }"
         >
-          <TimeBlock :block="item.block" :date="date" />
+          <TimeBlock
+            :block="item.block"
+            :date="date"
+            :is-current="item.block?.id === currentBlock?.id"
+            :remaining-minutes="item.block?.id === currentBlock?.id ? currentBlockRemaining : null"
+          />
         </div>
 
         <div
