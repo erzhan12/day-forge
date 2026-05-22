@@ -14,6 +14,17 @@ function sampleNow(): { minutes: number; hhmm: string } {
   }
 }
 
+/**
+ * Centralised 60s current-time sampler for schedule UI.
+ *
+ * - On-today (`viewedDate === todayString()`): `nowMinutes` / `nowDate` /
+ *   `currentHHMM` track wall-clock; the interval re-evaluates `today` on
+ *   every tick so a tab left open across midnight auto-leaves today.
+ * - Off-today: `nowMinutes` / `nowDate` are `null`, `currentHHMM` is `""`,
+ *   and no interval runs.
+ * - Same-instance navigation into today refreshes immediately (no remount
+ *   needed).
+ */
 export function useNowMinutes(viewedDate: Ref<string>) {
   const nowMinutes = ref<number | null>(null)
   const nowDate = ref<string | null>(null)

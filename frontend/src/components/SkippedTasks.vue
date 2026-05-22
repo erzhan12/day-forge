@@ -12,7 +12,8 @@ const props = defineProps<{
 }>()
 
 const activeTheme = useActiveTheme()
-// Tick `currentHHMM` so today's blocks roll into Skipped as their window closes.
+// Shared 60s tick so today's blocks roll into Skipped as their window closes
+// (extracted from the previously duplicated Schedule.vue interval).
 const { currentHHMM } = useNowMinutes(toRef(props, "date"))
 
 const isPastDay = computed(() => props.date < todayString())

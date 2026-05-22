@@ -27,6 +27,11 @@ export function clampToDay(minutes: number): number {
   return Math.max(DAY_START_MINUTES, Math.min(DAY_END_MINUTES, minutes))
 }
 
+/**
+ * Returns the block containing `nowMinutes` on a half-open `[start, end)`
+ * interval. Returns `null` when `nowDate` is `null` (off-today) or no block
+ * matches. Overlapping matches resolve by `(start_time, sort_order)`.
+ */
 export function findCurrentBlock(
   blocks: TimeBlock[],
   nowMinutes: number,
@@ -50,6 +55,10 @@ export function findCurrentBlock(
   return matchingBlocks[0] ?? null
 }
 
+/**
+ * Minutes until `block.end_time`. Half-open window — returns `null` before
+ * `start_time` and at/after `end_time`.
+ */
 export function remainingMinutesForBlock(
   block: TimeBlock,
   nowMinutes: number,
@@ -61,8 +70,11 @@ export function remainingMinutesForBlock(
   return end - nowMinutes
 }
 
+/**
+ * "Xm" / "Xh" / "Xh Ym" duration label. Negative or zero input returns
+ * `"0m"` (caller-error path; this leaf formatter never throws).
+ */
 export function formatDurationMinutes(minutes: number): string {
-  // Negative minutes are a caller error; keep this leaf formatter non-throwing.
   if (minutes <= 0) return "0m"
   if (minutes < 60) return `${minutes}m`
 
@@ -71,6 +83,7 @@ export function formatDurationMinutes(minutes: number): string {
   return remainder === 0 ? `${hours}h` : `${hours}h ${remainder}m`
 }
 
+/** "Xm left" / "Xh left" / "Xh Ym left" — appends " left" to `formatDurationMinutes`. */
 export function formatRemainingMinutes(minutes: number): string {
   return `${formatDurationMinutes(minutes)} left`
 }
