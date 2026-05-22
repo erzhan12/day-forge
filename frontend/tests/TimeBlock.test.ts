@@ -38,7 +38,12 @@ function makeBlock(overrides: Partial<TimeBlockType> = {}): TimeBlockType {
 const mockPushUndo = vi.fn()
 const mockSnapshotBlocks = vi.fn(() => [makeBlock()])
 
-function mountWithProvide(props: { block: TimeBlockType; date: string }) {
+function mountWithProvide(props: {
+  block: TimeBlockType
+  date: string
+  isCurrent?: boolean
+  remainingMinutes?: number | null
+}) {
   return mount(TimeBlock, {
     props,
     global: {
@@ -71,6 +76,63 @@ describe("TimeBlock", () => {
   it("computes duration correctly", () => {
     const wrapper = mountWithProvide({ block: makeBlock({ start_time: "09:00", end_time: "10:30" }), date: "2026-04-10" })
     expect(wrapper.text()).toContain("1h 30m")
+  })
+
+  it("formats whole-hour durations without trailing minutes", () => {
+    const oneHour = mountWithProvide({
+      block: makeBlock({ start_time: "09:00", end_time: "10:00" }),
+      date: "2026-04-10",
+    })
+    expect(oneHour.find(".duration").text()).toBe("1h")
+
+    const twoHours = mountWithProvide({
+      block: makeBlock({ start_time: "09:00", end_time: "11:00" }),
+      date: "2026-04-10",
+    })
+    expect(twoHours.find(".duration").text()).toBe("2h")
+  })
+
+  it("keeps compact 30-minute blocks in compact layout", () => {
+    const wrapper = mountWithProvide({
+      block: makeBlock({ start_time: "09:00", end_time: "09:30" }),
+      date: "2026-04-10",
+    })
+    expect(wrapper.find(".time-block").classes()).toContain("compact")
+    expect(wrapper.find(".duration").exists()).toBe(false)
+  })
+
+  it("shows remaining time on an active compact block", () => {
+    const wrapper = mountWithProvide({
+      block: makeBlock({ start_time: "09:00", end_time: "09:30" }),
+      date: "2026-04-10",
+      isCurrent: true,
+      remainingMinutes: 23,
+    })
+
+    expect(wrapper.find(".remaining-badge").text()).toBe("23m left")
+  })
+
+  it("shows remaining time on an active expanded block while preserving total duration", () => {
+    const wrapper = mountWithProvide({
+      block: makeBlock({ start_time: "09:00", end_time: "10:30" }),
+      date: "2026-04-10",
+      isCurrent: true,
+      remainingMinutes: 60,
+    })
+
+    expect(wrapper.find(".duration").text()).toBe("1h 30m")
+    expect(wrapper.find(".remaining-badge").text()).toBe("1h left")
+  })
+
+  it("omits remaining time for inactive blocks", () => {
+    const wrapper = mountWithProvide({
+      block: makeBlock(),
+      date: "2026-04-10",
+      isCurrent: false,
+      remainingMinutes: 23,
+    })
+
+    expect(wrapper.find(".remaining-badge").exists()).toBe(false)
   })
 
   it("toggles completion on checkbox change", async () => {
