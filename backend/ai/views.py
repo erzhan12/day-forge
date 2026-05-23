@@ -534,6 +534,11 @@ async def ai_command(request, date):
         data = json.loads(request.body)
     except json.JSONDecodeError:
         return JsonResponse({"errors": {"body": "Invalid JSON."}}, status=400)
+    if not isinstance(data, dict):
+        return JsonResponse(
+            {"errors": {"body": "Request body must be a JSON object."}},
+            status=400,
+        )
 
     command = data.get("command")
     if not isinstance(command, str):

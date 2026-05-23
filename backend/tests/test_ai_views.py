@@ -63,6 +63,13 @@ class TestRouting:
         assert resp.status_code == 400
 
     @pytest.mark.django_db
+    @pytest.mark.parametrize("body", ["[]", '"x"', "123", "null", "true"])
+    def test_non_object_json_root_returns_400(self, auth_client, body):
+        resp = auth_client.post(URL, body, content_type="application/json")
+        assert resp.status_code == 400
+        assert resp.json()["errors"]["body"] == "Request body must be a JSON object."
+
+    @pytest.mark.django_db
     def test_non_string_command(self, auth_client):
         resp = _post(auth_client, {"command": 42})
         assert resp.status_code == 400
