@@ -63,6 +63,23 @@ class TestRouting:
         assert resp.status_code == 400
 
     @pytest.mark.django_db
+    @pytest.mark.parametrize("raw_body", ["[]", '"x"', "123", "null", "true"])
+    def test_non_dict_json_body(self, auth_client, raw_body):
+        """Lock the contract that malformed bodies always return 4xx, never 5xx.
+
+        Valid JSON with a non-dict root (``[]``, ``"x"``, ``123``,
+        ``null``, ``true``) parses cleanly via ``json.loads`` but would
+        crash on ``data.get("command")`` with ``AttributeError`` → 500
+        without the explicit ``isinstance(data, dict)`` guard added in
+        ``backend/ai/views.py`` (the post-JSON-parse step). Mirrors the
+        same contract enforced for ``ai_chat`` in
+        ``test_ai_views_chat.py::test_non_object_json_root_returns_400``.
+        """
+        resp = auth_client.post(URL, raw_body, content_type="application/json")
+        assert resp.status_code == 400
+        assert resp.json()["errors"]["body"] == "Request body must be a JSON object."
+
+    @pytest.mark.django_db
     def test_non_string_command(self, auth_client):
         resp = _post(auth_client, {"command": 42})
         assert resp.status_code == 400

@@ -535,6 +535,15 @@ async def ai_command(request, date):
     except json.JSONDecodeError:
         return JsonResponse({"errors": {"body": "Invalid JSON."}}, status=400)
 
+    # Non-object JSON roots (``[]``, ``"x"``, ``123``, ``null``) parse
+    # fine but break ``data.get(...)`` with AttributeError → 500. Reject
+    # them as 400 here so the contract from the planning doc holds:
+    # any malformed body returns 4xx, never 5xx.
+    if not isinstance(data, dict):
+        return JsonResponse(
+            {"errors": {"body": "Request body must be a JSON object."}}, status=400
+        )
+
     command = data.get("command")
     if not isinstance(command, str):
         return JsonResponse({"errors": {"command": "command must be a string."}}, status=400)
