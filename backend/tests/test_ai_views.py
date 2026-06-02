@@ -636,13 +636,14 @@ class TestRateLimit:
     def test_cache_incr_value_error_reseeds_counter(
         self, auth_client, today_schedule, monkeypatch
     ):
-        """If the key evicts between ``cache.aadd`` returning False and
-        ``cache.aincr`` firing, ``aincr`` raises ``ValueError``. The
-        decorator must recover by re-seeding the counter, not 500.
+        """If the key evicts between ``cache.aadd`` returning False and the
+        increment firing, the sync ``cache.incr`` raises ``ValueError``.
+        The decorator must recover by re-seeding the counter, not 500.
 
-        (Feature 0009: production code now calls the async cache API
-        ``cache.aincr``; the replacement must be ``async def`` since the
-        call site is awaited.)"""
+        (Feature 0015: ``_consume_rate_limit`` routes the increment through
+        the **sync** ``cache.incr`` via ``sync_to_async`` — for atomic
+        Redis ``INCR`` + TTL preservation — so the replacement is a plain
+        ``def``, not ``async def``.)"""
         _patch_run(
             monkeypatch,
             AICommandResult(
@@ -654,14 +655,85 @@ class TestRateLimit:
         # Seed the cache with a first successful call.
         assert _post(auth_client, {"command": "seed"}).status_code == 200
 
-        async def _raise_value_error(_key):
+        def _raise_value_error(_key):
             raise ValueError("key missing")
 
-        monkeypatch.setattr("ai.views.cache.aincr", _raise_value_error)
+        monkeypatch.setattr("ai.views.cache.incr", _raise_value_error)
         # Second call enters the ``incr`` branch, hits ValueError, and
         # the except clause re-seeds the counter so the request succeeds.
         resp = _post(auth_client, {"command": "after-evict"})
         assert resp.status_code == 200
+
+    @pytest.mark.django_db
+    def test_increment_preserves_window_ttl(
+        self, auth_client, user, today_schedule, monkeypatch, settings
+    ):
+        """Regression (feature 0015, M1): incrementing the counter must NOT
+        reset the fixed window TTL.
+
+        The window is anchored by ``cache.aadd(key, 1, 3600)``. The async
+        ``cache.aincr`` (non-atomic ``aget``→``aset``) would rewrite the
+        TTL to ``default_timeout`` (300s) on every request, silently
+        shrinking the window; the sync ``cache.incr`` the code now uses
+        (atomic ``INCR`` on Redis; in-place on LocMem) leaves it intact.
+
+        Observed on the pinned LocMem backend via ``_expire_info``. The
+        atomicity half of the fix (H1) needs concurrent Redis and is out of
+        the unit suite, but TTL preservation is observable here: a
+        TTL-resetting increment would leave ~300s instead of ~3600s."""
+        import time
+
+        from django.core.cache import cache
+
+        settings.LLM_RATE_LIMIT_PER_HOUR = 100
+        _patch_run(
+            monkeypatch,
+            AICommandResult(
+                raw_response_text="{}",
+                parsed_actions=[],
+                explanation="ok",
+            ),
+        )
+        key = cache.make_key(f"ai_cmd_rl:{user.id}")
+        assert _post(auth_client, {"command": "one"}).status_code == 200  # aadd -> 3600s
+        assert _post(auth_client, {"command": "two"}).status_code == 200  # incr
+        ttl_remaining = cache._expire_info[key] - time.time()
+        # 3600s window; a reset-to-default-timeout bug would show ~300s.
+        assert ttl_remaining > 1800
+
+    @pytest.mark.django_db
+    def test_counter_stored_under_expected_key(
+        self, auth_client, user, today_schedule, monkeypatch, settings
+    ):
+        """Key-shape regression (feature 0015): the command counter is
+        stored under ``ai_cmd_rl:<user_id>`` and increments per request.
+
+        Redis's ``KEY_PREFIX`` (``dayforge``) is transparent to
+        ``cache.get``, so this assertion holds on the pinned LocMem suite
+        and on a Redis-backed integration run alike. This is deliberately
+        NOT a cross-worker test: two ``Client`` instances in one process
+        share LocMem / FileBased / Dummy, so a "two clients, one counter"
+        assertion would pass on the exact broken configurations ``ai.E001``
+        guards against and would prove nothing about multi-worker
+        behaviour. Cross-worker enforcement is covered by the hardened
+        ``test_checks.py`` cases plus an optional Redis integration step
+        (see 0015 plan Phase 3)."""
+        from django.core.cache import cache
+
+        settings.LLM_RATE_LIMIT_PER_HOUR = 5
+        _patch_run(
+            monkeypatch,
+            AICommandResult(
+                raw_response_text="{}",
+                parsed_actions=[],
+                explanation="ok",
+            ),
+        )
+        assert cache.get(f"ai_cmd_rl:{user.id}") is None
+        assert _post(auth_client, {"command": "one"}).status_code == 200
+        assert cache.get(f"ai_cmd_rl:{user.id}") == 1
+        assert _post(auth_client, {"command": "two"}).status_code == 200
+        assert cache.get(f"ai_cmd_rl:{user.id}") == 2
 
 
 class TestActiveRulesWiring:

@@ -9,42 +9,59 @@ that would otherwise ship with a trivially bypassable per-user rate limit.
 from django.conf import settings
 from django.core.checks import Error, register
 
+# Cache backends that cannot back a correct cross-worker rate limiter.
+# LocMemCache and DummyCache are per-process (each worker has its own
+# store, or no store at all); FileBasedCache is shared on disk but its
+# ``incr`` is not an atomic cross-worker counter (per-file locks are not
+# Redis ``INCR``). Any of them makes ``ai.views._consume_rate_limit``
+# under-count, multiplying the effective per-user limit. Mirrors
+# ``calendar_sync.checks._INEFFECTIVE_CACHE_BACKENDS`` — defined locally
+# rather than cross-imported to avoid an app-to-app dependency.
+_INEFFECTIVE_CACHE_BACKENDS = (
+    "django.core.cache.backends.locmem.LocMemCache",
+    "django.core.cache.backends.filebased.FileBasedCache",
+    "django.core.cache.backends.dummy.DummyCache",
+)
+
 
 @register()
 def error_locmem_cache_with_ai_in_production(app_configs, **kwargs):
-    """Block production startup when any AI rate-limit counter lives in
-    a per-process cache.
+    """Block startup when the AI rate-limit counters live in a cache
+    backend that can't enforce a correct cross-worker limit.
 
     All three AI rate-limit buckets — ``ai_cmd_rl`` (one-shot command,
     ``LLM_RATE_LIMIT_PER_HOUR``), ``ai_draft_rl`` (auto/manual draft,
     ``LLM_DRAFT_RATE_LIMIT_PER_HOUR``), and ``ai_chat_rl`` (multi-turn
-    chat, ``LLM_CHAT_RATE_LIMIT_PER_HOUR``) — share Django's default
-    cache via ``ai.views._consume_rate_limit``. Under the default
-    ``LocMemCache`` that cache is per-worker, so a gunicorn deployment
-    with N workers makes the effective limit on EACH bucket
-    ``configured_limit × N`` — trivially bypassed by any client whose
-    connections round-robin across workers. Runs whenever
-    ``LLM_API_KEY`` is set (AI features actually in use), regardless of
-    ``DEBUG`` — a misconfigured prod with ``DEBUG=True`` would otherwise
-    silently ship the per-worker limiter.
+    chat, ``LLM_CHAT_RATE_LIMIT_PER_HOUR``) — share ``CACHES['default']``
+    via ``ai.views._consume_rate_limit``. An ineffective backend
+    (``LocMemCache`` / ``DummyCache`` are per-process; ``FileBasedCache``
+    has no atomic cross-worker ``incr``) makes the effective limit on
+    EACH bucket ``configured_limit × worker_count`` — trivially bypassed
+    by any client whose connections round-robin across workers. Genuinely
+    shared, atomic backends (``RedisCache`` via ``REDIS_URL``,
+    ``PyMemcacheCache``) pass. Runs whenever ``LLM_API_KEY`` is set (AI
+    features actually in use), regardless of ``DEBUG`` — a misconfigured
+    prod with ``DEBUG=True`` would otherwise silently ship the broken
+    limiter.
     """
     errors = []
     if not settings.LLM_API_KEY or not settings.LLM_API_KEY.strip():
         return errors
     backend = settings.CACHES.get("default", {}).get("BACKEND", "")
-    if backend.endswith(".LocMemCache"):
+    if backend in _INEFFECTIVE_CACHE_BACKENDS:
         errors.append(
             Error(
                 "AI rate limiters (ai_cmd_rl / ai_draft_rl / ai_chat_rl) "
-                "are configured with LocMemCache while LLM_API_KEY is "
-                "set. LocMemCache is per-process, so each bucket's "
-                "effective limit becomes its configured value × "
-                "worker_count and can be bypassed at will.",
+                f"are configured with an ineffective cache backend ({backend}) "
+                "while LLM_API_KEY is set. LocMemCache and DummyCache are "
+                "per-process; FileBasedCache has no atomic cross-worker incr. "
+                "On any of them each bucket's effective limit becomes its "
+                "configured value × worker_count and can be bypassed at will.",
                 hint=(
-                    "Point CACHES['default']['BACKEND'] at a shared cache "
-                    "(e.g. django.core.cache.backends.redis.RedisCache or "
-                    "django_redis) so all three counters are global "
-                    "across workers."
+                    "Point CACHES['default']['BACKEND'] at a shared, atomic "
+                    "cache (django.core.cache.backends.redis.RedisCache via "
+                    "REDIS_URL, or PyMemcacheCache) so all three counters are "
+                    "global and atomic across workers."
                 ),
                 id="ai.E001",
             )

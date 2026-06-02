@@ -122,12 +122,39 @@ LOGIN_URL = "/accounts/login/"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-CACHES = {
-    "default": {
-        "BACKEND": "django.core.cache.backends.filebased.FileBasedCache",
-        "LOCATION": PROJECT_ROOT / ".cache",
+# Cache / rate-limit backend. The three AI rate-limit buckets
+# (``ai_cmd_rl`` / ``ai_draft_rl`` / ``ai_chat_rl``, see
+# ``ai.views._consume_rate_limit``) and the ``caldav_events:*`` keys both
+# live in ``CACHES['default']``. Production-shaped deploys point
+# ``REDIS_URL`` at a shared Redis so the counters are atomic (Redis
+# ``INCR``) and global across workers. When ``REDIS_URL`` is unset we fall
+# back to ``LocMemCache`` — the conventional dev backend the test suite
+# assumes (pinned in ``conftest.py``). That fallback only boots cleanly
+# when AI is disabled: the ``ai.E001`` system check blocks startup on an
+# ineffective backend (LocMem / FileBased / Dummy) whenever ``LLM_API_KEY``
+# is set, independent of ``DEBUG``.
+# ``.strip()`` so a whitespace-only value (stray trailing space in .env,
+# or a templated/CI var that resolves to blank) falls back to LocMem and
+# trips ``ai.E001`` loudly when AI is enabled — rather than selecting
+# RedisCache with a blank LOCATION that only fails on the first cache hit.
+# Mirrors the ``LLM_API_KEY.strip()`` guard in ``ai/checks.py``.
+REDIS_URL = os.environ.get("REDIS_URL", "").strip()
+if REDIS_URL:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": REDIS_URL,
+            # Namespace keys so a Redis shared with another app doesn't
+            # collide on ``ai_cmd_rl:*`` / ``caldav_events:*``.
+            "KEY_PREFIX": "dayforge",
+        }
     }
-}
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        }
+    }
 
 # LLM (OpenAI-compatible; swap base URL for OpenRouter, etc.)
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "")

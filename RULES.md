@@ -122,6 +122,11 @@ The frontend refreshes `currentHHMM` on a 1-minute interval (matches `Schedule.v
 - `ai_command` accepts the rate-limit-as-decorator pattern because its only pre-LLM precondition is request shape. For `ai_generate_draft`, common pre-LLM rejections (422 no template, 409 non-empty schedule, 413 oversized body, 400 invalid date) **must not** consume the small (default 10/hr) draft budget — a stale page or a misconfigured account would otherwise exhaust the budget without any LLM call.
 - Pattern: drop the decorator, increment the counter inline via `_consume_rate_limit(...)` after every precondition guard and before the LLM call. Provider failures (502/503/504) do still consume the budget — they represent a real LLM call attempt and unlimited retries on a flapping provider would bypass the limit.
 
+## Rate-limit increment: sync `cache.incr`, not async `aincr` (feature 0015)
+
+- `_consume_rate_limit` increments via `await sync_to_async(cache.incr, thread_sensitive=True)(key)`, **not** `await cache.aincr(key)`. Django's `RedisCache` overrides only the *sync* `incr` (→ atomic Redis `INCR`); the async `aincr` it inherits from `BaseCache` is a non-atomic `aget`→`aset` read-modify-write that **also** rewrites the key TTL to `default_timeout` (300s), silently collapsing the intended 3600s window. The pattern mirrors how `BaseCache.aadd` itself bridges to the sync `add`. `RedisCache.incr` raises `ValueError` on a missing key, so the `except ValueError → aset` reseed branch survives. Guarded by `test_increment_preserves_window_ttl`.
+- The counter must live in a shared, atomic backend. `ai.E001` (`backend/ai/checks.py`) blocks startup when `LLM_API_KEY` is set and `CACHES['default']` is LocMem / FileBased / Dummy — set `REDIS_URL` (→ `RedisCache`) whenever AI is enabled. FileBased is rejected because its `incr` is not atomic across workers (file locks ≠ Redis `INCR`), not because it is per-process (only LocMem / Dummy are per-process).
+
 ## Auto-draft trigger
 
 - `schedule_view` returns two related Inertia props:

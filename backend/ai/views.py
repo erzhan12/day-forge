@@ -93,22 +93,39 @@ async def _consume_rate_limit(user_id: int, key_prefix: str, limit: int) -> bool
     """Increment the per-user fixed-window counter under ``key_prefix``.
 
     Returns True when the call is within budget (caller proceeds), False
-    when exceeded (caller returns 429). ``cache.aadd`` anchors the TTL to
-    the first call in each window so it doesn't slide forward on every
-    request; falls back to ``cache.aset`` if a backend evicts the key
-    mid-window.
+    when exceeded (caller returns 429). ``cache.aadd`` anchors the window
+    TTL to the first call (``SET key 1 EX 3600 NX`` on Redis) so it
+    doesn't slide forward on every request; falls back to ``cache.aset``
+    if a backend evicts the key mid-window.
 
-    LocMem note: the default ``LocMemCache`` is per-worker, so in
-    multi-worker deployments the effective limit is ``limit × workers`` —
-    the ``ai.E001`` system check blocks production startup unless the
-    cache backend is shared (Redis / Memcached).
+    The increment goes through the **sync** ``cache.incr`` via
+    ``sync_to_async`` rather than the async ``cache.aincr``. Django's
+    ``RedisCache`` overrides only the sync ``incr`` (atomic Redis
+    ``INCR``); the async ``aincr`` it inherits from ``BaseCache`` is a
+    non-atomic ``aget``→``aset`` read-modify-write that *also* rewrites
+    the key TTL to ``default_timeout`` (300s), collapsing the 3600s
+    window. Bridging to the sync path — mirroring how ``BaseCache.aadd``
+    itself bridges to the sync ``add`` — gives a cross-worker-atomic
+    ``INCR`` that leaves the TTL anchored by ``aadd`` intact.
+    ``RedisCache.incr`` raises ``ValueError`` on a missing key, so the
+    ``except ValueError`` reseed branch is preserved.
+
+    Backend note: ``CACHES['default']`` is Redis in production-shaped
+    deploys (set ``REDIS_URL``). The ``ai.E001`` system check blocks
+    startup whenever ``LLM_API_KEY`` is set and the backend is ineffective
+    for rate limiting (LocMem / Dummy are per-worker; FileBased has no
+    atomic cross-worker ``incr``), so a multi-worker AI deploy can't ship
+    the ``limit × workers`` footgun.
     """
     key = f"{key_prefix}:{user_id}"
     if await cache.aadd(key, 1, _RATE_LIMIT_WINDOW_SECONDS):
         count = 1
     else:
         try:
-            count = await cache.aincr(key)
+            # Sync ``incr`` (atomic Redis INCR; TTL-preserving) bridged to
+            # async — NOT ``cache.aincr``, which is a non-atomic RMW that
+            # resets the window TTL. See docstring.
+            count = await sync_to_async(cache.incr, thread_sensitive=True)(key)
         except ValueError:
             await cache.aset(key, 1, _RATE_LIMIT_WINDOW_SECONDS)
             count = 1
