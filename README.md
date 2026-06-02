@@ -63,6 +63,7 @@ Day Forge reads configuration from environment variables. The most common ones:
 | `DEBUG` | `1` for dev, `0` for production | `1` |
 | `ALLOWED_HOSTS` | Comma-separated hostnames (production only) | — |
 | `CSRF_TRUSTED_ORIGINS` | Comma-separated origins incl. scheme (production only) | — |
+| `REDIS_URL` | Cache / rate-limit backend (`RedisCache`). **Required when `LLM_API_KEY` is set** (`ai.E001`); LocMem fallback otherwise. | — |
 | `LLM_API_KEY` | OpenAI-compatible API key. Empty ⇒ AI endpoints return 503 and the UI shows degraded mode. Manual editing still works. | — |
 | `LLM_BASE_URL` | OpenAI-compatible base URL | `https://api.openai.com/v1` |
 | `LLM_MODEL` | Model used by command + chat | `gpt-4o-mini` |
@@ -75,7 +76,7 @@ Day Forge reads configuration from environment variables. The most common ones:
 
 The full list (history days, chat caps, schema caps, capture-prompt path, etc.) lives in [.claude/rules/project.md](.claude/rules/project.md).
 
-> **Production requires a shared cache backend (Redis or Memcached).** The default `LocMemCache` is per-process, so AI rate-limit counters collapse to `limit × worker_count` and are trivially bypassed. The Django system check `ai.E001` blocks startup when this is misconfigured.
+> **Set `REDIS_URL` when AI is enabled.** The AI rate-limit counters live in `CACHES['default']`; Redis (Django's built-in `RedisCache`) makes them atomic and shared across workers via Redis `INCR`. The Django system check `ai.E001` blocks startup on an ineffective cache backend (`LocMemCache` / `FileBasedCache` / `DummyCache`) whenever `LLM_API_KEY` is set, **independent of `DEBUG`**. `REDIS_URL` is **required for AI-enabled deploys** and recommended otherwise (shared rate limits + CalDAV event-cache perf); when unset, Day Forge falls back to per-process `LocMemCache`, which only boots cleanly with AI disabled. For production, point `REDIS_URL` at an authenticated, TLS-enabled instance (`rediss://default:PASSWORD@host:6380/0`) and keep credentials out of version control.
 
 ## Development
 

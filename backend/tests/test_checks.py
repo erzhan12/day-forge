@@ -10,7 +10,10 @@ from django.test import override_settings
 from schedules.checks import warn_sqlite_in_production
 
 LOCMEM = "django.core.cache.backends.locmem.LocMemCache"
+FILEBASED = "django.core.cache.backends.filebased.FileBasedCache"
+DUMMY = "django.core.cache.backends.dummy.DummyCache"
 REDIS = "django.core.cache.backends.redis.RedisCache"
+MEMCACHED = "django.core.cache.backends.memcached.PyMemcacheCache"
 
 
 class TestLocmemCacheProductionError:
@@ -46,7 +49,11 @@ class TestLocmemCacheProductionError:
             assert error_locmem_cache_with_ai_in_production(app_configs=None) == []
 
     def test_silent_on_shared_cache_backend(self):
-        """Any non-LocMem backend is presumed shared across workers."""
+        """Genuinely-shared, atomic backends (Redis / Memcached) are
+        silent; only ineffective backends (LocMem / FileBased / Dummy)
+        trip ai.E001. (After feature 0015 hardened the check, "any
+        non-LocMem backend" is no longer presumed shared — FileBased and
+        Dummy now fire too.)"""
         with override_settings(
             DEBUG=False,
             LLM_API_KEY="sk-test",
@@ -54,8 +61,18 @@ class TestLocmemCacheProductionError:
         ):
             assert error_locmem_cache_with_ai_in_production(app_configs=None) == []
 
+    def test_silent_on_memcached_backend(self):
+        """PyMemcacheCache is shared + atomic across workers — must stay
+        silent, same as Redis."""
+        with override_settings(
+            DEBUG=False,
+            LLM_API_KEY="sk-test",
+            CACHES={"default": {"BACKEND": MEMCACHED}},
+        ):
+            assert error_locmem_cache_with_ai_in_production(app_configs=None) == []
+
     def test_errors_when_prod_plus_locmem_plus_ai(self):
-        """DEBUG=False + LLM_API_KEY set + LocMem is the blocking case."""
+        """DEBUG=False + LLM_API_KEY set + LocMem is a blocking case."""
         with override_settings(
             DEBUG=False,
             LLM_API_KEY="sk-test",
@@ -65,9 +82,40 @@ class TestLocmemCacheProductionError:
         assert len(errors) == 1
         err = errors[0]
         assert err.id == "ai.E001"
+        assert "ineffective" in err.msg
         assert "LocMemCache" in err.msg
-        assert "per-process" in err.msg
         assert "Redis" in (err.hint or "")
+
+    def test_errors_when_prod_plus_filebased_plus_ai(self):
+        """FileBasedCache has no atomic cross-worker incr (file locks ≠
+        Redis INCR), so it must also trip ai.E001. This is the regression
+        feature 0015 fixes — FileBased was the silent default before."""
+        with override_settings(
+            DEBUG=False,
+            LLM_API_KEY="sk-test",
+            CACHES={"default": {"BACKEND": FILEBASED}},
+        ):
+            errors = error_locmem_cache_with_ai_in_production(app_configs=None)
+        assert len(errors) == 1
+        err = errors[0]
+        assert err.id == "ai.E001"
+        assert "ineffective" in err.msg
+        assert "FileBasedCache" in err.msg
+        assert "Redis" in (err.hint or "")
+
+    def test_errors_when_dummy_plus_ai(self):
+        """DummyCache stores nothing, so every counter read is a miss —
+        also ineffective for rate limiting. Fires regardless of DEBUG."""
+        with override_settings(
+            DEBUG=True,
+            LLM_API_KEY="sk-test",
+            CACHES={"default": {"BACKEND": DUMMY}},
+        ):
+            errors = error_locmem_cache_with_ai_in_production(app_configs=None)
+        assert len(errors) == 1
+        err = errors[0]
+        assert err.id == "ai.E001"
+        assert "DummyCache" in err.msg
 
 
 class TestDraftCaptureProductionError:

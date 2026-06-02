@@ -3,7 +3,7 @@ import pytest
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.cache import cache
-from django.test import Client
+from django.test import Client, override_settings
 
 # Ensure Django is set up before tests run
 if not settings.configured:
@@ -39,11 +39,49 @@ def _force_test_safe_http_settings():
     yield
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _pin_test_cache_backend():
+    """Pin ``CACHES['default']`` to ``LocMemCache`` for the whole suite,
+    independent of the host shell / CI ``.env``.
+
+    Feature 0015 builds ``CACHES['default']`` from ``REDIS_URL`` at
+    settings-import time (``settings.py`` calls ``load_dotenv``). A
+    developer or CI runner whose ``.env`` defines ``REDIS_URL`` — exactly
+    the var this feature introduces and documents in ``.env.example`` —
+    would otherwise make the entire unit suite try to connect to a live
+    Redis at import, turning every cache-touching test (``TestRateLimit``,
+    the ``cache.get`` assertions in the chat/draft view tests, and the
+    autouse ``_clear_cache``) into a connection-error failure with no
+    Redis running.
+
+    ``override_settings`` (not a raw ``settings.CACHES`` mutation) is
+    required: ``ConnectionHandler`` caches the resolved config on first
+    access, and ``caches.close_all()`` drops backend instances without
+    invalidating that cached config — so ``caches['default']`` can still
+    return the pre-pin backend. ``override_settings`` emits the
+    ``setting_changed`` signal for ``CACHES``, which makes the handler
+    re-read the config. Tests that genuinely need another backend (e.g.
+    the Redis / FileBased cases in ``test_checks.py``) keep their own
+    per-test ``override_settings(CACHES=...)``, which transparently
+    shadows this session pin for their duration. Session-scoped + autouse
+    so it wraps the first request of the first test.
+    """
+    with override_settings(
+        CACHES={
+            "default": {
+                "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            }
+        }
+    ):
+        yield
+
+
 @pytest.fixture(autouse=True)
 def _clear_cache():
     """The AI command endpoint uses the default cache for per-user rate
-    limiting, and LocMemCache persists across tests in the same process.
-    Clear before and after every test so rate-limit counters don't leak."""
+    limiting, and ``LocMemCache`` (pinned by ``_pin_test_cache_backend``)
+    persists across tests in the same process. Clear before and after
+    every test so rate-limit counters don't leak."""
     cache.clear()
     yield
     cache.clear()
