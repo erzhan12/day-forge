@@ -43,6 +43,12 @@ def error_locmem_cache_with_ai_in_production(app_configs, **kwargs):
     features actually in use), regardless of ``DEBUG`` — a misconfigured
     prod with ``DEBUG=True`` would otherwise silently ship the broken
     limiter.
+
+    Naming: ``error_locmem_cache_with_ai_in_production`` is a legacy name
+    kept from before feature 0015 broadened this check from LocMemCache-only
+    to the full ``_INEFFECTIVE_CACHE_BACKENDS`` tuple (LocMem / FileBased /
+    Dummy). The name and the ``ai.E001`` id are retained to avoid churning
+    the system-check id and its ``test_checks.py`` references.
     """
     errors = []
     if not settings.LLM_API_KEY or not settings.LLM_API_KEY.strip():

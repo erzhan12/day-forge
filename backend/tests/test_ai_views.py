@@ -697,6 +697,10 @@ class TestRateLimit:
         key = cache.make_key(f"ai_cmd_rl:{user.id}")
         assert _post(auth_client, {"command": "one"}).status_code == 200  # aadd -> 3600s
         assert _post(auth_client, {"command": "two"}).status_code == 200  # incr
+        # ``_expire_info`` is a LocMemCache implementation detail; this read
+        # only works because conftest's ``_pin_test_cache_backend`` pins the
+        # suite to LocMem (the unit suite never talks to Redis), and would
+        # break if Django changed LocMem's expiry internals.
         ttl_remaining = cache._expire_info[key] - time.time()
         # 3600s window; a reset-to-default-timeout bug would show ~300s.
         assert ttl_remaining > 1800

@@ -15,10 +15,18 @@ services:
       - REDIS_URL=redis://redis:6379/0
     command: uv run python manage.py runserver 0.0.0.0:8006
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
 
   redis:
     image: redis:7-alpine
     ports:
       # Exposed for local inspection (redis-cli); not required by the app.
       - "6379:6379"
+    healthcheck:
+      # Gate web's start on Redis accepting connections — avoids a
+      # cold-start race on the first cache op.
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
