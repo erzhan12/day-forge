@@ -76,7 +76,7 @@ Day Forge reads configuration from environment variables. The most common ones:
 
 The full list (history days, chat caps, schema caps, capture-prompt path, etc.) lives in [.claude/rules/project.md](.claude/rules/project.md).
 
-> **Set `REDIS_URL` when AI is enabled.** The AI rate-limit counters live in `CACHES['default']`; Redis (Django's built-in `RedisCache`) makes them atomic and shared across workers via Redis `INCR`. The Django system check `ai.E001` blocks startup on an ineffective cache backend (`LocMemCache` / `FileBasedCache` / `DummyCache`) whenever `LLM_API_KEY` is set, **independent of `DEBUG`**. `REDIS_URL` is **required for AI-enabled deploys** and recommended otherwise (shared rate limits + CalDAV event-cache perf); when unset, Day Forge falls back to per-process `LocMemCache`, which only boots cleanly with AI disabled.
+> **Set `REDIS_URL` when AI is enabled.** The AI rate-limit counters live in `CACHES['default']`; Redis (Django's built-in `RedisCache`) makes them atomic and shared across workers via Redis `INCR`. The Django system check `ai.E001` blocks startup on an ineffective cache backend (`LocMemCache` / `FileBasedCache` / `DummyCache`) whenever `LLM_API_KEY` is set, **independent of `DEBUG`**. `REDIS_URL` is **required for AI-enabled deploys** and recommended otherwise (shared rate limits + CalDAV event-cache perf); when unset, Day Forge falls back to per-process `LocMemCache`, which only boots cleanly with AI disabled. For production, point `REDIS_URL` at an authenticated, TLS-enabled instance (`rediss://default:PASSWORD@host:6380/0`) and keep credentials out of version control.
 
 ## Development
 
