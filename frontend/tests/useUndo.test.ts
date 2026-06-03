@@ -90,6 +90,30 @@ describe("useUndo", () => {
     expect(undo.undoStack.value[0].description).toBe("action 5")
   })
 
+  it("performUndo ignores concurrent calls while restore is in flight", async () => {
+    let resolveRestore: (value: { ok: boolean }) => void = () => {}
+    mockRestoreBlocks.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveRestore = resolve
+        }),
+    )
+    const { undo } = mountUndo()
+    undo.pushUndo(makeAction({ description: "first" }))
+    undo.pushUndo(makeAction({ description: "second" }))
+
+    const first = undo.performUndo()
+    const second = undo.performUndo()
+
+    resolveRestore({ ok: true })
+    await first
+    await second
+
+    expect(mockRestoreBlocks).toHaveBeenCalledOnce()
+    expect(undo.undoStack.value).toHaveLength(1)
+    expect(undo.undoStack.value[0].description).toBe("first")
+  })
+
   it("performUndo calls restoreBlocks and pops on success", async () => {
     mockRestoreBlocks.mockResolvedValue({ ok: true })
     const { undo } = mountUndo()
