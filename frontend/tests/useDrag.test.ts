@@ -1,5 +1,9 @@
 import { describe, it, expect, vi } from "vitest"
-import { resolveConflicts, useDrag } from "../src/composables/useDrag"
+import {
+  blocksExternallyMutated,
+  resolveConflicts,
+  useDrag,
+} from "../src/composables/useDrag"
 import type { TimeBlock, UndoAction } from "../src/types"
 
 function makeBlock(overrides: Partial<TimeBlock> & { id: number }): TimeBlock {
@@ -441,5 +445,71 @@ describe("useDrag.endDrag (undo snapshot)", () => {
     const a = action.previousBlocks.find((b) => b.id === 1)!
     expect(a.start_time).toBe("09:00")
     expect(a.end_time).toBe("10:00")
+  })
+
+  it("aborts drop when a non-dragged block changed during the drag", async () => {
+    const snapshot: TimeBlock[] = [
+      { id: 1, title: "A", start_time: "09:00", end_time: "10:00",
+        category: "work", is_completed: false, sort_order: 0 },
+      { id: 2, title: "B", start_time: "10:00", end_time: "11:00",
+        category: "work", is_completed: false, sort_order: 10 },
+    ]
+    const liveAfterAi: TimeBlock[] = [
+      snapshot[0],
+      { ...snapshot[1], start_time: "14:00", end_time: "15:00" },
+    ]
+    const snapshotBlocks = vi.fn(() => snapshot.map((b) => ({ ...b })))
+    const getCurrentBlocks = vi.fn(() => liveAfterAi)
+    const reorderBlocks = vi.fn(async () => ({ ok: true as const }))
+    const pushUndo = vi.fn<(a: UndoAction) => void>()
+
+    const drag = useDrag(
+      "2026-04-16",
+      getCurrentBlocks,
+      reorderBlocks,
+      pushUndo,
+      snapshotBlocks,
+    )
+
+    drag.startDrag(
+      { pointerId: 1, clientY: 0 } as PointerEvent,
+      snapshot[0],
+      makeFakeContainer(),
+    )
+    drag.previewBlocks.value = [
+      { ...snapshot[0], start_time: "11:00", end_time: "12:00" },
+      liveAfterAi[1],
+    ]
+    drag.previewStartTime.value = "11:00"
+
+    await drag.endDrag()
+
+    expect(reorderBlocks).not.toHaveBeenCalled()
+    expect(pushUndo).not.toHaveBeenCalled()
+  })
+})
+
+describe("blocksExternallyMutated", () => {
+  const snapshot: TimeBlock[] = [
+    { id: 1, title: "A", start_time: "09:00", end_time: "10:00",
+      category: "work", is_completed: false, sort_order: 0 },
+    { id: 2, title: "B", start_time: "10:00", end_time: "11:00",
+      category: "work", is_completed: false, sort_order: 10 },
+  ]
+
+  it("returns false when only the dragged block may change", () => {
+    expect(blocksExternallyMutated(snapshot, snapshot, 1)).toBe(false)
+  })
+
+  it("returns true when a neighbour's times changed", () => {
+    const live = [
+      snapshot[0],
+      { ...snapshot[1], start_time: "14:00", end_time: "15:00" },
+    ]
+    expect(blocksExternallyMutated(snapshot, live, 1)).toBe(true)
+  })
+
+  it("returns true when block ids differ", () => {
+    expect(blocksExternallyMutated(snapshot, [snapshot[0]], 1)).toBe(true)
   })
 })
