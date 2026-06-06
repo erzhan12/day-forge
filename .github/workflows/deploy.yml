@@ -1,0 +1,199 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/day-forge
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python
+        run: uv python install 3.14
+
+      - name: Install backend deps
+        run: uv sync --frozen
+
+      - name: Run backend tests
+        # AI rate-limit tests assume LocMemCache (conftest pins it); leave
+        # LLM_API_KEY unset so ai.E001 does not require Redis in CI.
+        run: uv run pytest backend/tests/ -q
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+
+      - name: Frontend type-check + tests
+        working-directory: frontend
+        run: |
+          npm run type-check
+          npm test
+
+  build-and-push:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Compute tags
+        id: meta
+        run: echo "tag=${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deployment/docker/Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:latest
+            ${{ env.IMAGE }}:${{ steps.meta.outputs.tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Install SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add server to known_hosts
+        run: ssh-keyscan -H "${{ secrets.SERVER_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Copy deployment files to droplet
+        env:
+          SSH_TARGET: ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          # Container runs as uid 1000 — host dirs must be writable (see deployment/README.md §3b).
+          ssh "$SSH_TARGET" "mkdir -p \"$DEPLOY_PATH/data\" \"$DEPLOY_PATH/staticfiles\" && sudo chown -R 1000:1000 \"$DEPLOY_PATH/data\" \"$DEPLOY_PATH/staticfiles\""
+          scp deployment/docker/docker-compose.yml "$SSH_TARGET:$DEPLOY_PATH/docker-compose.yml"
+
+      - name: Write .env, pull image, restart stack
+        env:
+          SSH_TARGET: ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          IMAGE_REF: ${{ env.IMAGE }}:${{ needs.build-and-push.outputs.image_tag }}
+          DJANGO_SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY }}
+          ALLOWED_HOSTS: ${{ secrets.ALLOWED_HOSTS }}
+          CSRF_TRUSTED_ORIGINS: ${{ secrets.CSRF_TRUSTED_ORIGINS }}
+          CALDAV_ENCRYPTION_KEY: ${{ secrets.CALDAV_ENCRYPTION_KEY }}
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
+          LLM_MODEL: ${{ secrets.LLM_MODEL }}
+          LLM_DRAFT_MODEL: ${{ secrets.LLM_DRAFT_MODEL }}
+          DJANGO_SUPERUSER_USERNAME: ${{ secrets.DJANGO_SUPERUSER_USERNAME }}
+          DJANGO_SUPERUSER_EMAIL: ${{ secrets.DJANGO_SUPERUSER_EMAIL }}
+          DJANGO_SUPERUSER_PASSWORD: ${{ secrets.DJANGO_SUPERUSER_PASSWORD }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_ACTOR: ${{ github.actor }}
+        run: |
+          # Build .env via Python — never interpolate secrets inside double-quoted shell
+          # echo (metacharacters in DJANGO_SUPERUSER_PASSWORD etc. break or inject).
+          python3 <<'PY'
+          import os, sys
+
+          def require(name: str) -> str:
+              value = os.environ.get(name, "")
+              if not value:
+                  sys.exit(f"missing required env var: {name}")
+              if "\n" in value or "\r" in value:
+                  sys.exit(f"{name} must not contain newlines")
+              return value
+
+          def dotenv_line(key: str, value: str, *, quote: bool = True) -> str:
+              """Single-quoted values: Compose env_file does not expand $ inside quotes."""
+              if not quote:
+                  return f"{key}={value}"
+              escaped = value.replace("'", "\\'")  # Compose: only ' is escaped inside '...'; \ is literal
+              return f"{key}='{escaped}'"
+
+          lines = [
+              "DEBUG=0",
+              dotenv_line("DJANGO_SECRET_KEY", require("DJANGO_SECRET_KEY")),
+              dotenv_line("ALLOWED_HOSTS", require("ALLOWED_HOSTS")),
+              dotenv_line("CSRF_TRUSTED_ORIGINS", require("CSRF_TRUSTED_ORIGINS")),
+              dotenv_line("CALDAV_ENCRYPTION_KEY", require("CALDAV_ENCRYPTION_KEY")),
+              dotenv_line("LLM_API_KEY", require("LLM_API_KEY")),
+              dotenv_line("LLM_BASE_URL", require("LLM_BASE_URL")),
+              dotenv_line("LLM_MODEL", require("LLM_MODEL")),
+              dotenv_line("LLM_DRAFT_MODEL", require("LLM_DRAFT_MODEL")),
+              dotenv_line("DJANGO_SUPERUSER_USERNAME", require("DJANGO_SUPERUSER_USERNAME")),
+              dotenv_line("DJANGO_SUPERUSER_EMAIL", require("DJANGO_SUPERUSER_EMAIL")),
+              dotenv_line("DJANGO_SUPERUSER_PASSWORD", require("DJANGO_SUPERUSER_PASSWORD")),
+              dotenv_line("DOCKER_IMAGE", require("IMAGE_REF")),
+          ]
+          path = "/tmp/day-forge.env"
+          with open(path, "w", encoding="utf-8") as f:
+              f.write("\n".join(lines) + "\n")
+          PY
+          scp /tmp/day-forge.env "$SSH_TARGET:$DEPLOY_PATH/.env"
+          rm -f /tmp/day-forge.env
+          ssh "$SSH_TARGET" "grep -q '^DEBUG=0$' '$DEPLOY_PATH/.env'"
+          ssh "$SSH_TARGET" "bash -s" <<EOF
+          set -e
+          cd "$DEPLOY_PATH"
+          echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          export DOCKER_IMAGE="$IMAGE_REF"
+          docker compose pull
+          docker compose up -d --remove-orphans
+          docker image prune -f
+          EOF
+
+  health-check:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for stabilization
+        run: sleep 30
+
+      - name: Probe HTTPS endpoint
+        run: |
+          for i in $(seq 1 5); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" https://dayforge.habitreward.org/accounts/login/ || true)
+            echo "attempt $i: HTTP $code"
+            if [ "$code" = "200" ]; then exit 0; fi
+            sleep 10
+          done
+          echo "health check failed"; exit 1
