@@ -1,0 +1,46 @@
+services:
+  web:
+    # No default image tag — CI always writes DOCKER_IMAGE to .env on deploy;
+    # manual `docker compose up` without .env fails fast instead of pulling a
+    # hardcoded owner/repo (see Task 8 / deployment/README.md).
+    image: ${DOCKER_IMAGE:?Set DOCKER_IMAGE in .env — CI writes ghcr.io/<owner>/day-forge:<sha>}
+    container_name: day_forge_web
+    restart: unless-stopped
+    # Published on 0.0.0.0:8006 so habit_reward's central Caddy reaches it via
+    # host.docker.internal:8006 (Docker bridge gateway on Linux — NOT 127.0.0.1,
+    # so do not bind 127.0.0.1:8006:8006 as the primary exposure fix).
+    # UFW alone does NOT block public :8006 — Docker publishes via iptables
+    # (DOCKER chain) and bypasses ufw. SEE deployment/README.md §3 for the
+    # required DOCKER-USER iptables rules + off-host verification curl.
+    ports:
+      - "8006:8006"
+    env_file:
+      - .env
+    environment:
+      # Overrides any REDIS_URL in .env: talk to the compose-internal service.
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - ./data:/app/db                 # SQLite file: /app/db/day_forge.db
+      - ./staticfiles:/app/staticfiles  # collectstatic target (optional persist)
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      # DEBUG=0: proto header (SECURE_SSL_REDIRECT) + Host (ALLOWED_HOSTS — not localhost).
+      test: ["CMD", "curl", "-fsS", "--max-time", "5", "-H", "X-Forwarded-Proto: https", "-H", "Host: dayforge.habitreward.org", "http://localhost:8006/accounts/login/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  redis:
+    image: redis:7-alpine
+    container_name: day_forge_redis
+    restart: unless-stopped
+    # Not published to the host — only the web service reaches it on the
+    # compose network. KEY_PREFIX "dayforge" namespaces keys (settings.py).
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
