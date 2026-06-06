@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Day Forge is an AI-powered daily schedule assistant. Django 5.x backend with SQLite, Python 3.14, managed with uv. Vue 3 + Inertia.js frontend served via Vite.
 
-> ⚠️  **WARNING: Production scale blocker** — the AI endpoints (command, draft, chat) are `async def` since feature 0009, but the deployment is still WSGI/sync gunicorn so every async view runs through asgiref's thread-pool executor — **no concurrency win lands until Phase 7** (ASGI runner + middleware async-capability audit). Read **Production Deployment** below before exposing this app to concurrent load.
+> ✅  **Scale blocker resolved for the `dayforge.habitreward.org` deploy (feature 0016)** — it runs **uvicorn ASGI** (`--workers 1`), so the `async def` AI endpoints (command, draft, chat) serve concurrently off one event loop. The historical WSGI/sync-gunicorn blocker (feature 0009) only applies to other sync-runner deploys. Read **Production Deployment** below before exposing a *sync-runner* deploy to concurrent load; for the 0016 deploy see `deployment/` + `docs/features/0016_deploy_PLAN.md`.
 
 See `.claude/rules/` for detailed instructions. Review `tasks/lessons.md` at session start.
 
@@ -24,7 +24,9 @@ See `.claude/rules/` for detailed instructions. Review `tasks/lessons.md` at ses
 
 ## Production Deployment
 
-> ⚠️  **WARNING: CRITICAL — PRODUCTION SCALE BLOCKER:** feature 0009 ported the AI views to `async def` and the service layer to `openai.AsyncOpenAI`, removing the **code-level** barrier to concurrent LLM requests. The **operational** barrier still exists because the deployment is WSGI/sync gunicorn — every async view runs through asgiref's thread-pool executor, so each in-flight LLM call still occupies one worker thread. **The concurrency win lands in Phase 7**, not in this branch. Do not promote this branch to a production deploy that fronts concurrent AI load until Phase 7 ships.
+> ✅ **RESOLVED for the `dayforge.habitreward.org` deploy (feature 0016):** that deploy runs **uvicorn ASGI** (`day_forge.asgi:application`, `--workers 1`), so the async AI views serve concurrently off one event loop — the worker thread is freed during each LLM `await`. The WSGI/sync-gunicorn scale blocker below is historical context for any *other* (non-0016) deploy still on the sync runner. The middleware async-capability audit (`WhiteNoiseMiddleware`/`InertiaMiddleware` are sync-only) concluded **ship as-is**: under ASGI Django wraps each sync middleware in its own `sync_to_async` bridge — a per-request hop, not an event-loop block. See `deployment/` and `docs/features/0016_deploy_PLAN.md` (§ "Middleware async audit").
+
+> ⚠️  **WARNING: CRITICAL — PRODUCTION SCALE BLOCKER (sync-runner deploys only):** feature 0009 ported the AI views to `async def` and the service layer to `openai.AsyncOpenAI`, removing the **code-level** barrier to concurrent LLM requests. On a WSGI/sync-gunicorn deploy the **operational** barrier remains — every async view runs through asgiref's thread-pool executor, so each in-flight LLM call still occupies one worker thread. The 0016 ASGI deploy above clears this; do not promote a *sync-runner* deploy that fronts concurrent AI load.
 
 All three AI endpoints (`POST /api/ai/schedules/<date>/command/`, `/generate-draft/`, `/chat/`) hold one worker thread per in-flight request for up to `LLM_REQUEST_TIMEOUT` seconds (default 15) under the current sync-gunicorn worker model. N concurrent AI requests still starve the worker pool and stall all traffic, including manual schedule edits — same operational profile as the pre-0009 sync version. Acceptable for development and low-concurrency demos; before exposing the AI endpoints to production load:
 
