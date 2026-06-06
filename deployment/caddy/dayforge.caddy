@@ -1,0 +1,21 @@
+# Add this block to habit_reward's central Caddyfile, then reload Caddy.
+# day-forge serves its own static via WhiteNoise, so no file_server here.
+dayforge.habitreward.org {
+	encode zstd gzip
+
+	# Django trusts this via SECURE_PROXY_SSL_HEADER (settings.py).
+	reverse_proxy host.docker.internal:8006 {
+		header_up X-Forwarded-Proto https
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+
+	log {
+		output file /var/log/caddy/dayforge-access.log
+	}
+}
