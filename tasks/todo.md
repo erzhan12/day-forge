@@ -169,6 +169,10 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
 
 ## Follow-ups (discovered during manual testing)
 
+### Drag / Undo
+
+- [ ] **useDrag abort feedback.** When `blocksExternallyMutated` detects a concurrent mutation during drag, `endDrag` aborts silently (no toast) — consistent with `cancelDrag()`. Adding user feedback requires wiring a toast callback into `useDrag` (see `UndoToast.vue` for the pattern). Defer until user-reported confusion surfaces. Tracked per comment at `frontend/src/composables/useDrag.ts:413-415`.
+
 ### UX / Rules
 
 - [ ] **Auto-bump default priority for new Rules.** Today every new rule
