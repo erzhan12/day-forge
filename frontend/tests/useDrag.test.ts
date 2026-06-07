@@ -521,6 +521,15 @@ describe("blocksExternallyMutated", () => {
     expect(blocksExternallyMutated(snapshot, live, 1)).toBe(false)
   })
 
+  it("returns true when a block was added during drag", () => {
+    const live = [
+      ...snapshot,
+      { id: 3, title: "C", start_time: "11:00", end_time: "12:00",
+        category: "work", is_completed: false, sort_order: 20 },
+    ]
+    expect(blocksExternallyMutated(snapshot, live, 1)).toBe(true)
+  })
+
   it("returns true when block ids differ", () => {
     expect(blocksExternallyMutated(snapshot, [snapshot[0]], 1)).toBe(true)
   })
