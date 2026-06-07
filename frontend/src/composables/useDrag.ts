@@ -410,6 +410,9 @@ export function useDrag(
     // externally moved neighbour would look "changed" and get written back
     // at preview coordinates, clobbering the other mutation. Abort the
     // drop when the live schedule diverged from the snapshot.
+    // Note: the abort is silent (no toast) — consistent with cancelDrag().
+    // Adding user feedback requires wiring a toast callback into useDrag;
+    // track in tasks/todo.md § "Follow-ups".
     if (blocksExternallyMutated(savedSnapshot, getCurrentBlocks(), draggedId)) {
       resetState()
       return

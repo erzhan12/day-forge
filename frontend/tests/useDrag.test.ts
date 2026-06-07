@@ -530,7 +530,23 @@ describe("blocksExternallyMutated", () => {
     expect(blocksExternallyMutated(snapshot, live, 1)).toBe(true)
   })
 
-  it("returns true when block ids differ", () => {
+  it("returns true when block ids differ (substitution, same count)", () => {
+    const live = [
+      snapshot[0],
+      { ...snapshot[1], id: 99 },
+    ]
+    expect(blocksExternallyMutated(snapshot, live, 1)).toBe(true)
+  })
+
+  it("returns true when block ids differ (deletion)", () => {
     expect(blocksExternallyMutated(snapshot, [snapshot[0]], 1)).toBe(true)
+  })
+
+  it("returns false for two empty block lists", () => {
+    expect(blocksExternallyMutated([], [], 1)).toBe(false)
+  })
+
+  it("returns true when snapshot is empty but current has blocks", () => {
+    expect(blocksExternallyMutated([], [snapshot[0]], 1)).toBe(true)
   })
 })
