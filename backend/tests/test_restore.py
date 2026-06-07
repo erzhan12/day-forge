@@ -259,3 +259,33 @@ class TestRestoreBlocks:
         )
         assert resp.status_code == 413
         assert "too large" in resp.json()["errors"]["body"].lower()
+
+    def test_locks_schedule_row(self, auth_client, schedule, monkeypatch):
+        """Regression: ``restore_blocks`` must lock the parent ``Schedule``
+        row so it serializes with ``_apply_draft_sync`` on an empty day."""
+        from schedules.models import Schedule as _Schedule
+
+        original = _Schedule.objects.select_for_update
+        called = {"v": False}
+
+        def _spy(*args, **kwargs):
+            called["v"] = True
+            return original(*args, **kwargs)
+
+        monkeypatch.setattr(
+            _Schedule.objects, "select_for_update", _spy, raising=True
+        )
+        resp = _post_restore(
+            auth_client,
+            "2026-04-07",
+            [{
+                "title": "A",
+                "start_time": "10:00",
+                "end_time": "11:00",
+                "category": "work",
+                "is_completed": False,
+                "sort_order": 0,
+            }],
+        )
+        assert resp.status_code == 200, resp.content
+        assert called["v"]

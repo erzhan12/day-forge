@@ -495,6 +495,10 @@ def _apply_actions_sync(schedule, result) -> None:
     semantics that don't merge cleanly.
     """
     with transaction.atomic():
+        # Parent-row lock serializes with ``_apply_draft_sync`` and with
+        # ``create_block`` / ``restore_blocks`` on an empty day — locking
+        # only the (empty) TimeBlock queryset acquires zero rows.
+        Schedule.objects.select_for_update().get(pk=schedule.pk)
         locked_blocks = list(
             TimeBlock.objects.filter(schedule=schedule).select_for_update()
         )
