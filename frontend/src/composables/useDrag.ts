@@ -175,6 +175,39 @@ export function resolveConflicts(
   return result
 }
 
+/**
+ * Return true when any block other than the one being dragged changed
+ * between drag start and drop. Covers concurrent AI edits, manual
+ * mutations, undo, and cross-tab writes while the pointer is down.
+ */
+export function blocksExternallyMutated(
+  savedSnapshot: TimeBlock[],
+  currentBlocks: TimeBlock[],
+  draggedId: number,
+): boolean {
+  const snapIds = new Set(savedSnapshot.map((b) => b.id))
+  const curIds = new Set(currentBlocks.map((b) => b.id))
+  if (snapIds.size !== curIds.size) return true
+  for (const id of snapIds) {
+    if (!curIds.has(id)) return true
+  }
+
+  const currentById = new Map(currentBlocks.map((b) => [b.id, b]))
+  for (const b of savedSnapshot) {
+    if (b.id === draggedId) continue
+    const live = currentById.get(b.id)
+    if (!live) return true
+    if (
+      live.start_time !== b.start_time ||
+      live.end_time !== b.end_time ||
+      live.sort_order !== b.sort_order
+    ) {
+      return true
+    }
+  }
+  return false
+}
+
 export function useDrag(
   date: DateSource,
   getCurrentBlocks: () => TimeBlock[],
@@ -367,8 +400,20 @@ export function useDrag(
     //      actually mutated, not the day the user has navigated to.
     const savedSnapshot = snapshot
     const savedScheduleDate = snapshotDate
+    const draggedId = originalBlock.id
     const title = originalBlock.title
     const targetTime = previewStartTime.value
+
+    // Concurrent mutations (AI chat, manual edit, undo, another tab) can
+    // land while the pointer is down. `updatePreview` reads live blocks,
+    // but the drop diff below is against the drag-start snapshot — so an
+    // externally moved neighbour would look "changed" and get written back
+    // at preview coordinates, clobbering the other mutation. Abort the
+    // drop when the live schedule diverged from the snapshot.
+    if (blocksExternallyMutated(savedSnapshot, getCurrentBlocks(), draggedId)) {
+      resetState()
+      return
+    }
 
     // Build updates array for blocks that changed
     const originalMap = new Map(

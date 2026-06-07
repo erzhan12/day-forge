@@ -76,11 +76,15 @@ const {
 // consumer is this page.
 const { isGeneratingDraft, lastDraftError, generateDraft } = useDraft()
 
-// Schedule-wide disabled flag: while a draft is generating, suppress all
-// user mutation paths (form submit, inline edit, completion toggle,
-// delete, drag, gap-click-to-add, command bar). Provided via inject so
-// child components don't need to thread it through props.
-const scheduleDisabled = computed(() => isGeneratingDraft.value)
+// Schedule-wide disabled flag: while a draft is generating or AI chat is
+// in flight, suppress all user mutation paths (form submit, inline edit,
+// completion toggle, delete, drag, gap-click-to-add). Provided via
+// inject so child components don't need to thread it through props.
+const { setActiveDate: setChatActiveDate, isProcessing: isChatProcessing } =
+  useChat()
+const scheduleDisabled = computed(
+  () => isGeneratingDraft.value || isChatProcessing.value,
+)
 provide("scheduleDisabled", scheduleDisabled)
 
 const {
@@ -115,7 +119,6 @@ function retryFetchEvents() {
 // always resets the thread — without this, a follow-up like "ага,
 // добавь его" authored against day A could mutate day B. The watcher is
 // `immediate: true` so first mount registers the date too.
-const { setActiveDate: setChatActiveDate } = useChat()
 watch(
   () => props.date,
   (d) => setChatActiveDate(d),
