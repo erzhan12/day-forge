@@ -542,6 +542,10 @@ describe("blocksExternallyMutated", () => {
     expect(blocksExternallyMutated(snapshot, [snapshot[0]], 1)).toBe(true)
   })
 
+  it("returns true when dragged block was deleted during drag", () => {
+    expect(blocksExternallyMutated(snapshot, [snapshot[1]], 1)).toBe(true)
+  })
+
   it("returns false for two empty block lists", () => {
     expect(blocksExternallyMutated([], [], 1)).toBe(false)
   })

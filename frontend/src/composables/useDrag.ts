@@ -179,6 +179,11 @@ export function resolveConflicts(
  * Return true when any block other than the one being dragged changed
  * between drag start and drop. Covers concurrent AI edits, manual
  * mutations, undo, and cross-tab writes while the pointer is down.
+ *
+ * Only position fields are compared (start_time, end_time, sort_order)
+ * because those are the only ones the reorder endpoint touches.
+ * Changes to is_completed or category do not affect drag collision
+ * resolution and are intentionally ignored.
  */
 export function blocksExternallyMutated(
   savedSnapshot: TimeBlock[],
@@ -404,15 +409,10 @@ export function useDrag(
     const title = originalBlock.title
     const targetTime = previewStartTime.value
 
-    // Concurrent mutations (AI chat, manual edit, undo, another tab) can
-    // land while the pointer is down. `updatePreview` reads live blocks,
-    // but the drop diff below is against the drag-start snapshot — so an
-    // externally moved neighbour would look "changed" and get written back
-    // at preview coordinates, clobbering the other mutation. Abort the
-    // drop when the live schedule diverged from the snapshot.
-    // Note: the abort is silent (no toast) — consistent with cancelDrag().
-    // Adding user feedback requires wiring a toast callback into useDrag;
-    // track in tasks/todo.md § "Follow-ups".
+    // Abort if concurrent mutations (AI chat, undo, manual edit, cross-tab)
+    // landed while the pointer was down — otherwise the reorder payload
+    // would clobber those changes. Silent abort matches cancelDrag();
+    // user feedback deferred — see tasks/todo.md § "Drag / Undo".
     if (blocksExternallyMutated(savedSnapshot, getCurrentBlocks(), draggedId)) {
       resetState()
       return
