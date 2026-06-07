@@ -270,6 +270,35 @@ class TestCreateBlock:
         )
         assert resp.status_code == 201
 
+    @pytest.mark.django_db
+    def test_locks_schedule_row(self, auth_client, schedule, monkeypatch):
+        """Regression: ``create_block`` must lock the parent ``Schedule`` row
+        so it serializes with ``_apply_draft_sync`` on an empty day.
+        Overlap-only ``TimeBlock`` locks acquire zero rows when the schedule
+        is empty — see ``ai_views_draft.TestApplyLocksScheduleRow``."""
+        original = Schedule.objects.select_for_update
+        called = {"v": False}
+
+        def _spy(*args, **kwargs):
+            called["v"] = True
+            return original(*args, **kwargs)
+
+        monkeypatch.setattr(
+            Schedule.objects, "select_for_update", _spy, raising=True
+        )
+        resp = auth_client.post(
+            "/api/schedules/2026-04-07/blocks/",
+            json.dumps({
+                "title": "Meeting",
+                "start_time": "14:00",
+                "end_time": "15:00",
+                "category": "work",
+            }),
+            content_type="application/json",
+        )
+        assert resp.status_code == 201, resp.content
+        assert called["v"]
+
 
 class TestBlockDetail:
     @pytest.mark.django_db

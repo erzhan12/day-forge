@@ -786,3 +786,44 @@ class TestActiveRulesWiring:
         assert resp.status_code == 200
         # Exactly the two active, user-owned rules, ordered high → low.
         assert captured["rules_texts"] == ["HIGH rule", "LOW rule"]
+
+
+@pytest.mark.django_db
+class TestApplyActionsLocksScheduleRow:
+    """Regression: the command/chat apply path must lock the parent
+    ``Schedule`` row so it serializes with ``_apply_draft_sync`` on an
+    empty day — locking only the (empty) ``TimeBlock`` queryset acquires
+    zero rows."""
+
+    def test_locks_schedule_row(
+        self, auth_client, today_schedule, monkeypatch
+    ):
+        _patch_run(
+            monkeypatch,
+            AICommandResult(
+                raw_response_text="{}",
+                parsed_actions=[
+                    {
+                        "type": "add",
+                        "title": "Standup",
+                        "start_time": "10:00",
+                        "end_time": "10:15",
+                        "category": "work",
+                    }
+                ],
+                explanation="Added standup",
+            ),
+        )
+        original = Schedule.objects.select_for_update
+        called = {"v": False}
+
+        def _spy(*args, **kwargs):
+            called["v"] = True
+            return original(*args, **kwargs)
+
+        monkeypatch.setattr(
+            Schedule.objects, "select_for_update", _spy, raising=True
+        )
+        resp = _post(auth_client, {"command": "add standup at 10"})
+        assert resp.status_code == 200, resp.content
+        assert called["v"]
