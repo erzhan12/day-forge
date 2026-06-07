@@ -90,6 +90,12 @@ def create_block(request, date):
     # serializes via its DB-level write lock.
     try:
         with transaction.atomic():
+            # Parent-row lock serializes with ``_apply_draft_sync`` (which
+            # also locks the Schedule row) so a concurrent draft apply on an
+            # empty day can't race past the in-lock emptiness check while we
+            # insert. Locking only overlapping TimeBlock rows acquires zero
+            # locks on an empty schedule — see ``ai.views._apply_draft_sync``.
+            Schedule.objects.select_for_update().get(pk=schedule.pk)
             overlap = TimeBlock.objects.filter(
                 schedule=schedule,
                 start_time__lt=end,
@@ -643,6 +649,10 @@ def restore_blocks(request, date):
             block.full_clean()
 
         with transaction.atomic():
+            # Same parent-row lock as ``create_block`` — draft apply holds
+            # this lock while re-checking emptiness, so restore must queue
+            # behind it (and vice versa) on PostgreSQL.
+            Schedule.objects.select_for_update().get(pk=schedule.pk)
             TimeBlock.objects.filter(schedule=schedule).delete()
             if instances:
                 TimeBlock.objects.bulk_create(instances)
