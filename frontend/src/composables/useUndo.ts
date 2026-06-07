@@ -34,6 +34,7 @@ export function useUndo(date: string, getCurrentBlocks: () => TimeBlock[]) {
   const currentToast = ref<{ description: string; actionable: boolean } | null>(null)
 
   let toastTimer: ReturnType<typeof setTimeout> | null = null
+  let undoInFlight = false
 
   function clearToastTimer() {
     if (toastTimer !== null) {
@@ -73,27 +74,34 @@ export function useUndo(date: string, getCurrentBlocks: () => TimeBlock[]) {
   }
 
   async function performUndo(): Promise<void> {
+    if (undoInFlight) return
+
     if (undoStack.value.length === 0) {
       showToast("Nothing to undo.", false)
       return
     }
 
-    const action = undoStack.value[undoStack.value.length - 1]
-    const blocksPayload = action.previousBlocks.map((b) => ({
-      title: b.title,
-      start_time: b.start_time,
-      end_time: b.end_time,
-      category: b.category,
-      is_completed: b.is_completed,
-      sort_order: b.sort_order,
-    }))
+    undoInFlight = true
+    try {
+      const action = undoStack.value[undoStack.value.length - 1]
+      const blocksPayload = action.previousBlocks.map((b) => ({
+        title: b.title,
+        start_time: b.start_time,
+        end_time: b.end_time,
+        category: b.category,
+        is_completed: b.is_completed,
+        sort_order: b.sort_order,
+      }))
 
-    const result = await restoreBlocks(action.scheduleDate, blocksPayload)
-    if (result.ok) {
-      undoStack.value.pop()
-      showToast(`Undone: ${action.description}`, false)
-    } else {
-      showToast("Undo failed. Please try again.", false)
+      const result = await restoreBlocks(action.scheduleDate, blocksPayload)
+      if (result.ok) {
+        undoStack.value.pop()
+        showToast(`Undone: ${action.description}`, false)
+      } else {
+        showToast("Undo failed. Please try again.", false)
+      }
+    } finally {
+      undoInFlight = false
     }
   }
 
