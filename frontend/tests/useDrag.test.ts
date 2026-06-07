@@ -451,7 +451,7 @@ describe("useDrag.endDrag (undo snapshot)", () => {
         category: "work", is_completed: false, sort_order: 10 },
     ]
     const liveAfterAi: TimeBlock[] = [
-      snapshot[0],
+      { ...snapshot[0] },
       { ...snapshot[1], start_time: "14:00", end_time: "15:00" },
     ]
     const snapshotBlocks = vi.fn(() => snapshot.map((b) => ({ ...b })))
@@ -503,6 +503,22 @@ describe("blocksExternallyMutated", () => {
       { ...snapshot[1], start_time: "14:00", end_time: "15:00" },
     ]
     expect(blocksExternallyMutated(snapshot, live, 1)).toBe(true)
+  })
+
+  it("returns true when a neighbour's sort_order changed", () => {
+    const live = [
+      snapshot[0],
+      { ...snapshot[1], sort_order: 99 },
+    ]
+    expect(blocksExternallyMutated(snapshot, live, 1)).toBe(true)
+  })
+
+  it("returns false when the dragged block itself changed", () => {
+    const live = [
+      { ...snapshot[0], start_time: "11:00", end_time: "12:00" },
+      snapshot[1],
+    ]
+    expect(blocksExternallyMutated(snapshot, live, 1)).toBe(false)
   })
 
   it("returns true when block ids differ", () => {
