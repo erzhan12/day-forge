@@ -175,6 +175,44 @@ export function resolveConflicts(
   return result
 }
 
+/**
+ * Return true when any block other than the one being dragged changed
+ * between drag start and drop. Covers concurrent AI edits, manual
+ * mutations, undo, and cross-tab writes while the pointer is down.
+ *
+ * Only position fields are compared (start_time, end_time, sort_order)
+ * because those are the only ones the reorder endpoint touches.
+ * Changes to is_completed or category do not affect drag collision
+ * resolution and are intentionally ignored.
+ */
+export function blocksExternallyMutated(
+  savedSnapshot: TimeBlock[],
+  currentBlocks: TimeBlock[],
+  draggedId: number,
+): boolean {
+  const snapIds = new Set(savedSnapshot.map((b) => b.id))
+  const curIds = new Set(currentBlocks.map((b) => b.id))
+  if (snapIds.size !== curIds.size) return true
+  for (const id of snapIds) {
+    if (!curIds.has(id)) return true
+  }
+
+  const currentById = new Map(currentBlocks.map((b) => [b.id, b]))
+  for (const b of savedSnapshot) {
+    if (b.id === draggedId) continue
+    const live = currentById.get(b.id)
+    if (!live) return true
+    if (
+      live.start_time !== b.start_time ||
+      live.end_time !== b.end_time ||
+      live.sort_order !== b.sort_order
+    ) {
+      return true
+    }
+  }
+  return false
+}
+
 export function useDrag(
   date: DateSource,
   getCurrentBlocks: () => TimeBlock[],
@@ -367,8 +405,18 @@ export function useDrag(
     //      actually mutated, not the day the user has navigated to.
     const savedSnapshot = snapshot
     const savedScheduleDate = snapshotDate
+    const draggedId = originalBlock.id
     const title = originalBlock.title
     const targetTime = previewStartTime.value
+
+    // Abort if concurrent mutations (AI chat, undo, manual edit, cross-tab)
+    // landed while the pointer was down — otherwise the reorder payload
+    // would clobber those changes. Silent abort matches cancelDrag();
+    // user feedback deferred — see tasks/todo.md § "Drag / Undo".
+    if (blocksExternallyMutated(savedSnapshot, getCurrentBlocks(), draggedId)) {
+      resetState()
+      return
+    }
 
     // Build updates array for blocks that changed
     const originalMap = new Map(
