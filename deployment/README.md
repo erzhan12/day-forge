@@ -15,8 +15,7 @@ Complete **before** expecting a green CI health-check:
 6. Push to `main` or run **Deploy** workflow manually
 
 Steps 1–5 are required: the workflow's HTTPS probe hits Caddy, not the app port
-directly. CI re-applies the `chown` on every deploy; first boot still needs it
-before the first successful `migrate` if you bring the stack up manually.
+directly. §3b bind-mount ownership is a **one-time** host prep step before first deploy.
 
 ## One-time setup
 
@@ -29,7 +28,7 @@ Add an **A record**: host `dayforge` → the droplet's public IP. (Subdomain of
 |---|---|
 | `SSH_PRIVATE_KEY` | deploy key for the droplet |
 | `SERVER_HOST` | droplet public IP |
-| `SSH_USER` | e.g. `deploy` — must have **passwordless `sudo`** for `chown -R 1000:1000` on `$DEPLOY_PATH/data` and `staticfiles` (CI runs this every deploy) |
+| `SSH_USER` | e.g. `deploy` — must own `$DEPLOY_PATH` and be able to `mkdir`/`scp` there (see §3b one-time `chown`) |
 | `DEPLOY_PATH` | e.g. `/home/deploy/day-forge` |
 | `DJANGO_SECRET_KEY` | 50+ random chars |
 | `ALLOWED_HOSTS` | `dayforge.habitreward.org` |
