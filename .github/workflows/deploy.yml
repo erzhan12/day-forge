@@ -109,7 +109,7 @@ jobs:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
           # Container runs as uid 1000 — host dirs must be writable (see deployment/README.md §3b).
-          ssh "$SSH_TARGET" "mkdir -p \"$DEPLOY_PATH/data\" \"$DEPLOY_PATH/staticfiles\" && sudo chown -R 1000:1000 \"$DEPLOY_PATH/data\" \"$DEPLOY_PATH/staticfiles\""
+          ssh "$SSH_TARGET" "mkdir -p \"$DEPLOY_PATH/data\" \"$DEPLOY_PATH/staticfiles\" && sudo chown -R 1000:1000 \"$DEPLOY_PATH/data\" \"$DEPLOY_PATH/staticfiles\" && sudo chown \"\$(whoami):\$(whoami)\" \"$DEPLOY_PATH\""
           scp deployment/docker/docker-compose.yml "$SSH_TARGET:$DEPLOY_PATH/docker-compose.yml"
 
       - name: Write .env, pull image, restart stack
