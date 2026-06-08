@@ -263,3 +263,34 @@ insufficient because two fetches for the same date can interleave (retry,
 and writes onto separate seqs and adds `writeCompletionTick` so a read
 can never supersede a write. See `useCalendarAccount.ts` header comment
 for the full design and the scenario that motivates each guard.
+
+## Production deploy (feature 0016)
+
+The production deploy lives in `deployment/` and targets
+`dayforge.habitreward.org` behind the shared habit_reward Caddy. See
+`deployment/README.md` for the one-time manual ops checklist.
+
+- **`SECURE_PROXY_SSL_HEADER` is mandatory behind Caddy.** TLS terminates
+  at the proxy; the app gets plain HTTP. Without
+  `SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")`
+  (settings.py, `if not DEBUG`), `SECURE_SSL_REDIRECT` sees every request
+  as insecure and `DEBUG=0` 301-**infinite-loops**.
+- **Health probes to `http://localhost:8006/...` need two headers** under
+  `DEBUG=0`: `X-Forwarded-Proto: https` (or `SECURE_SSL_REDIRECT` 301s it)
+  **and** `Host: dayforge.habitreward.org` (or `ALLOWED_HOSTS` rejects
+  `localhost` with 400). The Dockerfile + compose healthchecks send both;
+  the pre-flight uses `ALLOWED_HOSTS=localhost` so only the proto header.
+- **Two stacks.** Prod is the `deployment/` stack (multi-stage Dockerfile,
+  uvicorn ASGI `--workers 1`, `DEBUG=0`). The root `Dockerfile` /
+  `docker-compose.yml` stay **dev-only** (`runserver`, `DEBUG=1`, mounts).
+- **Static path chain:** Vite `frontend/dist` → `STATICFILES_DIRS` →
+  `collectstatic` → WhiteNoise serves it (no Caddy `file_server`).
+- **SQLite** lives at `/app/db/day_forge.db`; bind-mount `./data:/app/db`,
+  host dir owned by **uid 1000** (the container's `app` user).
+- **`:8006` must be locked down via DOCKER-USER iptables** — `ufw deny`
+  alone does not block Docker-published ports. Allow Docker-private
+  **source** CIDRs (`172.16.0.0/12`), not `-i docker0` (Caddy uses Compose
+  `br-*` bridges). Caddy reaches the app via `host.docker.internal:8006`
+  on the bridge — do **not** switch to a `127.0.0.1:8006` bind.
+- **First deploy:** wire the central Caddy block before expecting the CI
+  HTTPS health-check to pass (it probes Caddy, not the app port).

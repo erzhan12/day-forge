@@ -116,6 +116,11 @@ if not DEBUG:
     SECURE_SSL_REDIRECT = True
     SECURE_HSTS_SECONDS = 31_536_000
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    # TLS terminates at the shared Caddy reverse proxy, which forwards plain
+    # HTTP with `X-Forwarded-Proto: https`. Without this, SECURE_SSL_REDIRECT
+    # (set just above) sees every proxied request as insecure and 301-loops.
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    USE_X_FORWARDED_HOST = True
 
 # Auth
 LOGIN_URL = "/accounts/login/"

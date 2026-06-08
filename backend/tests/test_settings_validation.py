@@ -109,3 +109,15 @@ class TestCacheBackendConstruction:
         cache = ns["CACHES"]["default"]
         assert cache["BACKEND"] == self.REDIS
         assert cache["LOCATION"] == "redis://example:6379/1"
+
+
+def test_secure_proxy_ssl_header_set_in_production(monkeypatch):
+    """Behind Caddy, Django must trust X-Forwarded-Proto or SECURE_SSL_REDIRECT loops."""
+    ns = _exec_settings(
+        monkeypatch,
+        DEBUG="0",
+        DJANGO_SECRET_KEY="x" * 50,
+        REDIS_URL="",  # pin so a host .env cannot leak in
+    )
+    assert ns["SECURE_PROXY_SSL_HEADER"] == ("HTTP_X_FORWARDED_PROTO", "https")
+    assert ns["SECURE_SSL_REDIRECT"] is True  # guard: the setting this protects

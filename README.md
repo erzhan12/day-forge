@@ -53,6 +53,19 @@ docker compose run web uv run python manage.py seed_templates
 docker compose up
 ```
 
+> This root Docker stack is **dev-only** (`runserver`, `DEBUG=1`). The
+> production stack (uvicorn ASGI, multi-stage image, Redis) lives in
+> `deployment/` — see **Deploy** below.
+
+## Deploy
+
+Production target: `dayforge.habitreward.org` on the shared habitreward
+droplet, behind the central Caddy, via a gated GitHub Actions pipeline
+(test → build → push GHCR → SSH deploy → health-check). One-time manual
+setup (DNS, GitHub secrets, droplet firewall, Caddy block) and the full
+runbook live in [`deployment/README.md`](deployment/README.md). Design
+rationale: [`docs/features/0016_deploy_PLAN.md`](docs/features/0016_deploy_PLAN.md).
+
 ## Configuration
 
 Day Forge reads configuration from environment variables. The most common ones:

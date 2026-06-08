@@ -1,0 +1,16 @@
+.git
+.github
+**/.venv
+**/node_modules
+**/__pycache__
+**/*.pyc
+db/
+staticfiles/
+frontend/dist/
+.env
+*.sqlite3
+.pytest_cache
+.ruff_cache
+docs/
+tasks/
+frontend/scripts/playwright/
