@@ -30,6 +30,31 @@ jobs:
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number }}
 
+            ## Repository context (day-forge)
+
+            Day Forge is an AI-powered daily schedule assistant. Use this stack map to
+            ground your review in real code paths and risk areas:
+
+            - **Backend** — Django 5, Python 3.14 (managed with `uv`). Async AI views live
+              in `backend/ai/` (`views.py`, `service.py`, `prompts.py`). Production system
+              checks `ai.E001` / `ai.E002` (`backend/ai/checks.py`) and
+              `calendar_sync.E001` / `calendar_sync.W001` (`backend/calendar_sync/checks.py`)
+              gate startup — never weaken them. Settings + middleware in
+              `backend/day_forge/settings.py`. SQLite in dev, Redis cache in prod (holds the
+              `ai_*_rl` rate-limit counters — only sync `incr` is atomic). CalDAV passwords
+              are Fernet-encrypted at rest. Lint with `ruff`, test with `pytest`.
+            - **Frontend** — Vue 3 + Inertia.js + TypeScript (Vite). Schedule/drag logic in
+              `frontend/src/composables/useSchedule.ts` and `useDrag.ts` — these carry the
+              drag/drop concurrency + mutation-abort guards, so scrutinize any change there
+              for races and stale-state writes. Type safety is gated by `vue-tsc --noEmit`.
+            - **Deploy** — production stack lives under `deployment/` (uvicorn ASGI + Caddy)
+              and is distinct from the root dev `docker-compose.yml`. GHCR build/deploy is
+              `.github/workflows/deploy.yml`; TLS relies on `SECURE_PROXY_SSL_HEADER` behind
+              Caddy. Treat any change under `deployment/` or to `deploy.yml` as
+              production-affecting and call it out explicitly.
+            - **Conventions** — honor `CLAUDE.md`, `RULES.md`, and the
+              `docs/features/*_PLAN.md` feature-plan pattern.
+
             Please perform a comprehensive code review with the following focus areas:
 
             1. **Code Quality**
@@ -82,12 +107,12 @@ jobs:
 
             In this repository, please make the following changes:
 
-            1. **[P0] [SECURITY]** File `path/to/file.py`, line 42: <specific instruction>
-            2. **[P0] [BUG]** File `path/to/file.py`, line 87: <specific instruction>
-            3. **[P1] [PERFORMANCE]** File `path/to/other.py`, line 15: <specific instruction>
-            4. **[P2] [QUALITY]** File `path/to/file.py`, line 33: <specific instruction>
-            5. **[P2] [TESTING]** File `path/to/test.py`: <specific instruction>
-            6. **[P3] [DOCS]** File `README.md`: <specific instruction>
+            1. **[P0] [SECURITY]** File `backend/ai/views.py`, line 42: <specific instruction>
+            2. **[P0] [BUG]** File `frontend/src/composables/useDrag.ts`, line 87: <specific instruction>
+            3. **[P1] [PERFORMANCE]** File `backend/day_forge/settings.py`, line 15: <specific instruction>
+            4. **[P2] [QUALITY]** File `frontend/src/composables/useSchedule.ts`, line 33: <specific instruction>
+            5. **[P2] [TESTING]** File `backend/tests/test_ai_views.py`: <specific instruction>
+            6. **[P3] [DOCS]** File `RULES.md`: <specific instruction>
 
             After making all changes, run the existing tests to make sure nothing is broken.
 
