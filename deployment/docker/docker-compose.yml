@@ -6,6 +6,16 @@ services:
     image: ${DOCKER_IMAGE:?Set DOCKER_IMAGE in .env — CI writes ghcr.io/<owner>/day-forge:<sha>}
     container_name: day_forge_web
     restart: unless-stopped
+    # Shared 1 GB droplet hosts 5 services — cap this container so a leak
+    # OOM-kills/restarts only day_forge instead of starving the whole host.
+    # uvicorn idles ~85 MB; 250m leaves headroom for LLM-request spikes.
+    mem_limit: 250m
+    memswap_limit: 500m   # RAM+swap ceiling (default would be 2× mem_limit anyway; explicit > implicit)
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"   # unbounded json-file logs can fill the 24 GB disk
+        max-file: "3"
     # Published on 0.0.0.0:8006 so habit_reward's central Caddy reaches it via
     # host.docker.internal:8006 (Docker bridge gateway on Linux — NOT 127.0.0.1,
     # so do not bind 127.0.0.1:8006:8006 as the primary exposure fix).
@@ -37,6 +47,14 @@ services:
     image: redis:7-alpine
     container_name: day_forge_redis
     restart: unless-stopped
+    # Tiny workload (rate-limit counters + CalDAV event cache) — idles ~10 MB.
+    mem_limit: 64m
+    memswap_limit: 128m
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
     # Not published to the host — only the web service reaches it on the
     # compose network. KEY_PREFIX "dayforge" namespaces keys (settings.py).
     healthcheck:
