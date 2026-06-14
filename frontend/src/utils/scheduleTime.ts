@@ -228,7 +228,10 @@ export function spliceNowMarker(
  * item's SEMANTIC `[start, end)` range — not its rendered height. CSS maps the
  * percentage onto the rendered height, so a compressed edge stub still
  * positions the marker proportionally (approximate, per spec). Returns `"0%"`
- * when `nowMinutes` is `null` (off-today) or the span is non-positive.
+ * when `nowMinutes` is `null` (off-today) or the span is non-positive. The
+ * result is clamped to `[0, 100]%` defensively — callers only splice the now
+ * marker into the containing item, but clamping prevents an out-of-range CSS
+ * `top` if that invariant ever breaks.
  */
 export function nowOffsetPercent(
   startTime: string,
@@ -240,7 +243,8 @@ export function nowOffsetPercent(
   const end = timeToMinutes(endTime)
   const span = end - start
   if (span <= 0) return "0%"
-  return ((nowMinutes - start) / span) * 100 + "%"
+  const pct = ((nowMinutes - start) / span) * 100
+  return Math.max(0, Math.min(100, pct)) + "%"
 }
 
 /**

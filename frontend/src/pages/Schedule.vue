@@ -23,6 +23,7 @@ import {
   PX_PER_MINUTE, timeToMinutes, findCurrentBlock,
   remainingMinutesForBlock, computeRenderBounds, buildBaseDisplayItems,
   spliceNowMarker, nowOffsetPercent as computeNowOffsetPercent,
+  type ScheduleDisplayItem,
 } from "../utils/scheduleTime"
 import { useSchedule } from "../composables/useSchedule"
 import { useUndo } from "../composables/useUndo"
@@ -36,18 +37,6 @@ import ExternalEventsPanel from "../components/ExternalEventsPanel.vue"
 import "../app.css"
 
 useThemeFromProps()
-
-// Mirrors ScheduleDisplayItem (utils/scheduleTime) with overlay variants for
-// the item containing the current time.
-interface DisplayItem {
-  type: "block" | "gap" | "block-with-now" | "gap-with-now"
-  block?: TimeBlockType
-  start_time: string
-  end_time: string
-  duration_minutes: number
-  render_minutes?: number
-  compact?: boolean
-}
 
 const props = withDefaults(
   defineProps<{
@@ -247,7 +236,7 @@ const ghostIsCompact = computed(() => {
 })
 
 // Build the display list: blocks and gaps with the now marker spliced in.
-const displayList = computed<DisplayItem[]>(() => {
+const displayList = computed<ScheduleDisplayItem[]>(() => {
   const bounds = renderBounds.value
   const activeRenderStart =
     isDragging.value && frozenRenderBounds.value
@@ -267,12 +256,12 @@ const displayList = computed<DisplayItem[]>(() => {
   return spliceNowMarker(baseItems, nowMinutes.value, nowDate.value)
 })
 
-function itemHeight(item: DisplayItem): string {
+function itemHeight(item: ScheduleDisplayItem): string {
   const minutes = item.render_minutes ?? item.duration_minutes
   return `${minutes * PX_PER_MINUTE}px`
 }
 
-function nowOffsetPercent(item: DisplayItem): string {
+function nowOffsetPercent(item: ScheduleDisplayItem): string {
   return computeNowOffsetPercent(item.start_time, item.end_time, nowMinutes.value)
 }
 

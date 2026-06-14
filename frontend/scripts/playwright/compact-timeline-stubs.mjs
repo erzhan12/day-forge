@@ -18,6 +18,11 @@ const USERNAME = "playwright"
 const PASSWORD = "playwright-pw-do-not-use-in-prod"
 const SCHEDULE_DATE = "2027-03-15"
 const STUB_HEIGHT_PX = 60 // STUB_MINUTES(30) × PX_PER_MINUTE(2)
+// Slot-height asserts allow ±4px: the rendered slot includes GapSlot border
+// (1px dashed top+bottom) and box-sizing padding, plus sub-pixel browser
+// rounding of getBoundingClientRect — so the measured height lands a few px off
+// the exact STUB_HEIGHT_PX without indicating a layout regression.
+const STUB_HEIGHT_TOLERANCE_PX = 4
 const REPO_ROOT = resolve(process.cwd(), "..")
 
 function fail(msg) {
@@ -96,7 +101,7 @@ try {
   if (!leading.text.includes("earlier")) {
     fail(`Leading gap missing "earlier" hint — text: ${leading.text}`)
   }
-  if (Math.abs(leading.slotHeight - STUB_HEIGHT_PX) > 4) {
+  if (Math.abs(leading.slotHeight - STUB_HEIGHT_PX) > STUB_HEIGHT_TOLERANCE_PX) {
     fail(
       `Leading gap height ${leading.slotHeight}px (inline ${leading.inlineHeight}), expected ~${STUB_HEIGHT_PX}px`,
     )
@@ -108,7 +113,7 @@ try {
   if (!trailing.text.includes("later")) {
     fail(`Trailing gap missing "later" hint — text: ${trailing.text}`)
   }
-  if (Math.abs(trailing.slotHeight - STUB_HEIGHT_PX) > 4) {
+  if (Math.abs(trailing.slotHeight - STUB_HEIGHT_PX) > STUB_HEIGHT_TOLERANCE_PX) {
     fail(
       `Trailing gap height ${trailing.slotHeight}px (inline ${trailing.inlineHeight}), expected ~${STUB_HEIGHT_PX}px`,
     )

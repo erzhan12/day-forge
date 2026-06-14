@@ -175,7 +175,13 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
 
 ### UX / Rules
 
-- [ ] **Shorten oversized leading gap at top of timeline.** When the first
+- [x] **Shorten oversized leading gap at top of timeline.** Done in feature
+  0017 (Approach A — origin-shift linear render): leading *and* trailing edge
+  gaps collapse to fixed `STUB_MINUTES` (30-min / ~60px) compact stubs while
+  the timeline stays linear in minutes. The stub remains a click-to-add
+  `GapSlot` emitting the full semantic range, preserving the early-morning add
+  affordance. See `docs/features/0017_compact_timeline_stubs_SPEC.md`. Original
+  note below for context. When the first
   block starts well after `DAY_START` (06:00), `displayList` renders a
   full-height leading `GapSlot` from 06:00 to the first block
   (`frontend/src/pages/Schedule.vue:259-268`) at `PX_PER_MINUTE = 2`
