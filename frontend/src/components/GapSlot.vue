@@ -21,9 +21,10 @@ const emit = defineEmits<{
 // compresses the leading and trailing gaps only — never a mid-day gap), so a
 // compact gap starting at DAY_START is the leading stub ("earlier"); any other
 // compact gap is the trailing stub ("later").
-const edgeHint = computed(() =>
-  props.startTime === DAY_START ? "earlier" : "later",
-)
+const edgeHint = computed(() => {
+  if (!props.compact) return ""
+  return props.startTime === DAY_START ? "earlier" : "later"
+})
 
 const durationLabel = computed(() => {
   if (props.durationMinutes >= 60) {

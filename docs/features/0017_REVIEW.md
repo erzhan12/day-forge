@@ -37,4 +37,4 @@ No snake_case/camelCase or nested payload mismatches were found. The feature rem
 
 ## Note
 
-`Schedule.vue` still has a local `DisplayItem` interface that mirrors `ScheduleDisplayItem` from `scheduleTime.ts`; this is harmless, but the duplicate type can be consolidated later if the display-list helpers continue to grow.
+The duplicate `DisplayItem` type was consolidated into `ScheduleDisplayItem`: `Schedule.vue` now imports and uses the shared type from `scheduleTime.ts`, and the `as RenderItem[]` / `as DisplayItem[]` casts were removed.
