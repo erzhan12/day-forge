@@ -26,7 +26,11 @@ import { useSchedule } from "./useSchedule"
 const MAX_UNDO_STACK = 20
 const TOAST_DURATION_MS = 8_000
 
-export function useUndo(date: string, getCurrentBlocks: () => TimeBlock[]) {
+export function useUndo(
+  date: string,
+  getCurrentBlocks: () => TimeBlock[],
+  isDisabled?: () => boolean,
+) {
   const { restoreBlocks } = useSchedule(date)
 
   const undoStack = ref<UndoAction[]>([])
@@ -75,6 +79,7 @@ export function useUndo(date: string, getCurrentBlocks: () => TimeBlock[]) {
 
   async function performUndo(): Promise<void> {
     if (undoInFlight) return
+    if (isDisabled?.()) return
 
     if (undoStack.value.length === 0) {
       showToast("Nothing to undo.", false)
@@ -107,6 +112,7 @@ export function useUndo(date: string, getCurrentBlocks: () => TimeBlock[]) {
 
   function handleKeydown(e: KeyboardEvent) {
     if (!(e.metaKey || e.ctrlKey) || e.key !== "z") return
+    if (isDisabled?.()) return
 
     const target = e.target as HTMLElement
     const tag = target.tagName.toLowerCase()
