@@ -175,6 +175,23 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
 
 ### UX / Rules
 
+- [x] **Shorten oversized leading gap at top of timeline.** Done in feature
+  0017 (Approach A — origin-shift linear render): leading *and* trailing edge
+  gaps collapse to fixed `STUB_MINUTES` (30-min / ~60px) compact stubs while
+  the timeline stays linear in minutes. The stub remains a click-to-add
+  `GapSlot` emitting the full semantic range, preserving the early-morning add
+  affordance. See `docs/features/0017_compact_timeline_stubs_SPEC.md`. Original
+  note below for context. When the first
+  block starts well after `DAY_START` (06:00), `displayList` renders a
+  full-height leading `GapSlot` from 06:00 to the first block
+  (`frontend/src/pages/Schedule.vue:259-268`) at `PX_PER_MINUTE = 2`
+  (`frontend/src/utils/scheduleTime.ts:8`) — e.g. a 09:00 first block
+  yields 360px of empty space before any content. Shorten it. Design
+  under discussion (collapse to compact stub vs. derive timeline start
+  from earliest block vs. configurable day start). Constraint: the
+  leading gap is an interactive `GapSlot` (click-to-add), so any
+  collapse must preserve the early-morning add affordance.
+
 - [ ] **Auto-bump default priority for new Rules.** Today every new rule
   lands at `priority=0` (hardcoded in `RulesList.vue:44`'s `createRule({...,
   priority: 0 })` call). Adding a second rule produces two rules at

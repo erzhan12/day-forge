@@ -1,19 +1,30 @@
 <script setup lang="ts">
 import { computed } from "vue"
+import { DAY_START } from "../utils/scheduleTime"
 
 const props = withDefaults(
   defineProps<{
     startTime: string
     endTime: string
     durationMinutes: number
+    compact?: boolean
     disabled?: boolean
   }>(),
-  { disabled: false },
+  { compact: false, disabled: false },
 )
 
 const emit = defineEmits<{
   "add-here": [payload: { start_time: string; end_time: string }]
 }>()
+
+// `compact` is only ever set on the two edge gaps (buildBaseDisplayItems
+// compresses the leading and trailing gaps only — never a mid-day gap), so a
+// compact gap starting at DAY_START is the leading stub ("earlier"); any other
+// compact gap is the trailing stub ("later").
+const edgeHint = computed(() => {
+  if (!props.compact) return ""
+  return props.startTime === DAY_START ? "earlier" : "later"
+})
 
 const durationLabel = computed(() => {
   if (props.durationMinutes >= 60) {
@@ -34,10 +45,13 @@ function handleClick() {
 <template>
   <div
     class="gap-slot"
-    :class="{ disabled }"
+    :class="{ disabled, compact }"
     @click="handleClick"
   >
-    <span class="gap-label">Free — {{ durationLabel }}</span>
+    <span class="gap-label">
+      Free — {{ durationLabel }}
+      <span v-if="compact" class="gap-hint">{{ edgeHint }}</span>
+    </span>
     <span class="gap-time">{{ startTime }} – {{ endTime }}</span>
   </div>
 </template>
@@ -80,5 +94,17 @@ function handleClick() {
 
 .gap-time {
   font-size: 12px;
+}
+
+.gap-slot.compact {
+  padding: 4px 12px;
+  font-size: 12px;
+}
+
+.gap-hint {
+  margin-left: 6px;
+  font-weight: 400;
+  font-style: italic;
+  opacity: 0.85;
 }
 </style>

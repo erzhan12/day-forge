@@ -9,6 +9,7 @@ import {
   SNAP_MINUTES,
   timeToMinutes,
   minutesToTime,
+  type RenderBounds,
 } from "../utils/scheduleTime"
 
 /**
@@ -227,8 +228,10 @@ export function useDrag(
   pushUndo: (action: UndoAction) => void,
   snapshotBlocks: () => TimeBlock[],
   isDisabled?: () => boolean,
+  getRenderBounds?: () => RenderBounds,
 ) {
   const isDragging = ref(false)
+  const frozenRenderBounds = ref<RenderBounds | null>(null)
   const dragBlockId = ref<number | null>(null)
   const ghostTop = ref(0)
   const previewStartTime = ref("")
@@ -272,9 +275,11 @@ export function useDrag(
     const snapped =
       Math.round(minuteOffset / SNAP_MINUTES) * SNAP_MINUTES
 
-    let newStart = DAY_START_MINUTES + snapped
-    // Clamp to day window
-    if (newStart < DAY_START_MINUTES) newStart = DAY_START_MINUTES
+    const renderStart =
+      frozenRenderBounds.value?.renderStart ?? DAY_START_MINUTES
+
+    let newStart = renderStart + snapped
+    if (newStart < renderStart) newStart = renderStart
     if (newStart + blockDuration > DAY_END_MINUTES)
       newStart = DAY_END_MINUTES - blockDuration
 
@@ -283,7 +288,7 @@ export function useDrag(
     previewStartTime.value = minutesToTime(newStart)
     previewEndTime.value = minutesToTime(newEnd)
     ghostTop.value =
-      containerPaddingTop + (newStart - DAY_START_MINUTES) * PX_PER_MINUTE
+      containerPaddingTop + (newStart - renderStart) * PX_PER_MINUTE
 
     // Resolve conflicts
     const resolved = resolveConflicts(
@@ -351,12 +356,18 @@ export function useDrag(
     dropValid = true
     pointerId = event.pointerId
 
+    frozenRenderBounds.value = getRenderBounds?.() ?? {
+      renderStart: DAY_START_MINUTES,
+      renderEnd: DAY_END_MINUTES,
+    }
+    const renderStart = frozenRenderBounds.value.renderStart
+
     const startMinutes = timeToMinutes(block.start_time)
     // Offset between cursor and block top at grab time, in px
     // relative to the schedule-body content area. Reused in
     // updatePreview so the ghost follows the cursor from the same
     // relative position (cursor doesn't teleport to block top).
-    const blockTopPx = (startMinutes - DAY_START_MINUTES) * PX_PER_MINUTE
+    const blockTopPx = (startMinutes - renderStart) * PX_PER_MINUTE
     const cursorY =
       event.clientY - containerRect.top - containerPaddingTop + container.scrollTop
     grabOffsetY = cursorY - blockTopPx
@@ -492,6 +503,7 @@ export function useDrag(
 
   function resetState() {
     isDragging.value = false
+    frozenRenderBounds.value = null
     dragBlockId.value = null
     ghostTop.value = 0
     previewStartTime.value = ""
@@ -510,6 +522,7 @@ export function useDrag(
 
   return {
     isDragging,
+    frozenRenderBounds,
     dragBlockId,
     ghostTop,
     previewStartTime,
