@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, provide, toRef, watch } from "vue"
 import { Link, router } from "@inertiajs/vue3"
-import type { TimeBlock as TimeBlockType, Schedule, RenderItem } from "../types"
+import type { TimeBlock as TimeBlockType, Schedule } from "../types"
 import DateNavigator from "../components/DateNavigator.vue"
 import TimeBlock from "../components/TimeBlock.vue"
 import GapSlot from "../components/GapSlot.vue"
@@ -20,8 +20,9 @@ import {
 } from "../utils/chatSidebarStorage"
 import {
   DAY_START, DAY_END, DAY_START_MINUTES, DAY_END_MINUTES,
-  PX_PER_MINUTE, timeToMinutes, minutesToTime, findCurrentBlock,
-  remainingMinutesForBlock,
+  PX_PER_MINUTE, timeToMinutes, findCurrentBlock,
+  remainingMinutesForBlock, computeRenderBounds, buildBaseDisplayItems,
+  spliceNowMarker, nowOffsetPercent as computeNowOffsetPercent,
 } from "../utils/scheduleTime"
 import { useSchedule } from "../composables/useSchedule"
 import { useUndo } from "../composables/useUndo"
@@ -36,13 +37,16 @@ import "../app.css"
 
 useThemeFromProps()
 
-// Extend RenderItem with overlay variants for items containing the current time
+// Mirrors ScheduleDisplayItem (utils/scheduleTime) with overlay variants for
+// the item containing the current time.
 interface DisplayItem {
   type: "block" | "gap" | "block-with-now" | "gap-with-now"
   block?: TimeBlockType
   start_time: string
   end_time: string
   duration_minutes: number
+  render_minutes?: number
+  compact?: boolean
 }
 
 const props = withDefaults(
@@ -88,12 +92,16 @@ const scheduleDisabled = computed(
 provide("scheduleDisabled", scheduleDisabled)
 
 const {
-  isDragging, dragBlockId, ghostTop, previewStartTime, previewEndTime,
-  previewBlocks, shiftedBlockIds, startDrag, endDrag, cancelDrag,
+  isDragging, frozenRenderBounds, dragBlockId, ghostTop, previewStartTime,
+  previewEndTime, previewBlocks, shiftedBlockIds, startDrag, endDrag,
+  cancelDrag,
 } = useDrag(
   () => props.date, getBlocks, reorderBlocks, pushUndo, snapshotBlocks,
   () => scheduleDisabled.value,
+  () => computeRenderBounds(props.blocks),
 )
+
+const renderBounds = computed(() => computeRenderBounds(props.blocks))
 
 // Provide to child components
 provide("undo", { pushUndo, snapshotBlocks })
@@ -240,123 +248,32 @@ const ghostIsCompact = computed(() => {
 
 // Build the display list: blocks and gaps with the now marker spliced in.
 const displayList = computed<DisplayItem[]>(() => {
-  const blocks = effectiveBlocks.value
-  const baseItems: RenderItem[] = []
+  const bounds = renderBounds.value
+  const activeRenderStart =
+    isDragging.value && frozenRenderBounds.value
+      ? frozenRenderBounds.value.renderStart
+      : bounds.renderStart
+  const activeRenderEnd =
+    isDragging.value && frozenRenderBounds.value
+      ? frozenRenderBounds.value.renderEnd
+      : bounds.renderEnd
 
-  // Filter blocks to those overlapping the visible day window
-  const visibleBlocks = blocks.filter(
-    (b) => timeToMinutes(b.end_time) > DAY_START_MINUTES && timeToMinutes(b.start_time) < DAY_END_MINUTES
+  const baseItems = buildBaseDisplayItems(
+    effectiveBlocks.value,
+    activeRenderStart,
+    activeRenderEnd,
   )
 
-  if (visibleBlocks.length === 0) {
-    baseItems.push({
-      type: "gap",
-      start_time: DAY_START,
-      end_time: DAY_END,
-      duration_minutes: DAY_END_MINUTES - DAY_START_MINUTES,
-    })
-  } else {
-    // Gap before first block
-    const firstStart = Math.max(timeToMinutes(visibleBlocks[0].start_time), DAY_START_MINUTES)
-    if (firstStart > DAY_START_MINUTES) {
-      baseItems.push({
-        type: "gap",
-        start_time: DAY_START,
-        end_time: minutesToTime(firstStart),
-        duration_minutes: firstStart - DAY_START_MINUTES,
-      })
-    }
-
-    for (let i = 0; i < visibleBlocks.length; i++) {
-      const block = visibleBlocks[i]
-      const clampedStart = Math.max(timeToMinutes(block.start_time), DAY_START_MINUTES)
-      const clampedEnd = Math.min(timeToMinutes(block.end_time), DAY_END_MINUTES)
-      baseItems.push({
-        type: "block",
-        block,
-        start_time: minutesToTime(clampedStart),
-        end_time: minutesToTime(clampedEnd),
-        duration_minutes: clampedEnd - clampedStart,
-      })
-
-      if (i < visibleBlocks.length - 1) {
-        const gapStart = clampedEnd
-        const nextStart = Math.max(timeToMinutes(visibleBlocks[i + 1].start_time), DAY_START_MINUTES)
-        const gapMinutes = nextStart - gapStart
-        if (gapMinutes > 0) {
-          baseItems.push({
-            type: "gap",
-            start_time: minutesToTime(gapStart),
-            end_time: minutesToTime(nextStart),
-            duration_minutes: gapMinutes,
-          })
-        }
-      }
-    }
-
-    // Gap after last block
-    const lastEnd = Math.min(timeToMinutes(visibleBlocks[visibleBlocks.length - 1].end_time), DAY_END_MINUTES)
-    if (lastEnd < DAY_END_MINUTES) {
-      baseItems.push({
-        type: "gap",
-        start_time: minutesToTime(lastEnd),
-        end_time: DAY_END,
-        duration_minutes: DAY_END_MINUTES - lastEnd,
-      })
-    }
-  }
-
-  // If not today, return as-is (no now marker)
-  if (nowDate.value === null || nowMinutes.value === null) {
-    return baseItems as DisplayItem[]
-  }
-
-  // Splice the now marker into the list
-  const now = nowMinutes.value
-  const result: DisplayItem[] = []
-  let inserted = false
-
-  for (const item of baseItems) {
-    const start = timeToMinutes(item.start_time)
-    const end = timeToMinutes(item.end_time)
-
-    if (inserted || now < start || now >= end) {
-      // Current time is not in this item — pass through
-      result.push(item as DisplayItem)
-      continue
-    }
-
-    inserted = true
-
-    if (item.type === "gap") {
-      // Gap with now overlay — keeps the full gap height intact
-      result.push({
-        ...item,
-        type: "gap-with-now",
-      } as DisplayItem)
-    } else {
-      // Block with now overlay
-      result.push({
-        ...item,
-        type: "block-with-now",
-      } as DisplayItem)
-    }
-  }
-
-  return result
+  return spliceNowMarker(baseItems, nowMinutes.value, nowDate.value)
 })
 
 function itemHeight(item: DisplayItem): string {
-  return `${item.duration_minutes * PX_PER_MINUTE}px`
+  const minutes = item.render_minutes ?? item.duration_minutes
+  return `${minutes * PX_PER_MINUTE}px`
 }
 
 function nowOffsetPercent(item: DisplayItem): string {
-  if (nowMinutes.value === null) return "0%"
-  const start = timeToMinutes(item.start_time)
-  const end = timeToMinutes(item.end_time)
-  const span = end - start
-  if (span <= 0) return "0%"
-  return ((nowMinutes.value - start) / span) * 100 + "%"
+  return computeNowOffsetPercent(item.start_time, item.end_time, nowMinutes.value)
 }
 
 function handleAddHere(payload: { start_time: string; end_time: string }) {
@@ -470,6 +387,7 @@ function logout() {
             :start-time="item.start_time"
             :end-time="item.end_time"
             :duration-minutes="item.duration_minutes"
+            :compact="item.compact"
             :disabled="scheduleDisabled"
             @add-here="handleAddHere"
           />
@@ -501,6 +419,7 @@ function logout() {
             :start-time="item.start_time"
             :end-time="item.end_time"
             :duration-minutes="item.duration_minutes"
+            :compact="item.compact"
             :disabled="scheduleDisabled"
             @add-here="handleAddHere"
           />

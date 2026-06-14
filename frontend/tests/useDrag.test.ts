@@ -1,6 +1,12 @@
 import { describe, it, expect, vi } from "vitest"
 import { blocksExternallyMutated, resolveConflicts, useDrag } from "../src/composables/useDrag"
 import type { TimeBlock, UndoAction } from "../src/types"
+import {
+  DAY_END_MINUTES,
+  DAY_START_MINUTES,
+  PX_PER_MINUTE,
+  computeRenderBounds,
+} from "../src/utils/scheduleTime"
 
 function makeBlock(overrides: Partial<TimeBlock> & { id: number }): TimeBlock {
   return {
@@ -482,6 +488,112 @@ describe("useDrag.endDrag (undo snapshot)", () => {
 
     expect(reorderBlocks).not.toHaveBeenCalled()
     expect(pushUndo).not.toHaveBeenCalled()
+  })
+})
+
+describe("useDrag frozen render bounds", () => {
+  const blocks = [
+    makeBlock({ id: 1, start_time: "09:00", end_time: "23:00", sort_order: 0 }),
+  ]
+
+  function makeDrag(getRenderBounds = () => computeRenderBounds(blocks)) {
+    return useDrag(
+      "2026-04-16",
+      () => blocks,
+      vi.fn(async () => ({ ok: true as const })),
+      vi.fn(),
+      () => blocks.map((b) => ({ ...b })),
+      undefined,
+      getRenderBounds,
+    )
+  }
+
+  it("sets frozenRenderBounds on startDrag and clears on endDrag", async () => {
+    const drag = makeDrag()
+    expect(drag.frozenRenderBounds.value).toBeNull()
+
+    drag.startDrag(
+      { pointerId: 1, clientY: 0 } as PointerEvent,
+      blocks[0],
+      makeFakeContainer(),
+    )
+    expect(drag.frozenRenderBounds.value).toEqual({
+      renderStart: 9 * 60 - 30,
+      renderEnd: DAY_END_MINUTES,
+    })
+
+    drag.previewBlocks.value = [
+      { ...blocks[0], start_time: "10:00", end_time: "11:00" },
+    ]
+    drag.previewStartTime.value = "10:00"
+    await drag.endDrag()
+
+    expect(drag.frozenRenderBounds.value).toBeNull()
+  })
+
+  it("clears frozenRenderBounds on cancelDrag", () => {
+    const drag = makeDrag()
+    drag.startDrag(
+      { pointerId: 1, clientY: 0 } as PointerEvent,
+      blocks[0],
+      makeFakeContainer(),
+    )
+    expect(drag.frozenRenderBounds.value).not.toBeNull()
+
+    drag.cancelDrag()
+    expect(drag.frozenRenderBounds.value).toBeNull()
+  })
+
+  it("uses frozen renderStart for ghostTop at grab time", () => {
+    const drag = makeDrag()
+    const container = makeFakeContainer()
+    Object.defineProperty(container, "scrollTop", { value: 0, writable: true })
+
+    drag.startDrag(
+      { pointerId: 1, clientY: 0 } as PointerEvent,
+      blocks[0],
+      container,
+    )
+
+    const renderStart = 9 * 60 - 30
+    const expectedTop = (9 * 60 - renderStart) * PX_PER_MINUTE
+    expect(drag.ghostTop.value).toBe(expectedTop)
+  })
+
+  it("clamps preview start at frozen renderStart via pointer move", async () => {
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+      cb(0)
+      return 0
+    })
+
+    const drag = makeDrag()
+    const container = makeFakeContainer()
+    Object.defineProperty(container, "scrollTop", { value: 0, writable: true })
+
+    drag.startDrag(
+      { pointerId: 1, clientY: 200 } as PointerEvent,
+      blocks[0],
+      container,
+    )
+
+    const renderStart = drag.frozenRenderBounds.value!.renderStart
+    expect(renderStart).toBeGreaterThan(DAY_START_MINUTES)
+
+    const moveHandler = (
+      container.addEventListener as ReturnType<typeof vi.fn>
+    ).mock.calls.find((call) => call[0] === "pointermove")?.[1] as (
+      e: PointerEvent,
+    ) => void
+
+    moveHandler({ clientY: 0 } as PointerEvent)
+
+    const previewStart =
+      parseInt(drag.previewStartTime.value.split(":")[0], 10) * 60 +
+      parseInt(drag.previewStartTime.value.split(":")[1], 10)
+    expect(previewStart).toBeGreaterThanOrEqual(renderStart)
+    expect(previewStart + 60 * 14).toBeLessThanOrEqual(DAY_END_MINUTES)
+
+    vi.unstubAllGlobals()
   })
 })
 
