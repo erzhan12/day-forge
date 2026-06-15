@@ -95,6 +95,121 @@ describe("CommandBar (chat dock)", () => {
     expect(setActiveDate).toHaveBeenCalledWith("2026-04-18")
   })
 
+  describe("placeholder rotation", () => {
+    // TODO: import from CommandBar.vue once the SFC exports it (tasks/todo.md)
+    const PLACEHOLDER_ROTATION_MS = 6_000
+    // Duplicated from CommandBar.vue PLACEHOLDERS array; keep in sync
+    const PLACEHOLDER_0 = "tell me about your day…"
+    const PLACEHOLDER_1 = "опиши свой день — я задам уточняющие вопросы"
+    const PLACEHOLDER_2 = "add standup at 10:00 for 15 min"
+
+    function textareaPlaceholder(w: VueWrapper): string {
+      const ph = (w.find("textarea.command-input").element as HTMLTextAreaElement)
+        .placeholder
+      return ph.split(" (press / to focus")[0]
+    }
+
+    beforeEach(() => {
+      vi.useFakeTimers()
+      vi.spyOn(document, "hasFocus").mockReturnValue(true)
+      Object.defineProperty(document, "visibilityState", {
+        configurable: true,
+        value: "visible",
+      })
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it("rotates placeholder while the tab is focused", async () => {
+      const w = mountBar()
+      expect(textareaPlaceholder(w)).toBe(PLACEHOLDER_0)
+      vi.advanceTimersByTime(PLACEHOLDER_ROTATION_MS)
+      await nextTick()
+      expect(textareaPlaceholder(w)).toBe(PLACEHOLDER_1)
+    })
+
+    it("pauses rotation when the tab is hidden and resumes when visible", async () => {
+      const w = mountBar()
+      vi.advanceTimersByTime(PLACEHOLDER_ROTATION_MS)
+      await nextTick()
+      expect(textareaPlaceholder(w)).toBe(PLACEHOLDER_1)
+
+      Object.defineProperty(document, "visibilityState", {
+        configurable: true,
+        value: "hidden",
+      })
+      document.dispatchEvent(new Event("visibilitychange"))
+      vi.advanceTimersByTime(PLACEHOLDER_ROTATION_MS)
+      await nextTick()
+      expect(textareaPlaceholder(w)).toBe(PLACEHOLDER_1)
+
+      Object.defineProperty(document, "visibilityState", {
+        configurable: true,
+        value: "visible",
+      })
+      document.dispatchEvent(new Event("visibilitychange"))
+      vi.advanceTimersByTime(PLACEHOLDER_ROTATION_MS)
+      await nextTick()
+      expect(textareaPlaceholder(w)).toBe(PLACEHOLDER_2)
+    })
+
+    it("pauses rotation when the window blurs and resumes on focus", async () => {
+      const w = mountBar()
+      vi.advanceTimersByTime(PLACEHOLDER_ROTATION_MS)
+      await nextTick()
+      expect(textareaPlaceholder(w)).toBe(PLACEHOLDER_1)
+
+      vi.mocked(document.hasFocus).mockReturnValue(false)
+      window.dispatchEvent(new Event("blur"))
+      vi.advanceTimersByTime(PLACEHOLDER_ROTATION_MS)
+      await nextTick()
+      expect(textareaPlaceholder(w)).toBe(PLACEHOLDER_1)
+
+      vi.mocked(document.hasFocus).mockReturnValue(true)
+      window.dispatchEvent(new Event("focus"))
+      vi.advanceTimersByTime(PLACEHOLDER_ROTATION_MS)
+      await nextTick()
+      expect(textareaPlaceholder(w)).toBe(PLACEHOLDER_2)
+    })
+
+    it("stops rotation and removes all listeners after unmount", async () => {
+      const w = mountBar()
+      vi.advanceTimersByTime(PLACEHOLDER_ROTATION_MS)
+      await nextTick()
+      expect(textareaPlaceholder(w)).toBe(PLACEHOLDER_1)
+
+      w.unmount()
+      wrapper = null
+
+      expect(vi.getTimerCount()).toBe(0)
+      expect(() => {
+        document.dispatchEvent(new Event("visibilitychange"))
+        window.dispatchEvent(new Event("focus"))
+        window.dispatchEvent(new Event("blur"))
+      }).not.toThrow()
+    })
+
+    it("only one timer runs when focus/blur events fire rapidly", async () => {
+      mountBar()
+      // fire events rapidly without advancing time; set hasFocus BEFORE each
+      // event so the synchronous handler sees the correct state (mirrors browser)
+      vi.mocked(document.hasFocus).mockReturnValue(false)
+      window.dispatchEvent(new Event("blur"))
+      vi.mocked(document.hasFocus).mockReturnValue(true)
+      window.dispatchEvent(new Event("focus"))
+      window.dispatchEvent(new Event("focus"))
+      document.dispatchEvent(new Event("visibilitychange"))
+
+      expect(vi.getTimerCount()).toBe(1)
+
+      vi.advanceTimersByTime(PLACEHOLDER_ROTATION_MS)
+      await nextTick()
+      expect(textareaPlaceholder(wrapper!)).toBe(PLACEHOLDER_1)
+    })
+  })
+
   it("submits the turn on Enter without Shift", async () => {
     submitTurn.mockResolvedValue(undefined)
     const pushUndo = vi.fn()

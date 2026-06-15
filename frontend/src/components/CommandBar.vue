@@ -67,6 +67,36 @@ const PLACEHOLDERS = [
 const placeholder = ref(PLACEHOLDERS[0])
 let placeholderTimer: ReturnType<typeof setInterval> | null = null
 
+// visibilityState catches tab switches; hasFocus() catches app/window switches.
+function isWindowFocused(): boolean {
+  return document.visibilityState === "visible" && document.hasFocus()
+}
+
+function advancePlaceholder(): void {
+  const next = (PLACEHOLDERS.indexOf(placeholder.value) + 1) % PLACEHOLDERS.length
+  placeholder.value = PLACEHOLDERS[next]
+}
+
+function startPlaceholderRotation(): void {
+  if (placeholderTimer) return
+  placeholderTimer = setInterval(advancePlaceholder, PLACEHOLDER_ROTATION_MS)
+}
+
+function stopPlaceholderRotation(): void {
+  if (placeholderTimer) {
+    clearInterval(placeholderTimer)
+    placeholderTimer = null
+  }
+}
+
+function syncPlaceholderRotation(): void {
+  if (isWindowFocused()) {
+    startPlaceholderRotation()
+  } else {
+    stopPlaceholderRotation()
+  }
+}
+
 // Tunables. `LINE_HEIGHT_PX` must match the `line-height` rule on
 // `.command-input` in <style>; the variant-keyed min/max line counts
 // must match the `min-height`/`max-height` rules on the variant-scoped
@@ -158,16 +188,19 @@ function handleGlobalKeydown(e: KeyboardEvent): void {
 
 onMounted(() => {
   document.addEventListener("keydown", handleGlobalKeydown)
-  placeholderTimer = setInterval(() => {
-    const next = (PLACEHOLDERS.indexOf(placeholder.value) + 1) % PLACEHOLDERS.length
-    placeholder.value = PLACEHOLDERS[next]
-  }, PLACEHOLDER_ROTATION_MS)
+  document.addEventListener("visibilitychange", syncPlaceholderRotation)
+  window.addEventListener("focus", syncPlaceholderRotation)
+  window.addEventListener("blur", syncPlaceholderRotation)
+  syncPlaceholderRotation()
   autosize()
 })
 
 onUnmounted(() => {
   document.removeEventListener("keydown", handleGlobalKeydown)
-  if (placeholderTimer) clearInterval(placeholderTimer)
+  document.removeEventListener("visibilitychange", syncPlaceholderRotation)
+  window.removeEventListener("focus", syncPlaceholderRotation)
+  window.removeEventListener("blur", syncPlaceholderRotation)
+  stopPlaceholderRotation()
 })
 </script>
 
