@@ -61,9 +61,6 @@ const scheduleBodyRef = ref<HTMLElement | null>(null)
 // Initialize composables
 const { reorderBlocks } = useSchedule(props.date)
 const getBlocks = () => props.blocks
-const {
-  currentToast, pushUndo, performUndo, snapshotBlocks, dismissToast,
-} = useUndo(props.date, getBlocks)
 
 // Draft generation state — module-level singleton inside useDraft, single
 // consumer is this page.
@@ -71,7 +68,7 @@ const { isGeneratingDraft, lastDraftError, generateDraft } = useDraft()
 
 // Schedule-wide disabled flag: while a draft is generating or AI chat is
 // in flight, suppress all user mutation paths (form submit, inline edit,
-// completion toggle, delete, drag, gap-click-to-add). Provided via
+// completion toggle, delete, drag, gap-click-to-add, undo). Provided via
 // inject so child components don't need to thread it through props.
 const { setActiveDate: setChatActiveDate, isProcessing: isChatProcessing } =
   useChat()
@@ -79,6 +76,10 @@ const scheduleDisabled = computed(
   () => isGeneratingDraft.value || isChatProcessing.value,
 )
 provide("scheduleDisabled", scheduleDisabled)
+
+const {
+  currentToast, pushUndo, performUndo, snapshotBlocks, dismissToast,
+} = useUndo(props.date, getBlocks, () => scheduleDisabled.value)
 
 const {
   isDragging, frozenRenderBounds, dragBlockId, ghostTop, previewStartTime,
@@ -423,7 +424,7 @@ function logout() {
     <UndoToast
       v-if="currentToast"
       :message="currentToast.description"
-      :actionable="currentToast.actionable"
+      :actionable="currentToast.actionable && !scheduleDisabled"
       @undo="performUndo"
       @dismiss="dismissToast"
     />
