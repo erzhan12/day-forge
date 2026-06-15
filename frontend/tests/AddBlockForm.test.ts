@@ -115,7 +115,7 @@ describe("AddBlockForm", () => {
     await wrapper.find("form").trigger("submit")
     await vi.dynamicImportSettled()
     expect(mockPushUndo).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "add", description: 'Added "New Block"' }),
+      expect.objectContaining({ type: "add", description: 'Added "New Block"', silent: true }),
     )
   })
 

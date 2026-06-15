@@ -280,6 +280,7 @@ describe("useDrag.endDrag (undo snapshot)", () => {
     expect(pushUndo).toHaveBeenCalledOnce()
     const action = pushUndo.mock.calls[0][0]
     expect(action.type).toBe("drag")
+    expect(action.silent).toBe(true)
     expect(action.scheduleDate).toBe("2026-04-16")
     // Critical: previousBlocks must hold the pre-drag state, not [] and
     // not the post-resetState snapshot.

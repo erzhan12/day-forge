@@ -117,6 +117,7 @@ async function saveTitle() {
         type: "edit",
         previousBlocks: snapshot,
         scheduleDate,
+        silent: true,
       })
     }
   } else {
@@ -147,6 +148,7 @@ async function toggleCompleted() {
         type: "toggle",
         previousBlocks: snapshot,
         scheduleDate,
+        silent: true,
       })
     }
   } else {
@@ -168,6 +170,7 @@ async function handleDelete() {
         type: "delete",
         previousBlocks: snapshot,
         scheduleDate,
+        silent: true,
       })
     }
   } else {

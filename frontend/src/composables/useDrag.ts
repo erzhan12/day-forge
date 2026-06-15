@@ -467,6 +467,7 @@ export function useDrag(
         type: "drag",
         previousBlocks: savedSnapshot,
         scheduleDate: savedScheduleDate,
+        silent: true,
       })
     }
   }

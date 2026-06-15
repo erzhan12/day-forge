@@ -74,7 +74,10 @@ export function useUndo(
     if (undoStack.value.length > MAX_UNDO_STACK) {
       undoStack.value.shift()
     }
-    showToast(action.description, true)
+    // Silent actions stay on the stack but skip the toast (issue #54).
+    if (!action.silent) {
+      showToast(action.description, true)
+    }
   }
 
   async function performUndo(): Promise<void> {

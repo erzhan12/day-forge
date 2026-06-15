@@ -24,6 +24,7 @@ This is a living document — update it as new patterns emerge.
 - A `200 OK` from the AI command endpoint does **not** always mean the schedule changed. The LLM may return `actions: []` with an explanation (e.g. "outside working hours") — this is a successful interaction with zero mutations.
 - Undo must be registered only when `result.data.blocks` actually differs from the pre-submit snapshot. The comparison lives in `_scheduleChanged()` in `frontend/src/components/CommandBar.vue`.
 - When `data.blocks` is missing from the response, treat as no change (do not push undo) — this is the safe default.
+- `UndoAction.silent?: boolean` (issue #54) controls **only** the toast, not the stack. `pushUndo` gates `showToast` behind `!action.silent` but always pushes — so Cmd+Z still works for silent actions. Obvious in-UI edits (add/edit/toggle/delete in `AddBlockForm.vue`/`TimeBlock.vue`, drag in `useDrag.ts`) pass `silent: true`; non-obvious mutations (AI apply in `useChat.ts`, draft in `Schedule.vue`) omit it. `performUndo`'s own toasts ("Undone: …", errors, "Nothing to undo.") call `showToast` directly, never `pushUndo`, so they are independent of `silent`.
 
 ## Schedule.status flip rules
 

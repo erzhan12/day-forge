@@ -202,6 +202,34 @@ describe("useUndo", () => {
     expect(undo.currentToast.value).toBeNull()
   })
 
+  it("silent action is pushed to stack but shows no toast (issue #54)", () => {
+    const { undo } = mountUndo()
+    undo.pushUndo(makeAction({ description: "Added block", silent: true }))
+    // No toast, but the action is still undoable.
+    expect(undo.currentToast.value).toBeNull()
+    expect(undo.undoStack.value).toHaveLength(1)
+    expect(undo.canUndo.value).toBe(true)
+  })
+
+  it("non-silent action still shows a toast (regression)", () => {
+    const { undo } = mountUndo()
+    undo.pushUndo(makeAction({ description: "AI applied", silent: false }))
+    expect(undo.currentToast.value?.description).toBe("AI applied")
+    expect(undo.currentToast.value?.actionable).toBe(true)
+  })
+
+  it("performUndo still toasts after a silent push (issue #54)", async () => {
+    mockRestoreBlocks.mockResolvedValue({ ok: true })
+    const { undo } = mountUndo()
+    undo.pushUndo(makeAction({ description: "Added block", silent: true }))
+    expect(undo.currentToast.value).toBeNull()
+
+    await undo.performUndo()
+    // performUndo's own toast is independent of the action's silent flag.
+    expect(undo.currentToast.value?.description).toBe("Undone: Added block")
+    expect(undo.currentToast.value?.actionable).toBe(false)
+  })
+
   it("new push clears previous toast timer", () => {
     const { undo } = mountUndo()
     undo.pushUndo(makeAction({ description: "first" }))

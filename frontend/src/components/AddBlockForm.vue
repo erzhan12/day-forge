@@ -63,6 +63,7 @@ async function handleSubmit() {
         type: "add",
         previousBlocks: snapshot,
         scheduleDate,
+        silent: true,
       })
     }
     title.value = ""
