@@ -58,6 +58,11 @@ export interface Rule {
 // category surfaces a compile error wherever this type is consumed.
 export type CategoryMinutes = Record<TimeBlock["category"], number>
 
+// Discriminator for the sound-notification feature (issue #56): which
+// boundary of a block was crossed. Shared by the fired-Set key and the
+// playSound signature so the two stay aligned.
+export type SoundEventType = "start" | "end"
+
 export interface DailyReview {
   id: number
   schedule_id: number

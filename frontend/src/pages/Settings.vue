@@ -5,6 +5,7 @@ import type { Rule, Template } from "../types"
 import TemplateEditor from "../components/TemplateEditor.vue"
 import RulesList from "../components/RulesList.vue"
 import DesignSelector from "../components/DesignSelector.vue"
+import SoundNotificationToggle from "../components/SoundNotificationToggle.vue"
 import { todayString } from "../utils/date"
 // Keeps `<html data-theme>` in sync with ui_preferences across reloads.
 // Required convention for every authenticated page — see RULES.md.
@@ -114,6 +115,10 @@ async function handleCalendarDisconnect() {
 
     <section class="section">
       <DesignSelector />
+    </section>
+
+    <section class="section">
+      <SoundNotificationToggle />
     </section>
 
     <section class="section">

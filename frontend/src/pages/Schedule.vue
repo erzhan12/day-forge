@@ -33,6 +33,7 @@ import { useChat } from "../composables/useChat"
 import { useCalendar } from "../composables/useCalendar"
 import { useThemeFromProps } from "../composables/useThemeFromProps"
 import { useNowMinutes } from "../composables/useNowMinutes"
+import { useSoundNotifications } from "../composables/useSoundNotifications"
 import ExternalEventsPanel from "../components/ExternalEventsPanel.vue"
 import "../app.css"
 
@@ -201,6 +202,12 @@ const showAnalyticsLink = computed(() => {
 })
 
 const { nowMinutes, nowDate } = useNowMinutes(toRef(props, "date"))
+
+// Sound notifications (issue #56): chime when the wall clock crosses a
+// block's start/end. Opt-in (read from localStorage inside the composable),
+// rides the same 60s sampler above — no extra interval. Off-today nulls from
+// useNowMinutes keep it silent on past/future dates.
+useSoundNotifications(nowMinutes, nowDate, getBlocks)
 
 // During drag, use preview blocks for real-time visual feedback
 const effectiveBlocks = computed(() =>
