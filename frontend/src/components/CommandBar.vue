@@ -67,6 +67,7 @@ const PLACEHOLDERS = [
 const placeholder = ref(PLACEHOLDERS[0])
 let placeholderTimer: ReturnType<typeof setInterval> | null = null
 
+// visibilityState catches tab switches; hasFocus() catches app/window switches.
 function isWindowFocused(): boolean {
   return document.visibilityState === "visible" && document.hasFocus()
 }

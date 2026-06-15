@@ -191,11 +191,12 @@ describe("CommandBar (chat dock)", () => {
 
     it("only one timer runs when focus/blur events fire rapidly", async () => {
       mountBar()
-      // fire events rapidly without advancing time
-      window.dispatchEvent(new Event("blur"))
+      // fire events rapidly without advancing time; set hasFocus BEFORE each
+      // event so the synchronous handler sees the correct state (mirrors browser)
       vi.mocked(document.hasFocus).mockReturnValue(false)
-      window.dispatchEvent(new Event("focus"))
+      window.dispatchEvent(new Event("blur"))
       vi.mocked(document.hasFocus).mockReturnValue(true)
+      window.dispatchEvent(new Event("focus"))
       window.dispatchEvent(new Event("focus"))
       document.dispatchEvent(new Event("visibilitychange"))
 
