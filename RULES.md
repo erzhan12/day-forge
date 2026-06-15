@@ -295,3 +295,33 @@ The production deploy lives in `deployment/` and targets
   on the bridge — do **not** switch to a `127.0.0.1:8006` bind.
 - **First deploy:** wire the central Caddy block before expecting the CI
   HTTPS health-check to pass (it probes Caddy, not the app port).
+
+## Sound notifications (feature 0019, issue #56)
+
+Opt-in chime at block start/end. Frontend-only; `useSoundNotifications.ts`
+piggybacks the existing 60s `useNowMinutes` sampler — **never add a second
+interval** (it would drift out of phase with the now-line). Setting persists
+in localStorage (`soundNotificationStorage.ts`, strict-only-on-**true** so
+the safe failure mode is silence — inverse of `chatSidebarStorage`).
+
+- **Time-trigger dedup keys MUST include the time, not just the entity id.**
+  The fired-Set keys `start:${block.id}:${date}:${minutes}`. A re-timed block
+  keeps its `id` across the `router.reload({only:["blocks","schedule"]})`
+  re-flow, so an id-only key would suppress the new boundary's chime after
+  the old one fired. Any future "fire once per X" guard over re-flowable
+  rows has the same footgun.
+- **The `AudioContext` is a module-level singleton (`utils/audioContext.ts`)
+  that is never closed.** It must survive the Settings→Schedule Inertia
+  navigation: the opt-in toggle click is the autoplay-unlock gesture, and it
+  has to unlock the *same* context the Schedule detector later plays through.
+  A per-instance or refcount-to-0-close context would re-suspend on every
+  navigation and drop the first chime. Do **not** close it on component
+  unmount.
+- **Detection is crossed-since-last-sample `(prev, now]`, not exact equality**
+  — a background-tab tick is throttled/coalesced and can skip the exact
+  boundary minute. First tick of a date fires exact-`now` only (no
+  back-fill); a backward clock step (DST / manual) fires nothing.
+- **Inherited limitation:** a tab left open across midnight stops firing
+  until date navigation, because `useNowMinutes.tick()` calls `leaveToday()`
+  (clears the interval, `nowDate=null`) and never re-arms. Not fixable
+  without the forbidden second timer.
