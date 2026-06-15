@@ -96,7 +96,9 @@ describe("CommandBar (chat dock)", () => {
   })
 
   describe("placeholder rotation", () => {
+    // TODO: import from CommandBar.vue once the SFC exports it (tasks/todo.md)
     const PLACEHOLDER_ROTATION_MS = 6_000
+    // Duplicated from CommandBar.vue PLACEHOLDERS array; keep in sync
     const PLACEHOLDER_0 = "tell me about your day…"
     const PLACEHOLDER_1 = "опиши свой день — я задам уточняющие вопросы"
     const PLACEHOLDER_2 = "add standup at 10:00 for 15 min"
