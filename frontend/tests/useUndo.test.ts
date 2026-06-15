@@ -43,13 +43,20 @@ function makeAction(overrides: Partial<UndoAction> = {}): UndoAction {
   }
 }
 
+// Track all mounted wrappers so afterEach can unmount them, removing
+// document keydown listeners between tests to prevent cross-test interference.
+const mountedWrappers: ReturnType<typeof mount>[] = []
+
 // Helper to mount a component that uses the composable
-function mountUndo(blocks: TimeBlock[] = [makeBlock()]) {
+function mountUndo(
+  blocks: TimeBlock[] = [makeBlock()],
+  isDisabled?: () => boolean,
+) {
   let result: ReturnType<typeof useUndo> | undefined
 
   const Wrapper = defineComponent({
     setup() {
-      result = useUndo("2026-04-10", () => blocks)
+      result = useUndo("2026-04-10", () => blocks, isDisabled)
       return {}
     },
     render() {
@@ -58,6 +65,7 @@ function mountUndo(blocks: TimeBlock[] = [makeBlock()]) {
   })
 
   const wrapper = mount(Wrapper)
+  mountedWrappers.push(wrapper)
   return { wrapper, undo: result! }
 }
 
@@ -69,6 +77,7 @@ describe("useUndo", () => {
 
   afterEach(() => {
     vi.useRealTimers()
+    mountedWrappers.splice(0).forEach((w) => w.unmount())
   })
 
   it("pushUndo adds to stack", () => {
@@ -88,6 +97,30 @@ describe("useUndo", () => {
     expect(undo.undoStack.value).toHaveLength(20)
     // Oldest (0-4) should be removed, 5 should be first
     expect(undo.undoStack.value[0].description).toBe("action 5")
+  })
+
+  it("performUndo is a no-op while schedule mutations are disabled", async () => {
+    mockRestoreBlocks.mockResolvedValue({ ok: true })
+    const { undo } = mountUndo([makeBlock()], () => true)
+    undo.pushUndo(makeAction({ description: "blocked" }))
+
+    await undo.performUndo()
+
+    expect(mockRestoreBlocks).not.toHaveBeenCalled()
+    expect(undo.undoStack.value).toHaveLength(1)
+  })
+
+  it("keyboard shortcut Ctrl+Z is blocked while schedule mutations are disabled", async () => {
+    mockRestoreBlocks.mockResolvedValue({ ok: true })
+    const { wrapper, undo } = mountUndo([makeBlock()], () => true)
+    undo.pushUndo(makeAction({ description: "blocked" }))
+
+    const event = new KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true })
+    document.body.dispatchEvent(event)
+    await nextTick()
+
+    expect(mockRestoreBlocks).not.toHaveBeenCalled()
+    expect(undo.undoStack.value).toHaveLength(1)
   })
 
   it("performUndo ignores concurrent calls while restore is in flight", async () => {
