@@ -266,7 +266,7 @@ describe("TimeBlock", () => {
     await wrapper.find(".title-input").setValue("New Title")
     await wrapper.find(".title-input").trigger("keydown.enter")
     expect(mockPushUndo).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "edit" }),
+      expect.objectContaining({ type: "edit", silent: true }),
     )
   })
 
@@ -275,7 +275,7 @@ describe("TimeBlock", () => {
     const wrapper = mountWithProvide({ block: makeBlock(), date: "2026-04-10" })
     await wrapper.find(".checkbox").trigger("change")
     expect(mockPushUndo).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "toggle" }),
+      expect.objectContaining({ type: "toggle", silent: true }),
     )
   })
 
@@ -285,7 +285,7 @@ describe("TimeBlock", () => {
     const wrapper = mountWithProvide({ block: makeBlock(), date: "2026-04-10" })
     await wrapper.find(".delete-btn").trigger("click")
     expect(mockPushUndo).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "delete" }),
+      expect.objectContaining({ type: "delete", silent: true }),
     )
   })
 

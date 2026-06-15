@@ -27,6 +27,10 @@ export interface UndoAction {
   type: "drag" | "edit" | "toggle" | "add" | "delete" | "ai" | "draft"
   previousBlocks: TimeBlock[]
   scheduleDate: string
+  // When true, the action is pushed onto the undo stack (Cmd+Z still works)
+  // but no toast is shown — used for obvious in-UI edits where the result is
+  // already visible on the timeline (issue #54). Absence means "show toast".
+  silent?: boolean
 }
 
 export interface TemplateBlock {
