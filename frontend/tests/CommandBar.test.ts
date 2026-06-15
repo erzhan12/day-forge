@@ -171,6 +171,40 @@ describe("CommandBar (chat dock)", () => {
       await nextTick()
       expect(textareaPlaceholder(w)).toBe(PLACEHOLDER_2)
     })
+
+    it("stops rotation and removes all listeners after unmount", async () => {
+      const w = mountBar()
+      vi.advanceTimersByTime(PLACEHOLDER_ROTATION_MS)
+      await nextTick()
+      expect(textareaPlaceholder(w)).toBe(PLACEHOLDER_1)
+
+      w.unmount()
+      wrapper = null
+
+      expect(vi.getTimerCount()).toBe(0)
+      expect(() => {
+        document.dispatchEvent(new Event("visibilitychange"))
+        window.dispatchEvent(new Event("focus"))
+        window.dispatchEvent(new Event("blur"))
+      }).not.toThrow()
+    })
+
+    it("only one timer runs when focus/blur events fire rapidly", async () => {
+      mountBar()
+      // fire events rapidly without advancing time
+      window.dispatchEvent(new Event("blur"))
+      vi.mocked(document.hasFocus).mockReturnValue(false)
+      window.dispatchEvent(new Event("focus"))
+      vi.mocked(document.hasFocus).mockReturnValue(true)
+      window.dispatchEvent(new Event("focus"))
+      document.dispatchEvent(new Event("visibilitychange"))
+
+      expect(vi.getTimerCount()).toBe(1)
+
+      vi.advanceTimersByTime(PLACEHOLDER_ROTATION_MS)
+      await nextTick()
+      expect(textareaPlaceholder(wrapper!)).toBe(PLACEHOLDER_1)
+    })
   })
 
   it("submits the turn on Enter without Shift", async () => {

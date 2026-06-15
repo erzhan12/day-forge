@@ -473,3 +473,9 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
   corruption pattern at us in the audit log, or the project gains a
   metrics-emission infra (see also: iter-1 P1 [QUALITY] deferral
   above for the drop-counter / metrics work).
+
+- [ ] **Export `PLACEHOLDER_ROTATION_MS` from CommandBar.vue so tests don't hardcode it.**
+  Currently `frontend/tests/CommandBar.test.ts` hardcodes `6_000` independently of the
+  component constant. In Vue SFCs with `<script setup>` a named export requires a
+  separate `<script>` block — structural change, low priority since the value is stable.
+  Suggested by `claude-review` on PR #55 (P3 [QUALITY]).
