@@ -112,6 +112,9 @@ describe("useChat", () => {
       ask: null,
     })
     expect(pushUndo).toHaveBeenCalledOnce()
+    expect(pushUndo).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "ai", silent: true }),
+    )
     expect(routerReload).toHaveBeenCalledOnce()
     expect(chat.isProcessing.value).toBe(false)
   })

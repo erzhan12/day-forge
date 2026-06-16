@@ -212,6 +212,7 @@ export function useChat() {
             type: "ai",
             previousBlocks: snapshot,
             scheduleDate: requestDate,
+            silent: true,
           })
         }
         router.reload({ only: ["blocks", "schedule"] })
