@@ -386,6 +386,12 @@ describe("Schedule.vue auto-draft watcher", () => {
     expect(pushUndo).toHaveBeenCalledWith(
       expect.objectContaining({ type: "draft", scheduleDate: "2026-05-04" }),
     )
+    // generate-draft intentionally keeps its undo toast (unlike AI chat
+    // apply, which is silent per PR #61), so the draft undo action must NOT
+    // carry `silent: true`.
+    expect(pushUndo).toHaveBeenCalledWith(
+      expect.not.objectContaining({ silent: true }),
+    )
   })
 })
 
