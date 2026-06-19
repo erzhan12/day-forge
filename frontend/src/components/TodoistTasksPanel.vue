@@ -5,25 +5,14 @@ defineProps<{
   tasks: TodoistTask[]
   loading: boolean
   error: string | null
-  connected: boolean
-  statusKnown: boolean
 }>()
 
 const emit = defineEmits<{ (e: "retry"): void }>()
 </script>
 
 <template>
-  <!-- Render nothing until status is known (avoids first-paint flicker),
-       then render nothing when not connected (V1 simplification per the plan). -->
-  <section
-    v-if="statusKnown && connected"
-    class="todoist-tasks"
-    aria-label="Todoist tasks"
-  >
-    <header class="todoist-header">
-      <span class="todoist-title">Todoist</span>
-      <span v-if="loading" class="todoist-loading" aria-live="polite">Loading…</span>
-    </header>
+  <div class="todoist-panel" data-testid="todoist-panel">
+    <span v-if="loading" class="todoist-loading" aria-live="polite">Loading…</span>
 
     <div v-if="error" class="todoist-error" role="status">
       <span>{{ error }}</span>
@@ -55,39 +44,25 @@ const emit = defineEmits<{ (e: "retry"): void }>()
     </p>
 
     <p v-else class="todoist-empty">No tasks scheduled for this day.</p>
-  </section>
+  </div>
 </template>
 
 <style scoped>
-.todoist-tasks {
-  margin: 12px 16px;
-  padding: 12px 14px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border-strong);
-  border-radius: 8px;
+.todoist-panel {
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  padding: 12px;
   font-size: 13px;
-}
-
-.todoist-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-weight: 500;
-  color: var(--text-secondary);
-}
-
-.todoist-title {
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  font-size: 11px;
+  overflow: hidden;
 }
 
 .todoist-loading {
   font-size: 11px;
   color: var(--text-muted);
+  flex-shrink: 0;
 }
 
 .todoist-error {
@@ -99,6 +74,7 @@ const emit = defineEmits<{ (e: "retry"): void }>()
   background: var(--danger-surface);
   color: var(--danger-text);
   border-radius: 6px;
+  flex-shrink: 0;
 }
 
 .todoist-retry {
@@ -118,6 +94,9 @@ const emit = defineEmits<{ (e: "retry"): void }>()
   display: flex;
   flex-direction: column;
   gap: 6px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .todoist-item {
@@ -127,6 +106,7 @@ const emit = defineEmits<{ (e: "retry"): void }>()
   align-items: center;
   padding: 4px 0;
   color: var(--text-primary);
+  flex-shrink: 0;
 }
 
 .todoist-priority-dot {
@@ -171,6 +151,9 @@ const emit = defineEmits<{ (e: "retry"): void }>()
   display: flex;
   flex-direction: column;
   gap: 6px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .todoist-skel-row {
@@ -178,5 +161,6 @@ const emit = defineEmits<{ (e: "retry"): void }>()
   background: var(--bg-schedule-gap);
   border-radius: 4px;
   opacity: 0.6;
+  flex-shrink: 0;
 }
 </style>

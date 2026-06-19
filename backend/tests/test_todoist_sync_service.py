@@ -126,12 +126,29 @@ class TestFilterQuerySelection:
         _, kwargs = patched_get.call_args
         return kwargs["params"]["query"]
 
-    def test_today_uses_today_overdue(self, patched_get):
+    def test_today_uses_date_overdue(self, patched_get):
         today = datetime.date(2026, 6, 17)
         with patch(
             "todoist_sync.service.django_tz.localdate", return_value=today
         ):
-            assert self._query_for(patched_get, today) == "today | overdue"
+            assert self._query_for(patched_get, today) == "2026-06-17 | overdue"
+
+    def test_carry_overdue_flag_when_not_project_today(self, patched_get):
+        today = datetime.date(2026, 6, 17)
+        browser_today = datetime.date(2026, 6, 18)
+        with patch(
+            "todoist_sync.service.django_tz.localdate", return_value=today
+        ):
+            patched_get.return_value = _fake_response(
+                json_payload=_fake_page([], next_cursor=None)
+            )
+            service.fetch_tasks_for_date(
+                _make_account_stub(),
+                browser_today,
+                include_overdue_carryover=True,
+            )
+        _, kwargs = patched_get.call_args
+        assert kwargs["params"]["query"] == "2026-06-18 | overdue"
 
     def test_past_date_uses_literal_date_token(self, patched_get):
         today = datetime.date(2026, 6, 17)

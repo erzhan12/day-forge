@@ -24,25 +24,47 @@ from django.core.cache import cache
 _KEY_PREFIX = "todoist_tasks"
 
 
-def tasks_cache_key(account, target_date: date) -> str:
-    """Versioned cache key for ``(user, account_version, date)``.
+def tasks_filter_scope(
+    target_date: date, *, include_overdue_carryover: bool = False
+) -> str:
+    """Cache-scope tag for the filter mode used on this read.
+
+    ``with_overdue`` and ``exact`` must not share a cache entry — the
+    overdue carryover query returns a strict superset of the bare-date
+    query.
+    """
+    from django.utils import timezone as django_tz
+
+    if include_overdue_carryover or target_date == django_tz.localdate():
+        return "with_overdue"
+    return "exact"
+
+
+def tasks_cache_key(
+    account, target_date: date, *, filter_scope: str = "exact"
+) -> str:
+    """Versioned cache key for ``(user, account_version, date, filter_scope)``.
 
     ``account.updated_at.isoformat()`` gives microsecond precision so
     two POSTs in the same second still produce distinct keys.
     """
     return (
         f"{_KEY_PREFIX}:{account.user_id}:"
-        f"{account.updated_at.isoformat()}:{target_date.isoformat()}"
+        f"{account.updated_at.isoformat()}:{target_date.isoformat()}:{filter_scope}"
     )
 
 
-def get_cached_tasks(account, target_date: date):
-    return cache.get(tasks_cache_key(account, target_date))
+def get_cached_tasks(
+    account, target_date: date, *, filter_scope: str = "exact"
+):
+    return cache.get(tasks_cache_key(account, target_date, filter_scope=filter_scope))
 
 
-def set_cached_tasks(account, target_date: date, tasks: list) -> None:
+def set_cached_tasks(
+    account, target_date: date, tasks: list, *, filter_scope: str = "exact"
+) -> None:
     cache.set(
-        tasks_cache_key(account, target_date),
+        tasks_cache_key(account, target_date, filter_scope=filter_scope),
         tasks,
         settings.TODOIST_CACHE_TTL_SECONDS,
     )

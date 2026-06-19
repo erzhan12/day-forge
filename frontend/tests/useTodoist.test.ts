@@ -68,6 +68,23 @@ describe("useTodoist.fetchTasks", () => {
     expect(opts).toMatchObject({ signal: expect.any(AbortSignal) })
   })
 
+  it("appends carry_overdue=1 when fetching browser-local today", async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 5, 18, 12, 0, 0))
+    requestJsonMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      data: { tasks: [] },
+    })
+    const todoist = useTodoist()
+    await todoist.fetchTasks("2026-06-18")
+
+    expect(requestJsonMock.mock.calls[0][0]).toBe(
+      "/api/todoist/tasks/2026-06-18/?carry_overdue=1",
+    )
+    vi.useRealTimers()
+  })
+
   it("commits the most recent fetch (cross-date race)", async () => {
     const d1 = defer<{ ok: boolean; data?: object; status?: number }>()
     const d2 = defer<{ ok: boolean; data?: object; status?: number }>()

@@ -793,11 +793,19 @@ default `300`).
 |------|------|-------|
 | `date` | string | `YYYY-MM-DD`. Invalid → `400`. |
 
-**Date → filter behavior**: when `date` is **today** the panel shows
-`today | overdue` (due today plus all overdue carryover); for any other
-date it shows tasks due **on that exact date**. Tasks with no due date
-never appear (the view is date-scoped). Completed tasks are never
-returned.
+**Date → filter behavior**: when `date` is **today** (project `TIME_ZONE`
+via `timezone.localdate()`) **or** the client passes `?carry_overdue=1`
+(browser-local today can differ from `TIME_ZONE` when it is UTC), the
+service queries Todoist with `"<YYYY-MM-DD> | overdue"` — tasks due on
+that schedule date plus all overdue carryover. For any other date it
+shows tasks due **on that exact date** only (`"<YYYY-MM-DD>"`). Tasks
+with no due date never appear (the view is date-scoped). Completed tasks are never returned.
+
+**Query params**
+
+| Name | Type | Notes |
+|------|------|-------|
+| `carry_overdue` | string | Optional. Pass `1` to include overdue carryover when `date` is browser-local today but not project-local today. The Schedule page sets this automatically for today. |
 
 **Success — `200 OK`**
 

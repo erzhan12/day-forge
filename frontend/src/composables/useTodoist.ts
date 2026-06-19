@@ -23,6 +23,7 @@
 
 import { reactive, ref } from "vue"
 import type { TodoistAccountStatus, TodoistTask } from "../types/todoist"
+import { todayString } from "../utils/date"
 import { requestJson } from "./useHttp"
 
 interface TodoistState {
@@ -82,10 +83,15 @@ export function useTodoist() {
     state.loading = true
     state.error = null
 
+    const tasksUrl =
+      date === todayString()
+        ? `/api/todoist/tasks/${date}/?carry_overdue=1`
+        : `/api/todoist/tasks/${date}/`
+
     let result
     try {
       result = await requestJson(
-        `/api/todoist/tasks/${date}/`,
+        tasksUrl,
         "GET",
         undefined,
         { signal: controller.signal },

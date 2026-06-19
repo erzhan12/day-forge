@@ -143,17 +143,23 @@ def _normalize_task(task) -> NormalizedTask:
     )
 
 
-def _filter_query(target_date: date) -> str:
+def _filter_query(target_date: date, *, include_overdue_carryover: bool = False) -> str:
     """Map the selected date to a Todoist filter query.
 
-    If the date is today (in the project timezone) → ``"today | overdue"``
-    (tasks due today plus overdue carryover). Otherwise → the bare
-    literal-date token ``"<YYYY-MM-DD>"``, which Todoist interprets as
-    "due on that date" (``due:`` semantics). Do NOT use the ``date:``
-    keyword, which scopes by absolute date and ignores recurrence.
+    When the schedule date is "today" (project ``TIME_ZONE``) **or** the
+    client requests overdue carryover (browser-local today can differ from
+    ``localdate()`` when ``TIME_ZONE`` is UTC and the user is ahead), use
+    ``"<YYYY-MM-DD> | overdue"`` — tasks due on that date plus all past-due
+    tasks. Pinning the literal date (not Todoist's ``today`` token) keeps
+    the window aligned with the selected schedule day.
+
+  Otherwise → the bare literal-date token ``"<YYYY-MM-DD>"``, which Todoist
+    interprets as "due on that date" (``due:`` semantics). Do NOT use the
+    ``date:`` keyword, which scopes by absolute date and ignores recurrence.
     """
-    if target_date == django_tz.localdate():
-        return "today | overdue"
+    is_project_today = target_date == django_tz.localdate()
+    if is_project_today or include_overdue_carryover:
+        return f"{target_date.isoformat()} | overdue"
     return target_date.isoformat()
 
 
@@ -187,7 +193,12 @@ def _fetch_filtered_tasks(query: str, token: str) -> list:
     return raw_tasks
 
 
-def fetch_tasks_for_date(account, target_date: date) -> list[NormalizedTask]:
+def fetch_tasks_for_date(
+    account,
+    target_date: date,
+    *,
+    include_overdue_carryover: bool = False,
+) -> list[NormalizedTask]:
     """Fetch and normalise Todoist tasks for one date.
 
     The only function that decrypts the stored token. Wraps every provider
@@ -195,7 +206,9 @@ def fetch_tasks_for_date(account, target_date: date) -> list[NormalizedTask]:
     leaking requests-lib types. Lets ``ImproperlyConfigured`` (key rotation)
     propagate so the view maps it to a config-shaped 500.
     """
-    query = _filter_query(target_date)
+    query = _filter_query(
+        target_date, include_overdue_carryover=include_overdue_carryover
+    )
     token = account.get_token()  # only call site
     try:
         raw_tasks = _fetch_filtered_tasks(query, token)

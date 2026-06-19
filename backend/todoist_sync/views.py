@@ -147,12 +147,23 @@ def tasks(request: HttpRequest, date: str) -> JsonResponse:
     except TodoistAccount.DoesNotExist:
         return _envelope("No Todoist account configured", 503)
 
-    cached = todoist_cache.get_cached_tasks(account_row, parsed_date)
+    include_overdue_carryover = request.GET.get("carry_overdue") == "1"
+    filter_scope = todoist_cache.tasks_filter_scope(
+        parsed_date, include_overdue_carryover=include_overdue_carryover
+    )
+
+    cached = todoist_cache.get_cached_tasks(
+        account_row, parsed_date, filter_scope=filter_scope
+    )
     if cached is not None:
         return JsonResponse({"tasks": cached})
 
     try:
-        tasks_list = service.fetch_tasks_for_date(account_row, parsed_date)
+        tasks_list = service.fetch_tasks_for_date(
+            account_row,
+            parsed_date,
+            include_overdue_carryover=include_overdue_carryover,
+        )
     except ImproperlyConfigured:
         # Server-side encryption-key issue (e.g. TODOIST_ENCRYPTION_KEY
         # rotated while old rows persist). Surface as a 500 with a
@@ -168,5 +179,7 @@ def tasks(request: HttpRequest, date: str) -> JsonResponse:
         return _service_error_response(e)
 
     payload = [normalized_task_to_dict(t) for t in tasks_list]
-    todoist_cache.set_cached_tasks(account_row, parsed_date, payload)
+    todoist_cache.set_cached_tasks(
+        account_row, parsed_date, payload, filter_scope=filter_scope
+    )
     return JsonResponse({"tasks": payload})

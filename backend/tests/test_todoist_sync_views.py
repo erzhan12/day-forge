@@ -277,6 +277,30 @@ class TestTasksEndpoint:
             assert get.call_count == first_calls
             assert r1.json() == r2.json()
 
+    def test_exact_and_overdue_filters_use_separate_cache_entries(
+        self, auth_client, account
+    ):
+        """A bare-date read must not poison the overdue-carryover cache."""
+        frozen_today = datetime.date(2026, 5, 8)
+        exact_task = {**RAW_TASK, "id": "exact", "content": "Exact only"}
+        overdue_task = {**RAW_TASK, "id": "overdue", "content": "With overdue"}
+        with patch(
+            "todoist_sync.service.django_tz.localdate",
+            return_value=frozen_today,
+        ), patch("todoist_sync.service.requests.get") as get:
+            get.side_effect = [
+                _fake_response([exact_task]),
+                _fake_response([exact_task, overdue_task]),
+            ]
+            r1 = auth_client.get("/api/todoist/tasks/2026-05-09/")
+            assert r1.status_code == 200
+            assert len(r1.json()["tasks"]) == 1
+
+            r2 = auth_client.get("/api/todoist/tasks/2026-05-09/?carry_overdue=1")
+            assert r2.status_code == 200
+            assert len(r2.json()["tasks"]) == 2
+            assert get.call_count == 2
+
     def test_auth_error_returns_401_envelope(self, auth_client, account):
         with patch(
             "todoist_sync.service.fetch_tasks_for_date",
@@ -319,10 +343,10 @@ class TestTasksEndpoint:
         body = resp.json()
         assert "misconfigured" in body["errors"]["detail"].lower()
 
-    def test_today_uses_today_overdue_filter(self, auth_client, account):
+    def test_today_uses_date_overdue_filter(self, auth_client, account):
         """On a frozen clock, ``selected_date == today`` → the generated
-        Todoist ``query`` is ``"today | overdue"``. No CalDAV analog — the
-        filter string depends on "today", so we pin ``timezone.localdate``.
+        Todoist ``query`` is ``"<YYYY-MM-DD> | overdue"``. No CalDAV analog —
+        the filter string depends on "today", so we pin ``timezone.localdate``.
         """
         frozen_today = datetime.date(2026, 5, 7)
         with patch(
@@ -332,9 +356,22 @@ class TestTasksEndpoint:
             get.return_value = _fake_response([RAW_TASK])
             resp = auth_client.get("/api/todoist/tasks/2026-05-07/")
         assert resp.status_code == 200
-        # The filter endpoint is called with the today|overdue query.
         _, kwargs = get.call_args
-        assert kwargs["params"]["query"] == "today | overdue"
+        assert kwargs["params"]["query"] == "2026-05-07 | overdue"
+
+    def test_carry_overdue_query_param(self, auth_client, account):
+        """``?carry_overdue=1`` requests overdue carryover when the schedule
+        date is browser-local today but not project-local today."""
+        frozen_today = datetime.date(2026, 5, 7)
+        with patch(
+            "todoist_sync.service.django_tz.localdate",
+            return_value=frozen_today,
+        ), patch("todoist_sync.service.requests.get") as get:
+            get.return_value = _fake_response([RAW_TASK])
+            resp = auth_client.get("/api/todoist/tasks/2026-05-08/?carry_overdue=1")
+        assert resp.status_code == 200
+        _, kwargs = get.call_args
+        assert kwargs["params"]["query"] == "2026-05-08 | overdue"
 
     def test_other_date_uses_exact_date_filter(self, auth_client, account):
         """A past/future date (≠ today) → the bare literal-date token

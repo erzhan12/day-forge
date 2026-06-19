@@ -1,6 +1,4 @@
-// Render snapshots for TodoistTasksPanel.vue across its states:
-// hidden (not connected / status unknown), loading (skeleton), error,
-// populated (priority flags), empty.
+// TodoistTasksPanel — inner content for the fixed Todoist sidebar.
 
 import { describe, expect, it } from "vitest"
 import { mount } from "@vue/test-utils"
@@ -8,7 +6,6 @@ import { mount } from "@vue/test-utils"
 import TodoistTasksPanel from "../src/components/TodoistTasksPanel.vue"
 import type { TodoistTask } from "../src/types/todoist"
 
-// priority 4 -> P1 (highest), 1 -> P4. ui_priority = "P" + str(5 - priority).
 const TASK_P1: TodoistTask = {
   id: "1",
   title: "Ship the release",
@@ -42,40 +39,12 @@ const TASK_P4: TodoistTask = {
 }
 
 describe("TodoistTasksPanel", () => {
-  it("renders nothing when not connected", () => {
-    const wrapper = mount(TodoistTasksPanel, {
-      props: {
-        tasks: [],
-        loading: false,
-        error: null,
-        connected: false,
-        statusKnown: true,
-      },
-    })
-    expect(wrapper.find("section.todoist-tasks").exists()).toBe(false)
-  })
-
-  it("renders nothing until status is known", () => {
-    const wrapper = mount(TodoistTasksPanel, {
-      props: {
-        tasks: [],
-        loading: false,
-        error: null,
-        connected: true,
-        statusKnown: false,
-      },
-    })
-    expect(wrapper.find("section.todoist-tasks").exists()).toBe(false)
-  })
-
   it("renders the loading skeleton when loading", () => {
     const wrapper = mount(TodoistTasksPanel, {
       props: {
         tasks: [],
         loading: true,
         error: null,
-        connected: true,
-        statusKnown: true,
       },
     })
     expect(wrapper.find(".todoist-loading").exists()).toBe(true)
@@ -88,8 +57,6 @@ describe("TodoistTasksPanel", () => {
         tasks: [],
         loading: false,
         error: "Todoist service unavailable.",
-        connected: true,
-        statusKnown: true,
       },
     })
     expect(wrapper.find(".todoist-error").exists()).toBe(true)
@@ -105,8 +72,6 @@ describe("TodoistTasksPanel", () => {
         tasks: [TASK_P1, TASK_P2, TASK_P3, TASK_P4],
         loading: false,
         error: null,
-        connected: true,
-        statusKnown: true,
       },
     })
     const items = wrapper.findAll('[data-testid="todoist-task"]')
@@ -130,48 +95,26 @@ describe("TodoistTasksPanel", () => {
     )
   })
 
-  it("uses the Todoist header label and an accessible region label", () => {
-    const wrapper = mount(TodoistTasksPanel, {
-      props: {
-        tasks: [TASK_P1],
-        loading: false,
-        error: null,
-        connected: true,
-        statusKnown: true,
-      },
-    })
-    const region = wrapper.find('[aria-label="Todoist tasks"]')
-    expect(region.exists()).toBe(true)
-    expect(wrapper.find(".todoist-title").text()).toBe("Todoist")
-  })
-
   it("does not render a project chip, due-time, or open-in-Todoist link", () => {
     const wrapper = mount(TodoistTasksPanel, {
       props: {
         tasks: [TASK_P1, TASK_P3],
         loading: false,
         error: null,
-        connected: true,
-        statusKnown: true,
       },
     })
-    // No project chip / project name.
     expect(wrapper.find(".todoist-project").exists()).toBe(false)
-    // No due-time rendered (date dropped from display per V1 scope).
     expect(wrapper.find(".todoist-due").exists()).toBe(false)
     expect(wrapper.text()).not.toContain("2026-05-07")
-    // No open-in-Todoist link.
     expect(wrapper.find("a").exists()).toBe(false)
   })
 
-  it("renders empty-state copy when connected but no tasks", () => {
+  it("renders empty-state copy when no tasks", () => {
     const wrapper = mount(TodoistTasksPanel, {
       props: {
         tasks: [],
         loading: false,
         error: null,
-        connected: true,
-        statusKnown: true,
       },
     })
     const empty = wrapper.find(".todoist-empty")
