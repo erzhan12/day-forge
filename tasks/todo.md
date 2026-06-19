@@ -479,3 +479,27 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
   component constant. In Vue SFCs with `<script setup>` a named export requires a
   separate `<script>` block — structural change, low priority since the value is stable.
   Suggested by `claude-review` on PR #55 (P3 [QUALITY]).
+
+### Todoist (feature 0020) — PR #63 review deferrals
+
+- [ ] **Rate-limit the account-connect endpoints (CalDAV + Todoist).**
+  `claude-review` on PR #63 flagged `POST /api/todoist/account/` as having
+  no rate limit (token brute-force). Deferred, not blocking: the endpoint
+  is `@login_required`, the brute-force target is Todoist (which rate-limits
+  itself), and `POST /api/calendar/account/` has the same absence — so this
+  is a pre-existing pattern, not introduced by 0020. If added, do it
+  symmetrically for both providers (a shared `connect_rl:<user_id>` fixed
+  window mirroring `ai_cmd_rl`, env `*_CONNECT_RATE_LIMIT_PER_HOUR`,
+  documented in `.claude/rules/project.md`, returning 429).
+
+- [ ] **De-duplicate `extractErrorMessage` across composables.** Identical
+  helper in `useTodoist.ts` and `useTodoistAccount.ts` (and the CalDAV
+  analogs). Extract to a shared `frontend/src/composables/useHttp.ts` export
+  or `utils/errors.ts`. Multi-file refactor that should also fold in the
+  CalDAV copies — its own small PR. (`claude-review` PR #63, P2 [QUALITY].)
+
+  > Explicitly NOT doing (rejected on PR #63 with rationale): a pagination
+  > truncation cap (contradicts the plan's "fetch all, never truncate"),
+  > caching the `Fernet` instance (breaks runtime key rotation), and
+  > "zeroing" the decrypted token string (CPython strings are immutable —
+  > the rebind is ineffective security theater).

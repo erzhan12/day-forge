@@ -313,6 +313,29 @@ class TestPagination:
         _, kwargs = patched_get.call_args
         assert kwargs["params"]["cursor"] == "CURSOR_2"
 
+    def test_single_page_makes_exactly_one_call(self, patched_get):
+        """Boundary: a full page whose ``next_cursor`` is null must NOT
+        trigger a spurious second fetch — the loop breaks on a falsy cursor.
+        Pins ``call_count == 1`` so a regression that always re-requests
+        (e.g. treating missing ``next_cursor`` as "keep going") is caught."""
+        full_page = _fake_response(
+            json_payload=_fake_page(
+                [_raw_task(id=f"t{i}", content=f"T{i}") for i in range(200)],
+                next_cursor=None,
+            )
+        )
+        patched_get.side_effect = [full_page]
+
+        tasks = service.fetch_tasks_for_date(
+            _make_account_stub(), datetime.date(2025, 2, 12)
+        )
+
+        assert len(tasks) == 200
+        assert patched_get.call_count == 1
+        # First (only) call must not carry a cursor param.
+        _, kwargs = patched_get.call_args
+        assert "cursor" not in kwargs["params"]
+
 
 class TestDeterministicSort:
     def test_sort_is_priority_desc_then_due_then_title(self, patched_get):
