@@ -718,3 +718,117 @@ each occurrence is unique.
 | `500` | `Calendar service is misconfigured` — `CALDAV_ENCRYPTION_KEY` cannot decrypt the stored row (e.g. key rotation without re-write). **Operator action**: see `.claude/rules/project.md` § "CalDAV key rotation note". |
 
 All non-`2xx` use `{"errors": {"detail": "<message>"}}`.
+
+## Todoist — feature 0020
+
+Read-only Todoist task integration via a personal API token. The token is
+encrypted at rest with `cryptography.Fernet` (`TODOIST_ENCRYPTION_KEY`);
+the service layer is the only code path that decrypts it. No OAuth, no
+writes, no AI coupling — task text is never sent to the LLM provider.
+
+### `GET /api/todoist/account/`
+
+Returns the calling user's Todoist account status. Never returns a
+token-shaped field.
+
+**Success — `200 OK`**
+
+```json
+{
+  "connected": true,
+  "last_verified_at": "2026-06-17T09:00:00+00:00"
+}
+```
+
+When disconnected:
+
+```json
+{
+  "connected": false,
+  "last_verified_at": null
+}
+```
+
+### `POST /api/todoist/account/`
+
+Verify the token with Todoist and upsert the per-user `TodoistAccount`
+row. The token is encrypted before persistence; `last_verified_at` is set
+to `now()`; `updated_at` advances (rotates the tasks cache key).
+
+**Request body**
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `token` | string | yes | Todoist personal API token (never logged). Length cap 128. |
+
+**Responses**
+
+- `200 OK` — same shape as `GET /api/todoist/account/`.
+- `400` — malformed body, missing/empty `token`, over length cap.
+- `401` — `TodoistAuthError` (Todoist rejected the token).
+- `502` — `TodoistProviderError`.
+- `504` — `TodoistTimeoutError`.
+- `500` — `Todoist service is misconfigured. Contact the administrator.`
+  (server-side encryption-key issue; ops-only). **Operator action**: see
+  `.claude/rules/project.md` § "Todoist token rotation note".
+
+All non-`2xx` use `{"errors": {"detail": "<message>", ...}}`.
+
+### `DELETE /api/todoist/account/`
+
+Idempotent delete. Versioned cache keys make stale entries unreachable.
+
+**Success — `200 OK`** — shape identical to a disconnected
+`GET /api/todoist/account/`.
+
+### `GET /api/todoist/tasks/{date}/`
+
+Fetch normalised active (non-completed) tasks for one day. Server-side
+per-`(user, date, account_version)` cache (TTL = `TODOIST_CACHE_TTL_SECONDS`,
+default `300`).
+
+**Path params**
+
+| Name | Type | Notes |
+|------|------|-------|
+| `date` | string | `YYYY-MM-DD`. Invalid → `400`. |
+
+**Date → filter behavior**: when `date` is **today** the panel shows
+`today | overdue` (due today plus all overdue carryover); for any other
+date it shows tasks due **on that exact date**. Tasks with no due date
+never appear (the view is date-scoped). Completed tasks are never
+returned.
+
+**Success — `200 OK`**
+
+```json
+{
+  "tasks": [
+    {
+      "id": "7654321",
+      "title": "Submit quarterly report",
+      "priority": 4,
+      "ui_priority": "P1",
+      "due_date": "2026-06-17"
+    }
+  ]
+}
+```
+
+`priority` is the raw Todoist int (`4` = highest); `ui_priority` is the
+inverted UI label (`4→P1 … 1→P4`). `due_date` is an ISO `YYYY-MM-DD`
+string or `null` (the time component of timed tasks is dropped — date-only
+display). Sorted by priority (highest first), then due date, title, id.
+
+**Error responses**
+
+| Status | Cause |
+|--------|-------|
+| `400` | Malformed `date` path param. |
+| `401` | `TodoistAuthError` — Todoist rejected the stored token. |
+| `502` | `TodoistProviderError` — Todoist API failure. |
+| `503` | No `TodoistAccount` configured for this user. |
+| `504` | `TodoistTimeoutError` — request exceeded `TODOIST_REQUEST_TIMEOUT`. |
+| `500` | `Todoist service is misconfigured. Contact the administrator.` — `TODOIST_ENCRYPTION_KEY` cannot decrypt the stored row (e.g. key rotation without re-write). **Operator action**: see `.claude/rules/project.md` § "Todoist token rotation note". |
+
+All non-`2xx` use `{"errors": {"detail": "<message>"}}`.

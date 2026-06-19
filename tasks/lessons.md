@@ -17,3 +17,11 @@ When a drag holds state across async boundaries (pointer down → pointer up), c
 Detect this before applying updates: compare live blocks to the drag-start snapshot (excluding the dragged block). Check ID-set equality first (catches additions/deletions), then verify each neighbour's `start_time`, `end_time`, and `sort_order`. If diverged, abort the operation without posting.
 
 Seen at `frontend/src/composables/useDrag.ts` — `blocksExternallyMutated` guards `endDrag`. Defense in depth: `scheduleDisabled` also prevents new drags from starting while `isChatProcessing` is true.
+
+## A "plan-mandated divergence" still needs its boundary conditions checked
+
+When code intentionally diverges from a precedent (documented + plan-blessed), adversarial reviewers tend to wave it through as "matches the plan" and never drill into its edge cases. That is a blind spot.
+
+Feature 0020 (`useTodoist.ts`): the plan said "on any non-503 error (401/500/502/504) set `connected = true`" because a real HTTP status proves the account row exists. The impl coded this as an `else` branch — which also swallows the `result.status === undefined` case (`useHttp.requestJson` returns `{ok:false, errors}` with **no status** on network/parse failure, `useHttp.ts:67-70`). So a pure network failure for a *disconnected* user elevated `connected` and showed the panel. Two adversarial review passes missed it; an external review caught it.
+
+Rule: when reviewing an intentional divergence, enumerate its stated precondition (here: "a definitive HTTP status exists") and test the path where that precondition is **false**. Fix: gate the elevation on `result.status !== undefined`, and always add a test for the no-status / network-failure branch whenever a composable maps HTTP status to UI state.

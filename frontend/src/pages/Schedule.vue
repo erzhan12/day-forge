@@ -31,10 +31,12 @@ import { useDrag } from "../composables/useDrag"
 import { useDraft } from "../composables/useDraft"
 import { useChat } from "../composables/useChat"
 import { useCalendar } from "../composables/useCalendar"
+import { useTodoist } from "../composables/useTodoist"
 import { useThemeFromProps } from "../composables/useThemeFromProps"
 import { useNowMinutes } from "../composables/useNowMinutes"
 import { useSoundNotifications } from "../composables/useSoundNotifications"
 import ExternalEventsPanel from "../components/ExternalEventsPanel.vue"
+import TodoistTasksPanel from "../components/TodoistTasksPanel.vue"
 import "../app.css"
 
 useThemeFromProps()
@@ -110,6 +112,21 @@ watch(
 )
 function retryFetchEvents() {
   calendar.fetchEvents(props.date)
+}
+
+// Todoist (feature 0020): read-only task panel that follows the selected
+// date. Per-instance composable like `useCalendar`. The `!connected` panel
+// gate is why `fetchTasks` (not just `fetchAccountStatus`) owns `connected`
+// — see the divergence note in `useTodoist.ts`.
+const todoist = useTodoist()
+todoist.fetchAccountStatus()
+watch(
+  () => props.date,
+  (d) => todoist.fetchTasks(d),
+  { immediate: true },
+)
+function retryFetchTasks() {
+  todoist.fetchTasks(props.date)
 }
 
 // Multi-turn chat thread (feature 0007). State lives in `useChat`
@@ -316,6 +333,15 @@ function logout() {
       :error="calendar.state.error"
       :connected="calendar.state.connected"
       @retry="retryFetchEvents"
+    />
+
+    <TodoistTasksPanel
+      :tasks="todoist.state.tasks"
+      :loading="todoist.state.loading"
+      :error="todoist.state.error"
+      :connected="todoist.state.connected"
+      :status-known="todoist.state.statusKnown"
+      @retry="retryFetchTasks"
     />
 
     <AddBlockForm

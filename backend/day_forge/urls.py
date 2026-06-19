@@ -7,6 +7,7 @@ from schedules import api as schedules_api
 from schedules import views as schedules_views
 from templates_mgr import api as templates_api
 from templates_mgr import views as templates_views
+from todoist_sync import views as todoist_views
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -84,6 +85,17 @@ urlpatterns = [
         "api/calendar/events/<str:date>/",
         calendar_views.events,
         name="caldav_events",
+    ),
+    # API: Todoist (feature 0020)
+    path(
+        "api/todoist/account/",
+        todoist_views.account,
+        name="todoist_account",
+    ),
+    path(
+        "api/todoist/tasks/<str:date>/",
+        todoist_views.tasks,
+        name="todoist_tasks",
     ),
     # Analytics
     path(
