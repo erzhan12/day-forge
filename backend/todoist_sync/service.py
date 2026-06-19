@@ -37,6 +37,17 @@ _FILTER_PAGE_LIMIT = 200
 _MAX_FILTER_PAGES = 200
 
 
+def is_project_today(target_date: date) -> bool:
+    """Single source of truth for the today-vs-exact-date decision, shared by
+    ``_filter_query`` (here) and ``tasks_filter_scope`` (``todoist_sync.cache``).
+
+    The cache scope MUST match the filter the query actually used; keeping
+    both on this one helper prevents cache-miss / stale-data bugs from logic
+    drift between the two call sites.
+    """
+    return target_date == django_tz.localdate()
+
+
 # ----- Typed exception hierarchy -----------------------------------------
 
 class TodoistError(Exception):
@@ -167,8 +178,7 @@ def _filter_query(target_date: date, *, include_overdue_carryover: bool = False)
     interprets as "due on that date" (``due:`` semantics). Do NOT use the
     ``date:`` keyword, which scopes by absolute date and ignores recurrence.
     """
-    is_project_today = target_date == django_tz.localdate()
-    if is_project_today or include_overdue_carryover:
+    if is_project_today(target_date) or include_overdue_carryover:
         return f"{target_date.isoformat()} | overdue"
     return target_date.isoformat()
 

@@ -31,11 +31,13 @@ def tasks_filter_scope(
 
     ``with_overdue`` and ``exact`` must not share a cache entry — the
     overdue carryover query returns a strict superset of the bare-date
-    query.
+    query. Uses ``service.is_project_today`` (the single source of truth)
+    so this scope tag can never drift from the filter the query actually
+    used — drift would serve stale/wrong tasks.
     """
-    from django.utils import timezone as django_tz
+    from todoist_sync.service import is_project_today
 
-    if include_overdue_carryover or target_date == django_tz.localdate():
+    if include_overdue_carryover or is_project_today(target_date):
         return "with_overdue"
     return "exact"
 

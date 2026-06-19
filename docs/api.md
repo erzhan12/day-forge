@@ -807,6 +807,12 @@ with no due date never appear (the view is date-scoped). Completed tasks are nev
 |------|------|-------|
 | `carry_overdue` | string | Optional. Pass `1` to include overdue carryover when `date` is browser-local today but not project-local today. The Schedule page sets this automatically for today. |
 
+The server caches the two filter modes **separately** (`exact` vs.
+`with_overdue`) under distinct keys, so toggling `carry_overdue` on the
+same date fetches fresh data rather than serving the stale non-overdue
+list — the overdue query returns a strict superset, so the two must not
+share a cache entry.
+
 **Success — `200 OK`**
 
 ```json

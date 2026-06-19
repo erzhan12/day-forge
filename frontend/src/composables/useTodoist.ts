@@ -127,17 +127,20 @@ export function useTodoist() {
       state.statusKnown = true
       return
     }
-    // Non-503 error WITH a definitive server status (401/500/502/504): a
-    // 503 is returned *only* when the account row does not exist, so a real
-    // HTTP error status proves the account IS connected — elevate
-    // `connected` so the error surfaces past the `!connected` panel gate
-    // (the deliberate divergence from useCalendar.ts). A no-status failure
-    // (network/parse error → `result.status === undefined`, see useHttp.ts)
-    // proves nothing about account existence, so leave `connected`
-    // untouched — we must not show the panel for a user who may not be
-    // connected. We still mark `statusKnown` and surface the error so a
-    // user who WAS already connected sees it.
-    if (result.status !== undefined) {
+    // Non-503 error proving the account row EXISTS → elevate `connected`
+    // so the error surfaces past the `!connected` panel gate (the
+    // deliberate divergence from useCalendar.ts). Only statuses `>= 401`
+    // qualify: the tasks view returns `503` *only* on
+    // `TodoistAccount.DoesNotExist`, and a `401/500/502/504` reaches the
+    // auth/provider layer — both prove the row exists. A `400` (malformed
+    // date) is returned *before* the account-existence check, so it does
+    // NOT prove existence; and a no-status failure (network/parse error →
+    // `result.status === undefined`, see useHttp.ts) proves nothing either.
+    // For those we leave `connected` untouched — must not show the panel
+    // for a user who may not be connected — while still marking
+    // `statusKnown` and surfacing the error so an already-connected user
+    // sees it.
+    if (result.status !== undefined && result.status >= 401) {
       state.connected = true
     }
     state.statusKnown = true

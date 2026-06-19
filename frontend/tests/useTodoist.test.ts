@@ -228,6 +228,23 @@ describe("useTodoist.fetchTasks", () => {
     expect(todoist.state.error).toBe("Network error. Please check your connection.")
   })
 
+  it("first-load 400 (malformed date) does NOT elevate connected", async () => {
+    // A 400 is returned by the view *before* the account-existence check,
+    // so it does not prove the account row exists — connected must stay
+    // false on first load (only statuses >= 401 elevate it). statusKnown +
+    // error still set.
+    requestJsonMock.mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      errors: { detail: "Invalid date format." },
+    })
+    const todoist = useTodoist()
+    await todoist.fetchTasks("not-a-date")
+    expect(todoist.state.connected).toBe(false)
+    expect(todoist.state.statusKnown).toBe(true)
+    expect(todoist.state.error).toBe("Invalid date format.")
+  })
+
   it("AbortError from a superseded request leaves connected/statusKnown untouched", async () => {
     const aborted = new DOMException("aborted", "AbortError")
     requestJsonMock
