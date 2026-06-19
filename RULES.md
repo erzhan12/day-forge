@@ -265,6 +265,57 @@ and writes onto separate seqs and adds `writeCompletionTick` so a read
 can never supersede a write. See `useCalendarAccount.ts` header comment
 for the full design and the scenario that motivates each guard.
 
+## Todoist (feature 0020)
+
+`todoist_sync` mirrors `calendar_sync` one-for-one (new app, same error
+hierarchy, versioned cache, system checks, admin, frontend composables +
+panel). Differences: a single secret (personal API token, not
+apple_id+password+base_url), an HTTP REST client (`requests`, not a DAV
+library), and a date→filter algorithm. The same four rules apply:
+
+### Service-boundary owns the secret
+`backend/todoist_sync/service.py:fetch_tasks_for_date` is the **only**
+function that calls `account.get_token()` (and `del token` in a `finally`).
+Views pass the `TodoistAccount` instance through; they never touch the
+plaintext. New token-using code goes in `service.py`, or the
+"token never logged" regression test
+(`test_todoist_sync_service.py`) becomes a liar.
+
+### Versioned cache keys + the `auto_now` footgun
+`backend/todoist_sync/cache.py` keys tasks by
+`account.updated_at.isoformat()`. Any mutating call site **must** call
+plain `account.save()` (no `update_fields`) or include `"updated_at"` —
+a partial save bypasses `auto_now` and serves stale tasks. The
+`TodoistAccount.set_token` docstring calls this out.
+
+### Date→filter algorithm + nullable `due_date`
+`service.py` maps the selected date to a Todoist filter query and hits the
+**dedicated filter endpoint** `GET /api/v1/tasks/filter` (required param
+`query`; cursor-paginated `{results, next_cursor}`, `limit` max 200 — loop
+until `next_cursor` is null). `selected_date == today` → `query =
+"today | overdue"`; else the bare literal-date token `query =
+"<YYYY-MM-DD>"` (`due:` semantics; **not** the `date:` keyword). Sort
+with a **null-safe** key — `due_date` is nullable (`due == null` → `None`),
+so use `key=lambda t: (-t.priority, t.due_date or "", t.title.casefold(),
+t.id)`; a bare tuple raises `TypeError` the moment a no-due task appears.
+Tasks with no due date never match a date-scoped query, so they never
+appear in the panel (by design — empty-state copy must not imply zero
+tasks). The `due.date` field is **polymorphic** (full-day `"YYYY-MM-DD"`
+vs. timed `"...T..."`); normalise via the `"T"`-in-`raw` branch, time
+component dropped. The wire field for the task name is `title` (never
+`content`).
+
+### `requestJson` GET footgun + dual-token stale guard (frontend)
+Same as CalDAV: `useTodoist.fetchTasks` passes `undefined` as the 3rd
+positional arg and `{ signal }` as the 4th; it guards with two commit
+tokens (`latestRequestedTaskDate` + `tasksRequestSeq`).
+**Connected-state divergence from `useCalendar`**: `GET
+/api/todoist/tasks/<date>/` returns `503` **only** on
+`TodoistAccount.DoesNotExist`, so a non-503 error (401/500/502/504)
+*proves* the account exists — `fetchTasks` sets `connected = true` on
+those (not just `503`/`ok`), so the panel's `!connected` gate doesn't hide
+the error on first load before `fetchAccountStatus()` resolves.
+
 ## Production deploy (feature 0016)
 
 The production deploy lives in `deployment/` and targets

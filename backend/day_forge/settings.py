@@ -35,6 +35,7 @@ INSTALLED_APPS = [
     "ai",
     "analytics",
     "calendar_sync",
+    "todoist_sync",
 ]
 
 MIDDLEWARE = [
@@ -150,7 +151,8 @@ if REDIS_URL:
             "BACKEND": "django.core.cache.backends.redis.RedisCache",
             "LOCATION": REDIS_URL,
             # Namespace keys so a Redis shared with another app doesn't
-            # collide on ``ai_cmd_rl:*`` / ``caldav_events:*``.
+            # collide on ``ai_cmd_rl:*`` / ``caldav_events:*`` /
+            # ``todoist_tasks:*``.
             "KEY_PREFIX": "dayforge",
         }
     }
@@ -281,6 +283,40 @@ if CALDAV_REQUEST_TIMEOUT <= 0:
     raise ValueError(
         "CALDAV_REQUEST_TIMEOUT must be a positive number; "
         f"got {CALDAV_REQUEST_TIMEOUT!r}"
+    )
+
+# ---------------------------------------------------------------------------
+# Todoist (feature 0020)
+# ---------------------------------------------------------------------------
+# Fernet symmetric encryption key (URL-safe base64, 32 bytes) for the
+# personal API token at rest. No insecure default — empty is tolerated only
+# when DEBUG=True. ``todoist_sync.E001`` blocks DEBUG=False startup if unset
+# or malformed; ``todoist_sync.crypto`` raises ImproperlyConfigured at use.
+TODOIST_ENCRYPTION_KEY = os.environ.get("TODOIST_ENCRYPTION_KEY", "")
+# API host — analog of CALDAV_DEFAULT_BASE_URL. Default is the real API host
+# (NOT the developer.todoist.com docs host, which 404s/returns HTML).
+# service.py builds every request URL from this base.
+TODOIST_BASE_URL = os.environ.get(
+    "TODOIST_BASE_URL", "https://api.todoist.com/api/v1"
+)
+# Hard cap on each Todoist HTTP call. Same risk profile as
+# CALDAV_REQUEST_TIMEOUT — a hung connection must not pin a worker.
+TODOIST_REQUEST_TIMEOUT = float(os.environ.get("TODOIST_REQUEST_TIMEOUT", "10"))
+# Per-(user, date) task-list cache window. Versioned keys (see
+# todoist_sync/cache.py) keep correctness regardless of backend; the
+# ``todoist_sync.W001`` check warns when the backend is non-shared.
+TODOIST_CACHE_TTL_SECONDS = int(os.environ.get("TODOIST_CACHE_TTL_SECONDS", "300"))
+# Same import-time positive-value guards as the CALDAV_* block: fail loudly
+# on a misconfigured deploy (ValueError, NOT ImproperlyConfigured).
+if TODOIST_CACHE_TTL_SECONDS <= 0:
+    raise ValueError(
+        "TODOIST_CACHE_TTL_SECONDS must be a positive integer; "
+        f"got {TODOIST_CACHE_TTL_SECONDS!r}"
+    )
+if TODOIST_REQUEST_TIMEOUT <= 0:
+    raise ValueError(
+        "TODOIST_REQUEST_TIMEOUT must be a positive number; "
+        f"got {TODOIST_REQUEST_TIMEOUT!r}"
     )
 
 # Analytics / streak. Validated at import time so a misconfigured value

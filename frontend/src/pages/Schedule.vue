@@ -10,6 +10,7 @@ import NowLine from "../components/NowLine.vue"
 import UndoToast from "../components/UndoToast.vue"
 import CommandBar from "../components/CommandBar.vue"
 import ChatSidebar from "../components/ChatSidebar.vue"
+import TodoistSidebar from "../components/TodoistSidebar.vue"
 import DraftBadge from "../components/DraftBadge.vue"
 import RegenerateDraftButton from "../components/RegenerateDraftButton.vue"
 import { todayString } from "../utils/date"
@@ -18,6 +19,10 @@ import {
   readChatSidebarOpen,
   writeChatSidebarOpen,
 } from "../utils/chatSidebarStorage"
+import {
+  readTodoistSidebarOpen,
+  writeTodoistSidebarOpen,
+} from "../utils/todoistSidebarStorage"
 import {
   DAY_START, DAY_END, DAY_START_MINUTES, DAY_END_MINUTES,
   PX_PER_MINUTE, timeToMinutes, findCurrentBlock,
@@ -31,6 +36,7 @@ import { useDrag } from "../composables/useDrag"
 import { useDraft } from "../composables/useDraft"
 import { useChat } from "../composables/useChat"
 import { useCalendar } from "../composables/useCalendar"
+import { useTodoist } from "../composables/useTodoist"
 import { useThemeFromProps } from "../composables/useThemeFromProps"
 import { useNowMinutes } from "../composables/useNowMinutes"
 import { useSoundNotifications } from "../composables/useSoundNotifications"
@@ -112,6 +118,21 @@ function retryFetchEvents() {
   calendar.fetchEvents(props.date)
 }
 
+// Todoist (feature 0020): read-only task panel that follows the selected
+// date. Per-instance composable like `useCalendar`. The `!connected` panel
+// gate is why `fetchTasks` (not just `fetchAccountStatus`) owns `connected`
+// — see the divergence note in `useTodoist.ts`.
+const todoist = useTodoist()
+todoist.fetchAccountStatus()
+watch(
+  () => props.date,
+  (d) => todoist.fetchTasks(d),
+  { immediate: true },
+)
+function retryFetchTasks() {
+  todoist.fetchTasks(props.date)
+}
+
 // Multi-turn chat thread (feature 0007). State lives in `useChat`
 // (module-level) so the bottom dock and the sidebar variant share one
 // thread. Re-anchor the active date here so navigation between days
@@ -132,13 +153,23 @@ const { isWide } = useViewport()
 const sidebarOpen = ref<boolean>(readChatSidebarOpen())
 watch(sidebarOpen, writeChatSidebarOpen)
 
+const todoistSidebarOpen = ref<boolean>(readTodoistSidebarOpen())
+watch(todoistSidebarOpen, writeTodoistSidebarOpen)
+
 const chatSidebarWidth = computed(() => {
   if (!isWide.value) return "0px"
   return sidebarOpen.value ? "380px" : "32px"
 })
 
+const todoistSidebarWidth = computed(() => {
+  if (!isWide.value) return "0px"
+  if (!todoist.state.statusKnown || !todoist.state.connected) return "0px"
+  return todoistSidebarOpen.value ? "380px" : "32px"
+})
+
 const schedulePageStyle = computed(() => ({
   "--chat-sidebar-width": chatSidebarWidth.value,
+  "--todoist-sidebar-width": todoistSidebarWidth.value,
 }))
 
 // Per-component-instance set of dates the auto-draft has already been
@@ -436,6 +467,14 @@ function logout() {
       @dismiss="dismissToast"
     />
 
+    <TodoistSidebar
+      v-if="isWide && todoist.state.statusKnown && todoist.state.connected"
+      v-model:open="todoistSidebarOpen"
+      :tasks="todoist.state.tasks"
+      :loading="todoist.state.loading"
+      :error="todoist.state.error"
+      @retry="retryFetchTasks"
+    />
     <ChatSidebar
       v-if="isWide"
       v-model:open="sidebarOpen"
@@ -455,16 +494,16 @@ function logout() {
 
 <style scoped>
 .schedule-page {
-  /* Explicit content-box so `padding-right: var(--chat-sidebar-width)`
-     extends the page width without eating into the 640px content area.
-     The global `*` reset in app.css sets border-box; this is a scoped
-     override. */
+  /* Explicit content-box so side padding extends page width without
+     eating into the 640px content area. The global `*` reset in app.css
+     sets border-box; this is a scoped override. */
   box-sizing: content-box;
   max-width: 640px;
   margin: 0 auto;
   min-height: 100vh;
   background: var(--bg-schedule-gap);
   padding-right: var(--chat-sidebar-width, 0);
+  padding-left: var(--todoist-sidebar-width, 0);
 }
 
 .schedule-body {

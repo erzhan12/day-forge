@@ -11,6 +11,7 @@ import { todayString } from "../utils/date"
 // Required convention for every authenticated page — see RULES.md.
 import { useThemeFromProps } from "../composables/useThemeFromProps"
 import { useCalendarAccount } from "../composables/useCalendarAccount"
+import { useTodoistAccount } from "../composables/useTodoistAccount"
 import "../app.css"
 
 useThemeFromProps()
@@ -102,6 +103,47 @@ async function handleCalendarDisconnect() {
     calendarForm.password = ""
     calendarForm.base_url = ""
     calendarMessage.value = "Apple Calendar disconnected."
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Todoist (feature 0020) — connect / disconnect via personal API token.
+// Separate card from External Calendars (different provider, single secret).
+// ---------------------------------------------------------------------------
+const todoistAccount = useTodoistAccount()
+const todoistForm = reactive<{ token: string }>({ token: "" })
+const todoistMessage = ref<string | null>(null)
+
+onMounted(() => {
+  todoistAccount.fetchAccountStatus()
+})
+
+const isTodoistConnected = computed(() =>
+  Boolean(todoistAccount.state.status?.connected),
+)
+const todoistBusy = computed(
+  () => todoistAccount._internals.accountOperationInFlight.value !== null,
+)
+const todoistVerifiedAt = computed(() => {
+  const ts = todoistAccount.state.status?.last_verified_at
+  return ts ? new Date(ts).toLocaleString() : null
+})
+
+async function handleTodoistConnect() {
+  todoistMessage.value = null
+  const result = await todoistAccount.connect({ token: todoistForm.token.trim() })
+  if (result.ok) {
+    todoistForm.token = ""
+    todoistMessage.value = "Todoist connected."
+  }
+}
+
+async function handleTodoistDisconnect() {
+  todoistMessage.value = null
+  const result = await todoistAccount.disconnect()
+  if (result.ok) {
+    todoistForm.token = ""
+    todoistMessage.value = "Todoist disconnected."
   }
 }
 </script>
@@ -249,6 +291,78 @@ async function handleCalendarDisconnect() {
         @click="handleCalendarDisconnect"
       >
         {{ calendarBusy ? "Disconnecting…" : "Disconnect" }}
+      </button>
+    </section>
+
+    <section class="section">
+      <h2 class="section-title">Todoist</h2>
+      <p class="section-subtitle">
+        Connect your Todoist account so Day Forge can display your tasks
+        read-only alongside your daily schedule.
+      </p>
+      <p class="section-subtitle">
+        Paste a
+        <a
+          href="https://app.todoist.com/app/settings/integrations/developer"
+          target="_blank"
+          rel="noopener noreferrer"
+        >personal API token</a> — Day Forge only reads your tasks, never
+        writes.
+      </p>
+
+      <p v-if="isTodoistConnected" class="cal-status connected">
+        Connected to Todoist<span v-if="todoistVerifiedAt">
+          · verified {{ todoistVerifiedAt }}</span>
+      </p>
+      <p v-else class="cal-status">Not connected</p>
+
+      <p
+        v-if="todoistAccount.state.error"
+        class="cal-error"
+        role="status"
+      >
+        {{ todoistAccount.state.error }}
+      </p>
+      <p
+        v-else-if="todoistMessage"
+        class="cal-message"
+        role="status"
+      >
+        {{ todoistMessage }}
+      </p>
+
+      <form
+        v-if="!isTodoistConnected"
+        class="cal-form"
+        @submit.prevent="handleTodoistConnect"
+      >
+        <label class="cal-field">
+          <span>API token</span>
+          <input
+            v-model="todoistForm.token"
+            type="password"
+            autocomplete="off"
+            required
+            :disabled="todoistBusy"
+          />
+        </label>
+        <button
+          type="submit"
+          class="cal-submit"
+          :disabled="todoistBusy"
+        >
+          {{ todoistBusy ? "Connecting…" : "Connect" }}
+        </button>
+      </form>
+
+      <button
+        v-else
+        type="button"
+        class="cal-disconnect"
+        :disabled="todoistBusy"
+        @click="handleTodoistDisconnect"
+      >
+        {{ todoistBusy ? "Disconnecting…" : "Disconnect" }}
       </button>
     </section>
   </div>
