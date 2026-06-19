@@ -336,6 +336,21 @@ class TestPagination:
         _, kwargs = patched_get.call_args
         assert "cursor" not in kwargs["params"]
 
+    def test_endless_cursor_raises_instead_of_looping_forever(self, patched_get):
+        """A misbehaving endpoint that never returns a null ``next_cursor``
+        must raise (worker protection) after the page ceiling, never loop
+        forever or silently truncate."""
+        endless = _fake_response(
+            json_payload=_fake_page([_raw_task(id="x")], next_cursor="MORE")
+        )
+        patched_get.return_value = endless  # same non-terminating page every call
+
+        with pytest.raises(service.TodoistProviderError):
+            service.fetch_tasks_for_date(
+                _make_account_stub(), datetime.date(2025, 2, 12)
+            )
+        assert patched_get.call_count == service._MAX_FILTER_PAGES
+
 
 class TestDeterministicSort:
     def test_sort_is_priority_desc_then_due_then_title(self, patched_get):

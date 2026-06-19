@@ -26,6 +26,16 @@ logger = logging.getLogger(__name__)
 # The dedicated filter endpoint is cursor-paginated; ``limit`` maxes at 200.
 _FILTER_PAGE_LIMIT = 200
 
+# Hard ceiling on pagination loops. A well-behaved API terminates by
+# returning a null ``next_cursor``; this guards against a misbehaving or
+# malicious endpoint (``TODOIST_BASE_URL`` is operator-configurable, so a
+# proxy could return an endless cursor) pinning a worker forever — the same
+# worker-protection rationale as ``TODOIST_REQUEST_TIMEOUT``. 200 pages ×
+# 200 tasks = 40k, far above any real Todoist account, so legitimate fetches
+# never hit it. We RAISE (never silently truncate — the plan mandates
+# fetching all matching tasks), surfacing as a 502 rather than a hang.
+_MAX_FILTER_PAGES = 200
+
 
 # ----- Typed exception hierarchy -----------------------------------------
 
@@ -174,7 +184,7 @@ def _fetch_filtered_tasks(query: str, token: str) -> list:
     url = f"{settings.TODOIST_BASE_URL}/tasks/filter"
     raw_tasks: list = []
     cursor = None
-    while True:
+    for _page in range(_MAX_FILTER_PAGES):
         params = {"query": query, "limit": _FILTER_PAGE_LIMIT}
         if cursor is not None:
             params["cursor"] = cursor
@@ -189,8 +199,13 @@ def _fetch_filtered_tasks(query: str, token: str) -> list:
         raw_tasks.extend(payload.get("results", []))
         cursor = payload.get("next_cursor")
         if not cursor:
-            break
-    return raw_tasks
+            return raw_tasks
+    # Exhausted the page ceiling without a terminating null cursor — the
+    # endpoint is misbehaving. Raise rather than silently truncate or loop
+    # forever (worker protection; never drops tasks on a well-behaved API).
+    raise TodoistProviderError(
+        f"Todoist filter pagination exceeded {_MAX_FILTER_PAGES} pages"
+    )
 
 
 def fetch_tasks_for_date(
