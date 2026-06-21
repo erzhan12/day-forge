@@ -203,6 +203,7 @@ watch(
 )
 
 async function runDraft() {
+  if (scheduleDisabled.value) return
   const snapshot = snapshotBlocks()
   // Bind undo to the date active when the draft request starts — if the
   // user navigates dates while the LLM call is in flight, ``props.date``
