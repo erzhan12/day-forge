@@ -1,10 +1,11 @@
 """Todoist REST client wrapper for the todoist_sync app.
 
-**Service-boundary owns the secret.** ``fetch_tasks_for_date`` is the
-ONLY function that calls ``account.get_token()``. Views pass the
-``TodoistAccount`` instance through; they never touch the plaintext. This
-keeps the decryption surface to a single file and makes the
-"token never logged" test tractable.
+**Service-boundary owns the secret.** ``fetch_tasks_for_date`` and
+``complete_task`` are the only two functions that call
+``account.get_token()``. Views pass the ``TodoistAccount`` instance
+through; they never touch the plaintext. This keeps the decryption
+surface to a single file and makes the "token never logged" test
+tractable.
 
 The Todoist API v1 host is ``https://api.todoist.com/api/v1`` (the real
 API host, parameterised as ``settings.TODOIST_BASE_URL`` — never the
@@ -226,15 +227,16 @@ def fetch_tasks_for_date(
 ) -> list[NormalizedTask]:
     """Fetch and normalise Todoist tasks for one date.
 
-    The only function that decrypts the stored token. Wraps every provider
-    error in the typed hierarchy so views translate to HTTP status without
-    leaking requests-lib types. Lets ``ImproperlyConfigured`` (key rotation)
-    propagate so the view maps it to a config-shaped 500.
+    One of two functions that decrypt the stored token (the other is
+    ``complete_task``). Wraps every provider error in the typed hierarchy so
+    views translate to HTTP status without leaking requests-lib types. Lets
+    ``ImproperlyConfigured`` (key rotation) propagate so the view maps it to
+    a config-shaped 500.
     """
     query = _filter_query(
         target_date, include_overdue_carryover=include_overdue_carryover
     )
-    token = account.get_token()  # only call site
+    token = account.get_token()  # one of two call sites (see complete_task)
     try:
         raw_tasks = _fetch_filtered_tasks(query, token)
         normalized: list[NormalizedTask] = []
@@ -276,4 +278,50 @@ def fetch_tasks_for_date(
         # Defensive: drop the local binding so the plaintext doesn't linger
         # in the frame's locals dict any longer than necessary. ``del``
         # makes intent explicit; the binding is unreachable afterwards.
+        del token
+
+
+# ----- complete_task -----------------------------------------------------
+
+def complete_task(account, task_id: str) -> None:
+    """Close (complete) one Todoist task.
+
+    One of the two functions that decrypt the stored token (the other is
+    ``fetch_tasks_for_date``); views pass the ``TodoistAccount`` instance
+    through and never touch plaintext (service-boundary). POSTs to the v1
+    close endpoint ``POST {TODOIST_BASE_URL}/tasks/{id}/close`` — ``204 No
+    Content`` on success (this also completes a recurring task's *current*
+    occurrence, accepted for V1). Wraps every provider error in the typed
+    hierarchy so views translate to HTTP status without leaking
+    requests-lib types. Lets ``ImproperlyConfigured`` (key rotation)
+    propagate so the view maps it to a config-shaped 500.
+
+    ``task_id`` round-trips from Todoist's own task list and is opaque
+    (alphanumeric, e.g. ``6X7rfFVPjhvv84XG`` — NOT numeric), so it is built
+    straight into the URL path; the ``<str:task_id>`` route converter only
+    excludes path separators (``[^/]+``), so ids are otherwise opaque.
+    """
+    url = f"{settings.TODOIST_BASE_URL}/tasks/{task_id}/close"
+    token = account.get_token()  # one of two call sites (see fetch_tasks_for_date)
+    try:
+        response = requests.post(
+            url,
+            headers=_headers(token),
+            timeout=settings.TODOIST_REQUEST_TIMEOUT,
+        )
+        _raise_for_status(response)
+    except TodoistError:
+        raise
+    except requests.Timeout as e:
+        raise TodoistTimeoutError("Todoist request timed out") from e
+    except requests.RequestException as e:
+        raise TodoistProviderError("Todoist provider error") from e
+    except ImproperlyConfigured:
+        # Mirror fetch_tasks_for_date: a key-rotation decryption failure
+        # carries actionable ops detail — propagate unwrapped so the view
+        # maps it to a config-shaped 500, not a provider-failure 502.
+        raise
+    except Exception as e:
+        raise TodoistProviderError("Todoist provider error") from e
+    finally:
         del token

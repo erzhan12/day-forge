@@ -1,4 +1,4 @@
-// Schedule-page composable for read-only Todoist tasks.
+// Schedule-page composable for Todoist tasks (read + complete + live refresh).
 //
 // Mirrors `useCalendar.ts` (feature 0011). Per the stale-response guard:
 // two commit tokens for fetchTasks (date + sequence) because two requests
@@ -71,7 +71,17 @@ export function useTodoist() {
     }
   }
 
-  async function fetchTasks(date: string): Promise<void> {
+  // Shared fetch body for both the initial load (`fetchTasks`) and the
+  // manual/background refresh (`refreshTasks`).
+  //   - `force`  → append `refresh=1` so the backend bypasses its read cache.
+  //   - `silent` → skip the `loading=true` skeleton flip so existing rows
+  //     stay visible during a background refresh (no skeleton flash). The
+  //     commit is still atomic and the error clear / commit-guard / abort
+  //     logic is unchanged.
+  async function _fetchTasks(
+    date: string,
+    { force = false, silent = false }: { force?: boolean; silent?: boolean } = {},
+  ): Promise<void> {
     tasksAbortController.value?.abort()
     const controller = new AbortController()
     tasksAbortController.value = controller
@@ -80,13 +90,23 @@ export function useTodoist() {
     const seq = ++tasksRequestSeq.value
     const expectedDate = date
 
-    state.loading = true
+    if (!silent) {
+      state.loading = true
+    }
     state.error = null
 
-    const tasksUrl =
-      date === todayString()
-        ? `/api/todoist/tasks/${date}/?carry_overdue=1`
-        : `/api/todoist/tasks/${date}/`
+    // Query flags are independent: `carry_overdue=1` (browser-local today)
+    // and `refresh=1` (forced cache bypass) can both apply. Preserve the
+    // existing carry_overdue logic exactly.
+    const params: string[] = []
+    if (date === todayString()) {
+      params.push("carry_overdue=1")
+    }
+    if (force) {
+      params.push("refresh=1")
+    }
+    const query = params.length > 0 ? `?${params.join("&")}` : ""
+    const tasksUrl = `/api/todoist/tasks/${date}/${query}`
 
     let result
     try {
@@ -147,6 +167,60 @@ export function useTodoist() {
     state.error = statusToMessage(result.status) ?? extractErrorMessage(result.errors)
   }
 
+  // Initial / date-change load — shows the skeleton on first fetch.
+  function fetchTasks(date: string): Promise<void> {
+    return _fetchTasks(date, { force: false, silent: false })
+  }
+
+  // Manual Refresh (PART B) / future polling — forces a provider re-fetch
+  // (cache bypass) and runs silently so the existing rows stay visible
+  // (no skeleton flash). The atomic commit replaces the list on success.
+  function refreshTasks(date: string): Promise<void> {
+    return _fetchTasks(date, { force: true, silent: true })
+  }
+
+  // Optimistic complete with surgical rollback (PART A). The row vanishes
+  // immediately; on failure the attempted task is re-inserted at its index.
+  // Operates on whatever the CURRENT `state.tasks` is at success/failure
+  // time (never a snapshot captured at call time) so a concurrent
+  // `refreshTasks` commit is never clobbered.
+  async function completeTask(taskId: string): Promise<void> {
+    const idx = state.tasks.findIndex((t) => t.id === taskId)
+    const removed = idx >= 0 ? state.tasks[idx] : null
+
+    // Optimistic remove.
+    state.tasks = state.tasks.filter((t) => t.id !== taskId)
+
+    const result = await requestJson(
+      `/api/todoist/tasks/${taskId}/complete/`,
+      "POST",
+      undefined,
+    )
+
+    if (result.ok) {
+      // Idempotent re-filter against the CURRENT list: a concurrent
+      // `refreshTasks` commit may have re-inserted the just-closed task
+      // before this ack landed (the provider GET can race ahead of the
+      // close). Re-filtering guarantees it stays gone.
+      state.tasks = state.tasks.filter((t) => t.id !== taskId)
+      return
+    }
+
+    // Failure → surgical re-insert into the CURRENT list, and only if the
+    // task is absent (a refresh may already have re-added it). A whole-list
+    // restore would resurrect a stale snapshot and drop tasks a concurrent
+    // refresh added — see the plan's §Failure scenario. `connected` /
+    // `statusKnown` are untouched: a completion failure does not change the
+    // connection state (the sidebar is already mounted).
+    if (removed && !state.tasks.some((t) => t.id === taskId)) {
+      const next = state.tasks.slice()
+      next.splice(Math.min(idx, next.length), 0, removed)
+      state.tasks = next
+    }
+    state.error =
+      statusToMessage(result.status) ?? extractErrorMessage(result.errors)
+  }
+
   async function fetchAccountStatus(): Promise<void> {
     accountStatusAbortController.value?.abort()
     const controller = new AbortController()
@@ -180,7 +254,7 @@ export function useTodoist() {
     }
   }
 
-  return { state, fetchTasks, fetchAccountStatus }
+  return { state, fetchTasks, refreshTasks, completeTask, fetchAccountStatus }
 }
 
 function extractErrorMessage(

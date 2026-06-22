@@ -121,4 +121,35 @@ describe("TodoistTasksPanel", () => {
     expect(empty.exists()).toBe(true)
     expect(empty.text()).toBe("No tasks scheduled for this day.")
   })
+
+  it("renders a complete control per row with the correct aria-label", () => {
+    const wrapper = mount(TodoistTasksPanel, {
+      props: {
+        tasks: [TASK_P1, TASK_P2],
+        loading: false,
+        error: null,
+      },
+    })
+    const controls = wrapper.findAll('[data-testid="todoist-complete"]')
+    expect(controls).toHaveLength(2)
+    expect(controls[0].attributes("aria-label")).toBe(
+      "Complete task: Ship the release",
+    )
+    expect(controls[1].attributes("aria-label")).toBe(
+      "Complete task: Review the PR",
+    )
+  })
+
+  it("emits complete with the task id when the control is toggled", async () => {
+    const wrapper = mount(TodoistTasksPanel, {
+      props: {
+        tasks: [TASK_P1, TASK_P2],
+        loading: false,
+        error: null,
+      },
+    })
+    await wrapper.findAll('[data-testid="todoist-complete"]')[1].trigger("change")
+    expect(wrapper.emitted("complete")).toBeTruthy()
+    expect(wrapper.emitted("complete")![0]).toEqual(["2"])
+  })
 })

@@ -12,7 +12,11 @@ defineProps<{
   error: string | null
 }>()
 
-const emit = defineEmits<{ (e: "retry"): void }>()
+const emit = defineEmits<{
+  (e: "retry"): void
+  (e: "complete", taskId: string): void
+  (e: "refresh"): void
+}>()
 
 const open = defineModel<boolean>("open", { required: true })
 
@@ -30,17 +34,28 @@ function toggle(): void {
   >
     <header v-if="open" class="todoist-sidebar-header">
       <span class="todoist-sidebar-title">Todoist</span>
-      <button
-        type="button"
-        class="todoist-sidebar-toggle"
-        data-testid="todoist-sidebar-toggle"
-        aria-label="Collapse Todoist panel"
-        aria-controls="todoist-sidebar-body"
-        :aria-expanded="open"
-        @click="toggle"
-      >
-        ‹
-      </button>
+      <div class="todoist-sidebar-actions">
+        <button
+          type="button"
+          class="todoist-sidebar-toggle"
+          data-testid="todoist-sidebar-refresh"
+          aria-label="Refresh Todoist tasks"
+          @click="emit('refresh')"
+        >
+          ⟳
+        </button>
+        <button
+          type="button"
+          class="todoist-sidebar-toggle"
+          data-testid="todoist-sidebar-toggle"
+          aria-label="Collapse Todoist panel"
+          aria-controls="todoist-sidebar-body"
+          :aria-expanded="open"
+          @click="toggle"
+        >
+          ‹
+        </button>
+      </div>
     </header>
     <div v-if="open" id="todoist-sidebar-body" class="todoist-sidebar-body">
       <TodoistTasksPanel
@@ -48,6 +63,7 @@ function toggle(): void {
         :loading="loading"
         :error="error"
         @retry="emit('retry')"
+        @complete="emit('complete', $event)"
       />
     </div>
     <button
@@ -104,6 +120,14 @@ function toggle(): void {
   font-weight: 600;
   color: var(--text-secondary);
   letter-spacing: 0.02em;
+}
+
+/* Keep the header layout `title | [refresh][collapse]` — wrapping the two
+   buttons in a flex group stops `justify-content: space-between` from
+   spreading three children apart. */
+.todoist-sidebar-actions {
+  display: flex;
+  gap: 4px;
 }
 
 .todoist-sidebar-toggle {

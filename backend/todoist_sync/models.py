@@ -23,8 +23,9 @@ class TodoistAccount(models.Model):
     def get_token(self) -> str:
         """Decrypt and return the stored plaintext token.
 
-        Called only from ``todoist_sync.service.fetch_tasks_for_date`` —
-        the views never invoke this. See the plan's service-boundary note.
+        Called only from ``todoist_sync.service.fetch_tasks_for_date`` and
+        ``todoist_sync.service.complete_task`` — the views never invoke
+        this. See the plan's service-boundary note.
         """
         return crypto.decrypt_token(bytes(self.token_encrypted))
 

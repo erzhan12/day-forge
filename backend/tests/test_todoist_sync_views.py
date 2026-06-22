@@ -33,6 +33,14 @@ def _fake_response(results, next_cursor=None, status_code=200):
     return resp
 
 
+def _post_response(status_code=204):
+    """A stand-in ``requests.Response`` for the close endpoint (204, no body —
+    ``complete_task`` never reads ``.json()``)."""
+    resp = MagicMock()
+    resp.status_code = status_code
+    return resp
+
+
 # One full-day Todoist task: raw ``content`` → wire ``title``; priority 4 → P1.
 RAW_TASK = {
     "id": "1001",
@@ -427,6 +435,160 @@ class TestCacheInvalidation:
         resp = auth_client.get("/api/todoist/tasks/2026-05-07/")
         assert resp.status_code == 503
         _assert_envelope(resp)
+
+
+# ---- POST /api/todoist/tasks/<id>/complete/ -----------------------------
+
+
+class TestCompleteView:
+    def test_view_level_delegates_to_service(self, auth_client, account):
+        """(a) view contract: patch the service call out — the view returns
+        ``200 {"ok": true}`` and delegates exactly once with (account, id).
+        Issues NO HTTP to the provider."""
+        with patch("todoist_sync.views.service.complete_task") as complete:
+            complete.return_value = None
+            resp = auth_client.post("/api/todoist/tasks/abc123/complete/")
+        assert resp.status_code == 200
+        assert resp.json() == {"ok": True}
+        # Model __eq__ is by pk, so the freshly-loaded account_row matches.
+        complete.assert_called_once_with(account, "abc123")
+
+    def test_end_to_end_posts_close_with_bearer(self, auth_client, account):
+        """(b) end-to-end: do NOT mock ``complete_task`` — patch the NEW
+        ``requests.post`` target and assert the real close round-trip
+        (URL ends with ``/tasks/<id>/close`` + Bearer header)."""
+        with patch("todoist_sync.service.requests.post") as post:
+            post.return_value = _post_response(204)
+            resp = auth_client.post("/api/todoist/tasks/6X7rfFVPjhvv84XG/complete/")
+        assert resp.status_code == 200
+        assert resp.json() == {"ok": True}
+        args, kwargs = post.call_args
+        assert args[0].endswith("/tasks/6X7rfFVPjhvv84XG/close")
+        assert kwargs["headers"]["Authorization"].startswith("Bearer ")
+
+    def test_complete_invalidates_cache(self, auth_client, account):
+        """After a successful complete, the next tasks GET re-hits the
+        provider (cache key rotated via the ``updated_at`` bump) rather than
+        serving the stale cached list — mirror of
+        ``test_cache_invalidates_on_account_update``."""
+        with patch("todoist_sync.service.requests.get") as get, patch(
+            "todoist_sync.service.requests.post"
+        ) as post:
+            # First fetch returns the task; after it is completed the
+            # provider no longer returns it on the forced re-fetch.
+            get.side_effect = [_fake_response([RAW_TASK]), _fake_response([])]
+            post.return_value = _post_response(204)
+
+            # Prime the cache for this date.
+            r1 = auth_client.get("/api/todoist/tasks/2026-05-07/")
+            assert len(r1.json()["tasks"]) == 1
+            primed_calls = get.call_count
+
+            # Complete a task → invalidate_tasks bumps updated_at.
+            r = auth_client.post("/api/todoist/tasks/1001/complete/")
+            assert r.status_code == 200
+
+            # Next GET MUST miss the (now-rotated) cache AND not serve the
+            # completed task — the provider is re-queried and returns it gone.
+            r2 = auth_client.get("/api/todoist/tasks/2026-05-07/")
+            assert get.call_count > primed_calls
+            assert r2.json()["tasks"] == []
+
+    def test_503_when_no_account(self, auth_client):
+        resp = auth_client.post("/api/todoist/tasks/1001/complete/")
+        assert resp.status_code == 503
+        body = resp.json()
+        assert body["errors"]["detail"] == "No Todoist account configured"
+
+    @pytest.mark.parametrize(
+        "exc,status",
+        [
+            (service.TodoistAuthError("nope"), 401),
+            (service.TodoistProviderError("rest broke"), 502),
+            (service.TodoistTimeoutError("slow"), 504),
+        ],
+    )
+    def test_service_errors_mapped_to_envelopes(
+        self, auth_client, account, exc, status
+    ):
+        with patch("todoist_sync.views.service.complete_task", side_effect=exc):
+            resp = auth_client.post("/api/todoist/tasks/1001/complete/")
+        assert resp.status_code == status
+        _assert_envelope(resp)
+
+    def test_decryption_misconfig_returns_500_with_config_message(
+        self, auth_client, account
+    ):
+        from django.core.exceptions import ImproperlyConfigured
+
+        with patch(
+            "todoist_sync.views.service.complete_task",
+            side_effect=ImproperlyConfigured("key rotated"),
+        ):
+            resp = auth_client.post("/api/todoist/tasks/1001/complete/")
+        assert resp.status_code == 500
+        assert "misconfigured" in resp.json()["errors"]["detail"].lower()
+
+    def test_post_without_csrf_token_returns_403(self, db):
+        User.objects.create_user(username="csrf-complete", password="x")
+        client = Client(enforce_csrf_checks=True)
+        client.login(username="csrf-complete", password="x")
+        resp = client.post("/api/todoist/tasks/1001/complete/")
+        assert resp.status_code == 403
+
+    def test_anonymous_complete_redirects_to_login(self, db):
+        client = Client()
+        resp = client.post("/api/todoist/tasks/1001/complete/")
+        assert resp.status_code in (302, 401, 403)
+
+    def test_get_method_not_allowed(self, auth_client, account):
+        """The complete route is POST-only (``require_http_methods``)."""
+        resp = auth_client.get("/api/todoist/tasks/1001/complete/")
+        assert resp.status_code == 405
+
+
+# ---- GET /api/todoist/tasks/<date>/?refresh=1 ---------------------------
+
+
+class TestRefreshBypass:
+    def test_refresh_bypasses_cache_and_rewarms(self, auth_client, account):
+        """``?refresh=1`` must NOT read the cache (re-hits the provider) yet
+        still re-warm it — a subsequent non-forced GET is then served from
+        cache (contrast ``test_cache_hit_short_circuits_second_call``)."""
+        with patch("todoist_sync.service.requests.get") as get:
+            get.return_value = _fake_response([RAW_TASK])
+
+            # Prime the cache (1 provider call).
+            auth_client.get("/api/todoist/tasks/2026-05-07/")
+            primed_calls = get.call_count
+
+            # Forced refresh bypasses the cache → a fresh provider call.
+            r = auth_client.get("/api/todoist/tasks/2026-05-07/?refresh=1")
+            assert r.status_code == 200
+            assert get.call_count == primed_calls + 1
+
+            # The forced read re-warmed the same (exact-scope) key → the
+            # next non-forced GET is a cache hit (no further provider call).
+            r2 = auth_client.get("/api/todoist/tasks/2026-05-07/")
+            assert r2.status_code == 200
+            assert get.call_count == primed_calls + 1
+
+    def test_carry_overdue_with_refresh_keeps_overdue_scope(self, auth_client, account):
+        """No regression: ``carry_overdue=1`` alongside ``refresh=1`` still
+        drives the ``with_overdue`` filter query (the two flags are
+        independent)."""
+        frozen_today = datetime.date(2026, 5, 7)
+        with patch(
+            "todoist_sync.service.django_tz.localdate",
+            return_value=frozen_today,
+        ), patch("todoist_sync.service.requests.get") as get:
+            get.return_value = _fake_response([RAW_TASK])
+            resp = auth_client.get(
+                "/api/todoist/tasks/2026-05-08/?carry_overdue=1&refresh=1"
+            )
+        assert resp.status_code == 200
+        _, kwargs = get.call_args
+        assert kwargs["params"]["query"] == "2026-05-08 | overdue"
 
 
 # ---- CSRF guard ----------------------------------------------------------

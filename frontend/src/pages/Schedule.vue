@@ -132,6 +132,15 @@ watch(
 function retryFetchTasks() {
   todoist.fetchTasks(props.date)
 }
+// PART A — optimistic complete (row vanishes immediately, rolls back on
+// failure inside the composable).
+function completeTask(taskId: string) {
+  todoist.completeTask(taskId)
+}
+// PART B — manual live sync (force re-fetch, cache bypass, silent).
+function refreshTodoist() {
+  todoist.refreshTasks(props.date)
+}
 
 // Multi-turn chat thread (feature 0007). State lives in `useChat`
 // (module-level) so the bottom dock and the sidebar variant share one
@@ -474,6 +483,8 @@ function logout() {
       :loading="todoist.state.loading"
       :error="todoist.state.error"
       @retry="retryFetchTasks"
+      @complete="completeTask"
+      @refresh="refreshTodoist"
     />
     <ChatSidebar
       v-if="isWide"

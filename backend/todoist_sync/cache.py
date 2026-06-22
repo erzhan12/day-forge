@@ -4,9 +4,12 @@ Key shape: ``todoist_tasks:{user_id}:{account_version}:{date_iso}`` where
 ``account_version = account.updated_at.isoformat()`` (microsecond
 precision via ``DateTimeField(auto_now=True)``). On token rotation,
 ``account.save()`` bumps ``updated_at`` and the next read computes a
-fresh key — old entries become unreachable and expire via TTL. There is
-no explicit "invalidate" call; that's the whole point of the versioned
-design.
+fresh key — old entries become unreachable and expire via TTL. The
+versioned design avoids key-enumeration: ``invalidate_tasks(account)``
+exists (called after a successful task complete) but is NOT a key
+deletion — it bumps ``account.updated_at`` (plain ``account.save()``) so
+the version rotates and every existing ``todoist_tasks:*`` key for that
+user becomes unreachable at once, with no key enumeration.
 
 **auto_now footgun**: ``account.save(update_fields=[...])`` that omits
 ``"updated_at"`` bypasses ``auto_now`` and the key does NOT rotate —
@@ -70,3 +73,22 @@ def set_cached_tasks(
         tasks,
         settings.TODOIST_CACHE_TTL_SECONDS,
     )
+
+
+def invalidate_tasks(account) -> None:
+    """Invalidate every cached task list for ``account`` at once.
+
+    Bumps ``account.updated_at`` via a plain ``account.save()`` so the
+    ``account_version`` segment of every ``todoist_tasks:*`` key rotates —
+    all existing entries (across all dates/scopes) become unreachable
+    without any key enumeration (versioned-key design; see module
+    docstring). Called after a successful task complete so the just-closed
+    task is not served from a stale cache for up to the TTL.
+
+    **auto_now footgun (critical):** this MUST stay a plain ``account.save()``
+    with **no** ``update_fields`` (or one that includes ``"updated_at"``),
+    or ``auto_now`` does not fire, the key does not rotate, and the
+    completed task is still served. Same footgun documented in
+    ``cache.py`` (module docstring) and ``models.py:set_token``.
+    """
+    account.save()

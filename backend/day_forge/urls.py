@@ -97,6 +97,14 @@ urlpatterns = [
         todoist_views.tasks,
         name="todoist_tasks",
     ),
+    # The trailing ``/complete/`` literal disambiguates this from the
+    # ``<str:date>/`` route above (which has no trailing segment), so no
+    # path collision despite both leading with ``<str:...>``.
+    path(
+        "api/todoist/tasks/<str:task_id>/complete/",
+        todoist_views.complete,
+        name="todoist_complete",
+    ),
     # Analytics
     path(
         "analytics/<str:date>/",
