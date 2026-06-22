@@ -333,3 +333,183 @@ describe("useTodoist.fetchAccountStatus", () => {
     expect(todoist.state.tasks).toEqual([])
   })
 })
+
+describe("useTodoist.completeTask", () => {
+  beforeEach(() => {
+    requestJsonMock.mockReset()
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it("optimistically removes the row and keeps it removed on ok", async () => {
+    requestJsonMock.mockResolvedValueOnce({ ok: true, status: 200, data: {} })
+    const todoist = useTodoist()
+    todoist.state.tasks = [taskPayload("A", "A"), taskPayload("B", "B")]
+
+    await todoist.completeTask("A")
+
+    expect(todoist.state.tasks.map((t) => t.id)).toEqual(["B"])
+    expect(todoist.state.error).toBeNull()
+    // POST shape: (url, "POST", undefined) — no body, no GET footgun.
+    const [url, method, body] = requestJsonMock.mock.calls[0]
+    expect(url).toBe("/api/todoist/tasks/A/complete/")
+    expect(method).toBe("POST")
+    expect(body).toBeUndefined()
+  })
+
+  it.each([
+    [401, /credentials invalid/i],
+    [502, /unavailable/i],
+    [504, /unavailable/i],
+  ])(
+    "rolls back (task re-inserted at its index) + sets error on %i; leaves connected/statusKnown",
+    async (status, messageRe) => {
+      requestJsonMock.mockResolvedValueOnce({
+        ok: false,
+        status,
+        errors: { detail: "boom" },
+      })
+      const todoist = useTodoist()
+      todoist.state.tasks = [taskPayload("A", "A"), taskPayload("B", "B")]
+      todoist.state.connected = true
+      todoist.state.statusKnown = true
+
+      await todoist.completeTask("A")
+
+      expect(todoist.state.tasks.map((t) => t.id)).toEqual(["A", "B"])
+      expect(todoist.state.error).toMatch(messageRe)
+      // Completion failure must NOT touch connection state.
+      expect(todoist.state.connected).toBe(true)
+      expect(todoist.state.statusKnown).toBe(true)
+    },
+  )
+
+  it("rolls back and surfaces a no-status network error", async () => {
+    requestJsonMock.mockResolvedValueOnce({
+      ok: false,
+      errors: { detail: "Network error. Please check your connection." },
+    })
+    const todoist = useTodoist()
+    todoist.state.tasks = [taskPayload("A", "A"), taskPayload("B", "B")]
+
+    await todoist.completeTask("A")
+
+    expect(todoist.state.tasks.map((t) => t.id)).toEqual(["A", "B"])
+    expect(todoist.state.error).toBe("Network error. Please check your connection.")
+  })
+
+  it("failure after a concurrent refresh does not clobber the refreshed list (P1 race)", async () => {
+    const dComplete = defer<{ ok: boolean; status?: number; errors?: object }>()
+    requestJsonMock.mockReturnValueOnce(dComplete.promise)
+    const todoist = useTodoist()
+    todoist.state.tasks = [taskPayload("A", "A"), taskPayload("B", "B")]
+
+    const p = todoist.completeTask("A")
+    // Optimistic remove → [B].
+    expect(todoist.state.tasks.map((t) => t.id)).toEqual(["B"])
+    // A concurrent refreshTasks commit lands → [B, C].
+    todoist.state.tasks = [taskPayload("B", "B"), taskPayload("C", "C")]
+    // Complete POST then fails.
+    dComplete.resolve({ ok: false, status: 502, errors: { detail: "bad gateway" } })
+    await p
+
+    // A surgically re-inserted at its index, C preserved — NOT [A, B]
+    // (which a stale whole-list restore would produce, dropping C).
+    expect(todoist.state.tasks.map((t) => t.id)).toEqual(["A", "B", "C"])
+  })
+
+  it("success after a concurrent refresh re-added the task keeps it removed (P1 race, success side)", async () => {
+    const dComplete = defer<{ ok: boolean; status?: number; data?: object }>()
+    requestJsonMock.mockReturnValueOnce(dComplete.promise)
+    const todoist = useTodoist()
+    todoist.state.tasks = [taskPayload("A", "A"), taskPayload("B", "B")]
+
+    const p = todoist.completeTask("A")
+    expect(todoist.state.tasks.map((t) => t.id)).toEqual(["B"])
+    // Refresh raced ahead of the close → re-added A: [A, B, C].
+    todoist.state.tasks = [
+      taskPayload("A", "A"),
+      taskPayload("B", "B"),
+      taskPayload("C", "C"),
+    ]
+    dComplete.resolve({ ok: true, status: 200, data: {} })
+    await p
+
+    // The step-4 idempotent re-filter drops the re-added A → [B, C].
+    expect(todoist.state.tasks.map((t) => t.id)).toEqual(["B", "C"])
+  })
+})
+
+describe("useTodoist.refreshTasks", () => {
+  beforeEach(() => {
+    requestJsonMock.mockReset()
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it("appends refresh=1 and carry_overdue=1 for browser-local today", async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 5, 18, 12, 0, 0))
+    requestJsonMock.mockResolvedValueOnce({ ok: true, status: 200, data: { tasks: [] } })
+    const todoist = useTodoist()
+    await todoist.refreshTasks("2026-06-18")
+
+    expect(requestJsonMock.mock.calls[0][0]).toBe(
+      "/api/todoist/tasks/2026-06-18/?carry_overdue=1&refresh=1",
+    )
+    vi.useRealTimers()
+  })
+
+  it("appends only refresh=1 for a non-today date", async () => {
+    requestJsonMock.mockResolvedValueOnce({ ok: true, status: 200, data: { tasks: [] } })
+    const todoist = useTodoist()
+    await todoist.refreshTasks("2025-02-12")
+
+    expect(requestJsonMock.mock.calls[0][0]).toBe(
+      "/api/todoist/tasks/2025-02-12/?refresh=1",
+    )
+  })
+
+  it("shares the dual commit guard with fetchTasks (a superseded refresh is dropped)", async () => {
+    const d1 = defer<{ ok: boolean; data?: object; status?: number }>()
+    const d2 = defer<{ ok: boolean; data?: object; status?: number }>()
+    requestJsonMock.mockReturnValueOnce(d1.promise).mockReturnValueOnce(d2.promise)
+
+    const todoist = useTodoist()
+    const p1 = todoist.refreshTasks("2026-05-01")
+    const p2 = todoist.fetchTasks("2026-05-02")
+
+    d2.resolve({ ok: true, status: 200, data: { tasks: [taskPayload("d2", "Day 2")] } })
+    d1.resolve({ ok: true, status: 200, data: { tasks: [taskPayload("d1", "Day 1")] } })
+
+    await p2
+    await p1
+
+    expect(todoist.state.tasks).toHaveLength(1)
+    expect(todoist.state.tasks[0].title).toBe("Day 2")
+  })
+
+  it("stays silent: loading never flips true and rows stay populated until the atomic commit", async () => {
+    const dRefresh = defer<{ ok: boolean; data?: object; status?: number }>()
+    requestJsonMock.mockReturnValueOnce(dRefresh.promise)
+    const todoist = useTodoist()
+    todoist.state.tasks = [taskPayload("A", "A"), taskPayload("B", "B")]
+    todoist.state.connected = true
+    todoist.state.statusKnown = true
+
+    const p = todoist.refreshTasks("2026-05-07")
+    // Mid-flight: no skeleton flash — loading stays false, rows remain.
+    expect(todoist.state.loading).toBe(false)
+    expect(todoist.state.tasks).toHaveLength(2)
+
+    dRefresh.resolve({ ok: true, status: 200, data: { tasks: [taskPayload("C", "C")] } })
+    await p
+
+    expect(todoist.state.loading).toBe(false)
+    expect(todoist.state.tasks.map((t) => t.id)).toEqual(["C"])
+  })
+})

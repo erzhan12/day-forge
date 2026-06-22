@@ -7,7 +7,10 @@ defineProps<{
   error: string | null
 }>()
 
-const emit = defineEmits<{ (e: "retry"): void }>()
+const emit = defineEmits<{
+  (e: "retry"): void
+  (e: "complete", taskId: string): void
+}>()
 </script>
 
 <template>
@@ -26,6 +29,13 @@ const emit = defineEmits<{ (e: "retry"): void }>()
         class="todoist-item"
         data-testid="todoist-task"
       >
+        <input
+          type="checkbox"
+          class="todoist-complete"
+          data-testid="todoist-complete"
+          :aria-label="`Complete task: ${task.title}`"
+          @change="emit('complete', task.id)"
+        />
         <span
           class="todoist-priority-dot"
           :class="`todoist-priority-${task.ui_priority}`"
@@ -101,11 +111,20 @@ const emit = defineEmits<{ (e: "retry"): void }>()
 
 .todoist-item {
   display: grid;
-  grid-template-columns: auto 1fr;
+  /* checkbox + priority dot + title */
+  grid-template-columns: auto auto 1fr;
   gap: 8px;
   align-items: center;
   padding: 4px 0;
   color: var(--text-primary);
+  flex-shrink: 0;
+}
+
+.todoist-complete {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  cursor: pointer;
   flex-shrink: 0;
 }
 

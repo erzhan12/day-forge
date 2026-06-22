@@ -75,3 +75,28 @@ describe("TodoistSidebar — toggle behavior", () => {
     expect(wrapper.emitted("update:open")![0]).toEqual([true])
   })
 })
+
+describe("TodoistSidebar — refresh button (PART B)", () => {
+  it("renders the Refresh button when open and emits refresh on click", async () => {
+    wrapper = mountSidebar(true)
+    const btn = wrapper.find('[data-testid="todoist-sidebar-refresh"]')
+    expect(btn.exists()).toBe(true)
+    expect(btn.attributes("aria-label")).toBe("Refresh Todoist tasks")
+    await btn.trigger("click")
+    expect(wrapper.emitted("refresh")).toBeTruthy()
+  })
+
+  it("hides the Refresh button when collapsed", () => {
+    wrapper = mountSidebar(false)
+    expect(wrapper.find('[data-testid="todoist-sidebar-refresh"]').exists()).toBe(false)
+  })
+})
+
+describe("TodoistSidebar — complete passthrough (PART A)", () => {
+  it("propagates a complete event from the panel up through the sidebar", async () => {
+    wrapper = mountSidebar(true)
+    await wrapper.find('[data-testid="todoist-complete"]').trigger("change")
+    expect(wrapper.emitted("complete")).toBeTruthy()
+    expect(wrapper.emitted("complete")![0]).toEqual(["1"])
+  })
+})

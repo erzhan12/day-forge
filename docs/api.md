@@ -719,12 +719,15 @@ each occurrence is unique.
 
 All non-`2xx` use `{"errors": {"detail": "<message>"}}`.
 
-## Todoist — feature 0020
+## Todoist — features 0020, 0021
 
-Read-only Todoist task integration via a personal API token. The token is
+Todoist task integration via a personal API token: read the day's tasks,
+mark a task complete (0021), and force a live refresh (0021). The token is
 encrypted at rest with `cryptography.Fernet` (`TODOIST_ENCRYPTION_KEY`);
-the service layer is the only code path that decrypts it. No OAuth, no
-writes, no AI coupling — task text is never sent to the LLM provider.
+the service layer is the only code path that decrypts it (two call sites:
+`fetch_tasks_for_date` + `complete_task`). No OAuth, no task
+creation/editing/re-open, no AI coupling — task text is never sent to the
+LLM provider.
 
 ### `GET /api/todoist/account/`
 
@@ -806,6 +809,7 @@ with no due date never appear (the view is date-scoped). Completed tasks are nev
 | Name | Type | Notes |
 |------|------|-------|
 | `carry_overdue` | string | Optional. Pass `1` to include overdue carryover when `date` is browser-local today but not project-local today. The Schedule page sets this automatically for today. |
+| `refresh` | string | Optional (feature 0021). Pass `1` to **bypass** the read cache and force a live provider re-fetch; the result still re-warms the cache, so a subsequent non-forced read is served from cache. Independent of `carry_overdue` (both can apply). Used by the sidebar Refresh button (and any future polling). |
 
 The server caches the two filter modes **separately** (`exact` vs.
 `with_overdue`) under distinct keys, so toggling `carry_overdue` on the
@@ -844,5 +848,44 @@ display). Sorted by priority (highest first), then due date, title, id.
 | `503` | No `TodoistAccount` configured for this user. |
 | `504` | `TodoistTimeoutError` — request exceeded `TODOIST_REQUEST_TIMEOUT`. |
 | `500` | `Todoist service is misconfigured. Contact the administrator.` — `TODOIST_ENCRYPTION_KEY` cannot decrypt the stored row (e.g. key rotation without re-write). **Operator action**: see `.claude/rules/project.md` § "Todoist token rotation note". |
+
+All non-`2xx` use `{"errors": {"detail": "<message>"}}`.
+
+### `POST /api/todoist/tasks/{id}/complete/` — feature 0021
+
+Close (complete) one Todoist task. CSRF-protected (Django session +
+`X-XSRF-TOKEN`). Parses **no** request body — the task id is in the URL
+path. On success the server invalidates this user's task cache (bumps
+`account.updated_at`, rotating every `todoist_tasks:*` key) so the
+just-closed task is not re-served from a stale cache.
+
+> Completing a recurring task closes its **current occurrence** (Todoist
+> `POST /tasks/{id}/close` semantics). Un-complete / re-open is **not**
+> supported — the frontend's optimistic rollback is local UI only.
+
+**Path params**
+
+| Name | Type | Notes |
+|------|------|-------|
+| `id` | string | Opaque Todoist task id (alphanumeric, e.g. `6X7rfFVPjhvv84XG` — **not** numeric). Round-trips from `GET /api/todoist/tasks/{date}/`. |
+
+**Success — `200 OK`**
+
+```json
+{ "ok": true }
+```
+
+A bare ack — the frontend already removed the row optimistically, so the
+refreshed list is not returned (avoids a second provider round-trip).
+
+**Error responses**
+
+| Status | Cause |
+|--------|-------|
+| `401` | `TodoistAuthError` — Todoist rejected the stored token. |
+| `502` | `TodoistProviderError` — Todoist API failure (incl. a stale/unknown id → provider `404`). |
+| `503` | No `TodoistAccount` configured for this user. |
+| `504` | `TodoistTimeoutError` — request exceeded `TODOIST_REQUEST_TIMEOUT`. |
+| `500` | `Todoist service is misconfigured. Contact the administrator.` — `TODOIST_ENCRYPTION_KEY` cannot decrypt the stored row. **Operator action**: see `.claude/rules/project.md` § "Todoist token rotation note". |
 
 All non-`2xx` use `{"errors": {"detail": "<message>"}}`.

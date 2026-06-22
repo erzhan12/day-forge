@@ -1,11 +1,12 @@
 """Todoist endpoints.
 
-Two URL paths, four method handlers:
+Three URL paths, five method handlers:
 
-  - GET    /api/todoist/account/        — status (connected + last_verified_at)
-  - POST   /api/todoist/account/        — verify + persist (upsert)
-  - DELETE /api/todoist/account/        — disconnect
-  - GET    /api/todoist/tasks/<date>/   — fetch tasks (cached)
+  - GET    /api/todoist/account/                  — status (connected + last_verified_at)
+  - POST   /api/todoist/account/                  — verify + persist (upsert)
+  - DELETE /api/todoist/account/                  — disconnect
+  - GET    /api/todoist/tasks/<date>/             — fetch tasks (cached; ?refresh=1 bypasses)
+  - POST   /api/todoist/tasks/<id>/complete/      — complete a task
 
 All non-2xx responses use the envelope ``{"errors": {"detail": ...}}``
 to match ``frontend/src/composables/useHttp.ts:77``.
@@ -148,15 +149,21 @@ def tasks(request: HttpRequest, date: str) -> JsonResponse:
         return _envelope("No Todoist account configured", 503)
 
     include_overdue_carryover = request.GET.get("carry_overdue") == "1"
+    # ``?refresh=1`` forces a cache-bypass live re-fetch (manual Refresh /
+    # future polling). Additive: a non-forced read still hits the cache,
+    # and the forced read re-warms it below, so the read-only flow is
+    # unchanged. Independent of ``carry_overdue`` — both are query flags.
+    force_refresh = request.GET.get("refresh") == "1"
     filter_scope = todoist_cache.tasks_filter_scope(
         parsed_date, include_overdue_carryover=include_overdue_carryover
     )
 
-    cached = todoist_cache.get_cached_tasks(
-        account_row, parsed_date, filter_scope=filter_scope
-    )
-    if cached is not None:
-        return JsonResponse({"tasks": cached})
+    if not force_refresh:
+        cached = todoist_cache.get_cached_tasks(
+            account_row, parsed_date, filter_scope=filter_scope
+        )
+        if cached is not None:
+            return JsonResponse({"tasks": cached})
 
     try:
         tasks_list = service.fetch_tasks_for_date(
@@ -183,3 +190,47 @@ def tasks(request: HttpRequest, date: str) -> JsonResponse:
         account_row, parsed_date, payload, filter_scope=filter_scope
     )
     return JsonResponse({"tasks": payload})
+
+
+# ----- /api/todoist/tasks/<task_id>/complete/ ----------------------------
+
+
+@login_required
+@require_http_methods(["POST"])
+def complete(request: HttpRequest, task_id: str) -> JsonResponse:
+    # Explicit ordering so the 503-vs-anything-else precedence is
+    # deterministic and testable:
+    #   1) resolve the account (503 if absent),
+    #   2) call the service (try ladder below).
+    # The view parses NO request body — the id is in the URL path — so there
+    # is no oversized-body guard here (unlike POST /account/, which
+    # json.loads(request.body)). Django's global DATA_UPLOAD_MAX_MEMORY_SIZE
+    # already caps any stray body at the WSGI/ASGI boundary.
+    try:
+        account_row = request.user.todoist_account
+    except TodoistAccount.DoesNotExist:
+        return _envelope("No Todoist account configured", 503)
+
+    try:
+        service.complete_task(account_row, task_id)
+    except ImproperlyConfigured:
+        # Server-side encryption-key issue (e.g. TODOIST_ENCRYPTION_KEY
+        # rotated while old rows persist) — config-shaped 500, not a 502
+        # that would wrongly point ops at Todoist. Mirrors the ``tasks`` view.
+        logger.exception(
+            "Todoist decryption misconfigured for user %s", request.user.id
+        )
+        return _envelope(
+            "Todoist service is misconfigured. Contact the administrator.",
+            500,
+        )
+    except service.TodoistError as e:
+        return _service_error_response(e)
+
+    # Invalidate every cached list for this user (versioned-key bump) so the
+    # just-closed task is not served from a stale cache for up to the TTL.
+    # A bare ack is sufficient — the frontend already removed the row
+    # optimistically, so returning the refreshed list (a second provider
+    # round-trip) would be wasted work.
+    todoist_cache.invalidate_tasks(account_row)
+    return JsonResponse({"ok": True})

@@ -265,7 +265,7 @@ and writes onto separate seqs and adds `writeCompletionTick` so a read
 can never supersede a write. See `useCalendarAccount.ts` header comment
 for the full design and the scenario that motivates each guard.
 
-## Todoist (feature 0020)
+## Todoist (features 0020, 0021)
 
 `todoist_sync` mirrors `calendar_sync` one-for-one (new app, same error
 hierarchy, versioned cache, system checks, admin, frontend composables +
@@ -274,19 +274,24 @@ apple_id+password+base_url), an HTTP REST client (`requests`, not a DAV
 library), and a date→filter algorithm. The same four rules apply:
 
 ### Service-boundary owns the secret
-`backend/todoist_sync/service.py:fetch_tasks_for_date` is the **only**
-function that calls `account.get_token()` (and `del token` in a `finally`).
-Views pass the `TodoistAccount` instance through; they never touch the
-plaintext. New token-using code goes in `service.py`, or the
-"token never logged" regression test
-(`test_todoist_sync_service.py`) becomes a liar.
+`backend/todoist_sync/service.py:fetch_tasks_for_date` **and**
+`complete_task` (feature 0021) are the **only two** functions that call
+`account.get_token()` (each `del token` in a `finally`). Views pass the
+`TodoistAccount` instance through; they never touch the plaintext. New
+token-using code goes in `service.py`, or the "token never logged"
+regression test (`test_todoist_sync_service.py`, locked across both call
+sites by `TestTokenBoundary`) becomes a liar.
 
 ### Versioned cache keys + the `auto_now` footgun
 `backend/todoist_sync/cache.py` keys tasks by
 `account.updated_at.isoformat()`. Any mutating call site **must** call
 plain `account.save()` (no `update_fields`) or include `"updated_at"` —
 a partial save bypasses `auto_now` and serves stale tasks. The
-`TodoistAccount.set_token` docstring calls this out.
+`TodoistAccount.set_token` docstring calls this out. Cache invalidation on
+task complete (feature 0021) is **not** key-deletion: `cache.invalidate_tasks(account)`
+just does a plain `account.save()` to bump `updated_at` (rotates every
+`todoist_tasks:*` key at once, no key enumeration) — so it is governed by
+the **same** footgun. Keep it a plain `save()`.
 
 ### Date→filter algorithm + nullable `due_date`
 `service.py` maps the selected date to a Todoist filter query and hits the
@@ -315,6 +320,32 @@ tokens (`latestRequestedTaskDate` + `tasksRequestSeq`).
 *proves* the account exists — `fetchTasks` sets `connected = true` on
 those (not just `503`/`ok`), so the panel's `!connected` gate doesn't hide
 the error on first load before `fetchAccountStatus()` resolves.
+
+### Two-way sync (feature 0021): complete + live refresh
+- **Optimistic complete with *surgical* rollback** —
+  `useTodoist.completeTask` captures **only** the removed task + its index
+  (`idx`/`removed`), **never** a whole-list snapshot. On failure it
+  re-inserts only that task into the **current** list (and only if absent);
+  on success it idempotently re-filters the current list. A whole-list
+  `state.tasks = previous` restore would clobber a concurrent `refreshTasks`
+  commit (e.g. complete A from `[A,B]`, refresh commits `[B,C]`, A fails →
+  a whole-list restore drops C and resurrects A). Always operate on the
+  *current* `state.tasks` at success/failure time, not a call-time snapshot.
+- **`refresh=1` cache-bypass** — `GET /api/todoist/tasks/<date>/?refresh=1`
+  skips the read cache but still re-warms it (additive; no regression to the
+  cached read-only flow). `carry_overdue` and `refresh` are independent
+  query flags.
+- **Silent refresh (no skeleton flash)** — `fetchTasks` delegates to an
+  internal `_fetchTasks(date, { force, silent })`. `refreshTasks` passes
+  `{ force: true, silent: true }`: `silent` **skips** the `loading=true`
+  flip so existing rows stay visible (the panel renders the skeleton on
+  `loading`). The initial `fetchTasks` keeps `silent: false`. If you add a
+  new fetch entry point, decide `silent` deliberately — a stray
+  `loading=true` on a background refresh regresses the no-flash UX.
+- **Complete view parses no body** — `POST .../complete/` takes the id in
+  the URL path and reads **no** `request.body`, so it has **no**
+  `reject_oversized_body` guard (unlike `POST /account/`). Precedence is
+  just `503` (no account) → `2xx`/service-error.
 
 ## Production deploy (feature 0016)
 

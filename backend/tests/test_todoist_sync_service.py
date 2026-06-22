@@ -79,6 +79,17 @@ def patched_get():
         yield mock_get
 
 
+@pytest.fixture
+def patched_post():
+    """Patch ``requests.post`` used by ``service``.
+
+    ``complete_task`` is the module's first (and only) ``requests.post``
+    caller — the existing ``patched_get`` covers GET only.
+    """
+    with patch("todoist_sync.service.requests.post") as mock_post:
+        yield mock_post
+
+
 class TestVerifyCredentials:
     def test_success_returns_none(self, patched_get):
         patched_get.return_value = _fake_response(status_code=200)
@@ -445,6 +456,68 @@ class TestProviderErrorMapping:
             )
 
 
+class TestCompleteTask:
+    """``complete_task(account, task_id)`` POSTs to the v1 close endpoint.
+
+    The second (and only other) call site of ``account.get_token()``; the
+    module's first ``requests.post`` caller (hence ``patched_post``).
+    """
+
+    @pytest.mark.parametrize("status_code", [204, 200])
+    def test_success_returns_none_and_posts_close(self, patched_post, status_code):
+        patched_post.return_value = _fake_response(status_code=status_code)
+        assert service.complete_task(_make_account_stub(), "abc123") is None
+        args, kwargs = patched_post.call_args
+        # URL is the lone positional arg; ends with the close action.
+        assert args[0].endswith("/tasks/abc123/close")
+        assert kwargs["headers"]["Authorization"] == f"Bearer {TOKEN_PLAIN}"
+        assert kwargs["timeout"] == 5
+
+    def test_alphanumeric_task_id_round_trips_in_url(self, patched_post):
+        # v1 task ids are opaque alphanumerics (e.g. 6X7rfFVPjhvv84XG), not
+        # numeric — they must build straight into the URL path unmodified.
+        patched_post.return_value = _fake_response(status_code=204)
+        service.complete_task(_make_account_stub(), "6X7rfFVPjhvv84XG")
+        args, _ = patched_post.call_args
+        assert args[0].endswith("/tasks/6X7rfFVPjhvv84XG/close")
+
+    def test_401_raises_auth(self, patched_post):
+        patched_post.return_value = _fake_response(status_code=401)
+        with pytest.raises(service.TodoistAuthError):
+            service.complete_task(_make_account_stub(), "t")
+
+    def test_403_raises_auth(self, patched_post):
+        patched_post.return_value = _fake_response(status_code=403)
+        with pytest.raises(service.TodoistAuthError):
+            service.complete_task(_make_account_stub(), "t")
+
+    def test_timeout_raises_timeout(self, patched_post):
+        patched_post.side_effect = requests.Timeout("slow")
+        with pytest.raises(service.TodoistTimeoutError):
+            service.complete_task(_make_account_stub(), "t")
+
+    def test_500_raises_provider(self, patched_post):
+        patched_post.return_value = _fake_response(status_code=500)
+        with pytest.raises(service.TodoistProviderError):
+            service.complete_task(_make_account_stub(), "t")
+
+    def test_connection_error_raises_provider(self, patched_post):
+        patched_post.side_effect = requests.ConnectionError("no route")
+        with pytest.raises(service.TodoistProviderError):
+            service.complete_task(_make_account_stub(), "t")
+
+    def test_key_rotation_surfaces_as_improperly_configured(
+        self, account, patched_post, settings
+    ):
+        """Decryption fails BEFORE the POST — ``ImproperlyConfigured`` must
+        propagate unwrapped and the provider must never be hit (the token is
+        never sent over the wire)."""
+        settings.TODOIST_ENCRYPTION_KEY = Fernet.generate_key().decode()
+        with pytest.raises(ImproperlyConfigured):
+            service.complete_task(account, "t")
+        patched_post.assert_not_called()
+
+
 class TestDecryptionPropagation:
     """``account.get_token()`` is called BEFORE the broad provider ``try`` in
     ``fetch_tasks_for_date`` (service.py), so a key-rotation decryption
@@ -493,6 +566,19 @@ class TestTokenBoundary:
         _, kwargs = patched_get.call_args
         assert kwargs["headers"]["Authorization"] == f"Bearer {TOKEN_PLAIN}"
 
+    def test_complete_calls_get_token_once_with_bearer(self, account, patched_post):
+        """``complete_task`` is the second decryption call site — it too
+        decrypts exactly once and carries the Bearer header, locking the
+        service boundary across BOTH call sites."""
+        patched_post.return_value = _fake_response(status_code=204)
+        with patch.object(
+            account, "get_token", wraps=account.get_token
+        ) as spy:
+            service.complete_task(account, "task-xyz")
+        assert spy.call_count == 1
+        _, kwargs = patched_post.call_args
+        assert kwargs["headers"]["Authorization"] == f"Bearer {TOKEN_PLAIN}"
+
 
 class TestCredentialsNeverLogged:
     """Mirror ``test_calendar_sync_service.py::TestCredentialsNeverLogged``:
@@ -521,5 +607,24 @@ class TestCredentialsNeverLogged:
         joined = "\n".join(r.getMessage() for r in caplog.records)
         assert TOKEN_PLAIN not in joined
         # Defence-in-depth: the *ciphertext* must also never appear in logs.
+        ciphertext_hex = bytes(account.token_encrypted).hex()
+        assert ciphertext_hex not in joined
+
+    def test_token_never_appears_in_logs_complete(self, account, patched_post, caplog):
+        """Same no-token-in-logs guarantee across the POST (``complete_task``)
+        path, on both the success (204) and failure (502) branches."""
+        # Success path (204).
+        patched_post.return_value = _fake_response(status_code=204)
+        with caplog.at_level(logging.DEBUG):
+            service.complete_task(account, "task-xyz")
+
+        # Failure path (502 → TodoistProviderError).
+        patched_post.return_value = _fake_response(status_code=502)
+        with caplog.at_level(logging.DEBUG):
+            with pytest.raises(service.TodoistProviderError):
+                service.complete_task(account, "task-xyz")
+
+        joined = "\n".join(r.getMessage() for r in caplog.records)
+        assert TOKEN_PLAIN not in joined
         ciphertext_hex = bytes(account.token_encrypted).hex()
         assert ciphertext_hex not in joined
