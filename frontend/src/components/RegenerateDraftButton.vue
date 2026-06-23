@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue"
-import { useAI } from "../composables/useAI"
+import { useChat } from "../composables/useChat"
 import { useDraft } from "../composables/useDraft"
 
 const props = defineProps<{
@@ -12,7 +12,7 @@ const emit = defineEmits<{
   (e: "click"): void
 }>()
 
-const { isProcessing, apiHealthy } = useAI()
+const { isProcessing, apiHealthy } = useChat()
 const { isGeneratingDraft } = useDraft()
 
 const disabled = computed(
