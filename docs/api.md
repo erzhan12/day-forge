@@ -809,7 +809,7 @@ with no due date never appear (the view is date-scoped). Completed tasks are nev
 | Name | Type | Notes |
 |------|------|-------|
 | `carry_overdue` | string | Optional. Pass `1` to include overdue carryover when `date` is browser-local today but not project-local today. The Schedule page sets this automatically for today. |
-| `refresh` | string | Optional (feature 0021). Pass `1` to **bypass** the read cache and force a live provider re-fetch; the result still re-warms the cache, so a subsequent non-forced read is served from cache. Independent of `carry_overdue` (both can apply). Used by the sidebar Refresh button (and any future polling). |
+| `refresh` | string | Optional (feature 0021). Pass `1` to **bypass** the read cache and force a live provider re-fetch; the result still re-warms the cache, so a subsequent non-forced read is served from cache. Independent of `carry_overdue` (both can apply). Used by the sidebar Refresh button and background polling (`TODOIST_POLL_INTERVAL_SECONDS` > 0). |
 
 The server caches the two filter modes **separately** (`exact` vs.
 `with_overdue`) under distinct keys, so toggling `carry_overdue` on the

@@ -342,6 +342,13 @@ the error on first load before `fetchAccountStatus()` resolves.
   `loading`). The initial `fetchTasks` keeps `silent: false`. If you add a
   new fetch entry point, decide `silent` deliberately — a stray
   `loading=true` on a background refresh regresses the no-flash UX.
+- **Background polling (#71)** — `TODOIST_POLL_INTERVAL_SECONDS` (default
+  `0`) is passed to Schedule as `todoist_poll_interval`. When `> 0` and
+  the Todoist sidebar is open on a wide viewport with a connected account,
+  `useTodoistPoll` calls `refreshTasks` on that interval (`?refresh=1`,
+  silent). Polling pauses while `document.hidden`; one refresh fires when
+  the tab becomes visible again. Collapsing the sidebar or disconnecting
+  Todoist clears the interval.
 - **Complete view parses no body** — `POST .../complete/` takes the id in
   the URL path and reads **no** `request.body`, so it has **no**
   `reject_oversized_body` guard (unlike `POST /account/`). Precedence is
