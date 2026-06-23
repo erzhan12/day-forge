@@ -121,6 +121,7 @@ jobs:
           ALLOWED_HOSTS: ${{ secrets.ALLOWED_HOSTS }}
           CSRF_TRUSTED_ORIGINS: ${{ secrets.CSRF_TRUSTED_ORIGINS }}
           CALDAV_ENCRYPTION_KEY: ${{ secrets.CALDAV_ENCRYPTION_KEY }}
+          TODOIST_ENCRYPTION_KEY: ${{ secrets.TODOIST_ENCRYPTION_KEY }}
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
           LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
           LLM_MODEL: ${{ secrets.LLM_MODEL }}
@@ -157,6 +158,7 @@ jobs:
               dotenv_line("ALLOWED_HOSTS", require("ALLOWED_HOSTS")),
               dotenv_line("CSRF_TRUSTED_ORIGINS", require("CSRF_TRUSTED_ORIGINS")),
               dotenv_line("CALDAV_ENCRYPTION_KEY", require("CALDAV_ENCRYPTION_KEY")),
+              dotenv_line("TODOIST_ENCRYPTION_KEY", require("TODOIST_ENCRYPTION_KEY")),
               dotenv_line("LLM_API_KEY", require("LLM_API_KEY")),
               dotenv_line("LLM_BASE_URL", require("LLM_BASE_URL")),
               dotenv_line("LLM_MODEL", require("LLM_MODEL")),

@@ -34,6 +34,7 @@ Add an **A record**: host `dayforge` → the droplet's public IP. (Subdomain of
 | `ALLOWED_HOSTS` | `dayforge.habitreward.org` |
 | `CSRF_TRUSTED_ORIGINS` | `https://dayforge.habitreward.org` |
 | `CALDAV_ENCRYPTION_KEY` | `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` |
+| `TODOIST_ENCRYPTION_KEY` | `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` |
 | `LLM_API_KEY` | OpenRouter key |
 | `LLM_BASE_URL` | `https://openrouter.ai/api/v1` |
 | `LLM_MODEL` | OpenRouter model id (command/chat) |
@@ -42,6 +43,8 @@ Add an **A record**: host `dayforge` → the droplet's public IP. (Subdomain of
 
 > `CALDAV_ENCRYPTION_KEY` is **required** for a `DEBUG=0` boot even if nobody uses
 > Apple Calendar (`calendar_sync.E001` blocks startup otherwise).
+> `TODOIST_ENCRYPTION_KEY` is also **required** for a `DEBUG=0` boot even if nobody
+> uses Todoist (`todoist_sync.E001` blocks startup otherwise).
 
 ### 3. Restrict public access to `:8006` (ufw + DOCKER-USER)
 
