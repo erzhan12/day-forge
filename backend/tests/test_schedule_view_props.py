@@ -91,3 +91,19 @@ class TestAutoDraftPending:
         assert props["slot_type"] == "weekend"
         assert props["has_template_for_type"] is True
         assert props["auto_draft_pending"] is True
+
+
+@pytest.mark.django_db
+class TestTodoistPollIntervalProp:
+    def test_passes_setting_to_schedule_props(self, auth_inertia_client, settings):
+        settings.TODOIST_POLL_INTERVAL_SECONDS = 30
+        resp = auth_inertia_client.get("/schedule/2026-05-04/")
+        assert resp.status_code == 200
+        props = _props(resp)
+        assert props["todoist_poll_interval"] == 30
+
+    def test_default_zero_disables_polling(self, auth_inertia_client, settings):
+        settings.TODOIST_POLL_INTERVAL_SECONDS = 0
+        resp = auth_inertia_client.get("/schedule/2026-05-04/")
+        props = _props(resp)
+        assert props["todoist_poll_interval"] == 0

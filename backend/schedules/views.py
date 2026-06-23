@@ -130,6 +130,9 @@ def schedule_view(request, date):
             # paint, so it can't double as a capability signal.
             "has_template_for_type": template_exists,
             "slot_type": slot_type,
+            # Seconds between background Todoist refreshes while the sidebar
+            # is open; ``0`` disables polling (manual Refresh only).
+            "todoist_poll_interval": settings.TODOIST_POLL_INTERVAL_SECONDS,
             "ui_preferences": {"theme": prefs.theme},
         },
         template_data={"initial_theme": prefs.theme},

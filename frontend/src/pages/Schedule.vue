@@ -37,6 +37,7 @@ import { useDraft } from "../composables/useDraft"
 import { useChat } from "../composables/useChat"
 import { useCalendar } from "../composables/useCalendar"
 import { useTodoist } from "../composables/useTodoist"
+import { useTodoistPoll } from "../composables/useTodoistPoll"
 import { useThemeFromProps } from "../composables/useThemeFromProps"
 import { useNowMinutes } from "../composables/useNowMinutes"
 import { useSoundNotifications } from "../composables/useSoundNotifications"
@@ -53,11 +54,13 @@ const props = withDefaults(
     auto_draft_pending?: boolean
     has_template_for_type?: boolean
     slot_type?: "weekday" | "weekend"
+    todoist_poll_interval?: number
   }>(),
   {
     auto_draft_pending: false,
     has_template_for_type: false,
     slot_type: "weekday",
+    todoist_poll_interval: 0,
   },
 )
 
@@ -164,6 +167,24 @@ watch(sidebarOpen, writeChatSidebarOpen)
 
 const todoistSidebarOpen = ref<boolean>(readTodoistSidebarOpen())
 watch(todoistSidebarOpen, writeTodoistSidebarOpen)
+
+// Background Todoist sync (#71): poll while sidebar is open on wide layout.
+const todoistPollActive = computed(
+  () =>
+    isWide.value &&
+    todoist.state.statusKnown &&
+    todoist.state.connected &&
+    todoistSidebarOpen.value,
+)
+
+useTodoistPoll({
+  intervalSeconds: toRef(props, "todoist_poll_interval"),
+  date: toRef(props, "date"),
+  active: todoistPollActive,
+  refresh: (d) => {
+    void todoist.refreshTasks(d)
+  },
+})
 
 const chatSidebarWidth = computed(() => {
   if (!isWide.value) return "0px"

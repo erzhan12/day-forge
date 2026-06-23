@@ -306,8 +306,19 @@ TODOIST_REQUEST_TIMEOUT = float(os.environ.get("TODOIST_REQUEST_TIMEOUT", "10"))
 # todoist_sync/cache.py) keep correctness regardless of backend; the
 # ``todoist_sync.W001`` check warns when the backend is non-shared.
 TODOIST_CACHE_TTL_SECONDS = int(os.environ.get("TODOIST_CACHE_TTL_SECONDS", "300"))
+# Frontend poll interval for live Todoist sync while the sidebar is open.
+# ``0`` disables background polling (manual Refresh only). Passed to Schedule
+# via the ``todoist_poll_interval`` Inertia prop.
+TODOIST_POLL_INTERVAL_SECONDS = int(
+    os.environ.get("TODOIST_POLL_INTERVAL_SECONDS", "0")
+)
 # Same import-time positive-value guards as the CALDAV_* block: fail loudly
 # on a misconfigured deploy (ValueError, NOT ImproperlyConfigured).
+if TODOIST_POLL_INTERVAL_SECONDS < 0:
+    raise ValueError(
+        "TODOIST_POLL_INTERVAL_SECONDS must be a non-negative integer; "
+        f"got {TODOIST_POLL_INTERVAL_SECONDS!r}"
+    )
 if TODOIST_CACHE_TTL_SECONDS <= 0:
     raise ValueError(
         "TODOIST_CACHE_TTL_SECONDS must be a positive integer; "
