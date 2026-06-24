@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue"
-import { useAI } from "../composables/useAI"
+import { useChat } from "../composables/useChat"
 import { useDraft } from "../composables/useDraft"
 
 const props = defineProps<{
@@ -12,7 +12,10 @@ const emit = defineEmits<{
   (e: "click"): void
 }>()
 
-const { isProcessing, apiHealthy } = useAI()
+// Chat (not the deprecated useAI command composable) owns in-flight AI
+// state after feature 0007 — gating on useAI.isProcessing would let
+// Regenerate race an active chat apply on an empty draft day.
+const { isProcessing, apiHealthy } = useChat()
 const { isGeneratingDraft } = useDraft()
 
 const disabled = computed(
