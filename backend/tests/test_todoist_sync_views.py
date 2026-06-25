@@ -423,6 +423,27 @@ class TestCacheInvalidation:
             auth_client.get("/api/todoist/tasks/2026-05-07/")
             assert get.call_count > first_calls
 
+    def test_invalidate_tasks_does_not_clobber_concurrent_token_update(
+        self, account
+    ):
+        """A stale in-memory account from an in-flight complete must not revert
+        a concurrent token rotation when bumping the cache version."""
+        from todoist_sync import cache as todoist_cache
+
+        stale_row = TodoistAccount.objects.get(pk=account.pk)
+        original_token = stale_row.get_token()
+
+        fresh = TodoistAccount.objects.get(pk=account.pk)
+        fresh.set_token("new-token-after-reconnect")
+        fresh.save()
+
+        todoist_cache.invalidate_tasks(stale_row)
+
+        reloaded = TodoistAccount.objects.get(pk=account.pk)
+        assert reloaded.get_token() == "new-token-after-reconnect"
+        assert reloaded.get_token() != original_token
+        assert reloaded.updated_at >= fresh.updated_at
+
     def test_cache_invalidates_on_account_delete(self, auth_client, user, account):
         with patch("todoist_sync.service.requests.get") as get:
             get.return_value = _fake_response([RAW_TASK])
