@@ -265,6 +265,110 @@ and writes onto separate seqs and adds `writeCompletionTick` so a read
 can never supersede a write. See `useCalendarAccount.ts` header comment
 for the full design and the scenario that motivates each guard.
 
+## Google Calendar / OAuth (feature 0022)
+
+`backend/gcal_sync/` mirrors the `calendar_sync` skeleton (crypto / models /
+service / cache / checks / views) but for OAuth, multi-account, and an async
+events path. Key divergences and footguns:
+
+### Multi-row account model + upsert
+`GoogleCalendarAccount` is **`ForeignKey`** (multi-row per user), not the
+`OneToOne` of CalDAV/Todoist, with `UniqueConstraint(user,
+google_account_id)`. The callback upserts via
+`get_or_create(user=…, google_account_id=…)` under
+`select_for_update()`, so reconnecting the same Google account **updates** the
+row (idempotent). Cache keys therefore embed `account.id` (a user has many
+accounts) — `gcal_events:{user_id}:{account_id}:{updated_at}:{date}`.
+
+### Partial success — never blank the panel
+The events view (`async def`) fans out with
+`asyncio.gather(..., return_exceptions=True)`; a single account's
+`GoogleCalAuthError` becomes an `account_errors[]` entry
+(`reconnect_required`) while healthy accounts' events still return (HTTP 200).
+Only `ImproperlyConfigured` (key rotation, server-wide) short-circuits to a
+config-500. The response is the composite `{"events": [...], "account_errors":
+[...]}` (the latter always present). The frontend mirrors this: provider
+errors are **non-suppressing banners**, never the single suppressing `error`
+prop that `ExternalEventsPanel` used pre-0022 — a Google failure must not blank
+healthy Apple events. Per-provider retry is routed separately
+(`retry(provider)`), Apple ≠ Google.
+
+### Token refresh concurrency (the P1/P2 design)
+`_ensure_access_token` (async) is the only refresh-token decrypt site. The
+`select_for_update` lock is acquired in the sync `_persist_refreshed_tokens`
+**after** the network refresh, NOT held across it (holding a row lock across an
+external HTTP call is an anti-pattern — P2). So two callers can both refresh
+against Google before either locks; the guarantee under test is
+**persisted-token correctness, not call count**. Double-check: a caller that
+finds the row already fresh **and** has no rotated refresh token skips the
+write; but a caller holding a **rotated** refresh token persists it even when
+the access token is fresh (Google may invalidate the old refresh token on
+rotation — P1). All persists are full `save()` (no `update_fields`) so
+`auto_now` rotates the cache version (same footgun as CalDAV/Todoist).
+`_persist_refreshed_tokens` returns `(token, updated_at)` and
+`_ensure_access_token` copies the post-refresh `updated_at` back onto the
+**in-memory** account — otherwise a refresh-during-request bumps the DB
+version while the view's stale `acc` writes the post-fetch cache under the
+dead pre-refresh key (next read misses it; perf-only but wasteful).
+
+### Async-safety gotchas
+- The events view does `user = await request.auser()` FIRST; touching the sync
+  `request.user` proxy in an `async def` body raises `SynchronousOnlyOperation`
+  (the 0009 AI-view pattern). Use the `auser()` result everywhere downstream.
+- Parse the `<date>` route string to `datetime.date.fromisoformat(date)` and
+  pass the **`date` object** (never the raw string) to the cache + service —
+  the cache key calls `target_date.isoformat()`.
+- `gcal_sync/cache.py` helpers are `async` (`cache.aget`/`aset`) because the
+  only caller is the async view; sync `cache.get/set` under `RedisCache` would
+  block the event loop. (The `aincr` non-atomic-RMW footgun is rate-limiter
+  specific and does NOT apply to these idempotent versioned get/set.)
+- The sync refresh transport runs via `asyncio.to_thread`; the sync ORM persist
+  via `sync_to_async(..., thread_sensitive=True)`. `_refresh_sync` is
+  **pure-network** (no ORM write) so no sync `.save()` is smuggled into a
+  worker thread.
+
+### OAuth correctness
+- Scopes are **`.split()`** from the space-separated `GOOGLE_OAUTH_SCOPE` and
+  requested as **canonical** strings (`…/auth/userinfo.email`, not the `email`
+  alias) so the returned scope set matches and oauthlib doesn't raise "Scope
+  has changed". `build_authorization_url` does **not** pass
+  `include_granted_scopes` (incremental auth would let Google merge a user's
+  other grants on the same client into a superset that trips the scope-equality
+  check on `fetch_token`); `service.py` also `os.environ.setdefault`s
+  `OAUTHLIB_RELAX_TOKEN_SCOPE=1` as belt-and-suspenders.
+- Calendar ids are **`urllib.parse.quote(cal_id, safe="")`**-encoded in the
+  events path — Google ids routinely contain `@`/`#` (shared
+  `…@group.calendar.google.com`); unescaped they break into extra path
+  segments and silently fail shared-calendar fetches.
+- `connect`/`callback`/`accounts` are sync; only `events` is async. The CSRF
+  `state` lives in the session and is `pop`ed in the callback (no replay).
+- `exchange_code` (sync) uses `httpx.Client`; the events path uses
+  `httpx.AsyncClient`. Don't cross them.
+
+### Shared `NormalizedEvent` (cross-app, intentional)
+`gcal_sync` imports `NormalizedEvent` / `normalized_event_to_dict` from
+`calendar_sync.schemas` — single source of truth, **deliberate**, not a
+layering violation. 0022 added a trailing `account_label: str = ""` field (the
+default keeps every existing CalDAV positional constructor + test compiling);
+Apple leaves it `""`, Google fills the account email. The frontend
+`NormalizedEvent` type + the CalDAV/Google API docs all carry the field.
+
+### Prod boot dependency (divergence from CalDAV)
+`gcal_sync.E001` blocks `DEBUG=False` startup if **any** of the four
+`GOOGLE_OAUTH_*` vars (client id/secret, redirect uri, token key) is
+unset/malformed — **even when no user has connected Google**, unlike
+`calendar_sync.E001` (encryption key only). A Google-less staging env must set
+all four or stay `DEBUG=True`.
+
+### Tests without pytest-asyncio
+Async service functions are driven from sync tests via `asyncio.run(...)`. The
+account fixture carries a **fresh cached access token** so
+`_ensure_access_token` returns early (no refresh, no `sync_to_async` persist,
+no cross-thread DB connection). The refresh/rotation guards are tested directly
+against the sync `_persist_refreshed_tokens`. The async events view is driven
+through Django's test `Client` with `views.service.fetch_events_for_account`
+patched.
+
 ## Todoist (features 0020, 0021)
 
 `todoist_sync` mirrors `calendar_sync` one-for-one (new app, same error
@@ -353,6 +457,25 @@ the error on first load before `fetchAccountStatus()` resolves.
   the URL path and reads **no** `request.body`, so it has **no**
   `reject_oversized_body` guard (unlike `POST /account/`). Precedence is
   just `503` (no account) → `2xx`/service-error.
+
+## External tasks panel (issue #73 — planned)
+
+**UX decision:** one **left-side panel** on Schedule, grouped by integration
+(Todoist, Habitica, future apps) — not a separate sidebar per provider.
+Today's `TodoistSidebar.vue` (feature 0020) will be refactored into a shell
+(`ExternalTasksSidebar.vue`) with per-source **sections**
+(`TodoistTasksSection`, `HabiticaTasksSection`, …). Each integration keeps
+its own backend app (`*_sync`) and composable (`useTodoist`, `useHabitica`);
+the shell owns collapse/expand, width, and global refresh. Panel shows when
+**any** connected source is present. New integrations add a section +
+composable only — no duplicate sidebar chrome.
+
+**Polling decision (#73):** one shared **`EXTERNAL_TASKS_POLL_INTERVAL_SECONDS`**
+(default **`10`**, `0` = off) for the whole panel — replaces
+`TODOIST_POLL_INTERVAL_SECONDS` / `useTodoistPoll` when the panel refactor
+lands. While the panel is open on a wide viewport with ≥1 connected source,
+`useExternalTasksPoll` silently calls `refreshTasks` on every connected
+composable every 10s (`?refresh=1`); pauses when `document.hidden`.
 
 ## Production deploy (feature 0016)
 

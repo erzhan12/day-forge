@@ -36,6 +36,7 @@ function eventPayload(uid: string, title: string) {
     calendar_name: "Personal",
     all_day: false,
     external_uid: uid,
+    account_label: "", // Apple emits the empty sentinel (feature 0022)
   }
 }
 

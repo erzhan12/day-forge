@@ -36,6 +36,11 @@ import { useDrag } from "../composables/useDrag"
 import { useDraft } from "../composables/useDraft"
 import { useChat } from "../composables/useChat"
 import { useCalendar } from "../composables/useCalendar"
+import { useGoogleCalendar } from "../composables/useGoogleCalendar"
+import type {
+  NormalizedEvent,
+  ProviderErrorBanner,
+} from "../types/calendar"
 import { useTodoist } from "../composables/useTodoist"
 import { useTodoistPoll } from "../composables/useTodoistPoll"
 import { useThemeFromProps } from "../composables/useThemeFromProps"
@@ -117,8 +122,60 @@ watch(
   (d) => calendar.fetchEvents(d),
   { immediate: true },
 )
-function retryFetchEvents() {
-  calendar.fetchEvents(props.date)
+
+// Google Calendar (feature 0022): multi-account read-only events merged into
+// the SAME ExternalEventsPanel. `fetchAccountStatus()` on mount seeds the
+// panel's `connected` from the account list immediately — without it a
+// Google-only user's panel stays hidden until the first events round-trip.
+const googleCalendar = useGoogleCalendar()
+googleCalendar.fetchAccountStatus()
+watch(
+  () => props.date,
+  (d) => googleCalendar.fetchEvents(d),
+  { immediate: true },
+)
+
+// Single chronological list (no grouping). Sort by the SAME tuple the backend
+// uses — (start, title, external_uid) — so Apple + Google interleave with
+// stable, deterministic tie-breaking matching each side's server sort.
+const mergedExternalEvents = computed<NormalizedEvent[]>(() =>
+  [...calendar.state.events, ...googleCalendar.state.events].sort((a, b) => {
+    if (a.start !== b.start) return a.start < b.start ? -1 : 1
+    if (a.title !== b.title) return a.title < b.title ? -1 : 1
+    if (a.external_uid === b.external_uid) return 0
+    return a.external_uid < b.external_uid ? -1 : 1
+  }),
+)
+
+const externalConnected = computed(
+  () => calendar.state.connected || googleCalendar.state.connected,
+)
+const externalLoading = computed(
+  () => calendar.state.loading || googleCalendar.state.loading,
+)
+
+// Errors are ADDITIVE, never suppressing: a Google 502 must not blank healthy
+// Apple events (and vice-versa). Build one banner per provider whose
+// whole-request fetch failed; the panel renders them above the list.
+const externalErrorBanners = computed<ProviderErrorBanner[]>(() => {
+  const banners: ProviderErrorBanner[] = []
+  if (calendar.state.error) {
+    banners.push({ provider: "apple", message: calendar.state.error })
+  }
+  if (googleCalendar.state.error) {
+    banners.push({ provider: "google", message: googleCalendar.state.error })
+  }
+  return banners
+})
+
+// Per-provider retry — an Apple failure must NOT refetch Google (and
+// vice-versa).
+function retryExternalFetch(provider: "apple" | "google") {
+  if (provider === "apple") {
+    calendar.fetchEvents(props.date)
+  } else {
+    googleCalendar.fetchEvents(props.date)
+  }
 }
 
 // Todoist (feature 0020): read-only task panel that follows the selected
@@ -372,11 +429,12 @@ function logout() {
     <p v-if="lastDraftError" class="draft-error">{{ lastDraftError }}</p>
 
     <ExternalEventsPanel
-      :events="calendar.state.events"
-      :loading="calendar.state.loading"
-      :error="calendar.state.error"
-      :connected="calendar.state.connected"
-      @retry="retryFetchEvents"
+      :events="mergedExternalEvents"
+      :loading="externalLoading"
+      :error-banners="externalErrorBanners"
+      :account-errors="googleCalendar.state.accountErrors"
+      :connected="externalConnected"
+      @retry="retryExternalFetch"
     />
 
     <AddBlockForm

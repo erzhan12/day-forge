@@ -1,14 +1,29 @@
 <script setup lang="ts">
-import type { NormalizedEvent } from "../types/calendar"
+import type {
+  GoogleAccountError,
+  NormalizedEvent,
+  ProviderErrorBanner,
+} from "../types/calendar"
 
-defineProps<{
-  events: NormalizedEvent[]
-  loading: boolean
-  error: string | null
-  connected: boolean
-}>()
+withDefaults(
+  defineProps<{
+    events: NormalizedEvent[]
+    loading: boolean
+    connected: boolean
+    // Whole-request provider failures (Apple 502/504, Google 401/502/504).
+    // Rendered as NON-suppressing banners above the list — a single
+    // provider's failure must not blank the other provider's healthy events.
+    errorBanners?: ProviderErrorBanner[]
+    // Per-account Google failures (200 + account_errors[]).
+    accountErrors?: GoogleAccountError[]
+  }>(),
+  {
+    errorBanners: () => [],
+    accountErrors: () => [],
+  },
+)
 
-const emit = defineEmits<{ (e: "retry"): void }>()
+const emit = defineEmits<{ (e: "retry", provider: "apple" | "google"): void }>()
 
 // Compose-time format: ISO8601 → HH:MM in viewer's local TZ. All-day
 // events show a flat "All day" badge instead of a time range.
@@ -26,12 +41,45 @@ function formatTime(iso: string): string {
       <span v-if="loading" class="ee-loading" aria-live="polite">Loading…</span>
     </header>
 
-    <div v-if="error" class="ee-error" role="status">
-      <span>{{ error }}</span>
-      <button type="button" class="ee-retry" @click="emit('retry')">Retry</button>
+    <!-- Whole-request provider failures. NON-suppressing: each renders as a
+         banner above the list and carries its own per-provider Retry. -->
+    <div
+      v-for="banner in errorBanners"
+      :key="`err-${banner.provider}`"
+      class="ee-error"
+      role="status"
+      data-testid="provider-error"
+    >
+      <span>{{ banner.message }}</span>
+      <button
+        type="button"
+        class="ee-retry"
+        @click="emit('retry', banner.provider)"
+      >
+        Retry
+      </button>
     </div>
 
-    <ul v-else-if="!loading && events.length > 0" class="ee-list">
+    <!-- Per-account (Google) failures. Also non-suppressing — working
+         accounts' events still render below. -->
+    <div
+      v-for="acctErr in accountErrors"
+      :key="`acct-${acctErr.account_id}`"
+      class="ee-account-error"
+      role="status"
+      data-testid="account-error"
+    >
+      <template v-if="acctErr.error === 'reconnect_required'">
+        <span>{{ acctErr.email }} needs reconnecting.</span>
+        <a class="ee-reconnect" href="/settings/">Reconnect</a>
+      </template>
+      <template v-else>
+        <span>{{ acctErr.email }} is temporarily unavailable.</span>
+      </template>
+    </div>
+
+    <!-- Event list renders whenever there are events, regardless of banners. -->
+    <ul v-if="events.length > 0" class="ee-list">
       <li
         v-for="ev in events"
         :key="ev.external_uid"
@@ -43,18 +91,28 @@ function formatTime(iso: string): string {
           <template v-else>{{ formatTime(ev.start) }} – {{ formatTime(ev.end) }}</template>
         </span>
         <span class="ee-event-title">{{ ev.title }}</span>
-        <span class="ee-calendar-chip">{{ ev.calendar_name }}</span>
+        <div class="ee-chips">
+          <span class="ee-calendar-chip">{{ ev.calendar_name }}</span>
+          <span v-if="ev.account_label" class="ee-account-chip">{{ ev.account_label }}</span>
+        </div>
       </li>
     </ul>
 
-    <p v-else-if="loading" class="ee-skeleton" aria-hidden="true">
-      <span class="ee-skel-row"></span>
-      <span class="ee-skel-row"></span>
-      <span class="ee-skel-row"></span>
-      <span class="ee-skel-row"></span>
-    </p>
-
-    <p v-else class="ee-empty">No external calendar events for this day.</p>
+    <!-- Full-bleed empty / skeleton state ONLY when there are no events. -->
+    <template v-else>
+      <p v-if="loading" class="ee-skeleton" aria-hidden="true">
+        <span class="ee-skel-row"></span>
+        <span class="ee-skel-row"></span>
+        <span class="ee-skel-row"></span>
+        <span class="ee-skel-row"></span>
+      </p>
+      <p
+        v-else-if="errorBanners.length === 0 && accountErrors.length === 0"
+        class="ee-empty"
+      >
+        No external calendar events for this day.
+      </p>
+    </template>
   </section>
 </template>
 
@@ -142,6 +200,16 @@ function formatTime(iso: string): string {
   white-space: nowrap;
 }
 
+/* Both chips share the SINGLE `auto` grid cell so a second chip doesn't
+   become a 4th grid item and wrap onto an implicit row. Flex + wrap lets the
+   two chips stack cleanly under each other on narrow widths. */
+.ee-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
 .ee-calendar-chip {
   font-size: 10px;
   text-transform: uppercase;
@@ -150,6 +218,41 @@ function formatTime(iso: string): string {
   border-radius: 999px;
   background: var(--bg-schedule-gap);
   color: var(--text-muted);
+}
+
+.ee-account-chip {
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--border-strong);
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 160px;
+}
+
+.ee-account-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  background: var(--danger-surface);
+  color: var(--danger-text);
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.ee-reconnect {
+  font-size: 11px;
+  padding: 2px 8px;
+  border: 1px solid var(--danger-border);
+  border-radius: 4px;
+  color: var(--danger-text);
+  text-decoration: none;
+  white-space: nowrap;
 }
 
 .ee-empty {

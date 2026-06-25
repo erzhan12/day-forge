@@ -11,6 +11,7 @@ import { todayString } from "../utils/date"
 // Required convention for every authenticated page — see RULES.md.
 import { useThemeFromProps } from "../composables/useThemeFromProps"
 import { useCalendarAccount } from "../composables/useCalendarAccount"
+import { useGoogleAccount } from "../composables/useGoogleAccount"
 import { useTodoistAccount } from "../composables/useTodoistAccount"
 import "../app.css"
 
@@ -103,6 +104,68 @@ async function handleCalendarDisconnect() {
     calendarForm.password = ""
     calendarForm.base_url = ""
     calendarMessage.value = "Apple Calendar disconnected."
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Google Calendar (feature 0022) — multi-account OAuth connect / disconnect.
+// `connect()` is a full-page redirect (no fetch); the callback redirects back
+// to /settings/?google=connected | error&reason=… which we surface as a toast.
+// ---------------------------------------------------------------------------
+const googleAccount = useGoogleAccount()
+const googleMessage = ref<string | null>(null)
+const googleError = ref<string | null>(null)
+
+function googleErrorMessage(reason: string | null): string {
+  switch (reason) {
+    case "state":
+      return "Session expired — sign in and connect Google again."
+    case "denied":
+      return "Google connection was cancelled."
+    case "missing_code":
+      return "Google returned an incomplete response. Try again."
+    default:
+      return "Could not connect Google Calendar. Try again."
+  }
+}
+
+onMounted(() => {
+  googleAccount.fetchAccounts()
+  const params = new URLSearchParams(window.location.search)
+  const google = params.get("google")
+  if (google === "connected") {
+    googleMessage.value = "Google Calendar connected."
+    // Re-fetch so the just-connected account appears even if the mount fetch
+    // above raced the OAuth redirect or transiently failed.
+    googleAccount.fetchAccounts()
+  } else if (google === "error") {
+    googleError.value = googleErrorMessage(params.get("reason"))
+  }
+  if (google) {
+    // Strip the one-shot callback params so a reload doesn't re-toast.
+    params.delete("google")
+    params.delete("reason")
+    const qs = params.toString()
+    window.history.replaceState(
+      {},
+      "",
+      window.location.pathname + (qs ? `?${qs}` : ""),
+    )
+  }
+})
+
+const googleBusy = computed(() => googleAccount._internals.operationInFlight.value)
+
+function handleGoogleConnect() {
+  googleAccount.connect() // full-page redirect to Google consent
+}
+
+async function handleGoogleDisconnect(id: number) {
+  googleMessage.value = null
+  googleError.value = null
+  const result = await googleAccount.disconnect(id)
+  if (result.ok) {
+    googleMessage.value = "Google account disconnected."
   }
 }
 
@@ -291,6 +354,62 @@ async function handleTodoistDisconnect() {
         @click="handleCalendarDisconnect"
       >
         {{ calendarBusy ? "Disconnecting…" : "Disconnect" }}
+      </button>
+
+      <h3 class="subsection-title">Google Calendar</h3>
+      <p class="section-subtitle">
+        Connects via Google sign-in. Connecting (or reconnecting) always shows
+        Google's consent screen — that is expected, not an error; it guarantees
+        an offline refresh token. You can connect multiple Google accounts.
+      </p>
+
+      <p v-if="googleError" class="cal-error" role="status">{{ googleError }}</p>
+      <p v-else-if="googleMessage" class="cal-message" role="status">
+        {{ googleMessage }}
+      </p>
+      <p
+        v-else-if="googleAccount.state.error"
+        class="cal-error"
+        role="status"
+      >
+        {{ googleAccount.state.error }}
+      </p>
+
+      <ul
+        v-if="googleAccount.state.accounts.length > 0"
+        class="google-account-list"
+      >
+        <li
+          v-for="acc in googleAccount.state.accounts"
+          :key="acc.id"
+          class="google-account-row"
+        >
+          <span class="google-account-email">{{ acc.email }}</span>
+          <span
+            v-if="acc.last_verified_at"
+            class="google-account-verified"
+          >
+            verified {{ new Date(acc.last_verified_at).toLocaleDateString() }}
+          </span>
+          <button
+            type="button"
+            class="cal-disconnect"
+            :disabled="googleBusy"
+            @click="handleGoogleDisconnect(acc.id)"
+          >
+            Disconnect
+          </button>
+        </li>
+      </ul>
+      <p v-else class="cal-status">No Google accounts connected</p>
+
+      <button
+        type="button"
+        class="cal-submit"
+        :disabled="googleBusy"
+        @click="handleGoogleConnect"
+      >
+        Connect Google Calendar
       </button>
     </section>
 
@@ -541,5 +660,32 @@ async function handleTodoistDisconnect() {
 .cal-disconnect:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.google-account-list {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.google-account-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.google-account-email {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.google-account-verified {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-right: auto;
 }
 </style>

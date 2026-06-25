@@ -21,6 +21,14 @@ class NormalizedEvent:
     ``external_uid``. ``start`` / ``end`` are timezone-aware datetimes
     in UTC after service normalisation; the cache layer stores them as
     ISO8601 strings (see ``service.normalized_event_to_dict``).
+
+    ``account_label`` (feature 0022) identifies the connecting account in
+    the merged Apple+Google panel. It is the **canonical** shared field —
+    ``gcal_sync`` imports this dataclass rather than forking it. The Apple
+    (CalDAV) path leaves it the empty-string sentinel (single-account, no
+    label needed); the Google path fills it with the account email. The
+    trailing default keeps every existing positional constructor call in
+    ``calendar_sync.service._normalize_vevent`` compiling unchanged.
     """
 
     title: str
@@ -29,6 +37,7 @@ class NormalizedEvent:
     calendar_name: str
     all_day: bool
     external_uid: str
+    account_label: str = ""
 
 
 def normalized_event_to_dict(event: NormalizedEvent) -> dict:
@@ -39,6 +48,7 @@ def normalized_event_to_dict(event: NormalizedEvent) -> dict:
         "calendar_name": event.calendar_name,
         "all_day": event.all_day,
         "external_uid": event.external_uid,
+        "account_label": event.account_label,
     }
 
 
