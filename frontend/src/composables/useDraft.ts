@@ -13,6 +13,13 @@ interface DraftSubmitResult extends ApiResult {
 const isGeneratingDraft = ref(false)
 const lastDraftError = ref<string | null>(null)
 
+// Module-level counter — mirrors useChat's latestRequestId. Each
+// generateDraft bumps it; only the resolver whose myId still matches may
+// clear the spinner or call router.reload. Prevents overlapping auto-drafts
+// (date navigation during a slow LLM call) from unlocking edits mid-flight
+// and then stomping them when an earlier draft resolves.
+let latestRequestId = 0
+
 function extractErrorMessage(
   errors: Record<string, string | string[]> | undefined,
 ): string {
@@ -39,15 +46,25 @@ function statusToMessage(status: number | undefined): string | null {
 
 export function useDraft() {
   async function generateDraft(date: string): Promise<DraftSubmitResult> {
+    const myId = ++latestRequestId
     isGeneratingDraft.value = true
     lastDraftError.value = null
 
-    const result = await requestJson(
-      `/api/ai/schedules/${date}/generate-draft/`,
-      "POST",
-    )
+    let result: DraftSubmitResult
+    try {
+      result = await requestJson(
+        `/api/ai/schedules/${date}/generate-draft/`,
+        "POST",
+      )
+    } finally {
+      if (myId === latestRequestId) {
+        isGeneratingDraft.value = false
+      }
+    }
 
-    isGeneratingDraft.value = false
+    if (myId !== latestRequestId) {
+      return { ok: false, errors: { detail: "stale" } }
+    }
 
     if (result.ok) {
       const explanation =
@@ -85,4 +102,16 @@ export function useDraft() {
     generateDraft,
     clearDraftError,
   }
+}
+
+/** Test-only reset — mirrors useChat._resetChatStateForTests. */
+export function _resetDraftStateForTests(): void {
+  latestRequestId = 0
+  isGeneratingDraft.value = false
+  lastDraftError.value = null
+}
+
+/** Test-only peek at the request counter. */
+export function _peekLatestRequestId(): number {
+  return latestRequestId
 }
