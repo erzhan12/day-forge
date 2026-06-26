@@ -63,7 +63,7 @@ export function useDraft() {
     }
 
     if (myId !== latestRequestId) {
-      return { ok: false, status: undefined, errors: { detail: "stale" } }
+      return { ok: false, errors: { detail: "stale" } }
     }
 
     if (result.ok) {

@@ -97,6 +97,8 @@ def invalidate_tasks(account) -> None:
     rely on a plain ``account.save()`` (or an ``update_fields`` that
     includes ``"updated_at"``) to fire ``auto_now`` — see module docstring.
     """
+    # Imports inside the function avoid a circular dependency
+    # (cache.py ← models.py → cache.py) at module load.
     from django.utils import timezone
 
     from todoist_sync.models import TodoistAccount
