@@ -78,17 +78,29 @@ def set_cached_tasks(
 def invalidate_tasks(account) -> None:
     """Invalidate every cached task list for ``account`` at once.
 
-    Bumps ``account.updated_at`` via a plain ``account.save()`` so the
-    ``account_version`` segment of every ``todoist_tasks:*`` key rotates —
-    all existing entries (across all dates/scopes) become unreachable
-    without any key enumeration (versioned-key design; see module
-    docstring). Called after a successful task complete so the just-closed
-    task is not served from a stale cache for up to the TTL.
+    Bumps ``account.updated_at`` so the ``account_version`` segment of every
+    ``todoist_tasks:*`` key rotates — all existing entries (across all
+    dates/scopes) become unreachable without any key enumeration
+    (versioned-key design; see module docstring). Called after a successful
+    task complete so the just-closed task is not served from a stale cache
+    for up to the TTL.
 
-    **auto_now footgun (critical):** this MUST stay a plain ``account.save()``
-    with **no** ``update_fields`` (or one that includes ``"updated_at"``),
-    or ``auto_now`` does not fire, the key does not rotate, and the
-    completed task is still served. Same footgun documented in
-    ``cache.py`` (module docstring) and ``models.py:set_token``.
+    Uses ``QuerySet.update(updated_at=…)`` rather than ``account.save()`` so
+    a stale in-memory instance (e.g. loaded at the start of an in-flight
+    complete while a concurrent account POST rotated the token, or DELETE
+    removed the row) cannot clobber ``token_encrypted`` or resurrect a
+    deleted account.
+
+    **auto_now footgun (critical):** ``QuerySet.update()`` bypasses
+    ``auto_now`` entirely, so ``updated_at`` MUST be set explicitly here.
+    Other mutating call sites (``views.py``, ``models.py:set_token``) still
+    rely on a plain ``account.save()`` (or an ``update_fields`` that
+    includes ``"updated_at"``) to fire ``auto_now`` — see module docstring.
     """
-    account.save()
+    from django.utils import timezone
+
+    from todoist_sync.models import TodoistAccount
+
+    now = timezone.now()
+    TodoistAccount.objects.filter(pk=account.pk).update(updated_at=now)
+    account.updated_at = now
