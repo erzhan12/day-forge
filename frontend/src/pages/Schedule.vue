@@ -74,7 +74,8 @@ const getBlocks = () => props.blocks
 
 // Draft generation state — module-level singleton inside useDraft, single
 // consumer is this page.
-const { isGeneratingDraft, lastDraftError, generateDraft } = useDraft()
+const { isGeneratingDraft, lastDraftError, generateDraft, abandonInFlight } =
+  useDraft()
 
 // Schedule-wide disabled flag: while a draft is generating or AI chat is
 // in flight, suppress all user mutation paths (form submit, inline edit,
@@ -153,7 +154,13 @@ function refreshTodoist() {
 // `immediate: true` so first mount registers the date too.
 watch(
   () => props.date,
-  (d) => setChatActiveDate(d),
+  (d) => {
+    setChatActiveDate(d)
+    // Mirror useChat: abandoning an in-flight draft unlocks the new day
+    // immediately and prevents a cross-date undo toast from wiping the
+    // generated blocks on the day the user left.
+    abandonInFlight()
+  },
   { immediate: true },
 )
 
@@ -240,7 +247,7 @@ async function runDraft() {
   // different date. Issue #21.
   const scheduleDate = props.date
   const result = await generateDraft(scheduleDate)
-  if (result.ok) {
+  if (result.ok && props.date === scheduleDate) {
     pushUndo({
       description: result.explanation || "Generated draft",
       type: "draft",

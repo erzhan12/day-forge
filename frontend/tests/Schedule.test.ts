@@ -30,6 +30,8 @@ const generateDraft = vi.fn()
 // Default: succeed with no explanation so runDraft pushes a "draft" undo.
 generateDraft.mockResolvedValue({ ok: true, explanation: null })
 
+const abandonInFlight = vi.fn()
+
 const isGeneratingDraft = ref(false)
 const lastDraftError: Ref<string | null> = ref(null)
 
@@ -39,6 +41,7 @@ vi.mock("../src/composables/useDraft", () => ({
     lastDraftError,
     generateDraft,
     clearDraftError: vi.fn(),
+    abandonInFlight,
   }),
 }))
 
@@ -360,11 +363,9 @@ describe("Schedule.vue auto-draft watcher", () => {
     expect(pushUndo).not.toHaveBeenCalled()
   })
 
-  it("draft binds scheduleDate to the date active when the request started, not when it resolved (issue #21)", async () => {
-    // Simulate user navigating to a new date while generateDraft is in
-    // flight: without the fix, ``pushUndo`` would read ``props.date``
-    // after the await and capture the new date, so undo would restore
-    // 2026-05-04's empty snapshot onto 2026-05-05.
+  it("does not push draft undo after navigating away before the request resolves", async () => {
+    // Auto-draft on day A while the user navigates to day B must not surface
+    // an undo toast on B that could wipe A's freshly generated blocks.
     let resolveDraft: (v: { ok: boolean; explanation: string | null }) => void =
       () => {}
     generateDraft.mockReturnValueOnce(
@@ -378,20 +379,12 @@ describe("Schedule.vue auto-draft watcher", () => {
       date: "2026-05-04",
       auto_draft_pending: true,
     })
-    // Allow the watcher to fire generateDraft.
     await nextTick()
     await w.setProps({ date: "2026-05-05", auto_draft_pending: false })
+    expect(abandonInFlight).toHaveBeenCalled()
     resolveDraft({ ok: true, explanation: "drafted" })
     await flushPromises()
-    expect(pushUndo).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "draft", scheduleDate: "2026-05-04" }),
-    )
-    // generate-draft intentionally keeps its undo toast (unlike AI chat
-    // apply, which is silent per PR #61), so the draft undo action must NOT
-    // carry `silent: true`.
-    expect(pushUndo).toHaveBeenCalledWith(
-      expect.not.objectContaining({ silent: true }),
-    )
+    expect(pushUndo).not.toHaveBeenCalled()
   })
 })
 
