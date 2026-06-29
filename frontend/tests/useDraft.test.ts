@@ -76,6 +76,24 @@ describe("useDraft", () => {
     })
   })
 
+  it("abandonInFlight clears spinner and stale-completes without reload", async () => {
+    const draft = makeDeferred()
+    requestJsonMock.mockReturnValueOnce(draft.promise)
+
+    const { generateDraft, isGeneratingDraft, abandonInFlight } = useDraft()
+    const p = generateDraft("2026-05-04")
+    expect(isGeneratingDraft.value).toBe(true)
+
+    abandonInFlight()
+    expect(isGeneratingDraft.value).toBe(false)
+
+    draft.resolve({ ok: true, data: { explanation: "abandoned" } })
+    await p
+
+    expect(isGeneratingDraft.value).toBe(false)
+    expect(routerReload).not.toHaveBeenCalled()
+  })
+
   it("stale in-flight draft does not set lastDraftError from a failed response", async () => {
     const draftA = makeDeferred()
     const draftB = makeDeferred()

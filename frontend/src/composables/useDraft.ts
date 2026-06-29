@@ -45,6 +45,12 @@ function statusToMessage(status: number | undefined): string | null {
 }
 
 export function useDraft() {
+  /** Cancel an in-flight draft after date navigation (mirrors useChat.clearThread). */
+  function abandonInFlight(): void {
+    latestRequestId += 1
+    isGeneratingDraft.value = false
+  }
+
   async function generateDraft(date: string): Promise<DraftSubmitResult> {
     const myId = ++latestRequestId
     isGeneratingDraft.value = true
@@ -101,6 +107,7 @@ export function useDraft() {
     lastDraftError,
     generateDraft,
     clearDraftError,
+    abandonInFlight,
   }
 }
 
