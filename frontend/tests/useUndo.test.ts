@@ -51,12 +51,13 @@ const mountedWrappers: ReturnType<typeof mount>[] = []
 function mountUndo(
   blocks: TimeBlock[] = [makeBlock()],
   isDisabled?: () => boolean,
+  currentDate: string = "2026-04-10",
 ) {
   let result: ReturnType<typeof useUndo> | undefined
 
   const Wrapper = defineComponent({
     setup() {
-      result = useUndo("2026-04-10", () => blocks, isDisabled)
+      result = useUndo(() => currentDate, () => blocks, isDisabled)
       return {}
     },
     render() {
@@ -66,7 +67,7 @@ function mountUndo(
 
   const wrapper = mount(Wrapper)
   mountedWrappers.push(wrapper)
-  return { wrapper, undo: result! }
+  return { wrapper, undo: result!, setCurrentDate: (d: string) => { currentDate = d } }
 }
 
 describe("useUndo", () => {
@@ -283,5 +284,46 @@ describe("useUndo", () => {
         sort_order: 0,
       },
     ])
+  })
+
+  it("refuses cross-date undo so Cmd+Z on day B cannot wipe day A (PR #85 follow-up)", async () => {
+    mockRestoreBlocks.mockResolvedValue({ ok: true })
+    const { undo, setCurrentDate } = mountUndo([makeBlock()], undefined, "2026-05-05")
+    undo.pushUndo(makeAction({
+      description: "Generated draft",
+      type: "draft",
+      previousBlocks: [],
+      scheduleDate: "2026-05-04",
+    }))
+
+    await undo.performUndo()
+
+    expect(mockRestoreBlocks).not.toHaveBeenCalled()
+    expect(undo.undoStack.value).toHaveLength(1)
+
+    setCurrentDate("2026-05-04")
+    await undo.performUndo()
+
+    expect(mockRestoreBlocks).toHaveBeenCalledOnce()
+    expect(mockRestoreBlocks).toHaveBeenCalledWith("2026-05-04", [])
+    expect(undo.undoStack.value).toHaveLength(0)
+  })
+
+  it("keyboard shortcut is blocked for cross-date undo entries", async () => {
+    mockRestoreBlocks.mockResolvedValue({ ok: true })
+    const { wrapper, undo } = mountUndo([makeBlock()], undefined, "2026-05-05")
+    undo.pushUndo(makeAction({
+      description: "Added block",
+      silent: true,
+      scheduleDate: "2026-05-04",
+    }))
+
+    const event = new KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true })
+    document.body.dispatchEvent(event)
+    await nextTick()
+
+    expect(mockRestoreBlocks).not.toHaveBeenCalled()
+    expect(undo.undoStack.value).toHaveLength(1)
+    wrapper.unmount()
   })
 })

@@ -27,11 +27,11 @@ const MAX_UNDO_STACK = 20
 const TOAST_DURATION_MS = 8_000
 
 export function useUndo(
-  date: string,
+  getCurrentDate: () => string,
   getCurrentBlocks: () => TimeBlock[],
   isDisabled?: () => boolean,
 ) {
-  const { restoreBlocks } = useSchedule(date)
+  const { restoreBlocks } = useSchedule(getCurrentDate)
 
   const undoStack = ref<UndoAction[]>([])
   const canUndo = computed(() => undoStack.value.length > 0)
@@ -92,6 +92,12 @@ export function useUndo(
     undoInFlight = true
     try {
       const action = undoStack.value[undoStack.value.length - 1]
+      // Undo entries are bound to the schedule date active when the edit
+      // started (issue #21). Refuse cross-date undo so a toast or Cmd+Z on
+      // day B cannot atomically wipe day A via restore_blocks.
+      if (action.scheduleDate !== getCurrentDate()) {
+        return
+      }
       const blocksPayload = action.previousBlocks.map((b) => ({
         title: b.title,
         start_time: b.start_time,

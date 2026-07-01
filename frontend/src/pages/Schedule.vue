@@ -90,7 +90,7 @@ provide("scheduleDisabled", scheduleDisabled)
 
 const {
   currentToast, pushUndo, performUndo, snapshotBlocks, dismissToast,
-} = useUndo(props.date, getBlocks, () => scheduleDisabled.value)
+} = useUndo(() => props.date, getBlocks, () => scheduleDisabled.value)
 
 const {
   isDragging, frozenRenderBounds, dragBlockId, ghostTop, previewStartTime,
@@ -160,6 +160,10 @@ watch(
     // immediately and prevents a cross-date undo toast from wiping the
     // generated blocks on the day the user left.
     abandonInFlight()
+    // Dismiss any undo toast from the prior day. performUndo also refuses
+    // cross-date restores, but the toast Undo button must not linger on B
+    // after a draft completed on A (PR #85 follow-up).
+    dismissToast()
   },
   { immediate: true },
 )
