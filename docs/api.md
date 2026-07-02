@@ -695,7 +695,8 @@ account_version)` cache (TTL = `CALDAV_CACHE_TTL_SECONDS`, default
       "end":   "2026-05-07T15:00:00+00:00",
       "calendar_name": "Personal",
       "all_day": false,
-      "external_uid": "uid@example.com"
+      "external_uid": "uid@example.com",
+      "account_label": ""
     }
   ]
 }
@@ -704,7 +705,10 @@ account_version)` cache (TTL = `CALDAV_CACHE_TTL_SECONDS`, default
 All-day events have `all_day: true` and a `[date 00:00 UTC, next-day
 00:00 UTC)` range. Recurring events return one entry per occurrence
 inside the window; `external_uid` includes the `RECURRENCE-ID` so
-each occurrence is unique.
+each occurrence is unique. `account_label` (feature 0022) is the
+connecting-account label, shared wire-compatibly with the Google path;
+the Apple/CalDAV path always emits the empty-string sentinel (single
+account, no label needed).
 
 **Error responses**
 
@@ -716,6 +720,97 @@ each occurrence is unique.
 | `503` | No `CalDAVAccount` configured for this user. |
 | `504` | `CalDAVTimeoutError` — request exceeded `CALDAV_REQUEST_TIMEOUT`. |
 | `500` | `Calendar service is misconfigured` — `CALDAV_ENCRYPTION_KEY` cannot decrypt the stored row (e.g. key rotation without re-write). **Operator action**: see `.claude/rules/project.md` § "CalDAV key rotation note". |
+
+All non-`2xx` use `{"errors": {"detail": "<message>"}}`.
+
+## Calendar (Google) — feature 0022
+
+Read-only, **multi-account, multi-calendar** Google Calendar events via OAuth
+2.0 (authorization-code flow, offline access + refresh tokens). Feeds the
+**same** provider-agnostic `ExternalEventsPanel` as CalDAV — events merge into
+one chronological list. Account credentials are encrypted at rest
+(`GOOGLE_OAUTH_TOKEN_KEY`); the service layer is the only decryption surface.
+All routes are `@login_required`.
+
+### `GET /api/calendar/google/connect/`
+
+Starts the OAuth flow. Generates a CSRF `state` (stored in the session) and
+`302`-redirects (full-page) to Google's consent screen. Connecting (or
+reconnecting) **always** shows the consent screen — `prompt=consent` is
+intentional so a refresh token is guaranteed; this is expected, not an error.
+
+### `GET /api/calendar/google/callback/?code=&state=`
+
+OAuth callback. Validates `state` against the session value (CSRF guard;
+popped so it can't be replayed), exchanges the `code` for tokens + account
+identity (`sub`/`email` from a verified `id_token`), and upserts the
+`GoogleCalendarAccount` (uniqueness `(user, google_account_id)` → reconnect is
+idempotent). Always `302`-redirects to Settings:
+
+| Redirect | When |
+|----------|------|
+| `/settings/?google=connected` | Success. |
+| `/settings/?google=error&reason=state` | Missing/mismatched `state` (CSRF guard). Also the session-expired-mid-consent case (V1 limitation — retry Connect after signing in). |
+| `/settings/?google=error&reason=denied` | Google returned `?error=` (user denied). |
+| `/settings/?google=error&reason=missing_code` | Neither `code` nor `error` present. |
+| `/settings/?google=error&reason=provider` | Token exchange / grant-probe failure. |
+
+### `GET /api/calendar/google/accounts/`
+
+Lists the calling user's connected Google accounts. **Never** returns a token
+field.
+
+```json
+{ "accounts": [ { "id": 1, "email": "you@gmail.com", "last_verified_at": "2026-05-07T09:00:00+00:00" } ] }
+```
+
+### `DELETE /api/calendar/google/accounts/{account_id}/`
+
+Disconnect one account. Scoped to `request.user` (IDOR guard); idempotent.
+Returns the refreshed list in the same shape as `GET /accounts/`.
+
+### `GET /api/calendar/google/events/{date}/`
+
+`async` multi-account fetch (the deploy is ASGI/uvicorn). Fetches across every
+connected account × selected calendar concurrently. Server-side per-`(user,
+account, date, account_version)` cache (TTL = `GOOGLE_CACHE_TTL_SECONDS`).
+
+**Success — `200 OK`** (composite shape; `account_errors` is **always**
+present, empty when all accounts loaded):
+
+```json
+{
+  "events": [
+    {
+      "title": "Standup",
+      "start": "2026-05-07T09:00:00+00:00",
+      "end":   "2026-05-07T09:15:00+00:00",
+      "calendar_name": "Team",
+      "all_day": false,
+      "external_uid": "abc123@google",
+      "account_label": "you@gmail.com"
+    }
+  ],
+  "account_errors": [
+    { "account_id": 2, "email": "old@gmail.com", "error": "reconnect_required" }
+  ]
+}
+```
+
+**Partial success** is the core contract: one account's revoked grant becomes
+an `account_errors[]` entry (`reconnect_required`) while the others' events
+still load — a single bad account never blanks the panel. Transient
+provider/timeout failures use `error: "unavailable"`. `external_uid` is
+namespaced (`<id>@google`) so it can't collide with a CalDAV UID; cancelled
+recurring instances are dropped.
+
+**Error responses** (whole-request, not per-account):
+
+| Status | Cause |
+|--------|-------|
+| `400` | Malformed `date` path param. |
+| `503` | No `GoogleCalendarAccount` configured for this user. |
+| `500` | `Google Calendar service is misconfigured. Contact the administrator.` — `GOOGLE_OAUTH_TOKEN_KEY` cannot decrypt a stored row (server-wide; e.g. key rotation). **Operator action**: see `.claude/rules/project.md` § "Google Calendar token rotation note". |
 
 All non-`2xx` use `{"errors": {"detail": "<message>"}}`.
 

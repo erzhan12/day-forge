@@ -36,6 +36,7 @@ INSTALLED_APPS = [
     "analytics",
     "calendar_sync",
     "todoist_sync",
+    "gcal_sync",
 ]
 
 MIDDLEWARE = [
@@ -328,6 +329,68 @@ if TODOIST_REQUEST_TIMEOUT <= 0:
     raise ValueError(
         "TODOIST_REQUEST_TIMEOUT must be a positive number; "
         f"got {TODOIST_REQUEST_TIMEOUT!r}"
+    )
+
+# ---------------------------------------------------------------------------
+# Google Calendar (feature 0022)
+# ---------------------------------------------------------------------------
+# OAuth 2.0 Web-application client credentials, issued in the Google Cloud
+# console. ``GOOGLE_OAUTH_CLIENT_SECRET`` is never logged; the redirect URI is
+# server-config only (never client-provided). All four are a hard boot
+# dependency in production — ``gcal_sync.E001`` blocks DEBUG=False startup if
+# the token key OR any of these client vars is unset, even if no user has
+# connected Google. An optional-Google staging env must set all four or stay
+# DEBUG=True.
+GOOGLE_OAUTH_CLIENT_ID = os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "")
+GOOGLE_OAUTH_CLIENT_SECRET = os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET", "")
+GOOGLE_OAUTH_REDIRECT_URI = os.environ.get("GOOGLE_OAUTH_REDIRECT_URI", "")
+# Fernet symmetric key (URL-safe base64, 32 bytes) for refresh/access tokens
+# at rest. No insecure default — empty is tolerated only when DEBUG=True;
+# ``gcal_sync.E001`` blocks DEBUG=False startup if unset or malformed, and
+# ``gcal_sync.crypto`` raises ImproperlyConfigured at use time.
+GOOGLE_OAUTH_TOKEN_KEY = os.environ.get("GOOGLE_OAUTH_TOKEN_KEY", "")
+# REST base + OAuth endpoints — analogs of CALDAV_DEFAULT_BASE_URL. service.py
+# builds every request URL from these so a self-hosted proxy ships without a
+# code change.
+GOOGLE_CALENDAR_API_BASE = os.environ.get(
+    "GOOGLE_CALENDAR_API_BASE", "https://www.googleapis.com/calendar/v3"
+)
+GOOGLE_OAUTH_TOKEN_URI = os.environ.get(
+    "GOOGLE_OAUTH_TOKEN_URI", "https://oauth2.googleapis.com/token"
+)
+GOOGLE_OAUTH_AUTH_URI = os.environ.get(
+    "GOOGLE_OAUTH_AUTH_URI", "https://accounts.google.com/o/oauth2/v2/auth"
+)
+# Space-separated read-only scopes. ``calendar.readonly`` covers calendarList
+# enumeration + events read and CANNOT write; ``openid`` + ``userinfo.email``
+# make Google return a verifiable id_token carrying ``sub`` + ``email`` for
+# account identity. Request the CANONICAL scope strings (not the short ``email``
+# alias) so the requested set equals Google's returned set and oauthlib does
+# not raise "Scope has changed". Parsed internally with ``.split()`` so each
+# scope flows separately through ``Flow.from_client_config(..., scopes=...)``.
+GOOGLE_OAUTH_SCOPE = os.environ.get(
+    "GOOGLE_OAUTH_SCOPE",
+    "https://www.googleapis.com/auth/calendar.readonly "
+    "openid https://www.googleapis.com/auth/userinfo.email",
+)
+# Hard cap on each Google HTTP call (mirror CALDAV_REQUEST_TIMEOUT) — a hung
+# connection must not pin a worker.
+GOOGLE_REQUEST_TIMEOUT = float(os.environ.get("GOOGLE_REQUEST_TIMEOUT", "10"))
+# Per-(user, account, date) event-list cache window. Versioned keys (see
+# gcal_sync/cache.py) keep correctness regardless of backend; the
+# ``gcal_sync.W001`` check warns when the backend is non-shared.
+GOOGLE_CACHE_TTL_SECONDS = int(os.environ.get("GOOGLE_CACHE_TTL_SECONDS", "300"))
+# Same import-time positive-value guards as the CALDAV_*/TODOIST_* blocks:
+# fail loudly on a misconfigured deploy (ValueError, NOT ImproperlyConfigured).
+if GOOGLE_CACHE_TTL_SECONDS <= 0:
+    raise ValueError(
+        "GOOGLE_CACHE_TTL_SECONDS must be a positive integer; "
+        f"got {GOOGLE_CACHE_TTL_SECONDS!r}"
+    )
+if GOOGLE_REQUEST_TIMEOUT <= 0:
+    raise ValueError(
+        "GOOGLE_REQUEST_TIMEOUT must be a positive number; "
+        f"got {GOOGLE_REQUEST_TIMEOUT!r}"
     )
 
 # Analytics / streak. Validated at import time so a misconfigured value

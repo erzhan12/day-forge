@@ -35,6 +35,8 @@ Add an **A record**: host `dayforge` → the droplet's public IP. (Subdomain of
 | `CSRF_TRUSTED_ORIGINS` | `https://dayforge.habitreward.org` |
 | `CALDAV_ENCRYPTION_KEY` | `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` |
 | `TODOIST_ENCRYPTION_KEY` | `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` |
+| `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` / `GOOGLE_OAUTH_REDIRECT_URI` | from the Google Cloud console OAuth (Web) client; redirect URI = `https://dayforge.habitreward.org/api/calendar/google/callback/` |
+| `GOOGLE_OAUTH_TOKEN_KEY` | `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` |
 | `LLM_API_KEY` | OpenRouter key |
 | `LLM_BASE_URL` | `https://openrouter.ai/api/v1` |
 | `LLM_MODEL` | OpenRouter model id (command/chat) |
@@ -45,6 +47,11 @@ Add an **A record**: host `dayforge` → the droplet's public IP. (Subdomain of
 > Apple Calendar (`calendar_sync.E001` blocks startup otherwise).
 > `TODOIST_ENCRYPTION_KEY` is also **required** for a `DEBUG=0` boot even if nobody
 > uses Todoist (`todoist_sync.E001` blocks startup otherwise).
+> **All four** `GOOGLE_OAUTH_*` vars (client id, client secret, redirect uri, token
+> key) are **required** for a `DEBUG=0` boot even if nobody connects Google
+> Calendar — `gcal_sync.E001` blocks startup if any is unset/malformed (a
+> stricter divergence from CalDAV/Todoist, whose checks cover only the
+> encryption key). A Google-less prod env must still set all four.
 
 ### 3. Restrict public access to `:8006` (ufw + DOCKER-USER)
 

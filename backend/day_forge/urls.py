@@ -3,6 +3,7 @@ from analytics import views as analytics_views
 from calendar_sync import views as calendar_views
 from django.contrib import admin
 from django.urls import path
+from gcal_sync import views as gcal_views
 from schedules import api as schedules_api
 from schedules import views as schedules_views
 from templates_mgr import api as templates_api
@@ -85,6 +86,32 @@ urlpatterns = [
         "api/calendar/events/<str:date>/",
         calendar_views.events,
         name="caldav_events",
+    ),
+    # API: Google Calendar (feature 0022)
+    path(
+        "api/calendar/google/connect/",
+        gcal_views.connect,
+        name="gcal_connect",
+    ),
+    path(
+        "api/calendar/google/callback/",
+        gcal_views.callback,
+        name="gcal_callback",
+    ),
+    path(
+        "api/calendar/google/accounts/",
+        gcal_views.accounts,
+        name="gcal_accounts",
+    ),
+    path(
+        "api/calendar/google/accounts/<int:account_id>/",
+        gcal_views.account_detail,
+        name="gcal_account_detail",
+    ),
+    path(
+        "api/calendar/google/events/<str:date>/",
+        gcal_views.events,
+        name="gcal_events",
     ),
     # API: Todoist (feature 0020)
     path(
