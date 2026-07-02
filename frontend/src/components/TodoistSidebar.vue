@@ -6,11 +6,21 @@
 import type { TodoistTask } from "../types/todoist"
 import TodoistTasksPanel from "./TodoistTasksPanel.vue"
 
-defineProps<{
-  tasks: TodoistTask[]
-  loading: boolean
-  error: string | null
-}>()
+// The left sidebar hosts both the Todoist task list AND (via the default slot,
+// feature 0022) the external-calendar panel stacked below it. Either section
+// shows independently: `showTasks` when Todoist is connected, `showExtra` when
+// a calendar is connected. Schedule.vue gates the whole sidebar on
+// `showTasks || showExtra`.
+withDefaults(
+  defineProps<{
+    tasks: TodoistTask[]
+    loading: boolean
+    error: string | null
+    showTasks?: boolean
+    showExtra?: boolean
+  }>(),
+  { showTasks: true, showExtra: false },
+)
 
 const emit = defineEmits<{
   (e: "retry"): void
@@ -30,12 +40,13 @@ function toggle(): void {
     class="todoist-sidebar"
     :class="{ collapsed: !open }"
     data-testid="todoist-sidebar"
-    aria-label="Todoist tasks"
+    :aria-label="showTasks ? 'Todoist tasks' : 'Calendar'"
   >
     <header v-if="open" class="todoist-sidebar-header">
-      <span class="todoist-sidebar-title">Todoist</span>
+      <span class="todoist-sidebar-title">{{ showTasks ? "Todoist" : "Calendar" }}</span>
       <div class="todoist-sidebar-actions">
         <button
+          v-if="showTasks"
           type="button"
           class="todoist-sidebar-toggle"
           data-testid="todoist-sidebar-refresh"
@@ -48,7 +59,7 @@ function toggle(): void {
           type="button"
           class="todoist-sidebar-toggle"
           data-testid="todoist-sidebar-toggle"
-          aria-label="Collapse Todoist panel"
+          :aria-label="showTasks ? 'Collapse Todoist panel' : 'Collapse Calendar panel'"
           aria-controls="todoist-sidebar-body"
           :aria-expanded="open"
           @click="toggle"
@@ -59,19 +70,25 @@ function toggle(): void {
     </header>
     <div v-if="open" id="todoist-sidebar-body" class="todoist-sidebar-body">
       <TodoistTasksPanel
+        v-if="showTasks"
+        class="todoist-sidebar-tasks"
         :tasks="tasks"
         :loading="loading"
         :error="error"
         @retry="emit('retry')"
         @complete="emit('complete', $event)"
       />
+      <!-- External-calendar panel (feature 0022), stacked below the tasks. -->
+      <div v-if="showExtra" class="todoist-sidebar-extra">
+        <slot />
+      </div>
     </div>
     <button
       v-else
       type="button"
       class="todoist-sidebar-toggle todoist-sidebar-toggle-rail"
       data-testid="todoist-sidebar-toggle"
-      aria-label="Expand Todoist panel"
+      :aria-label="showTasks ? 'Expand Todoist panel' : 'Expand Calendar panel'"
       aria-controls="todoist-sidebar-body"
       :aria-expanded="open"
       @click="toggle"
@@ -166,5 +183,22 @@ function toggle(): void {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+/* Task list takes the growing space and keeps its own internal scroll. */
+.todoist-sidebar-tasks {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* Calendar panel sits below with a capped height + its own scroll, so a long
+   event list never pushes the task list off-screen. When Todoist isn't
+   connected (`showTasks` false) it's the only child and simply sizes to
+   content at the top. */
+.todoist-sidebar-extra {
+  flex: 0 0 auto;
+  max-height: 50%;
+  overflow-y: auto;
+  border-top: 1px solid var(--border);
 }
 </style>

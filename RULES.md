@@ -293,6 +293,16 @@ prop that `ExternalEventsPanel` used pre-0022 — a Google failure must not blan
 healthy Apple events. Per-provider retry is routed separately
 (`retry(provider)`), Apple ≠ Google.
 
+**Panel placement (wide-only):** `ExternalEventsPanel` lives inside the left
+`TodoistSidebar` (default slot, stacked under the Todoist list) — **not** the
+main column. The sidebar shows on wide viewports (`isWide`) when **either**
+Todoist or a calendar is connected (`Schedule.vue:leftSidebarVisible`), with
+`showTasks` / `showExtra` gating each section. On narrow/mobile there is **no**
+external-calendar panel by design. Note: `useCalendar`/`useGoogleCalendar` still
+fetch on every date regardless of viewport, so on narrow the events are fetched
+but not displayed — a deliberate simplicity trade-off (gate the fetch on
+`isWide` if that egress ever matters).
+
 ### Token refresh concurrency (the P1/P2 design)
 `_ensure_access_token` (async) is the only refresh-token decrypt site. The
 `select_for_update` lock is acquired in the sync `_persist_refreshed_tokens`
