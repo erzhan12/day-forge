@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest"
 import { mount } from "@vue/test-utils"
 
 import ExternalEventsPanel from "../src/components/ExternalEventsPanel.vue"
+import { todayString } from "../src/utils/date"
 
 const APPLE_EVENT = {
   title: "Lunch",
@@ -167,5 +168,31 @@ describe("ExternalEventsPanel", () => {
     const banner = wrapper.find('[data-testid="account-error"]')
     expect(banner.text()).toContain("temporarily unavailable")
     expect(banner.find(".ee-reconnect").exists()).toBe(false)
+  })
+
+  it("dims timed events that already ended on today", () => {
+    const today = todayString()
+    const past = {
+      ...APPLE_EVENT,
+      start: `${today}T14:00:00`,
+      end: `${today}T15:00:00`,
+    }
+    const upcoming = {
+      ...GOOGLE_EVENT,
+      start: `${today}T17:00:00`,
+      end: `${today}T18:00:00`,
+    }
+    const wrapper = mount(ExternalEventsPanel, {
+      props: {
+        events: [past, upcoming],
+        loading: false,
+        connected: true,
+        date: today,
+        nowMinutes: 16 * 60,
+      },
+    })
+    const items = wrapper.findAll('[data-testid="external-event"]')
+    expect(items[0].classes()).toContain("ee-item--past")
+    expect(items[1].classes()).not.toContain("ee-item--past")
   })
 })
