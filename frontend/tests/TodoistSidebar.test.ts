@@ -149,4 +149,19 @@ describe("TodoistSidebar — showTasks / showExtra (feature 0022)", () => {
     )
     expect(wrapper.find(".todoist-sidebar-extra").exists()).toBe(false)
   })
+
+  it("titles + labels reflect BOTH sections when showTasks && showExtra", () => {
+    wrapper = mountSidebarWith(
+      { showTasks: true, showExtra: true },
+      '<div class="stub-cal">CAL</div>',
+    )
+    expect(wrapper.find(".todoist-sidebar-title").text()).toBe("Tasks & Calendar")
+    // Landmark + collapse toggle read the combined content, not just Todoist.
+    expect(
+      wrapper.find('[data-testid="todoist-sidebar"]').attributes("aria-label"),
+    ).toBe("Tasks and Calendar")
+    expect(
+      wrapper.find('[data-testid="todoist-sidebar-toggle"]').attributes("aria-label"),
+    ).toBe("Collapse Tasks & Calendar panel")
+  })
 })

@@ -3,6 +3,7 @@
 // the opposite edge: fixed viewport frame, header + rail toggle. Persistence
 // lives in Schedule.vue + todoistSidebarStorage; task data in useTodoist.
 
+import { computed } from "vue"
 import type { TodoistTask } from "../types/todoist"
 import TodoistTasksPanel from "./TodoistTasksPanel.vue"
 
@@ -11,7 +12,7 @@ import TodoistTasksPanel from "./TodoistTasksPanel.vue"
 // shows independently: `showTasks` when Todoist is connected, `showExtra` when
 // a calendar is connected. Schedule.vue gates the whole sidebar on
 // `showTasks || showExtra`.
-withDefaults(
+const props = withDefaults(
   defineProps<{
     tasks: TodoistTask[]
     loading: boolean
@@ -20,6 +21,24 @@ withDefaults(
     showExtra?: boolean
   }>(),
   { showTasks: true, showExtra: false },
+)
+
+// Title + the noun used in the landmark / toggle aria-labels reflect which
+// sections are actually visible — misleading "Todoist" labels over calendar
+// content (or vice-versa) confuse screen-reader users.
+const panelTitle = computed(() =>
+  props.showTasks && props.showExtra
+    ? "Tasks & Calendar"
+    : props.showTasks
+      ? "Todoist"
+      : "Calendar",
+)
+const panelNoun = computed(() =>
+  props.showTasks && props.showExtra
+    ? "Tasks and Calendar"
+    : props.showTasks
+      ? "Todoist tasks"
+      : "Calendar",
 )
 
 const emit = defineEmits<{
@@ -40,10 +59,10 @@ function toggle(): void {
     class="todoist-sidebar"
     :class="{ collapsed: !open }"
     data-testid="todoist-sidebar"
-    :aria-label="showTasks ? 'Todoist tasks' : 'Calendar'"
+    :aria-label="panelNoun"
   >
     <header v-if="open" class="todoist-sidebar-header">
-      <span class="todoist-sidebar-title">{{ showTasks ? "Todoist" : "Calendar" }}</span>
+      <span class="todoist-sidebar-title">{{ panelTitle }}</span>
       <div class="todoist-sidebar-actions">
         <button
           v-if="showTasks"
@@ -59,7 +78,7 @@ function toggle(): void {
           type="button"
           class="todoist-sidebar-toggle"
           data-testid="todoist-sidebar-toggle"
-          :aria-label="showTasks ? 'Collapse Todoist panel' : 'Collapse Calendar panel'"
+          :aria-label="`Collapse ${panelTitle} panel`"
           aria-controls="todoist-sidebar-body"
           :aria-expanded="open"
           @click="toggle"
@@ -88,7 +107,7 @@ function toggle(): void {
       type="button"
       class="todoist-sidebar-toggle todoist-sidebar-toggle-rail"
       data-testid="todoist-sidebar-toggle"
-      :aria-label="showTasks ? 'Expand Todoist panel' : 'Expand Calendar panel'"
+      :aria-label="`Expand ${panelTitle} panel`"
       aria-controls="todoist-sidebar-body"
       :aria-expanded="open"
       @click="toggle"
