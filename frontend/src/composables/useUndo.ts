@@ -27,11 +27,11 @@ const MAX_UNDO_STACK = 20
 const TOAST_DURATION_MS = 8_000
 
 export function useUndo(
-  date: string,
+  getCurrentDate: () => string,
   getCurrentBlocks: () => TimeBlock[],
   isDisabled?: () => boolean,
 ) {
-  const { restoreBlocks } = useSchedule(date)
+  const { restoreBlocks } = useSchedule(getCurrentDate)
 
   const undoStack = ref<UndoAction[]>([])
   const canUndo = computed(() => undoStack.value.length > 0)
@@ -92,6 +92,13 @@ export function useUndo(
     undoInFlight = true
     try {
       const action = undoStack.value[undoStack.value.length - 1]
+      // Only undo actions for the date currently on screen. After a draft
+      // or edit on day A, navigating to day B leaves the stack entry (so
+      // returning to A can still undo) but must not let Undo/Cmd+Z call
+      // restore_blocks on A while viewing B — that wipes A's blocks.
+      if (action.scheduleDate !== getCurrentDate()) {
+        return
+      }
       const blocksPayload = action.previousBlocks.map((b) => ({
         title: b.title,
         start_time: b.start_time,
