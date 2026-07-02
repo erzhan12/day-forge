@@ -345,8 +345,13 @@ dead pre-refresh key (next read misses it; perf-only but wasteful).
   a `code_challenge` and stashes the `code_verifier` on the Flow instance — but
   we rebuild a fresh, stateless Flow at callback time, so the verifier is gone
   at token exchange → Google `invalid_grant: Missing code verifier`. We're a
-  confidential Web client (client_secret), so PKCE is optional. If you ever
-  want PKCE back, persist the verifier in the session next to `state`.
+  confidential Web client (client_secret), so PKCE is optional. While PKCE
+  provides defense-in-depth even for confidential clients (RFC 7636), the
+  marginal benefit is outweighed by the session-persistence complexity in this
+  stateless Flow-rebuild architecture; the existing protections (client_secret,
+  CSRF state, server-controlled redirect_uri, HTTPS) remain robust. If you ever
+  want PKCE back, persist the verifier in the session next to `state`. See
+  RFC 7636 for the PKCE spec.
 - `connect`/`callback`/`accounts` are sync; only `events` is async. The CSRF
   `state` lives in the session and is `pop`ed in the callback (no replay).
 - `exchange_code` (sync) uses `httpx.Client`; the events path uses

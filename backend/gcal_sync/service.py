@@ -151,8 +151,9 @@ def _build_flow(state: str | None = None) -> Flow:
     # stateless Flow at callback time (connect and callback are separate
     # requests), so that verifier is gone at token exchange and Google rejects
     # it with "invalid_grant: Missing code verifier". This is a confidential
-    # Web client authenticating with a client_secret, so PKCE is optional —
-    # disable it rather than thread the verifier through the session.
+    # Web client authenticating with a client_secret, so PKCE is optional
+    # (RFC 7636) — disable it rather than thread the verifier through the
+    # session.
     flow.autogenerate_code_verifier = False
     flow.code_verifier = None
     return flow
@@ -175,6 +176,9 @@ def build_authorization_url(state: str) -> str:
         prompt="consent",
         state=state,
     )
+    # Log only the first 8 chars of the state so the full CSRF token never
+    # lands in logs; helps future OAuth troubleshooting.
+    logger.debug("Built Google OAuth URL (PKCE disabled) for state=%s…", state[:8])
     return url
 
 

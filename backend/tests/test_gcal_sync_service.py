@@ -329,6 +329,10 @@ class TestScopeRelaxation:
         assert "code_challenge" not in url
 
     def test_build_flow_disables_code_verifier(self, db):
+        # Regression guard: if PKCE is ever re-enabled, the stateless Flow
+        # rebuild at callback time loses the code_verifier and EVERY
+        # production Google connect fails with "invalid_grant: Missing code
+        # verifier". Keep the verifier off unless the session persists it.
         flow = service._build_flow("the-state")
         assert flow.autogenerate_code_verifier is False
         assert flow.code_verifier is None
