@@ -340,6 +340,13 @@ dead pre-refresh key (next read misses it; perf-only but wasteful).
   events path — Google ids routinely contain `@`/`#` (shared
   `…@group.calendar.google.com`); unescaped they break into extra path
   segments and silently fail shared-calendar fetches.
+- **PKCE is disabled** (`_build_flow` sets `flow.autogenerate_code_verifier =
+  False`). google-auth-oauthlib defaults it True, so `authorization_url` emits
+  a `code_challenge` and stashes the `code_verifier` on the Flow instance — but
+  we rebuild a fresh, stateless Flow at callback time, so the verifier is gone
+  at token exchange → Google `invalid_grant: Missing code verifier`. We're a
+  confidential Web client (client_secret), so PKCE is optional. If you ever
+  want PKCE back, persist the verifier in the session next to `state`.
 - `connect`/`callback`/`accounts` are sync; only `events` is async. The CSRF
   `state` lives in the session and is `pop`ed in the callback (no replay).
 - `exchange_code` (sync) uses `httpx.Client`; the events path uses
