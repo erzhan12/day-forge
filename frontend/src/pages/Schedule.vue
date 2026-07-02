@@ -46,6 +46,7 @@ import { useTodoistPoll } from "../composables/useTodoistPoll"
 import { useThemeFromProps } from "../composables/useThemeFromProps"
 import { useNowMinutes } from "../composables/useNowMinutes"
 import { useSoundNotifications } from "../composables/useSoundNotifications"
+import { useExternalCalendarPlacement } from "../composables/useExternalCalendarPlacement"
 import ExternalEventsPanel from "../components/ExternalEventsPanel.vue"
 import "../app.css"
 
@@ -255,12 +256,21 @@ const chatSidebarWidth = computed(() => {
   return sidebarOpen.value ? "380px" : "32px"
 })
 
-// The left sidebar now hosts the Todoist list AND the external-calendar panel
-// (feature 0022), so it shows when EITHER is connected.
+const { placement: externalCalendarPlacement } = useExternalCalendarPlacement()
+
+const externalCalendarInSidebar = computed(
+  () => externalCalendarPlacement.value === "sidebar",
+)
+const externalCalendarInCenter = computed(
+  () => externalCalendarPlacement.value === "center",
+)
+
+// The left sidebar hosts the Todoist list and, when placement is "sidebar",
+// the external-calendar panel — so it shows when EITHER is connected.
 const leftSidebarVisible = computed(
   () =>
     (todoist.state.statusKnown && todoist.state.connected) ||
-    externalConnected.value,
+    (externalConnected.value && externalCalendarInSidebar.value),
 )
 
 const todoistSidebarWidth = computed(() => {
@@ -443,6 +453,17 @@ function logout() {
 
     <p v-if="lastDraftError" class="draft-error">{{ lastDraftError }}</p>
 
+    <ExternalEventsPanel
+      v-if="externalConnected && externalCalendarInCenter"
+      variant="center"
+      :events="mergedExternalEvents"
+      :loading="externalLoading"
+      :error-banners="externalErrorBanners"
+      :account-errors="googleCalendar.state.accountErrors"
+      :connected="externalConnected"
+      @retry="retryExternalFetch"
+    />
+
     <AddBlockForm
       :date="date"
       :initial-start-time="prefillStart"
@@ -565,7 +586,7 @@ function logout() {
       v-if="isWide && leftSidebarVisible"
       v-model:open="todoistSidebarOpen"
       :show-tasks="todoist.state.statusKnown && todoist.state.connected"
-      :show-extra="externalConnected"
+      :show-extra="externalConnected && externalCalendarInSidebar"
       :tasks="todoist.state.tasks"
       :loading="todoist.state.loading"
       :error="todoist.state.error"
@@ -576,6 +597,8 @@ function logout() {
       <!-- External-calendar panel (feature 0022): stacked under the Todoist
            list inside the left sidebar. Wide-screen only. -->
       <ExternalEventsPanel
+        v-if="externalCalendarInSidebar"
+        variant="sidebar"
         :events="mergedExternalEvents"
         :loading="externalLoading"
         :error-banners="externalErrorBanners"

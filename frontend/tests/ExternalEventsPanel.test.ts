@@ -1,6 +1,6 @@
 // Render tests for ExternalEventsPanel.vue. Feature 0022 restructured the
 // error branch to be NON-suppressing (banners coexist with the list) and
-// added the second account chip + per-account error banners.
+// added the account email chip + per-account error banners.
 
 import { describe, expect, it } from "vitest"
 import { mount } from "@vue/test-utils"
@@ -71,7 +71,18 @@ describe("ExternalEventsPanel", () => {
     expect(wrapper.find(".ee-empty").exists()).toBe(true)
   })
 
-  it("renders a Google row with BOTH chips, an Apple row with only the calendar chip", () => {
+  it("renders event title prominently on its own row", () => {
+    const wrapper = mount(ExternalEventsPanel, {
+      props: { events: [GOOGLE_EVENT], loading: false, connected: true },
+    })
+    const item = wrapper.find('[data-testid="external-event"]')
+    const title = item.find(".ee-event-title")
+    expect(title.exists()).toBe(true)
+    expect(title.text()).toBe("Standup")
+    expect(item.find(".ee-meta").exists()).toBe(true)
+  })
+
+  it("renders a Google row with only the account email, an Apple row with only the calendar chip", () => {
     const wrapper = mount(ExternalEventsPanel, {
       props: { events: [APPLE_EVENT, GOOGLE_EVENT], loading: false, connected: true },
     })
@@ -79,8 +90,8 @@ describe("ExternalEventsPanel", () => {
     // Apple row: calendar chip only, no account chip.
     expect(items[0].find(".ee-calendar-chip").exists()).toBe(true)
     expect(items[0].find(".ee-account-chip").exists()).toBe(false)
-    // Google row: both chips, account chip shows the email.
-    expect(items[1].find(".ee-calendar-chip").exists()).toBe(true)
+    // Google row: account email only — no calendar-name chip (summary is often a display name).
+    expect(items[1].find(".ee-calendar-chip").exists()).toBe(false)
     const accountChip = items[1].find(".ee-account-chip")
     expect(accountChip.exists()).toBe(true)
     expect(accountChip.text()).toBe("alice@gmail.com")
