@@ -139,12 +139,24 @@ def _build_flow(state: str | None = None) -> Flow:
     # ``.split()`` the space-separated scope string into a list so each scope
     # flows separately — never pass the opaque multi-scope string as one
     # element (Google rejects it).
-    return Flow.from_client_config(
+    flow = Flow.from_client_config(
         _client_config(),
         scopes=settings.GOOGLE_OAUTH_SCOPE.split(),
         redirect_uri=settings.GOOGLE_OAUTH_REDIRECT_URI,
         state=state,
     )
+    # Disable PKCE. google-auth-oauthlib defaults autogenerate_code_verifier=
+    # True, so ``authorization_url`` emits a ``code_challenge`` and stores the
+    # matching ``code_verifier`` ON THE FLOW INSTANCE. We rebuild a FRESH,
+    # stateless Flow at callback time (connect and callback are separate
+    # requests), so that verifier is gone at token exchange and Google rejects
+    # it with "invalid_grant: Missing code verifier". This is a confidential
+    # Web client authenticating with a client_secret, so PKCE is optional
+    # (RFC 7636) — disable it rather than thread the verifier through the
+    # session.
+    flow.autogenerate_code_verifier = False
+    flow.code_verifier = None
+    return flow
 
 
 def build_authorization_url(state: str) -> str:
@@ -164,6 +176,9 @@ def build_authorization_url(state: str) -> str:
         prompt="consent",
         state=state,
     )
+    # Log only the first 8 chars of the state so the full CSRF token never
+    # lands in logs; helps future OAuth troubleshooting.
+    logger.debug("Built Google OAuth URL (PKCE disabled) for state=%s…", state[:8])
     return url
 
 

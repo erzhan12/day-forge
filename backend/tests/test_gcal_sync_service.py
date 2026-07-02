@@ -321,6 +321,22 @@ class TestScopeRelaxation:
         url = service.build_authorization_url("the-state")
         assert "include_granted_scopes" not in url
 
+    def test_authorization_url_has_no_pkce_challenge(self, db):
+        # PKCE is disabled — a stateless Flow rebuild at callback time can't
+        # supply the code_verifier, so sending a code_challenge would fail the
+        # token exchange with "Missing code verifier".
+        url = service.build_authorization_url("the-state")
+        assert "code_challenge" not in url
+
+    def test_build_flow_disables_code_verifier(self, db):
+        # Regression guard: if PKCE is ever re-enabled, the stateless Flow
+        # rebuild at callback time loses the code_verifier and EVERY
+        # production Google connect fails with "invalid_grant: Missing code
+        # verifier". Keep the verifier off unless the session persists it.
+        flow = service._build_flow("the-state")
+        assert flow.autogenerate_code_verifier is False
+        assert flow.code_verifier is None
+
 
 # ----- fetch_events_for_account ------------------------------------------
 
