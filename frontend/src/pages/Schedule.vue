@@ -255,9 +255,17 @@ const chatSidebarWidth = computed(() => {
   return sidebarOpen.value ? "380px" : "32px"
 })
 
+// The left sidebar now hosts the Todoist list AND the external-calendar panel
+// (feature 0022), so it shows when EITHER is connected.
+const leftSidebarVisible = computed(
+  () =>
+    (todoist.state.statusKnown && todoist.state.connected) ||
+    externalConnected.value,
+)
+
 const todoistSidebarWidth = computed(() => {
   if (!isWide.value) return "0px"
-  if (!todoist.state.statusKnown || !todoist.state.connected) return "0px"
+  if (!leftSidebarVisible.value) return "0px"
   return todoistSidebarOpen.value ? "380px" : "32px"
 })
 
@@ -435,15 +443,6 @@ function logout() {
 
     <p v-if="lastDraftError" class="draft-error">{{ lastDraftError }}</p>
 
-    <ExternalEventsPanel
-      :events="mergedExternalEvents"
-      :loading="externalLoading"
-      :error-banners="externalErrorBanners"
-      :account-errors="googleCalendar.state.accountErrors"
-      :connected="externalConnected"
-      @retry="retryExternalFetch"
-    />
-
     <AddBlockForm
       :date="date"
       :initial-start-time="prefillStart"
@@ -563,15 +562,28 @@ function logout() {
     />
 
     <TodoistSidebar
-      v-if="isWide && todoist.state.statusKnown && todoist.state.connected"
+      v-if="isWide && leftSidebarVisible"
       v-model:open="todoistSidebarOpen"
+      :show-tasks="todoist.state.statusKnown && todoist.state.connected"
+      :show-extra="externalConnected"
       :tasks="todoist.state.tasks"
       :loading="todoist.state.loading"
       :error="todoist.state.error"
       @retry="retryFetchTasks"
       @complete="completeTask"
       @refresh="refreshTodoist"
-    />
+    >
+      <!-- External-calendar panel (feature 0022): stacked under the Todoist
+           list inside the left sidebar. Wide-screen only. -->
+      <ExternalEventsPanel
+        :events="mergedExternalEvents"
+        :loading="externalLoading"
+        :error-banners="externalErrorBanners"
+        :account-errors="googleCalendar.state.accountErrors"
+        :connected="externalConnected"
+        @retry="retryExternalFetch"
+      />
+    </TodoistSidebar>
     <ChatSidebar
       v-if="isWide"
       v-model:open="sidebarOpen"

@@ -145,5 +145,5 @@ jobs:
             - Always end with a Merge Verdict section
 
           claude_args: |
-            --model claude-sonnet-4-5-20250929
+            --model claude-sonnet-4-6
             --allowed-tools "Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr review:*)"

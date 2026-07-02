@@ -100,3 +100,68 @@ describe("TodoistSidebar — complete passthrough (PART A)", () => {
     expect(wrapper.emitted("complete")![0]).toEqual(["1"])
   })
 })
+
+// Feature 0022: the sidebar can host a calendar panel (default slot) and can
+// render with Todoist absent (calendar-only user).
+function mountSidebarWith(props: Record<string, unknown>, slot?: string) {
+  return mount(TodoistSidebar, {
+    props: {
+      tasks: [],
+      loading: false,
+      error: null,
+      open: true,
+      "onUpdate:open": () => {},
+      ...props,
+    },
+    slots: slot ? { default: slot } : {},
+    attachTo: document.body,
+  })
+}
+
+describe("TodoistSidebar — showTasks / showExtra (feature 0022)", () => {
+  it("hides the task panel + refresh and titles 'Calendar' when showTasks=false", () => {
+    wrapper = mountSidebarWith({ showTasks: false, showExtra: true })
+    expect(wrapper.find('[data-testid="todoist-panel"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="todoist-sidebar-refresh"]').exists()).toBe(false)
+    expect(wrapper.find(".todoist-sidebar-title").text()).toBe("Calendar")
+  })
+
+  it("still titles 'Todoist' and shows the task panel when showTasks=true", () => {
+    wrapper = mountSidebarWith({ showTasks: true })
+    expect(wrapper.find(".todoist-sidebar-title").text()).toBe("Todoist")
+    expect(wrapper.find('[data-testid="todoist-panel"]').exists()).toBe(true)
+  })
+
+  it("renders slotted calendar content under .todoist-sidebar-extra when showExtra=true", () => {
+    wrapper = mountSidebarWith(
+      { showTasks: true, showExtra: true },
+      '<div class="stub-cal">CAL</div>',
+    )
+    const extra = wrapper.find(".todoist-sidebar-extra")
+    expect(extra.exists()).toBe(true)
+    expect(extra.find(".stub-cal").text()).toBe("CAL")
+  })
+
+  it("omits .todoist-sidebar-extra when showExtra=false", () => {
+    wrapper = mountSidebarWith(
+      { showTasks: true, showExtra: false },
+      '<div class="stub-cal">CAL</div>',
+    )
+    expect(wrapper.find(".todoist-sidebar-extra").exists()).toBe(false)
+  })
+
+  it("titles + labels reflect BOTH sections when showTasks && showExtra", () => {
+    wrapper = mountSidebarWith(
+      { showTasks: true, showExtra: true },
+      '<div class="stub-cal">CAL</div>',
+    )
+    expect(wrapper.find(".todoist-sidebar-title").text()).toBe("Tasks & Calendar")
+    // Landmark + collapse toggle read the combined content, not just Todoist.
+    expect(
+      wrapper.find('[data-testid="todoist-sidebar"]').attributes("aria-label"),
+    ).toBe("Tasks and Calendar")
+    expect(
+      wrapper.find('[data-testid="todoist-sidebar-toggle"]').attributes("aria-label"),
+    ).toBe("Collapse Tasks & Calendar panel")
+  })
+})
