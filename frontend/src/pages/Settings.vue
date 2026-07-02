@@ -6,6 +6,7 @@ import TemplateEditor from "../components/TemplateEditor.vue"
 import RulesList from "../components/RulesList.vue"
 import DesignSelector from "../components/DesignSelector.vue"
 import SoundNotificationToggle from "../components/SoundNotificationToggle.vue"
+import ExternalCalendarPlacementToggle from "../components/ExternalCalendarPlacementToggle.vue"
 import { todayString } from "../utils/date"
 // Keeps `<html data-theme>` in sync with ui_preferences across reloads.
 // Required convention for every authenticated page — see RULES.md.
@@ -411,6 +412,8 @@ async function handleTodoistDisconnect() {
       >
         Connect Google Calendar
       </button>
+
+      <ExternalCalendarPlacementToggle />
     </section>
 
     <section class="section">

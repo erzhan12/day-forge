@@ -295,10 +295,12 @@ healthy Apple events. Per-provider retry is routed separately
 
 **Panel placement (wide-only):** `ExternalEventsPanel` lives inside the left
 `TodoistSidebar` (default slot, stacked under the Todoist list) — **not** the
-main column. The sidebar shows on wide viewports (`isWide`) when **either**
+main column. Users can switch back to the legacy center-column placement in
+**Settings → External Calendars → Event panel placement** (`externalCalendarPlacementStorage.ts`, device-local). The sidebar shows on wide viewports (`isWide`) when **either**
 Todoist or a calendar is connected (`Schedule.vue:leftSidebarVisible`), with
-`showTasks` / `showExtra` gating each section. On narrow/mobile there is **no**
-external-calendar panel by design. Note: `useCalendar`/`useGoogleCalendar` still
+`showTasks` / `showExtra` gating each section. Center placement renders the
+panel above `AddBlockForm` on all viewports (legacy behavior). On narrow/mobile
+with sidebar placement there is **no** external-calendar panel by design. Note: `useCalendar`/`useGoogleCalendar` still
 fetch on every date regardless of viewport, so on narrow the events are fetched
 but not displayed — a deliberate simplicity trade-off (gate the fetch on
 `isWide` if that egress ever matters).
