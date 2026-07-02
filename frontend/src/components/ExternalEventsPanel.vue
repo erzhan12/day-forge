@@ -1,15 +1,23 @@
 <script setup lang="ts">
+import { computed, toRef } from "vue"
 import type {
   GoogleAccountError,
   NormalizedEvent,
   ProviderErrorBanner,
 } from "../types/calendar"
+import { todayString } from "../utils/date"
+import { isExternalEventPast } from "../utils/externalEventPast"
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     events: NormalizedEvent[]
     loading: boolean
     connected: boolean
+    // Schedule date (YYYY-MM-DD) — drives past-event fading on today.
+    date?: string
+    // Minutes-since-midnight sampler from Schedule's useNowMinutes; null
+    // off-today or before the first tick.
+    nowMinutes?: number | null
     // `sidebar` — nested in the left Todoist sidebar (tighter margins).
     // `center` — legacy placement above the schedule body.
     variant?: "sidebar" | "center"
@@ -24,8 +32,22 @@ withDefaults(
     errorBanners: () => [],
     accountErrors: () => [],
     variant: "sidebar",
+    date: () => todayString(),
+    nowMinutes: null,
   },
 )
+
+const viewedDate = toRef(props, "date")
+const today = computed(() => todayString())
+
+function eventIsPast(ev: NormalizedEvent): boolean {
+  return isExternalEventPast(
+    ev,
+    viewedDate.value,
+    today.value,
+    props.nowMinutes,
+  )
+}
 
 const emit = defineEmits<{ (e: "retry", provider: "apple" | "google"): void }>()
 
@@ -93,6 +115,7 @@ function formatTime(iso: string): string {
         v-for="ev in events"
         :key="ev.external_uid"
         class="ee-item"
+        :class="{ 'ee-item--past': eventIsPast(ev) }"
         data-testid="external-event"
       >
         <span class="ee-event-title">{{ ev.title }}</span>
@@ -200,6 +223,11 @@ function formatTime(iso: string): string {
   padding: 4px 0;
   color: var(--text-primary);
   min-width: 0;
+}
+
+.ee-item--past {
+  opacity: 0.55;
+  color: var(--text-muted);
 }
 
 .ee-time {

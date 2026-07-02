@@ -456,6 +456,8 @@ function logout() {
     <ExternalEventsPanel
       v-if="externalConnected && externalCalendarInCenter"
       variant="center"
+      :date="date"
+      :now-minutes="nowMinutes"
       :events="mergedExternalEvents"
       :loading="externalLoading"
       :error-banners="externalErrorBanners"
@@ -599,6 +601,8 @@ function logout() {
       <ExternalEventsPanel
         v-if="externalCalendarInSidebar"
         variant="sidebar"
+        :date="date"
+        :now-minutes="nowMinutes"
         :events="mergedExternalEvents"
         :loading="externalLoading"
         :error-banners="externalErrorBanners"
