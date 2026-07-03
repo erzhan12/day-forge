@@ -331,6 +331,8 @@ describe("buildBaseDisplayItems now-aware trailing split (feature 0023)", () => 
       14 * 60 + STUB_MINUTES,
       14 * 60,
     )
+    // String compares below rely on zero-padded "HH:MM" — lexicographic
+    // order equals numeric order for that fixed-width format.
     const trailing = items.filter(
       (i) => i.type === "gap" && i.start_time >= "14:00",
     )
@@ -348,6 +350,7 @@ describe("buildBaseDisplayItems now-aware trailing split (feature 0023)", () => 
       18 * 60 + STUB_MINUTES,
       17 * 60,
     )
+    // Zero-padded "HH:MM": lexicographic == numeric order.
     const trailing = items.filter(
       (i) => i.type === "gap" && i.start_time >= "18:00",
     )
@@ -365,6 +368,7 @@ describe("buildBaseDisplayItems now-aware trailing split (feature 0023)", () => 
       DAY_END_MINUTES,
       23 * 60 + 20,
     )
+    // Zero-padded "HH:MM": lexicographic == numeric order.
     const trailing = items.filter(
       (i) => i.type === "gap" && i.start_time >= "14:00",
     )
@@ -385,6 +389,7 @@ describe("buildBaseDisplayItems now-aware trailing split (feature 0023)", () => 
       DAY_END_MINUTES,
       22 * 60 + 50,
     )
+    // Zero-padded "HH:MM": lexicographic == numeric order.
     const trailing = items.filter(
       (i) => i.type === "gap" && i.start_time >= "22:00",
     )
