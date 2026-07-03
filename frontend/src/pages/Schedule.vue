@@ -107,6 +107,15 @@ const todayNowMinutes = computed(() =>
   nowDate.value === null ? null : nowMinutes.value,
 )
 
+// Reactively depends on nowMinutes: recomputes each 60s tick on today so the
+// trailing stub re-anchors as the idle gap grows. Ignored for layout during
+// drag (displayList reads the frozen snapshot instead). Single source for the
+// bounds formula — the useDrag getter below reads this computed so the
+// drag-start frozen snapshot can never diverge from the live bounds.
+const renderBounds = computed(() =>
+  computeRenderBounds(props.blocks, todayNowMinutes.value),
+)
+
 const {
   isDragging, frozenRenderBounds, frozenNowMinutes, dragBlockId, ghostTop,
   previewStartTime, previewEndTime, previewBlocks, shiftedBlockIds, startDrag,
@@ -114,15 +123,8 @@ const {
 } = useDrag(
   () => props.date, getBlocks, reorderBlocks, pushUndo, snapshotBlocks,
   () => scheduleDisabled.value,
-  () => computeRenderBounds(props.blocks, todayNowMinutes.value),
+  () => renderBounds.value,
   () => todayNowMinutes.value,
-)
-
-// Reactively depends on nowMinutes: recomputes each 60s tick on today so the
-// trailing stub re-anchors as the idle gap grows. Ignored for layout during
-// drag (displayList reads the frozen snapshot instead).
-const renderBounds = computed(() =>
-  computeRenderBounds(props.blocks, todayNowMinutes.value),
 )
 
 // Provide to child components
