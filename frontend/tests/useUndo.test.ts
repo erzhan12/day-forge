@@ -51,12 +51,13 @@ const mountedWrappers: ReturnType<typeof mount>[] = []
 function mountUndo(
   blocks: TimeBlock[] = [makeBlock()],
   isDisabled?: () => boolean,
+  getCurrentDate: () => string = () => "2026-04-10",
 ) {
   let result: ReturnType<typeof useUndo> | undefined
 
   const Wrapper = defineComponent({
     setup() {
-      result = useUndo("2026-04-10", () => blocks, isDisabled)
+      result = useUndo(getCurrentDate, () => blocks, isDisabled)
       return {}
     },
     render() {
@@ -283,5 +284,43 @@ describe("useUndo", () => {
         sort_order: 0,
       },
     ])
+  })
+
+  it("performUndo is a no-op when top action targets a different date", async () => {
+    mockRestoreBlocks.mockResolvedValue({ ok: true })
+    const { undo } = mountUndo([makeBlock()], undefined, () => "2026-04-11")
+    undo.pushUndo(makeAction({
+      description: "draft on A",
+      scheduleDate: "2026-04-10",
+      previousBlocks: [],
+    }))
+
+    await undo.performUndo()
+
+    expect(mockRestoreBlocks).not.toHaveBeenCalled()
+    expect(undo.undoStack.value).toHaveLength(1)
+  })
+
+  it("performUndo restores when navigating back to the action's date", async () => {
+    mockRestoreBlocks.mockResolvedValue({ ok: true })
+    const currentDate = ref("2026-04-11")
+    const { undo } = mountUndo(
+      [makeBlock()],
+      undefined,
+      () => currentDate.value,
+    )
+    undo.pushUndo(makeAction({
+      description: "draft on A",
+      scheduleDate: "2026-04-10",
+      previousBlocks: [],
+    }))
+
+    await undo.performUndo()
+    expect(mockRestoreBlocks).not.toHaveBeenCalled()
+
+    currentDate.value = "2026-04-10"
+    await undo.performUndo()
+    expect(mockRestoreBlocks).toHaveBeenCalledWith("2026-04-10", [])
+    expect(undo.undoStack.value).toHaveLength(0)
   })
 })

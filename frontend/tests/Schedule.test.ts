@@ -57,6 +57,7 @@ vi.mock("../src/composables/useSchedule", () => ({
 
 const pushUndo = vi.fn()
 const snapshotBlocks = vi.fn(() => [])
+const dismissToast = vi.fn()
 
 vi.mock("../src/composables/useUndo", () => ({
   useUndo: () => ({
@@ -66,7 +67,7 @@ vi.mock("../src/composables/useUndo", () => ({
     pushUndo,
     performUndo: vi.fn(),
     snapshotBlocks,
-    dismissToast: vi.fn(),
+    dismissToast,
   }),
 }))
 
@@ -385,6 +386,19 @@ describe("Schedule.vue auto-draft watcher", () => {
     resolveDraft({ ok: true, explanation: "drafted" })
     await flushPromises()
     expect(pushUndo).not.toHaveBeenCalled()
+  })
+
+  it("dismisses undo toast when navigating to another date", async () => {
+    const w = mountPage({
+      schedule: makeSchedule("2026-05-04"),
+      blocks: [],
+      date: "2026-05-04",
+      auto_draft_pending: false,
+    })
+    await nextTick()
+    dismissToast.mockClear()
+    await w.setProps({ date: "2026-05-05" })
+    expect(dismissToast).toHaveBeenCalled()
   })
 })
 
