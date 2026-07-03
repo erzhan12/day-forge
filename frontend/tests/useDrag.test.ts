@@ -498,7 +498,7 @@ describe("useDrag frozen render bounds", () => {
   ]
 
   function makeDrag(
-    getRenderBounds = () => computeRenderBounds(blocks),
+    getRenderBounds?: () => { renderStart: number; renderEnd: number },
     getNow?: () => number | null,
   ) {
     return useDrag(
@@ -508,7 +508,9 @@ describe("useDrag frozen render bounds", () => {
       vi.fn(),
       () => blocks.map((b) => ({ ...b })),
       undefined,
-      getRenderBounds,
+      // Default bounds getter threads getNow through, mirroring the
+      // Schedule.vue wiring, so the frozen snapshot pair is always coherent.
+      getRenderBounds ?? (() => computeRenderBounds(blocks, getNow?.() ?? null)),
       getNow,
     )
   }

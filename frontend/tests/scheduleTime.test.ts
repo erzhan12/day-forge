@@ -321,6 +321,26 @@ describe("buildBaseDisplayItems now-aware trailing split (feature 0023)", () => 
     expect(tail.render_minutes).toBe(STUB_MINUTES)
   })
 
+  it("does not split at the exact now === lastEnd boundary", () => {
+    // Guards the gate's strict `trailingAnchor > gapStart` comparison: at
+    // now === lastEnd the anchor equals the floor, so a `>=` regression
+    // would emit a zero-duration idle segment here.
+    const items = buildBaseDisplayItems(
+      [block({ start_time: "09:00", end_time: "14:00" })],
+      DAY_START_MINUTES,
+      14 * 60 + STUB_MINUTES,
+      14 * 60,
+    )
+    const trailing = items.filter(
+      (i) => i.type === "gap" && i.start_time >= "14:00",
+    )
+    expect(trailing).toHaveLength(1)
+    expect(trailing[0].start_time).toBe("14:00")
+    expect(trailing[0].end_time).toBe("23:00")
+    expect(trailing[0].compact).toBe(true)
+    expect(trailing[0].render_minutes).toBe(STUB_MINUTES)
+  })
+
   it("emits a single 0017 trailing gap when now is inside the last block", () => {
     const items = buildBaseDisplayItems(
       [block({ start_time: "16:00", end_time: "18:00" })],
