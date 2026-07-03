@@ -58,11 +58,44 @@ export function filterVisibleBlocks(blocks: TimeBlock[]): TimeBlock[] {
     })
 }
 
-/** Origin-shift linear render bounds for compact edge stubs. */
-export function computeRenderBounds(blocks: TimeBlock[]): RenderBounds {
+/**
+ * Trailing anchor shared by `computeRenderBounds` and `buildBaseDisplayItems`
+ * — the two must produce identical anchors or flow layout desyncs from the
+ * stub height. `anchorFloor` is `lastEnd` (≥1 visible block) or
+ * `DAY_START_MINUTES` (empty day). `nowMinutes === null` means off-today →
+ * exact 0017 anchor (`anchorFloor`). On today the anchor extends to `now` so
+ * the idle gap after the last block renders at full scale; the outer
+ * `DAY_END_MINUTES` clamp keeps a post-23:00 "now" from pushing the split
+ * boundary past the day end.
+ */
+export function computeTrailingAnchor(
+  anchorFloor: number,
+  nowMinutes: number | null,
+): number {
+  if (nowMinutes === null) return anchorFloor
+  return Math.min(DAY_END_MINUTES, Math.max(anchorFloor, nowMinutes))
+}
+
+/**
+ * Origin-shift linear render bounds for compact edge stubs. `nowMinutes` is
+ * non-null only on today (callers pass `nowDate === null ? null : nowMinutes`)
+ * — a non-null value unambiguously means "today" and makes the trailing
+ * anchor now-aware; `null` (default) keeps exact 0017 behavior.
+ */
+export function computeRenderBounds(
+  blocks: TimeBlock[],
+  nowMinutes: number | null = null,
+): RenderBounds {
   const visible = filterVisibleBlocks(blocks)
   if (visible.length === 0) {
-    return { renderStart: DAY_START_MINUTES, renderEnd: DAY_END_MINUTES }
+    if (nowMinutes === null) {
+      return { renderStart: DAY_START_MINUTES, renderEnd: DAY_END_MINUTES }
+    }
+    const trailingAnchor = computeTrailingAnchor(DAY_START_MINUTES, nowMinutes)
+    return {
+      renderStart: DAY_START_MINUTES,
+      renderEnd: Math.min(DAY_END_MINUTES, trailingAnchor + STUB_MINUTES),
+    }
   }
 
   const firstStart = Math.max(
@@ -75,35 +108,93 @@ export function computeRenderBounds(blocks: TimeBlock[]): RenderBounds {
   )
 
   const leadingGap = firstStart - DAY_START_MINUTES
+  // Compression threshold stays keyed off the REAL trailing gap from lastEnd
+  // (0017): an already-natural trailing gap never compresses regardless of now.
   const trailingGap = DAY_END_MINUTES - lastEnd
+  const trailingAnchor = computeTrailingAnchor(lastEnd, nowMinutes)
 
   return {
     renderStart:
       leadingGap > STUB_MINUTES ? firstStart - STUB_MINUTES : DAY_START_MINUTES,
     renderEnd:
-      trailingGap > STUB_MINUTES ? lastEnd + STUB_MINUTES : DAY_END_MINUTES,
+      trailingGap > STUB_MINUTES
+        ? Math.min(DAY_END_MINUTES, trailingAnchor + STUB_MINUTES)
+        : DAY_END_MINUTES,
   }
+}
+
+/**
+ * Emit the trailing gap `[gapStart, DAY_END)` onto `items`. On today with an
+ * idle interval (`trailingAnchor > gapStart`) and a real compressed tail
+ * (`activeRenderEnd < DAY_END_MINUTES`), split into a full-scale idle gap
+ * `[gapStart, trailingAnchor)` plus a compact tail `[trailingAnchor, DAY_END)`.
+ * The single gate covers both overflow edges: now ≥ 23:00 clamps
+ * `activeRenderEnd` to `DAY_END` (gate false → single gap), and
+ * `activeRenderEnd < DAY_END` implies `trailingAnchor < DAY_END` under the
+ * bounds contract, so the idle segment never crosses 23:00. Otherwise emit the
+ * single 0017 gap, compressed iff `activeRenderEnd < DAY_END_MINUTES`.
+ */
+function pushTrailingGap(
+  items: ScheduleDisplayItem[],
+  gapStart: number,
+  activeRenderEnd: number,
+  nowMinutes: number | null,
+): void {
+  if (gapStart >= DAY_END_MINUTES) return
+
+  const trailingAnchor = computeTrailingAnchor(gapStart, nowMinutes)
+  if (trailingAnchor > gapStart && activeRenderEnd < DAY_END_MINUTES) {
+    items.push({
+      type: "gap",
+      start_time: minutesToTime(gapStart),
+      end_time: minutesToTime(trailingAnchor),
+      duration_minutes: trailingAnchor - gapStart,
+    })
+    items.push({
+      type: "gap",
+      start_time: minutesToTime(trailingAnchor),
+      end_time: DAY_END,
+      duration_minutes: DAY_END_MINUTES - trailingAnchor,
+      render_minutes: Math.max(0, activeRenderEnd - trailingAnchor),
+      compact: true,
+    })
+    return
+  }
+
+  const compressed = activeRenderEnd < DAY_END_MINUTES
+  items.push({
+    type: "gap",
+    start_time: minutesToTime(gapStart),
+    end_time: DAY_END,
+    duration_minutes: DAY_END_MINUTES - gapStart,
+    ...(compressed
+      ? {
+          render_minutes: Math.max(0, activeRenderEnd - gapStart),
+          compact: true,
+        }
+      : {}),
+  })
 }
 
 /**
  * Build the block/gap list before now-marker splicing. Edge gaps may
  * compress to stub height; `activeRender*` is frozen during drag.
+ * `nowMinutes` is non-null only on today (same contract as
+ * `computeRenderBounds`) and splits the trailing gap into a full-scale idle
+ * segment `[lastEnd, now)` plus a compressed tail — `null` (default) keeps
+ * exact 0017 behavior.
  */
 export function buildBaseDisplayItems(
   blocks: TimeBlock[],
   activeRenderStart: number,
   activeRenderEnd: number,
+  nowMinutes: number | null = null,
 ): ScheduleDisplayItem[] {
   const items: ScheduleDisplayItem[] = []
   const visibleBlocks = filterVisibleBlocks(blocks)
 
   if (visibleBlocks.length === 0) {
-    items.push({
-      type: "gap",
-      start_time: DAY_START,
-      end_time: DAY_END,
-      duration_minutes: DAY_END_MINUTES - DAY_START_MINUTES,
-    })
+    pushTrailingGap(items, DAY_START_MINUTES, activeRenderEnd, nowMinutes)
     return items
   }
 
@@ -167,21 +258,7 @@ export function buildBaseDisplayItems(
     timeToMinutes(visibleBlocks[visibleBlocks.length - 1].end_time),
     DAY_END_MINUTES,
   )
-  if (lastEnd < DAY_END_MINUTES) {
-    const compressed = activeRenderEnd < DAY_END_MINUTES
-    items.push({
-      type: "gap",
-      start_time: minutesToTime(lastEnd),
-      end_time: DAY_END,
-      duration_minutes: DAY_END_MINUTES - lastEnd,
-      ...(compressed
-        ? {
-            render_minutes: Math.max(0, activeRenderEnd - lastEnd),
-            compact: true,
-          }
-        : {}),
-    })
-  }
+  pushTrailingGap(items, lastEnd, activeRenderEnd, nowMinutes)
 
   return items
 }
