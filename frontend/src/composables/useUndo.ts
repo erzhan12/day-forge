@@ -27,6 +27,17 @@ import { type DateSource, readDate } from "../utils/dateSource"
 const MAX_UNDO_STACK = 20
 const TOAST_DURATION_MS = 8_000
 
+// Most-recent stack index whose action targets `date`, or -1. Single source
+// for the date-match rule shared by `canUndo` and `performUndo` — keep them
+// in sync (a divergence shows an enabled Undo that then says "Nothing to
+// undo" on click).
+function findLastIndexForDate(stack: UndoAction[], date: string): number {
+  for (let i = stack.length - 1; i >= 0; i--) {
+    if (stack[i].scheduleDate === date) return i
+  }
+  return -1
+}
+
 export function useUndo(
   getCurrentDate: DateSource,
   getCurrentBlocks: () => TimeBlock[],
@@ -35,10 +46,10 @@ export function useUndo(
   const { restoreBlocks } = useSchedule(getCurrentDate)
 
   const undoStack = ref<UndoAction[]>([])
-  const canUndo = computed(() => {
-    const currentDate = readDate(getCurrentDate)
-    return undoStack.value.some((a) => a.scheduleDate === currentDate)
-  })
+  const canUndo = computed(
+    () =>
+      findLastIndexForDate(undoStack.value, readDate(getCurrentDate)) !== -1,
+  )
   const currentToast = ref<{ description: string; actionable: boolean } | null>(null)
 
   let toastTimer: ReturnType<typeof setTimeout> | null = null
@@ -95,13 +106,7 @@ export function useUndo(
     // Scanning from the top keeps navigate-back-then-undo working even
     // when a later entry for a different day sits on top of the stack.
     const currentDate = readDate(getCurrentDate)
-    let index = -1
-    for (let i = undoStack.value.length - 1; i >= 0; i--) {
-      if (undoStack.value[i].scheduleDate === currentDate) {
-        index = i
-        break
-      }
-    }
+    const index = findLastIndexForDate(undoStack.value, currentDate)
     if (index === -1) {
       showToast("Nothing to undo.", false)
       return
@@ -120,19 +125,22 @@ export function useUndo(
       }))
 
       const result = await restoreBlocks(action.scheduleDate, blocksPayload)
+      // Re-locate by object identity: `index` was captured before the await,
+      // and pushUndo is not gated by undoInFlight — a new action arriving
+      // mid-flight can shift() a full stack and stale the index.
+      const postAsyncIndex = undoStack.value.indexOf(action)
       if (result.ok) {
-        // Guard the async gap: if the user navigated to another date while
-        // the restore was in flight, leave the stack/toast untouched (the
-        // entry stays undoable on its own date) so we don't pop an entry —
-        // or flash an "Undone" toast — for a day no longer on screen.
-        if (readDate(getCurrentDate) !== currentDate) return
-        // Re-locate by object identity: `index` was captured before the
-        // await, and pushUndo is not gated by undoInFlight — a new action
-        // arriving mid-flight can shift() a full stack and stale the index.
-        const postAsyncIndex = undoStack.value.indexOf(action)
+        // The restore succeeded, so the entry is spent — remove it whether
+        // or not the user is still on this date. But only flash the "Undone"
+        // toast when they're still viewing the day it applied to; if they
+        // navigated away mid-flight, a toast on the new day is misleading.
         if (postAsyncIndex !== -1) undoStack.value.splice(postAsyncIndex, 1)
-        showToast(`Undone: ${action.description}`, false)
-      } else {
+        if (readDate(getCurrentDate) === currentDate) {
+          showToast(`Undone: ${action.description}`, false)
+        }
+      } else if (readDate(getCurrentDate) === currentDate) {
+        // Same rule for the failure toast: don't surface it on a day the
+        // user has since navigated to (the date watcher cleared any toast).
         showToast("Undo failed. Please try again.", false)
       }
     } finally {

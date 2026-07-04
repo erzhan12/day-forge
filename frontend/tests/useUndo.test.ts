@@ -295,6 +295,10 @@ describe("useUndo", () => {
       previousBlocks: [],
     }))
 
+    // canUndo is date-scoped: a stack holding only other-date entries reads
+    // false even though it is non-empty.
+    expect(undo.canUndo.value).toBe(false)
+
     await undo.performUndo()
 
     expect(mockRestoreBlocks).not.toHaveBeenCalled()
@@ -374,5 +378,38 @@ describe("useUndo", () => {
     // not 18) and never touches the wrong one.
     expect(undo.undoStack.value).toHaveLength(19)
     expect(undo.undoStack.value).not.toContain(top)
+  })
+
+  it("removes the entry but shows no toast when navigating away mid-restore", async () => {
+    let resolveRestore!: (v: { ok: boolean }) => void
+    mockRestoreBlocks.mockReturnValue(
+      new Promise((r) => {
+        resolveRestore = r
+      }),
+    )
+    const currentDate = ref("2026-04-10")
+    const { undo } = mountUndo(
+      [makeBlock()],
+      undefined,
+      () => currentDate.value,
+    )
+    undo.pushUndo(makeAction({
+      description: "edit on A",
+      scheduleDate: "2026-04-10",
+      previousBlocks: [],
+    }))
+
+    const pending = undo.performUndo()
+    // User navigates to another day before the restore resolves. Mirror
+    // Schedule.vue's date watcher, which dismisses the toast on navigation.
+    currentDate.value = "2026-04-11"
+    undo.dismissToast()
+    resolveRestore({ ok: true })
+    await pending
+
+    // Restore succeeded, so the entry is spent and removed (no phantom
+    // re-undo on return to A), but no "Undone" toast flashes on day B.
+    expect(undo.undoStack.value).toHaveLength(0)
+    expect(undo.currentToast.value).toBeNull()
   })
 })
