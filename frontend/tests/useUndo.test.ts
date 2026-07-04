@@ -323,4 +323,29 @@ describe("useUndo", () => {
     expect(mockRestoreBlocks).toHaveBeenCalledWith("2026-04-10", [])
     expect(undo.undoStack.value).toHaveLength(0)
   })
+
+  it("undoes the current date's entry even when a later date sits on top", async () => {
+    mockRestoreBlocks.mockResolvedValue({ ok: true })
+    const { undo } = mountUndo([makeBlock()], undefined, () => "2026-04-10")
+    undo.pushUndo(makeAction({
+      description: "edit on A",
+      scheduleDate: "2026-04-10",
+      previousBlocks: [makeBlock({ title: "A block" })],
+    }))
+    undo.pushUndo(makeAction({
+      description: "edit on B",
+      scheduleDate: "2026-04-11",
+      previousBlocks: [makeBlock({ title: "B block" })],
+    }))
+
+    await undo.performUndo()
+
+    // Restores A's entry (not the top-of-stack B entry) and removes only
+    // that entry, leaving B's entry intact for when the user returns to B.
+    expect(mockRestoreBlocks).toHaveBeenCalledWith("2026-04-10", [
+      expect.objectContaining({ title: "A block" }),
+    ])
+    expect(undo.undoStack.value).toHaveLength(1)
+    expect(undo.undoStack.value[0].scheduleDate).toBe("2026-04-11")
+  })
 })

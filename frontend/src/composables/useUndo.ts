@@ -1,6 +1,7 @@
 import { ref, computed, onMounted, onUnmounted } from "vue"
 import type { TimeBlock, UndoAction } from "../types"
 import { useSchedule } from "./useSchedule"
+import { type DateSource, readDate } from "../utils/dateSource"
 
 /**
  * Client-side undo stack for schedule edits.
@@ -27,7 +28,7 @@ const MAX_UNDO_STACK = 20
 const TOAST_DURATION_MS = 8_000
 
 export function useUndo(
-  getCurrentDate: () => string,
+  getCurrentDate: DateSource,
   getCurrentBlocks: () => TimeBlock[],
   isDisabled?: () => boolean,
 ) {
@@ -84,21 +85,28 @@ export function useUndo(
     if (undoInFlight) return
     if (isDisabled?.()) return
 
-    if (undoStack.value.length === 0) {
+    // The stack accumulates entries across dates — it survives Inertia
+    // date navigation. Undo the most recent entry *for the date currently
+    // on screen*, never one bound to another day (that would call
+    // restore_blocks on a day the user isn't looking at and wipe it).
+    // Scanning from the top keeps navigate-back-then-undo working even
+    // when a later entry for a different day sits on top of the stack.
+    const currentDate = readDate(getCurrentDate)
+    let index = -1
+    for (let i = undoStack.value.length - 1; i >= 0; i--) {
+      if (undoStack.value[i].scheduleDate === currentDate) {
+        index = i
+        break
+      }
+    }
+    if (index === -1) {
       showToast("Nothing to undo.", false)
       return
     }
 
     undoInFlight = true
     try {
-      const action = undoStack.value[undoStack.value.length - 1]
-      // Only undo actions for the date currently on screen. After a draft
-      // or edit on day A, navigating to day B leaves the stack entry (so
-      // returning to A can still undo) but must not let Undo/Cmd+Z call
-      // restore_blocks on A while viewing B — that wipes A's blocks.
-      if (action.scheduleDate !== getCurrentDate()) {
-        return
-      }
+      const action = undoStack.value[index]
       const blocksPayload = action.previousBlocks.map((b) => ({
         title: b.title,
         start_time: b.start_time,
@@ -110,7 +118,12 @@ export function useUndo(
 
       const result = await restoreBlocks(action.scheduleDate, blocksPayload)
       if (result.ok) {
-        undoStack.value.pop()
+        // Guard the async gap: if the user navigated to another date while
+        // the restore was in flight, leave the stack/toast untouched (the
+        // entry stays undoable on its own date) so we don't pop an entry —
+        // or flash an "Undone" toast — for a day no longer on screen.
+        if (readDate(getCurrentDate) !== currentDate) return
+        undoStack.value.splice(index, 1)
         showToast(`Undone: ${action.description}`, false)
       } else {
         showToast("Undo failed. Please try again.", false)
