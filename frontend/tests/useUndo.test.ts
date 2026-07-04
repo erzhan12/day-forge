@@ -51,12 +51,13 @@ const mountedWrappers: ReturnType<typeof mount>[] = []
 function mountUndo(
   blocks: TimeBlock[] = [makeBlock()],
   isDisabled?: () => boolean,
+  getCurrentDate: () => string = () => "2026-04-10",
 ) {
   let result: ReturnType<typeof useUndo> | undefined
 
   const Wrapper = defineComponent({
     setup() {
-      result = useUndo("2026-04-10", () => blocks, isDisabled)
+      result = useUndo(getCurrentDate, () => blocks, isDisabled)
       return {}
     },
     render() {
@@ -283,5 +284,132 @@ describe("useUndo", () => {
         sort_order: 0,
       },
     ])
+  })
+
+  it("performUndo is a no-op when top action targets a different date", async () => {
+    mockRestoreBlocks.mockResolvedValue({ ok: true })
+    const { undo } = mountUndo([makeBlock()], undefined, () => "2026-04-11")
+    undo.pushUndo(makeAction({
+      description: "draft on A",
+      scheduleDate: "2026-04-10",
+      previousBlocks: [],
+    }))
+
+    // canUndo is date-scoped: a stack holding only other-date entries reads
+    // false even though it is non-empty.
+    expect(undo.canUndo.value).toBe(false)
+
+    await undo.performUndo()
+
+    expect(mockRestoreBlocks).not.toHaveBeenCalled()
+    expect(undo.undoStack.value).toHaveLength(1)
+  })
+
+  it("performUndo restores when navigating back to the action's date", async () => {
+    mockRestoreBlocks.mockResolvedValue({ ok: true })
+    const currentDate = ref("2026-04-11")
+    const { undo } = mountUndo(
+      [makeBlock()],
+      undefined,
+      () => currentDate.value,
+    )
+    undo.pushUndo(makeAction({
+      description: "draft on A",
+      scheduleDate: "2026-04-10",
+      previousBlocks: [],
+    }))
+
+    await undo.performUndo()
+    expect(mockRestoreBlocks).not.toHaveBeenCalled()
+
+    currentDate.value = "2026-04-10"
+    await undo.performUndo()
+    expect(mockRestoreBlocks).toHaveBeenCalledWith("2026-04-10", [])
+    expect(undo.undoStack.value).toHaveLength(0)
+  })
+
+  it("undoes the current date's entry even when a later date sits on top", async () => {
+    mockRestoreBlocks.mockResolvedValue({ ok: true })
+    const { undo } = mountUndo([makeBlock()], undefined, () => "2026-04-10")
+    undo.pushUndo(makeAction({
+      description: "edit on A",
+      scheduleDate: "2026-04-10",
+      previousBlocks: [makeBlock({ title: "A block" })],
+    }))
+    undo.pushUndo(makeAction({
+      description: "edit on B",
+      scheduleDate: "2026-04-11",
+      previousBlocks: [makeBlock({ title: "B block" })],
+    }))
+
+    await undo.performUndo()
+
+    // Restores A's entry (not the top-of-stack B entry) and removes only
+    // that entry, leaving B's entry intact for when the user returns to B.
+    expect(mockRestoreBlocks).toHaveBeenCalledWith("2026-04-10", [
+      expect.objectContaining({ title: "A block" }),
+    ])
+    expect(undo.undoStack.value).toHaveLength(1)
+    expect(undo.undoStack.value[0].scheduleDate).toBe("2026-04-11")
+  })
+
+  it("removes the intended entry when a new action shifts a full stack mid-flight", async () => {
+    let resolveRestore!: (v: { ok: boolean }) => void
+    mockRestoreBlocks.mockReturnValue(
+      new Promise((r) => {
+        resolveRestore = r
+      }),
+    )
+    const { undo } = mountUndo([makeBlock()], undefined, () => "2026-04-10")
+    for (let i = 0; i < 20; i++) {
+      undo.pushUndo(makeAction({ description: `a${i}`, previousBlocks: [] }))
+    }
+    const top = undo.undoStack.value[undo.undoStack.value.length - 1]
+
+    const pending = undo.performUndo()
+    // A new edit arrives during the async restore gap: the stack is at
+    // MAX_UNDO_STACK, so pushUndo's shift() drops index 0 and slides every
+    // entry down one — staling the index captured before the await.
+    undo.pushUndo(makeAction({ description: "late", previousBlocks: [] }))
+    resolveRestore({ ok: true })
+    await pending
+
+    // Object-identity lookup removes exactly the intended entry (length 19,
+    // not 18) and never touches the wrong one.
+    expect(undo.undoStack.value).toHaveLength(19)
+    expect(undo.undoStack.value).not.toContain(top)
+  })
+
+  it("removes the entry but shows no toast when navigating away mid-restore", async () => {
+    let resolveRestore!: (v: { ok: boolean }) => void
+    mockRestoreBlocks.mockReturnValue(
+      new Promise((r) => {
+        resolveRestore = r
+      }),
+    )
+    const currentDate = ref("2026-04-10")
+    const { undo } = mountUndo(
+      [makeBlock()],
+      undefined,
+      () => currentDate.value,
+    )
+    undo.pushUndo(makeAction({
+      description: "edit on A",
+      scheduleDate: "2026-04-10",
+      previousBlocks: [],
+    }))
+
+    const pending = undo.performUndo()
+    // User navigates to another day before the restore resolves. Mirror
+    // Schedule.vue's date watcher, which dismisses the toast on navigation.
+    currentDate.value = "2026-04-11"
+    undo.dismissToast()
+    resolveRestore({ ok: true })
+    await pending
+
+    // Restore succeeded, so the entry is spent and removed (no phantom
+    // re-undo on return to A), but no "Undone" toast flashes on day B.
+    expect(undo.undoStack.value).toHaveLength(0)
+    expect(undo.currentToast.value).toBeNull()
   })
 })

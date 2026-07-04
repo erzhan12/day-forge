@@ -1,6 +1,7 @@
 import { ref, computed, onMounted, onUnmounted } from "vue"
 import type { TimeBlock, UndoAction } from "../types"
 import { useSchedule } from "./useSchedule"
+import { type DateSource, readDate } from "../utils/dateSource"
 
 /**
  * Client-side undo stack for schedule edits.
@@ -26,15 +27,29 @@ import { useSchedule } from "./useSchedule"
 const MAX_UNDO_STACK = 20
 const TOAST_DURATION_MS = 8_000
 
+// Most-recent stack index whose action targets `date`, or -1. Single source
+// for the date-match rule shared by `canUndo` and `performUndo` — keep them
+// in sync (a divergence shows an enabled Undo that then says "Nothing to
+// undo" on click).
+function findLastIndexForDate(stack: UndoAction[], date: string): number {
+  for (let i = stack.length - 1; i >= 0; i--) {
+    if (stack[i].scheduleDate === date) return i
+  }
+  return -1
+}
+
 export function useUndo(
-  date: string,
+  getCurrentDate: DateSource,
   getCurrentBlocks: () => TimeBlock[],
   isDisabled?: () => boolean,
 ) {
-  const { restoreBlocks } = useSchedule(date)
+  const { restoreBlocks } = useSchedule(getCurrentDate)
 
   const undoStack = ref<UndoAction[]>([])
-  const canUndo = computed(() => undoStack.value.length > 0)
+  const canUndo = computed(
+    () =>
+      findLastIndexForDate(undoStack.value, readDate(getCurrentDate)) !== -1,
+  )
   const currentToast = ref<{ description: string; actionable: boolean } | null>(null)
 
   let toastTimer: ReturnType<typeof setTimeout> | null = null
@@ -84,14 +99,22 @@ export function useUndo(
     if (undoInFlight) return
     if (isDisabled?.()) return
 
-    if (undoStack.value.length === 0) {
+    // The stack accumulates entries across dates — it survives Inertia
+    // date navigation. Undo the most recent entry *for the date currently
+    // on screen*, never one bound to another day (that would call
+    // restore_blocks on a day the user isn't looking at and wipe it).
+    // Scanning from the top keeps navigate-back-then-undo working even
+    // when a later entry for a different day sits on top of the stack.
+    const currentDate = readDate(getCurrentDate)
+    const index = findLastIndexForDate(undoStack.value, currentDate)
+    if (index === -1) {
       showToast("Nothing to undo.", false)
       return
     }
 
     undoInFlight = true
     try {
-      const action = undoStack.value[undoStack.value.length - 1]
+      const action = undoStack.value[index]
       const blocksPayload = action.previousBlocks.map((b) => ({
         title: b.title,
         start_time: b.start_time,
@@ -102,10 +125,22 @@ export function useUndo(
       }))
 
       const result = await restoreBlocks(action.scheduleDate, blocksPayload)
+      // Re-locate by object identity: `index` was captured before the await,
+      // and pushUndo is not gated by undoInFlight — a new action arriving
+      // mid-flight can shift() a full stack and stale the index.
+      const postAsyncIndex = undoStack.value.indexOf(action)
       if (result.ok) {
-        undoStack.value.pop()
-        showToast(`Undone: ${action.description}`, false)
-      } else {
+        // The restore succeeded, so the entry is spent — remove it whether
+        // or not the user is still on this date. But only flash the "Undone"
+        // toast when they're still viewing the day it applied to; if they
+        // navigated away mid-flight, a toast on the new day is misleading.
+        if (postAsyncIndex !== -1) undoStack.value.splice(postAsyncIndex, 1)
+        if (readDate(getCurrentDate) === currentDate) {
+          showToast(`Undone: ${action.description}`, false)
+        }
+      } else if (readDate(getCurrentDate) === currentDate) {
+        // Same rule for the failure toast: don't surface it on a day the
+        // user has since navigated to (the date watcher cleared any toast).
         showToast("Undo failed. Please try again.", false)
       }
     } finally {
