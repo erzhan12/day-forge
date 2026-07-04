@@ -229,9 +229,16 @@ export function useDrag(
   snapshotBlocks: () => TimeBlock[],
   isDisabled?: () => boolean,
   getRenderBounds?: () => RenderBounds,
+  getNow?: () => number | null,
 ) {
   const isDragging = ref(false)
   const frozenRenderBounds = ref<RenderBounds | null>(null)
+  // Drag-start snapshot of the now signal (feature 0023). The now-aware
+  // trailing-gap split in buildBaseDisplayItems must use the same frozen
+  // now as frozenRenderBounds — a live 60s tick mid-drag would move the
+  // idle/tail split boundary while bounds stay frozen (flow-vs-ghost
+  // divergence). Never enters drag px-math.
+  const frozenNowMinutes = ref<number | null>(null)
   const dragBlockId = ref<number | null>(null)
   const ghostTop = ref(0)
   const previewStartTime = ref("")
@@ -360,6 +367,7 @@ export function useDrag(
       renderStart: DAY_START_MINUTES,
       renderEnd: DAY_END_MINUTES,
     }
+    frozenNowMinutes.value = getNow?.() ?? null
     const renderStart = frozenRenderBounds.value.renderStart
 
     const startMinutes = timeToMinutes(block.start_time)
@@ -505,6 +513,7 @@ export function useDrag(
   function resetState() {
     isDragging.value = false
     frozenRenderBounds.value = null
+    frozenNowMinutes.value = null
     dragBlockId.value = null
     ghostTop.value = 0
     previewStartTime.value = ""
@@ -524,6 +533,7 @@ export function useDrag(
   return {
     isDragging,
     frozenRenderBounds,
+    frozenNowMinutes,
     dragBlockId,
     ghostTop,
     previewStartTime,

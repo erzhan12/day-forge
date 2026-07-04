@@ -503,3 +503,19 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
   > caching the `Fernet` instance (breaks runtime key rotation), and
   > "zeroing" the decrypted token string (CPython strings are immutable —
   > the rebind is ineffective security theater).
+
+- [ ] **Integration test for displayList's frozen-now wiring in
+  Schedule.vue.** `Schedule.test.ts` mocks `useDrag` entirely, so the
+  feature-0023 geometry-freeze expression in the `displayList` computed
+  (`frozenBounds ? frozenNowMinutes.value : todayNowMinutes.value`) has no
+  component-level coverage — a regression to live `todayNowMinutes` would
+  make the idle/tail split boundary jump on each 60s tick mid-drag. Needs a
+  mount harness that drives real drag state (un-mock `useDrag` or expose the
+  computed), which is its own design decision — deferred as its own task.
+  The pure-function halves are unit-covered (`frozenNowMinutes` lifecycle in
+  `useDrag.test.ts`; split-boundary maths in `scheduleTime.test.ts`).
+  (`claude-review` PR #94, P2 [TESTING].)
+
+- [ ] **Manual smoke pending (feature 0023):** click-to-add on the new
+  full-scale idle gap on today — verify the add-dialog pre-fills with
+  `[lastEnd, now)` per `docs/features/0023_PLAN.md` § "Manual smoke".

@@ -98,17 +98,34 @@ const {
   currentToast, pushUndo, performUndo, snapshotBlocks, dismissToast,
 } = useUndo(props.date, getBlocks, () => scheduleDisabled.value)
 
+// Wall-clock signal (feature 0023): declared BEFORE useDrag and renderBounds
+// so the now-aware trailing anchor feeds both the drag-start frozen snapshot
+// and the live bounds. `todayNowMinutes` is non-null only on today — the
+// contract computeRenderBounds/buildBaseDisplayItems expect.
+const { nowMinutes, nowDate } = useNowMinutes(toRef(props, "date"))
+const todayNowMinutes = computed(() =>
+  nowDate.value === null ? null : nowMinutes.value,
+)
+
+// Reactively depends on nowMinutes: recomputes each 60s tick on today so the
+// trailing stub re-anchors as the idle gap grows. Ignored for layout during
+// drag (displayList reads the frozen snapshot instead). Single source for the
+// bounds formula — the useDrag getter below reads this computed so the
+// drag-start frozen snapshot can never diverge from the live bounds.
+const renderBounds = computed(() =>
+  computeRenderBounds(props.blocks, todayNowMinutes.value),
+)
+
 const {
-  isDragging, frozenRenderBounds, dragBlockId, ghostTop, previewStartTime,
-  previewEndTime, previewBlocks, shiftedBlockIds, startDrag, endDrag,
-  cancelDrag,
+  isDragging, frozenRenderBounds, frozenNowMinutes, dragBlockId, ghostTop,
+  previewStartTime, previewEndTime, previewBlocks, shiftedBlockIds, startDrag,
+  endDrag, cancelDrag,
 } = useDrag(
   () => props.date, getBlocks, reorderBlocks, pushUndo, snapshotBlocks,
   () => scheduleDisabled.value,
-  () => computeRenderBounds(props.blocks),
+  () => renderBounds.value,
+  () => todayNowMinutes.value,
 )
-
-const renderBounds = computed(() => computeRenderBounds(props.blocks))
 
 // Provide to child components
 provide("undo", { pushUndo, snapshotBlocks })
@@ -344,8 +361,6 @@ const showAnalyticsLink = computed(() => {
   return props.date <= todayString() && props.schedule.status !== "draft"
 })
 
-const { nowMinutes, nowDate } = useNowMinutes(toRef(props, "date"))
-
 // Sound notifications (issue #56): chime when the wall clock crosses a
 // block's start/end. Opt-in (read from localStorage inside the composable),
 // rides the same 60s sampler above — no extra interval. Off-today nulls from
@@ -387,21 +402,24 @@ const ghostIsCompact = computed(() => {
 })
 
 // Build the display list: blocks and gaps with the now marker spliced in.
+// Every GEOMETRY input (activeRender* and the buildBaseDisplayItems now arg)
+// is frozen during drag so layout never jumps mid-gesture — renderBounds and
+// the live now are only read on the non-drag path. spliceNowMarker still
+// reads live now, so the red marker keeps moving during drag by design.
 const displayList = computed<ScheduleDisplayItem[]>(() => {
-  const bounds = renderBounds.value
-  const activeRenderStart =
-    isDragging.value && frozenRenderBounds.value
-      ? frozenRenderBounds.value.renderStart
-      : bounds.renderStart
-  const activeRenderEnd =
-    isDragging.value && frozenRenderBounds.value
-      ? frozenRenderBounds.value.renderEnd
-      : bounds.renderEnd
+  const frozenBounds = isDragging.value ? frozenRenderBounds.value : null
+  const activeRenderStart = frozenBounds
+    ? frozenBounds.renderStart
+    : renderBounds.value.renderStart
+  const activeRenderEnd = frozenBounds
+    ? frozenBounds.renderEnd
+    : renderBounds.value.renderEnd
 
   const baseItems = buildBaseDisplayItems(
     effectiveBlocks.value,
     activeRenderStart,
     activeRenderEnd,
+    frozenBounds ? frozenNowMinutes.value : todayNowMinutes.value,
   )
 
   return spliceNowMarker(baseItems, nowMinutes.value, nowDate.value)

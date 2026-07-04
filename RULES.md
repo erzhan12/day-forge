@@ -561,3 +561,32 @@ the safe failure mode is silence — inverse of `chatSidebarStorage`).
   until date navigation, because `useNowMinutes.tick()` calls `leaveToday()`
   (clears the interval, `nowDate=null`) and never re-arms. Not fixable
   without the forbidden second timer.
+
+## Timeline trailing stub (features 0017 + 0023)
+
+- **`computeTrailingAnchor` in `frontend/src/utils/scheduleTime.ts` is the
+  single source of truth for the trailing anchor** shared by
+  `computeRenderBounds` and `buildBaseDisplayItems` (via `pushTrailingGap`).
+  Never hand-inline the `min(DAY_END, max(floor, now))` math at a call site —
+  the two must produce identical anchors or flow layout desyncs from the stub
+  height.
+- **`nowMinutes: number | null` param contract:** non-null unambiguously means
+  "today" — callers pass `nowDate.value === null ? null : nowMinutes.value`
+  (`todayNowMinutes` computed in `Schedule.vue`). The pure helpers never call
+  `new Date()`.
+- **The now-marker lands at the idle/tail seam, not inside the idle gap.** The
+  trailing split boundary equals `now`, so by the half-open `[start,end)` rule
+  the idle segment `[lastEnd, now)` excludes `now`; `spliceNowMarker` upgrades
+  the compressed tail to `gap-with-now` at `nowOffsetPercent === "0%"` — the
+  pixel seam directly under the full-scale idle gap. Correct by construction;
+  don't "fix" it to mark the idle segment.
+- **Every geometry input to `displayList` must be frozen during drag.**
+  `frozenRenderBounds` AND `frozenNowMinutes` (both set in `startDrag`, cleared
+  in `resetState` in `useDrag.ts`) feed `buildBaseDisplayItems` while dragging;
+  only `spliceNowMarker` reads live now (marker may move, layout may not).
+  `displayList` reads `renderBounds.value` only on the non-drag path — an
+  unconditional read would re-layout mid-drag on each 60s tick because
+  `renderBounds` now depends on `nowMinutes`.
+- Accepted cosmetic edges (documented in `docs/features/0023_PLAN.md`):
+  empty-day pre-06:00 stub labeled "earlier" by `GapSlot`, and trailing-extent
+  desync while dragging the last block past frozen-now.

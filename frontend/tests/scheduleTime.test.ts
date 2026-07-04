@@ -7,6 +7,7 @@ import {
   STUB_MINUTES,
   buildBaseDisplayItems,
   computeRenderBounds,
+  computeTrailingAnchor,
   findCurrentBlock,
   formatDurationMinutes,
   formatRemainingMinutes,
@@ -99,6 +100,100 @@ describe("computeRenderBounds", () => {
       renderStart: DAY_START_MINUTES,
       renderEnd: DAY_END_MINUTES,
     })
+  })
+
+  // Feature 0023: now-aware trailing anchor on today.
+  it("keeps exact 0017 trailing anchor with an explicit null now (off-today)", () => {
+    const bounds = computeRenderBounds(
+      [block({ start_time: "06:00", end_time: "18:00" })],
+      null,
+    )
+    expect(bounds.renderEnd).toBe(18 * 60 + STUB_MINUTES)
+  })
+
+  it("anchors the trailing stub at now when idle after the last block", () => {
+    const bounds = computeRenderBounds(
+      [block({ start_time: "09:00", end_time: "14:00" })],
+      16 * 60,
+    )
+    expect(bounds.renderEnd).toBe(16 * 60 + STUB_MINUTES)
+  })
+
+  it("keeps the anchor at lastEnd when now is inside the last block", () => {
+    const bounds = computeRenderBounds(
+      [block({ start_time: "16:00", end_time: "18:00" })],
+      17 * 60,
+    )
+    expect(bounds.renderEnd).toBe(18 * 60 + STUB_MINUTES)
+  })
+
+  it("treats now === lastEnd as after the block (half-open boundary)", () => {
+    const bounds = computeRenderBounds(
+      [block({ start_time: "09:00", end_time: "14:00" })],
+      14 * 60,
+    )
+    expect(bounds.renderEnd).toBe(14 * 60 + STUB_MINUTES)
+  })
+
+  it("clamps a post-23:00 now to DAY_END", () => {
+    const bounds = computeRenderBounds(
+      [block({ start_time: "09:00", end_time: "14:00" })],
+      23 * 60 + 20,
+    )
+    expect(bounds.renderEnd).toBe(DAY_END_MINUTES)
+  })
+
+  it("never compresses a trailing gap at or below STUB even with an idle now", () => {
+    const bounds = computeRenderBounds(
+      [block({ start_time: "09:00", end_time: "22:45" })],
+      22 * 60 + 50,
+    )
+    expect(bounds.renderEnd).toBe(DAY_END_MINUTES)
+  })
+
+  it("anchors an empty today at now", () => {
+    expect(computeRenderBounds([], 16 * 60)).toEqual({
+      renderStart: DAY_START_MINUTES,
+      renderEnd: 16 * 60 + STUB_MINUTES,
+    })
+  })
+
+  it("floors a pre-06:00 now at DAY_START on an empty today", () => {
+    expect(computeRenderBounds([], 5 * 60)).toEqual({
+      renderStart: DAY_START_MINUTES,
+      renderEnd: DAY_START_MINUTES + STUB_MINUTES,
+    })
+  })
+
+  it("keeps the full day for an empty off-today day (null now)", () => {
+    expect(computeRenderBounds([], null)).toEqual({
+      renderStart: DAY_START_MINUTES,
+      renderEnd: DAY_END_MINUTES,
+    })
+  })
+})
+
+describe("computeTrailingAnchor", () => {
+  it("returns the floor off-today (null now)", () => {
+    expect(computeTrailingAnchor(840, null)).toBe(840)
+  })
+
+  it("extends to now when now is after the floor", () => {
+    expect(computeTrailingAnchor(840, 960)).toBe(960)
+  })
+
+  it("stays at the floor when now is before it (inside the last block)", () => {
+    expect(computeTrailingAnchor(1080, 1020)).toBe(1080)
+  })
+
+  it("clamps a post-23:00 now to DAY_END (load-bearing clamp)", () => {
+    expect(computeTrailingAnchor(840, 1400)).toBe(DAY_END_MINUTES)
+  })
+
+  it("keeps a pre-06:00 now at the empty-day floor", () => {
+    expect(computeTrailingAnchor(DAY_START_MINUTES, 300)).toBe(
+      DAY_START_MINUTES,
+    )
   })
 })
 
@@ -201,6 +296,167 @@ describe("buildBaseDisplayItems drag geometry", () => {
   })
 })
 
+describe("buildBaseDisplayItems now-aware trailing split (feature 0023)", () => {
+  it("splits the trailing gap into a full-scale idle segment and a compact tail", () => {
+    const items = buildBaseDisplayItems(
+      [block({ start_time: "09:00", end_time: "14:00" })],
+      DAY_START_MINUTES,
+      16 * 60 + STUB_MINUTES,
+      16 * 60,
+    )
+    const idle = items[items.length - 2]
+    const tail = items[items.length - 1]
+
+    expect(idle.type).toBe("gap")
+    expect(idle.start_time).toBe("14:00")
+    expect(idle.end_time).toBe("16:00")
+    expect(idle.duration_minutes).toBe(120)
+    expect(idle.compact).toBeUndefined()
+    expect(idle.render_minutes).toBeUndefined()
+
+    expect(tail.type).toBe("gap")
+    expect(tail.start_time).toBe("16:00")
+    expect(tail.end_time).toBe("23:00")
+    expect(tail.compact).toBe(true)
+    expect(tail.render_minutes).toBe(STUB_MINUTES)
+  })
+
+  it("does not split at the exact now === lastEnd boundary", () => {
+    // Guards the gate's strict `trailingAnchor > gapStart` comparison: at
+    // now === lastEnd the anchor equals the floor, so a `>=` regression
+    // would emit a zero-duration idle segment here.
+    const items = buildBaseDisplayItems(
+      [block({ start_time: "09:00", end_time: "14:00" })],
+      DAY_START_MINUTES,
+      14 * 60 + STUB_MINUTES,
+      14 * 60,
+    )
+    // String compares below rely on zero-padded "HH:MM" — lexicographic
+    // order equals numeric order for that fixed-width format.
+    const trailing = items.filter(
+      (i) => i.type === "gap" && i.start_time >= "14:00",
+    )
+    expect(trailing).toHaveLength(1)
+    expect(trailing[0].start_time).toBe("14:00")
+    expect(trailing[0].end_time).toBe("23:00")
+    expect(trailing[0].compact).toBe(true)
+    expect(trailing[0].render_minutes).toBe(STUB_MINUTES)
+  })
+
+  it("emits a single 0017 trailing gap when now is inside the last block", () => {
+    const items = buildBaseDisplayItems(
+      [block({ start_time: "16:00", end_time: "18:00" })],
+      DAY_START_MINUTES,
+      18 * 60 + STUB_MINUTES,
+      17 * 60,
+    )
+    // Zero-padded "HH:MM": lexicographic == numeric order.
+    const trailing = items.filter(
+      (i) => i.type === "gap" && i.start_time >= "18:00",
+    )
+    expect(trailing).toHaveLength(1)
+    expect(trailing[0].start_time).toBe("18:00")
+    expect(trailing[0].end_time).toBe("23:00")
+    expect(trailing[0].compact).toBe(true)
+    expect(trailing[0].render_minutes).toBe(STUB_MINUTES)
+  })
+
+  it("does not split when now is past 23:00 (clamped renderEnd)", () => {
+    const items = buildBaseDisplayItems(
+      [block({ start_time: "09:00", end_time: "14:00" })],
+      DAY_START_MINUTES,
+      DAY_END_MINUTES,
+      23 * 60 + 20,
+    )
+    // Zero-padded "HH:MM": lexicographic == numeric order.
+    const trailing = items.filter(
+      (i) => i.type === "gap" && i.start_time >= "14:00",
+    )
+    expect(trailing).toHaveLength(1)
+    expect(trailing[0].start_time).toBe("14:00")
+    expect(trailing[0].end_time).toBe("23:00")
+    expect(trailing[0].compact).toBeUndefined()
+    expect(trailing[0].render_minutes).toBeUndefined()
+    for (const item of items) {
+      expect(item.end_time <= "23:00").toBe(true)
+    }
+  })
+
+  it("does not split when anchor + stub reaches DAY_END (now < 23:00)", () => {
+    const items = buildBaseDisplayItems(
+      [block({ start_time: "09:00", end_time: "22:00" })],
+      DAY_START_MINUTES,
+      DAY_END_MINUTES,
+      22 * 60 + 50,
+    )
+    // Zero-padded "HH:MM": lexicographic == numeric order.
+    const trailing = items.filter(
+      (i) => i.type === "gap" && i.start_time >= "22:00",
+    )
+    expect(trailing).toHaveLength(1)
+    expect(trailing[0].compact).toBeUndefined()
+    expect(trailing[0].render_minutes).toBeUndefined()
+  })
+
+  it("keeps the single compressed trailing gap off-today (null now)", () => {
+    const items = buildBaseDisplayItems(
+      [block({ start_time: "06:00", end_time: "18:00" })],
+      DAY_START_MINUTES,
+      18 * 60 + STUB_MINUTES,
+      null,
+    )
+    const trailing = items.filter((i) => i.type === "gap")
+    expect(trailing).toHaveLength(1)
+    expect(trailing[0].compact).toBe(true)
+    expect(trailing[0].render_minutes).toBe(STUB_MINUTES)
+  })
+
+  it("splits an empty today into a full-scale morning gap and a compact tail", () => {
+    const items = buildBaseDisplayItems(
+      [],
+      DAY_START_MINUTES,
+      16 * 60 + STUB_MINUTES,
+      16 * 60,
+    )
+    expect(items).toHaveLength(2)
+    expect(items[0].type).toBe("gap")
+    expect(items[0].start_time).toBe("06:00")
+    expect(items[0].end_time).toBe("16:00")
+    expect(items[0].compact).toBeUndefined()
+    expect(items[1].start_time).toBe("16:00")
+    expect(items[1].end_time).toBe("23:00")
+    expect(items[1].compact).toBe(true)
+    expect(items[1].render_minutes).toBe(STUB_MINUTES)
+  })
+
+  it("emits a single compressed full-day gap for an empty today with pre-06:00 now", () => {
+    const items = buildBaseDisplayItems(
+      [],
+      DAY_START_MINUTES,
+      DAY_START_MINUTES + STUB_MINUTES,
+      5 * 60,
+    )
+    expect(items).toHaveLength(1)
+    expect(items[0].start_time).toBe("06:00")
+    expect(items[0].end_time).toBe("23:00")
+    expect(items[0].compact).toBe(true)
+    expect(items[0].render_minutes).toBe(STUB_MINUTES)
+  })
+
+  it("keeps the single uncompressed full-day gap for an empty off-today day", () => {
+    const items = buildBaseDisplayItems(
+      [],
+      DAY_START_MINUTES,
+      DAY_END_MINUTES,
+      null,
+    )
+    expect(items).toHaveLength(1)
+    expect(items[0].compact).toBeUndefined()
+    expect(items[0].render_minutes).toBeUndefined()
+    expect(items[0].duration_minutes).toBe(DAY_END_MINUTES - DAY_START_MINUTES)
+  })
+})
+
 describe("spliceNowMarker", () => {
   it("returns the list unchanged when off-today (null date or null now)", () => {
     const items = buildBaseDisplayItems(
@@ -249,6 +505,31 @@ describe("spliceNowMarker", () => {
     expect(withNow).toHaveLength(1)
     expect(withNow[0].type).toBe("block-with-now")
     expect(withNow[0].block?.id).toBe(1)
+  })
+
+  it("puts the now marker at the idle/tail seam of a split trailing gap", () => {
+    const items = buildBaseDisplayItems(
+      [block({ start_time: "09:00", end_time: "14:00" })],
+      DAY_START_MINUTES,
+      16 * 60 + STUB_MINUTES,
+      16 * 60,
+    )
+    const spliced = spliceNowMarker(items, 16 * 60, "2026-07-03")
+    const idle = spliced[spliced.length - 2]
+    const tail = spliced[spliced.length - 1]
+
+    // Half-open [start, end): the idle gap [14:00, 16:00) excludes now=960,
+    // so it stays a plain full-scale gap; the compact tail [16:00, 23:00)
+    // picks up the marker at 0% — the seam pixel directly under the
+    // full-scale idle gap, i.e. the proportionally correct "now" position.
+    expect(idle.type).toBe("gap")
+    expect(idle.compact).toBeUndefined()
+    expect(tail.type).toBe("gap-with-now")
+    expect(tail.compact).toBe(true)
+    expect(tail.render_minutes).toBe(STUB_MINUTES)
+    expect(
+      nowOffsetPercent(tail.start_time, tail.end_time, 16 * 60),
+    ).toBe("0%")
   })
 })
 

@@ -497,7 +497,10 @@ describe("useDrag frozen render bounds", () => {
     makeBlock({ id: 1, start_time: "09:00", end_time: "23:00", sort_order: 0 }),
   ]
 
-  function makeDrag(getRenderBounds = () => computeRenderBounds(blocks)) {
+  function makeDrag(
+    getRenderBounds?: () => { renderStart: number; renderEnd: number },
+    getNow?: () => number | null,
+  ) {
     return useDrag(
       "2026-04-16",
       () => blocks,
@@ -505,7 +508,10 @@ describe("useDrag frozen render bounds", () => {
       vi.fn(),
       () => blocks.map((b) => ({ ...b })),
       undefined,
-      getRenderBounds,
+      // Default bounds getter threads getNow through, mirroring the
+      // Schedule.vue wiring, so the frozen snapshot pair is always coherent.
+      getRenderBounds ?? (() => computeRenderBounds(blocks, getNow?.() ?? null)),
+      getNow,
     )
   }
 
@@ -543,6 +549,60 @@ describe("useDrag frozen render bounds", () => {
 
     drag.cancelDrag()
     expect(drag.frozenRenderBounds.value).toBeNull()
+  })
+
+  // Feature 0023: frozenNowMinutes mirrors the frozenRenderBounds lifecycle.
+  it("sets frozenNowMinutes from getNow on startDrag and clears on endDrag", async () => {
+    const drag = makeDrag(undefined, () => 960)
+    expect(drag.frozenNowMinutes.value).toBeNull()
+
+    drag.startDrag(
+      { pointerId: 1, clientY: 0 } as PointerEvent,
+      blocks[0],
+      makeFakeContainer(),
+    )
+    expect(drag.frozenNowMinutes.value).toBe(960)
+
+    drag.previewBlocks.value = [
+      { ...blocks[0], start_time: "10:00", end_time: "11:00" },
+    ]
+    drag.previewStartTime.value = "10:00"
+    await drag.endDrag()
+
+    expect(drag.frozenNowMinutes.value).toBeNull()
+  })
+
+  it("clears frozenNowMinutes on cancelDrag", () => {
+    const drag = makeDrag(undefined, () => 960)
+    drag.startDrag(
+      { pointerId: 1, clientY: 0 } as PointerEvent,
+      blocks[0],
+      makeFakeContainer(),
+    )
+    expect(drag.frozenNowMinutes.value).toBe(960)
+
+    drag.cancelDrag()
+    expect(drag.frozenNowMinutes.value).toBeNull()
+  })
+
+  it("leaves frozenNowMinutes null when getNow is omitted or returns null", () => {
+    const withoutGetter = makeDrag()
+    withoutGetter.startDrag(
+      { pointerId: 1, clientY: 0 } as PointerEvent,
+      blocks[0],
+      makeFakeContainer(),
+    )
+    expect(withoutGetter.frozenNowMinutes.value).toBeNull()
+    withoutGetter.cancelDrag()
+
+    const offToday = makeDrag(undefined, () => null)
+    offToday.startDrag(
+      { pointerId: 1, clientY: 0 } as PointerEvent,
+      blocks[0],
+      makeFakeContainer(),
+    )
+    expect(offToday.frozenNowMinutes.value).toBeNull()
+    offToday.cancelDrag()
   })
 
   it("uses frozen renderStart for ghostTop at grab time", () => {
