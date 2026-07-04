@@ -35,7 +35,10 @@ export function useUndo(
   const { restoreBlocks } = useSchedule(getCurrentDate)
 
   const undoStack = ref<UndoAction[]>([])
-  const canUndo = computed(() => undoStack.value.length > 0)
+  const canUndo = computed(() => {
+    const currentDate = readDate(getCurrentDate)
+    return undoStack.value.some((a) => a.scheduleDate === currentDate)
+  })
   const currentToast = ref<{ description: string; actionable: boolean } | null>(null)
 
   let toastTimer: ReturnType<typeof setTimeout> | null = null
@@ -123,7 +126,11 @@ export function useUndo(
         // entry stays undoable on its own date) so we don't pop an entry —
         // or flash an "Undone" toast — for a day no longer on screen.
         if (readDate(getCurrentDate) !== currentDate) return
-        undoStack.value.splice(index, 1)
+        // Re-locate by object identity: `index` was captured before the
+        // await, and pushUndo is not gated by undoInFlight — a new action
+        // arriving mid-flight can shift() a full stack and stale the index.
+        const postAsyncIndex = undoStack.value.indexOf(action)
+        if (postAsyncIndex !== -1) undoStack.value.splice(postAsyncIndex, 1)
         showToast(`Undone: ${action.description}`, false)
       } else {
         showToast("Undo failed. Please try again.", false)

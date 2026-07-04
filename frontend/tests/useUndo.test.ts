@@ -348,4 +348,31 @@ describe("useUndo", () => {
     expect(undo.undoStack.value).toHaveLength(1)
     expect(undo.undoStack.value[0].scheduleDate).toBe("2026-04-11")
   })
+
+  it("removes the intended entry when a new action shifts a full stack mid-flight", async () => {
+    let resolveRestore!: (v: { ok: boolean }) => void
+    mockRestoreBlocks.mockReturnValue(
+      new Promise((r) => {
+        resolveRestore = r
+      }),
+    )
+    const { undo } = mountUndo([makeBlock()], undefined, () => "2026-04-10")
+    for (let i = 0; i < 20; i++) {
+      undo.pushUndo(makeAction({ description: `a${i}`, previousBlocks: [] }))
+    }
+    const top = undo.undoStack.value[undo.undoStack.value.length - 1]
+
+    const pending = undo.performUndo()
+    // A new edit arrives during the async restore gap: the stack is at
+    // MAX_UNDO_STACK, so pushUndo's shift() drops index 0 and slides every
+    // entry down one — staling the index captured before the await.
+    undo.pushUndo(makeAction({ description: "late", previousBlocks: [] }))
+    resolveRestore({ ok: true })
+    await pending
+
+    // Object-identity lookup removes exactly the intended entry (length 19,
+    // not 18) and never touches the wrong one.
+    expect(undo.undoStack.value).toHaveLength(19)
+    expect(undo.undoStack.value).not.toContain(top)
+  })
 })
