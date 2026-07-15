@@ -202,14 +202,14 @@ LLM_CHAT_RATE_LIMIT_PER_HOUR = int(
 )
 # Hard cap on len(messages[]) per request. Protects against runaway
 # transcript size if the client never resets the thread.
-LLM_CHAT_MAX_TURNS = int(os.environ.get("LLM_CHAT_MAX_TURNS", "20"))
+LLM_CHAT_MAX_TURNS = int(os.environ.get("LLM_CHAT_MAX_TURNS", "40"))
 # Hard cap on the sum of len(content) across all messages — caps prompt
 # cost regardless of how many short turns the user piles on. Default is
-# 4× LLM_MAX_COMMAND_CHARS so the user can comfortably build up a
+# 8× LLM_MAX_COMMAND_CHARS so the user can comfortably build up a
 # multi-turn brief without bumping into the limit on a normal session.
 LLM_CHAT_MAX_TOTAL_CHARS = int(
     os.environ.get(
-        "LLM_CHAT_MAX_TOTAL_CHARS", str(LLM_MAX_COMMAND_CHARS * 4)
+        "LLM_CHAT_MAX_TOTAL_CHARS", str(LLM_MAX_COMMAND_CHARS * 8)
     )
 )
 # Schema caps on the model's per-turn output. Truncated provider responses
