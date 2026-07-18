@@ -149,6 +149,23 @@ class TestForwardMutationsFlipStatus:
         draft_schedule.refresh_from_db()
         assert draft_schedule.status == Schedule.Status.ACTIVE
 
+    def test_create_block_from_event_flips(self, auth_client, draft_schedule):
+        resp = auth_client.post(
+            "/api/schedules/2026-05-04/blocks/from-event/",
+            json.dumps(
+                {
+                    "title": "Dentist",
+                    "start_time": "14:07",
+                    "end_time": "14:33",
+                    "category": "other",
+                }
+            ),
+            content_type="application/json",
+        )
+        assert resp.status_code == 201
+        draft_schedule.refresh_from_db()
+        assert draft_schedule.status == Schedule.Status.ACTIVE
+
     def test_patch_block_flips(self, auth_client, draft_schedule):
         block = TimeBlock.objects.create(
             schedule=draft_schedule,
@@ -287,6 +304,25 @@ class TestReviewedUnfreezesOnEdit:
                     "start_time": "10:00",
                     "end_time": "11:00",
                     "category": "work",
+                }
+            ),
+            content_type="application/json",
+        )
+        assert resp.status_code == 201
+        reviewed_schedule.refresh_from_db()
+        assert reviewed_schedule.status == Schedule.Status.ACTIVE
+
+    def test_create_block_from_event_flips_reviewed_to_active(
+        self, auth_client, reviewed_schedule
+    ):
+        resp = auth_client.post(
+            "/api/schedules/2026-05-04/blocks/from-event/",
+            json.dumps(
+                {
+                    "title": "Dentist",
+                    "start_time": "14:07",
+                    "end_time": "14:33",
+                    "category": "other",
                 }
             ),
             content_type="application/json",

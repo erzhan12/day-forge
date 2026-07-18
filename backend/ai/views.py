@@ -272,18 +272,24 @@ def _validation_error_detail(e: ValidationError) -> dict:
     return getattr(e, "message_dict", None) or {"detail": str(e)}
 
 
-def _check_day_window(action_index: int, start, end) -> JsonResponse | None:
+def _check_day_window(action_index: int, start=None, end=None) -> JsonResponse | None:
     """Reject times outside the ``[DAY_START, DAY_END]`` working-day window.
 
     Mirrors the frontend guard in ``useDrag.ts`` and the constraint the
     system prompt asks the model to respect — enforced here so a
     hallucinating response can't insert off-window blocks.
+
+    Pass ``None`` to skip a boundary: move/resize check only values the
+    action supplied (or derived from supplied ones) — a value inherited
+    from the stored block was already persisted, and clamp-to-day
+    from-event blocks (feature 0026, e.g. 00:00–00:30) legitimately sit
+    outside the window.
     """
-    if start < _DAY_START_T:
+    if start is not None and start < _DAY_START_T:
         return _action_error(
             action_index, f"start_time must be >= {DAY_START}"
         )
-    if end > _DAY_END_T:
+    if end is not None and end > _DAY_END_T:
         return _action_error(
             action_index, f"end_time must be <= {DAY_END}"
         )
@@ -377,13 +383,20 @@ def _compute_move_resize_times(action, block):
     new_end = parse_time(action["end_time"]) if "end_time" in action else block.end_time
 
     if kind == "move" and "end_time" not in action:
-        # Preserve original duration for bare "move to HH:MM" commands.
+        # Preserve original duration for bare "move to HH:MM" commands,
+        # rounded UP to the next 5-minute multiple: an off-grid duration
+        # (from-event block, feature 0026) would otherwise land the
+        # computed ``new_end`` off-grid. Same normalize-on-move semantics
+        # as the drag round-up in ``useDrag.ts``.
         original = (
             datetime.datetime.combine(datetime.date.min, block.end_time)
             - datetime.datetime.combine(datetime.date.min, block.start_time)
         )
+        minutes = int(original.total_seconds()) // 60
+        rounded = max(5, -(-minutes // 5) * 5)
         new_end = (
-            datetime.datetime.combine(datetime.date.min, new_start) + original
+            datetime.datetime.combine(datetime.date.min, new_start)
+            + datetime.timedelta(minutes=rounded)
         ).time()
         # ``.time()`` silently wraps if the duration crosses midnight
         # (e.g. moving a 22:00-23:30 block to 23:00 would yield 00:30).
@@ -402,10 +415,30 @@ def _apply_move_or_resize(
             action_index, "moved block would extend past midnight"
         )
 
-    err = _check_day_window(action_index, new_start, new_end)
+    # Enforce day-window and granularity only on times the action supplied
+    # (or, for a bare move, derived from the supplied start): a value
+    # inherited from the stored block was already persisted, and off-grid
+    # / clamp-to-day from-event blocks (feature 0026) must stay movable.
+    # The AI still can't introduce *new* off-grid or off-window times.
+    start_supplied = "start_time" in action
+    end_supplied = "end_time" in action
+    bare_move = action["type"] == "move" and not end_supplied
+
+    err = _check_day_window(
+        action_index,
+        start=new_start if start_supplied else None,
+        end=new_end if (end_supplied or bare_move) else None,
+    )
     if err is not None:
         return err
-    err = _check_granularity(action_index, new_start, new_end)
+    supplied_times = []
+    if start_supplied:
+        supplied_times.append(new_start)
+    if end_supplied:
+        supplied_times.append(new_end)
+    # bare-move ``new_end`` needs no granularity check: on-grid start +
+    # rounded duration is on-grid by construction.
+    err = _check_granularity(action_index, *supplied_times)
     if err is not None:
         return err
     if new_start >= new_end:
@@ -419,7 +452,11 @@ def _apply_move_or_resize(
     block.start_time = new_start
     block.end_time = new_end
     try:
-        block.full_clean()
+        # ``exclude`` skips the field-level five-minute validators, which
+        # would re-fail an inherited off-grid time even after the
+        # selective ``_check_granularity`` above. Range and overlap were
+        # checked explicitly; model ``clean()`` still runs.
+        block.full_clean(exclude=["start_time", "end_time"])
     except ValidationError as e:
         return _action_error(action_index, _validation_error_detail(e))
     block.save()

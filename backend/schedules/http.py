@@ -106,9 +106,14 @@ def validate_time_range(start, end, block_id=None):
     return None
 
 
-def validate_block_times(start_str, end_str, block_id=None):
+def validate_block_times(start_str, end_str, block_id=None, *, enforce_granularity=True):
     """Parse and validate a pair of HH:MM strings: format, 5-minute
     granularity, and ``start < end``.
+
+    ``enforce_granularity=False`` skips only the 5-minute check — used by
+    ``restore_blocks``, which re-persists previously-valid states that may
+    legitimately be off-grid (from-event blocks, feature 0026). Format and
+    range checks always run.
 
     Returns ``(start, end, None)`` on success or
     ``(None, None, JsonResponse)`` on the first failure.
@@ -119,9 +124,10 @@ def validate_block_times(start_str, end_str, block_id=None):
     end, err = parse_time_or_error("end_time", end_str, block_id=block_id)
     if err is not None:
         return None, None, err
-    err = validate_five_minute_or_error(start, end)
-    if err is not None:
-        return None, None, err
+    if enforce_granularity:
+        err = validate_five_minute_or_error(start, end)
+        if err is not None:
+            return None, None, err
     err = validate_time_range(start, end, block_id=block_id)
     if err is not None:
         return None, None, err

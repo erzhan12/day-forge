@@ -123,6 +123,125 @@ def create_block(request, date):
 
 
 @login_required
+@require_http_methods(["POST"])
+def create_block_from_event(request, date):
+    """Create a block from an external calendar event (feature 0026).
+
+    A trimmed copy of ``create_block`` **minus the 5-minute granularity
+    check** — external events carry arbitrary minutes (e.g. 14:07) and the
+    clamp-to-day decision produces 23:59. Kept as a dedicated endpoint so
+    the off-grid bypass stays off the main manual-create path; this is the
+    single sanctioned off-grid caller. Every other invariant (title,
+    category, ``start < end``, overlap, locking) matches ``create_block``.
+    """
+    try:
+        parsed_date = datetime.date.fromisoformat(date)
+    except ValueError:
+        return JsonResponse({"errors": {"date": "Invalid date format."}}, status=400)
+
+    oversized = _reject_oversized_body(request)
+    if oversized is not None:
+        return oversized
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"errors": {"body": "Invalid JSON."}}, status=400)
+
+    if not isinstance(data, dict):
+        return JsonResponse(
+            {"errors": {"body": "Request body must be a JSON object."}},
+            status=400,
+        )
+
+    # Explicit type checks: ``create_block`` would 500 on a non-string
+    # title (``.strip()`` → AttributeError) or an unhashable category
+    # (``in``-set → TypeError); don't inherit that hole here.
+    for field in ("start_time", "end_time"):
+        if field not in data:
+            return JsonResponse(
+                {"errors": {field: f"{field} is required."}}, status=400
+            )
+        if not isinstance(data[field], str):
+            return JsonResponse(
+                {"errors": {field: f"{field} must be a string."}}, status=400
+            )
+    if "title" in data and not isinstance(data["title"], str):
+        return JsonResponse(
+            {"errors": {"title": "Title must be a string."}}, status=400
+        )
+    if "category" in data and not isinstance(data["category"], str):
+        return JsonResponse(
+            {"errors": {"category": "Category must be a string."}}, status=400
+        )
+
+    schedule, _ = Schedule.objects.get_or_create(user=request.user, date=parsed_date)
+
+    # No ``validate_five_minute_or_error`` — off-grid times are the point.
+    start, err = _parse_time_or_error("start_time", data["start_time"])
+    if err is not None:
+        return err
+    end, err = _parse_time_or_error("end_time", data["end_time"])
+    if err is not None:
+        return err
+    # Guards the degenerate clamp where a fully-out-of-day event collapses
+    # to a zero-length range: 400 instead of a zero-length block.
+    err = _validate_time_range(start, end)
+    if err is not None:
+        return err
+
+    title = data.get("title", "").strip()
+    if not title:
+        return JsonResponse(
+            {"errors": {"title": "Title is required."}}, status=400
+        )
+    if len(title) > 255:
+        return JsonResponse(
+            {"errors": {"title": "Title too long (max 255 characters)."}}, status=400
+        )
+
+    category = data.get("category", "other")
+    if category not in VALID_CATEGORIES:
+        choices = ", ".join(sorted(VALID_CATEGORIES))
+        return JsonResponse(
+            {"errors": {"category": f"Invalid category. Choose from: {choices}."}},
+            status=400,
+        )
+
+    try:
+        with transaction.atomic():
+            # Same locked-insert pattern as ``create_block`` — see the
+            # comments there for the draft-apply serialization rationale.
+            Schedule.objects.select_for_update().get(pk=schedule.pk)
+            overlap = TimeBlock.objects.filter(
+                schedule=schedule,
+                start_time__lt=end,
+                end_time__gt=start,
+            ).select_for_update().exists()
+            if overlap:
+                return JsonResponse(
+                    {"errors": {"time": "This block overlaps with an existing block."}},
+                    status=400,
+                )
+            block = TimeBlock(
+                schedule=schedule,
+                title=title,
+                start_time=start,
+                end_time=end,
+                category=category,
+            )
+            # ``exclude`` skips only the field-level five-minute validators;
+            # range was checked above and model ``clean()`` still runs.
+            block.full_clean(exclude=["start_time", "end_time"])
+            block.save()
+    except ValidationError as e:
+        return JsonResponse({"errors": e.message_dict}, status=400)
+
+    schedule.mark_active_on_edit()
+    return JsonResponse(_block_to_dict(block), status=201)
+
+
+@login_required
 @require_http_methods(["PATCH", "DELETE"])
 def block_detail(request, pk):
     try:
@@ -270,7 +389,12 @@ def block_detail(request, pk):
                         status=400,
                     )
 
-            block.full_clean()
+            # ``exclude`` keeps a completion toggle / title edit on an
+            # off-grid from-event block (feature 0026) from re-failing the
+            # field-level five-minute validators on *unchanged* times.
+            # Manual time edits enforced granularity + range explicitly
+            # above; model ``clean()`` (start >= end) still runs.
+            block.full_clean(exclude=["start_time", "end_time"])
             block.save()
     except ValidationError as e:
         return JsonResponse({"errors": e.message_dict}, status=400)
@@ -368,7 +492,11 @@ def reorder_blocks(request):
 
     update_map = {u["id"]: u for u in updates}
 
-    # Validate each update entry's contents (no DB access required)
+    # Validate each update entry's contents (no DB access required).
+    # Granularity is deferred to the in-lock loop below: a drag payload
+    # renumbers *every* block's sort_order and re-submits unchanged
+    # (possibly off-grid, feature 0026) times, which must not 400. Format
+    # and range always run here; the batch overlap check runs in-lock.
     for uid, entry in update_map.items():
         for field in ("start_time", "end_time", "sort_order"):
             if field not in entry:
@@ -377,7 +505,8 @@ def reorder_blocks(request):
                     status=400,
                 )
         _, _, err = _validate_block_times(
-            entry["start_time"], entry["end_time"], block_id=uid
+            entry["start_time"], entry["end_time"], block_id=uid,
+            enforce_granularity=False,
         )
         if err is not None:
             return err
@@ -477,8 +606,25 @@ def reorder_blocks(request):
             for b in schedule_blocks:
                 if b.id in update_map:
                     entry = update_map[b.id]
-                    b.start_time = _parse_time(entry["start_time"])
-                    b.end_time = _parse_time(entry["end_time"])
+                    new_start = _parse_time(entry["start_time"])
+                    new_end = _parse_time(entry["end_time"])
+                    # Enforce granularity only on times that actually
+                    # changed: unchanged off-grid times (from-event
+                    # blocks, feature 0026) were already persisted as
+                    # valid; a *new* off-grid time still 400s.
+                    changed = [
+                        t for t, stored in (
+                            (new_start, b.start_time),
+                            (new_end, b.end_time),
+                        )
+                        if t != stored
+                    ]
+                    if changed:
+                        err = _validate_five_minute_or_error(*changed)
+                        if err is not None:
+                            return err
+                    b.start_time = new_start
+                    b.end_time = new_end
                     b.sort_order = entry["sort_order"]
                     blocks_to_save.append(b)
 
@@ -498,7 +644,11 @@ def reorder_blocks(request):
                     )
 
             for b in blocks_to_save:
-                b.full_clean()
+                # Same footgun as ``block_detail``: the field validators
+                # would re-fail unchanged off-grid times even after the
+                # selective granularity check above. Range and overlap
+                # were checked explicitly; model ``clean()`` still runs.
+                b.full_clean(exclude=["start_time", "end_time"])
                 b.save()
     except ValidationError as e:
         return JsonResponse({"errors": e.message_dict}, status=400)
@@ -579,8 +729,13 @@ def restore_blocks(request, date):
                 return JsonResponse(
                     {"errors": {field: f"{field} is required (block {i})."}}, status=400
                 )
+        # Restore re-persists previously-valid states, which may include
+        # off-grid from-event blocks (feature 0026) — skip only the
+        # granularity check; format, range, and the snapshot-overlap
+        # check below all stay.
         start, end, err = _validate_block_times(
-            entry["start_time"], entry["end_time"], block_id=i
+            entry["start_time"], entry["end_time"], block_id=i,
+            enforce_granularity=False,
         )
         if err is not None:
             return err
@@ -646,7 +801,10 @@ def restore_blocks(request, date):
             for v in validated
         ]
         for block in instances:
-            block.full_clean()
+            # Skip the field-level five-minute validators (off-grid
+            # from-event blocks restore verbatim); everything else —
+            # title/category field validation, model ``clean()`` — runs.
+            block.full_clean(exclude=["start_time", "end_time"])
 
         with transaction.atomic():
             # Same parent-row lock as ``create_block`` — draft apply holds

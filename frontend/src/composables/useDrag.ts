@@ -58,6 +58,20 @@ import {
  *   // Returns null: shifting the trailing block would push it past 23:00
  *   resolveConflicts([{id:1,...}, {id:2, end:23:00}], 1, 1370, 1380)
  */
+/**
+ * Round a duration UP to the next `SNAP_MINUTES` multiple (min one snap
+ * step). Off-grid durations exist since feature 0026 (from-event blocks,
+ * e.g. 26 min): a shifted/dragged block must still POST on-grid times to
+ * `reorder_blocks`, which enforces granularity on *changed* values —
+ * normalize-on-move semantics.
+ */
+export function roundUpDuration(minutes: number): number {
+  return Math.max(
+    SNAP_MINUTES,
+    Math.ceil(minutes / SNAP_MINUTES) * SNAP_MINUTES,
+  )
+}
+
 export function resolveConflicts(
   blocks: TimeBlock[],
   draggedId: number,
@@ -122,20 +136,26 @@ export function resolveConflicts(
         // Pick the neighbour to move — the dragged block is anchored, so if
         // it's the later one (i+1) we shift the earlier non-dragged block at
         // i forward past it; otherwise we shift i+1 forward past i.
+        // Shifted durations are rounded UP to the snap grid: every shift
+        // chain starts at the dragged block (on-grid drop payload), so an
+        // on-grid start + rounded duration keeps the whole cascade
+        // on-grid even when it displaces an off-grid from-event block.
         const shiftIdx =
           result[i + 1].id === draggedId ? i : i + 1
         if (shiftIdx === i) {
-          const shiftDuration =
+          const shiftDuration = roundUpDuration(
             timeToMinutes(result[i].end_time) -
-            timeToMinutes(result[i].start_time)
+              timeToMinutes(result[i].start_time),
+          )
           const newStart = timeToMinutes(result[i + 1].end_time)
           const newEnd = newStart + shiftDuration
           if (newEnd > DAY_END_MINUTES) return null
           result[i].start_time = minutesToTime(newStart)
           result[i].end_time = minutesToTime(newEnd)
         } else {
-          const shiftDuration =
-            timeToMinutes(result[i + 1].end_time) - nextStart
+          const shiftDuration = roundUpDuration(
+            timeToMinutes(result[i + 1].end_time) - nextStart,
+          )
           const newStart = currEnd
           const newEnd = newStart + shiftDuration
           if (newEnd > DAY_END_MINUTES) return null
@@ -279,14 +299,21 @@ export function useDrag(
       e.clientY - containerRect.top - containerPaddingTop + containerEl.scrollTop
     const blockTopPx = cursorY - grabOffsetY
     const minuteOffset = blockTopPx / PX_PER_MINUTE
-    const snapped =
-      Math.round(minuteOffset / SNAP_MINUTES) * SNAP_MINUTES
 
     const renderStart =
       frozenRenderBounds.value?.renderStart ?? DAY_START_MINUTES
 
-    let newStart = renderStart + snapped
-    if (newStart < renderStart) newStart = renderStart
+    // Snap in the ABSOLUTE minutes domain, not relative to renderStart:
+    // renderStart itself can be off-grid when the first visible block is
+    // an off-grid from-event block (feature 0026), and a relative snap
+    // would then keep every drop position off-grid. The lower clamp
+    // rounds UP so a clamped start stays both in-view and on-grid; the
+    // day-end clamp is on-grid by construction (DAY_END and the rounded
+    // duration are both snap multiples).
+    let newStart =
+      Math.round((renderStart + minuteOffset) / SNAP_MINUTES) * SNAP_MINUTES
+    if (newStart < renderStart)
+      newStart = Math.ceil(renderStart / SNAP_MINUTES) * SNAP_MINUTES
     if (newStart + blockDuration > DAY_END_MINUTES)
       newStart = DAY_END_MINUTES - blockDuration
 
@@ -358,8 +385,23 @@ export function useDrag(
     containerRect = container.getBoundingClientRect()
     containerPaddingTop =
       parseFloat(getComputedStyle(container).paddingTop) || 0
-    blockDuration =
-      timeToMinutes(block.end_time) - timeToMinutes(block.start_time)
+    // Drag geometry works on the DISPLAY-CLAMPED span, matching what the
+    // renderer shows (buildBaseDisplayItems clamps to [06:00, 23:00)): a
+    // day-bound-clamped from-event block (raw 00:00–06:30, displayed
+    // 06:00–06:30) must compute grab offset and ghost geometry from the
+    // displayed 06:00, not the raw midnight start. The duration is then
+    // rounded up to the snap grid so the drop payload is on-grid — the
+    // hidden out-of-window remainder normalizing away on move is the same
+    // accepted normalize-on-move semantics as the round-up.
+    const clampedStartMinutes = Math.max(
+      timeToMinutes(block.start_time),
+      DAY_START_MINUTES,
+    )
+    const clampedEndMinutes = Math.min(
+      timeToMinutes(block.end_time),
+      DAY_END_MINUTES,
+    )
+    blockDuration = roundUpDuration(clampedEndMinutes - clampedStartMinutes)
     dropValid = true
     pointerId = event.pointerId
 
@@ -370,7 +412,7 @@ export function useDrag(
     frozenNowMinutes.value = getNow?.() ?? null
     const renderStart = frozenRenderBounds.value.renderStart
 
-    const startMinutes = timeToMinutes(block.start_time)
+    const startMinutes = clampedStartMinutes
     // Offset between cursor and block top at grab time, in px
     // relative to the schedule-body content area. Reused in
     // updatePreview so the ghost follows the cursor from the same

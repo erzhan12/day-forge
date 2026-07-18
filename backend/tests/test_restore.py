@@ -84,10 +84,43 @@ class TestRestoreBlocks:
         ])
         assert resp.status_code == 400
 
-    def test_restore_non_five_minute_time_rejected(self, auth_client, schedule):
+    def test_restore_off_grid_time_accepted(self, auth_client, schedule):
+        """Contract flip (feature 0026): restore re-persists previously-
+        valid states, which may include off-grid from-event blocks — the
+        pre-0026 behavior rejected ``08:03`` with a 400."""
         resp = _post_restore(auth_client, "2026-04-07", [
             {"title": "X", "start_time": "08:03", "end_time": "09:00", "category": "work",
              "is_completed": False, "sort_order": 0},
+        ])
+        assert resp.status_code == 200
+        block = TimeBlock.objects.get(schedule=schedule, title="X")
+        assert block.start_time.strftime("%H:%M") == "08:03"
+
+    def test_restore_off_grid_snapshot_persisted_verbatim(
+        self, auth_client, two_blocks, schedule
+    ):
+        """Full-day undo snapshot containing an off-grid from-event block
+        (14:07–14:33) restores every block verbatim — before the 0026
+        granularity bypass, undoing *any* edit on such a day 400d."""
+        resp = _post_restore(auth_client, "2026-04-07", [
+            {"title": "Morning", "start_time": "08:00", "end_time": "09:00",
+             "category": "work", "is_completed": False, "sort_order": 0},
+            {"title": "Dentist", "start_time": "14:07", "end_time": "14:33",
+             "category": "other", "is_completed": False, "sort_order": 10},
+        ])
+        assert resp.status_code == 200
+        times = {
+            b["title"]: (b["start_time"], b["end_time"])
+            for b in resp.json()["blocks"]
+        }
+        assert times["Dentist"] == ("14:07", "14:33")
+
+    def test_restore_off_grid_overlap_still_rejected(self, auth_client, schedule):
+        resp = _post_restore(auth_client, "2026-04-07", [
+            {"title": "A", "start_time": "14:07", "end_time": "14:33", "category": "other",
+             "is_completed": False, "sort_order": 0},
+            {"title": "B", "start_time": "14:20", "end_time": "15:00", "category": "work",
+             "is_completed": False, "sort_order": 10},
         ])
         assert resp.status_code == 400
 

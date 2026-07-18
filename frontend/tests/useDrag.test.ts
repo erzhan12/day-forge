@@ -1,5 +1,10 @@
 import { describe, it, expect, vi } from "vitest"
-import { blocksExternallyMutated, resolveConflicts, useDrag } from "../src/composables/useDrag"
+import {
+  blocksExternallyMutated,
+  resolveConflicts,
+  roundUpDuration,
+  useDrag,
+} from "../src/composables/useDrag"
 import type { TimeBlock, UndoAction } from "../src/types"
 import {
   DAY_END_MINUTES,
@@ -725,5 +730,161 @@ describe("blocksExternallyMutated", () => {
 
   it("returns true when snapshot is empty but current has blocks", () => {
     expect(blocksExternallyMutated([], [snapshot[0]], 1)).toBe(true)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Feature 0026 — off-grid from-event blocks must produce on-grid payloads
+// through the drag pipeline (normalize-on-move semantics).
+// ---------------------------------------------------------------------------
+
+describe("roundUpDuration", () => {
+  it("rounds an off-grid duration up to the next snap multiple", () => {
+    expect(roundUpDuration(26)).toBe(30)
+    expect(roundUpDuration(31)).toBe(35)
+  })
+
+  it("keeps on-grid durations unchanged", () => {
+    expect(roundUpDuration(30)).toBe(30)
+    expect(roundUpDuration(5)).toBe(5)
+  })
+
+  it("floors at one snap step", () => {
+    expect(roundUpDuration(0)).toBe(5)
+    expect(roundUpDuration(3)).toBe(5)
+  })
+})
+
+describe("resolveConflicts off-grid neighbours (feature 0026)", () => {
+  it("rounds a displaced off-grid neighbour's duration up to the grid", () => {
+    const blocks = [
+      makeBlock({ id: 1, start_time: "09:00", end_time: "10:00", sort_order: 0 }),
+      // Off-grid from-event block: 26 minutes at 10:07.
+      makeBlock({ id: 2, start_time: "10:07", end_time: "10:33", sort_order: 10 }),
+    ]
+    // Drag block 1 onto 10:00–11:00 — overlaps the off-grid neighbour.
+    const result = resolveConflicts(blocks, 1, 600, 660)
+    expect(result).not.toBeNull()
+    const shifted = result!.find((b) => b.id === 2)!
+    // Starts at the dragged block's on-grid end, duration 26 → 30.
+    expect(shifted.start_time).toBe("11:00")
+    expect(shifted.end_time).toBe("11:30")
+  })
+
+  it("keeps a cascade all-on-grid when it passes through an off-grid block", () => {
+    const blocks = [
+      makeBlock({ id: 1, start_time: "09:00", end_time: "10:00", sort_order: 0 }),
+      makeBlock({ id: 2, start_time: "10:07", end_time: "10:33", sort_order: 10 }),
+      makeBlock({ id: 3, start_time: "10:40", end_time: "11:10", sort_order: 20 }),
+    ]
+    const result = resolveConflicts(blocks, 1, 600, 660)
+    expect(result).not.toBeNull()
+    for (const b of result!) {
+      const [sh, sm] = b.start_time.split(":").map(Number)
+      const [eh, em] = b.end_time.split(":").map(Number)
+      expect((sh * 60 + sm) % 5, `${b.id} start ${b.start_time}`).toBe(0)
+      expect((eh * 60 + em) % 5, `${b.id} end ${b.end_time}`).toBe(0)
+    }
+  })
+})
+
+describe("useDrag off-grid geometry and payload (feature 0026)", () => {
+  function toMinutes(t: string): number {
+    const [h, m] = t.split(":").map(Number)
+    return h * 60 + m
+  }
+
+  function makeOffGridDrag(blocks: TimeBlock[]) {
+    return useDrag(
+      "2026-04-16",
+      () => blocks,
+      vi.fn(async () => ({ ok: true as const })),
+      vi.fn(),
+      () => blocks.map((b) => ({ ...b })),
+      undefined,
+      () => computeRenderBounds(blocks, null),
+    )
+  }
+
+  function fireMove(container: HTMLElement, clientY: number) {
+    const moveHandler = (
+      container.addEventListener as ReturnType<typeof vi.fn>
+    ).mock.calls.find((call) => call[0] === "pointermove")?.[1] as (
+      e: PointerEvent,
+    ) => void
+    moveHandler({ clientY } as PointerEvent)
+  }
+
+  it("dragging an off-grid-duration block yields an on-grid preview (26 → 30 min)", () => {
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+      cb(0)
+      return 0
+    })
+    const blocks = [
+      makeBlock({ id: 1, start_time: "14:07", end_time: "14:33", sort_order: 0 }),
+    ]
+    const drag = makeOffGridDrag(blocks)
+    const container = makeFakeContainer()
+    Object.defineProperty(container, "scrollTop", { value: 0, writable: true })
+
+    drag.startDrag({ pointerId: 1, clientY: 0 } as PointerEvent, blocks[0], container)
+    fireMove(container, 100)
+
+    const start = toMinutes(drag.previewStartTime.value)
+    const end = toMinutes(drag.previewEndTime.value)
+    expect(start % 5).toBe(0)
+    expect(end % 5).toBe(0)
+    expect(end - start).toBe(30) // 26 rounded up
+    vi.unstubAllGlobals()
+  })
+
+  it("day-end clamp stays on-grid with a rounded duration", () => {
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+      cb(0)
+      return 0
+    })
+    const blocks = [
+      makeBlock({ id: 1, start_time: "14:07", end_time: "14:33", sort_order: 0 }),
+    ]
+    const drag = makeOffGridDrag(blocks)
+    const container = makeFakeContainer()
+    Object.defineProperty(container, "scrollTop", { value: 0, writable: true })
+
+    drag.startDrag({ pointerId: 1, clientY: 0 } as PointerEvent, blocks[0], container)
+    // Move far past the bottom — the clamp computes DAY_END − duration,
+    // which must be on-grid (22:30) because the duration was rounded.
+    fireMove(container, 100000)
+
+    expect(drag.previewStartTime.value).toBe("22:30")
+    expect(drag.previewEndTime.value).toBe("23:00")
+    vi.unstubAllGlobals()
+  })
+
+  it("uses the display-clamped span for a partially-visible day-bound block", () => {
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+      cb(0)
+      return 0
+    })
+    // Clamp-to-day from-event block: raw 00:00–06:30, displayed 06:00–06:30.
+    const blocks = [
+      makeBlock({ id: 1, start_time: "00:00", end_time: "06:30", sort_order: 0 }),
+    ]
+    const drag = makeOffGridDrag(blocks)
+    const container = makeFakeContainer()
+    Object.defineProperty(container, "scrollTop", { value: 0, writable: true })
+
+    drag.startDrag({ pointerId: 1, clientY: 0 } as PointerEvent, blocks[0], container)
+    // Grab geometry anchors to the DISPLAYED position (06:00 = renderStart),
+    // not the raw midnight start (which would put the ghost at −720px).
+    expect(drag.ghostTop.value).toBe(0)
+
+    fireMove(container, 60)
+    const start = toMinutes(drag.previewStartTime.value)
+    const end = toMinutes(drag.previewEndTime.value)
+    // Payload derives from the clamped 30-minute span, not the raw 390.
+    expect(end - start).toBe(30)
+    expect(start % 5).toBe(0)
+    expect(end).toBeLessThanOrEqual(DAY_END_MINUTES)
+    vi.unstubAllGlobals()
   })
 })

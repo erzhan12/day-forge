@@ -54,6 +54,18 @@ export interface Rule {
   priority: number
 }
 
+// Travel-time rule for adding external calendar events to the timeline
+// (feature 0026). Ascending `order`, first keyword match wins. Empty
+// `category` means "no override" — the created block uses "other".
+export interface TravelRule {
+  id: number
+  keyword: string
+  travel_there_minutes: number
+  travel_back_minutes: number
+  category: "" | "work" | "personal" | "health" | "other"
+  order: number
+}
+
 // Keyed off the existing TimeBlock category union so adding/renaming a
 // category surfaces a compile error wherever this type is consumed.
 export type CategoryMinutes = Record<TimeBlock["category"], number>

@@ -1,3 +1,4 @@
+from calendar_sync.models import TravelRule
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.csrf import ensure_csrf_cookie
 from inertia import render as inertia_render
@@ -21,6 +22,11 @@ def settings_view(request):
     )
     rules = list(
         Rule.objects.filter(user=request.user).order_by("-priority", "id")
+    )
+    # Travel rules (feature 0026): same bounded no-pagination rationale —
+    # capped at MAX_TRAVEL_RULES_PER_USER by the CRUD API.
+    travel_rules = list(
+        TravelRule.objects.filter(user=request.user).order_by("order", "id")
     )
     # Resolve preferences exactly once per render so the SSR data-theme
     # and the Inertia ``ui_preferences`` prop always agree.
@@ -47,6 +53,17 @@ def settings_view(request):
                     "priority": r.priority,
                 }
                 for r in rules
+            ],
+            "travel_rules": [
+                {
+                    "id": r.id,
+                    "keyword": r.keyword,
+                    "travel_there_minutes": r.travel_there_minutes,
+                    "travel_back_minutes": r.travel_back_minutes,
+                    "category": r.category,
+                    "order": r.order,
+                }
+                for r in travel_rules
             ],
             "ui_preferences": {"theme": prefs.theme},
         },

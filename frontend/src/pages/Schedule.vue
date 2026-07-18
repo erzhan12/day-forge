@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, provide, toRef, watch } from "vue"
 import { Link, router } from "@inertiajs/vue3"
-import type { TimeBlock as TimeBlockType, Schedule } from "../types"
+import type { TimeBlock as TimeBlockType, Schedule, TravelRule } from "../types"
 import DateNavigator from "../components/DateNavigator.vue"
 import TimeBlock from "../components/TimeBlock.vue"
 import GapSlot from "../components/GapSlot.vue"
@@ -48,6 +48,9 @@ import { useNowMinutes } from "../composables/useNowMinutes"
 import { useSoundNotifications } from "../composables/useSoundNotifications"
 import { useExternalCalendarPlacement } from "../composables/useExternalCalendarPlacement"
 import ExternalEventsPanel from "../components/ExternalEventsPanel.vue"
+import AddToScheduleDialog from "../components/AddToScheduleDialog.vue"
+import { useTravelRules } from "../composables/useTravelRules"
+import { matchTravelRule } from "../utils/travelRules"
 import "../app.css"
 
 useThemeFromProps()
@@ -195,6 +198,36 @@ function retryExternalFetch(provider: "apple" | "google") {
   } else {
     googleCalendar.fetchEvents(props.date)
   }
+}
+
+// Add-external-event-to-schedule (feature 0026). Travel rules are not an
+// Inertia prop on this page — fetch once via the composable. Matching
+// happens here (the panel only emits the clicked event).
+const travelRulesApi = useTravelRules()
+const travelRules = ref<TravelRule[]>([])
+const travelRulesReady = ref(false)
+travelRulesApi.listRules().then((result) => {
+  if (result.ok && result.rules) travelRules.value = result.rules
+  travelRulesReady.value = true
+})
+
+const addDialogEvent = ref<NormalizedEvent | null>(null)
+const addDialogRule = ref<TravelRule | null>(null)
+
+async function handleAddToSchedule(ev: NormalizedEvent) {
+  // Avoid matching against [] if the user clicks before the initial fetch lands.
+  if (!travelRulesReady.value) {
+    const result = await travelRulesApi.listRules()
+    if (result.ok && result.rules) travelRules.value = result.rules
+    travelRulesReady.value = true
+  }
+  addDialogRule.value = matchTravelRule(travelRules.value, ev.title)
+  addDialogEvent.value = ev
+}
+
+function closeAddDialog() {
+  addDialogEvent.value = null
+  addDialogRule.value = null
 }
 
 // Todoist (feature 0020): read-only task panel that follows the selected
@@ -393,15 +426,27 @@ const draggedBlock = computed(() =>
     ? props.blocks.find((b) => b.id === dragBlockId.value)
     : null,
 )
+// Ghost sizing uses the same DISPLAY-CLAMPED span the renderer shows
+// (buildBaseDisplayItems clamps to [06:00, 23:00)): a day-bound-clamped
+// from-event block (feature 0026, raw 00:00–06:30 displayed 06:00–06:30)
+// must not size its ghost from the raw out-of-window span.
+function ghostClampedDuration(): number {
+  if (!draggedBlock.value) return 0
+  const clampedStart = Math.max(
+    timeToMinutes(draggedBlock.value.start_time), DAY_START_MINUTES,
+  )
+  const clampedEnd = Math.min(
+    timeToMinutes(draggedBlock.value.end_time), DAY_END_MINUTES,
+  )
+  return Math.max(0, clampedEnd - clampedStart)
+}
 const ghostHeight = computed(() => {
   if (!draggedBlock.value) return 0
-  const dur = timeToMinutes(draggedBlock.value.end_time) - timeToMinutes(draggedBlock.value.start_time)
-  return dur * PX_PER_MINUTE
+  return ghostClampedDuration() * PX_PER_MINUTE
 })
 const ghostIsCompact = computed(() => {
   if (!draggedBlock.value) return false
-  const dur = timeToMinutes(draggedBlock.value.end_time) - timeToMinutes(draggedBlock.value.start_time)
-  return dur <= 30
+  return ghostClampedDuration() <= 30
 })
 
 // Build the display list: blocks and gaps with the now marker spliced in.
@@ -485,6 +530,7 @@ function logout() {
       :account-errors="googleCalendar.state.accountErrors"
       :connected="externalConnected"
       @retry="retryExternalFetch"
+      @add-to-schedule="handleAddToSchedule"
     />
 
     <AddBlockForm
@@ -630,8 +676,16 @@ function logout() {
         :account-errors="googleCalendar.state.accountErrors"
         :connected="externalConnected"
         @retry="retryExternalFetch"
+        @add-to-schedule="handleAddToSchedule"
       />
     </TodoistSidebar>
+    <AddToScheduleDialog
+      v-if="addDialogEvent"
+      :event="addDialogEvent"
+      :matched-rule="addDialogRule"
+      :date="date"
+      @close="closeAddDialog"
+    />
     <ChatSidebar
       v-if="isWide"
       v-model:open="sidebarOpen"

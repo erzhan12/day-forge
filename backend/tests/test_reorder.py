@@ -103,6 +103,42 @@ class TestReorderBlocks:
         ])
         assert resp.status_code == 400
 
+    def test_unchanged_off_grid_times_accepted(self, auth_client, schedule):
+        """Feature 0026: a drag payload renumbers every block's sort_order
+        and re-submits unchanged times — an off-grid from-event block on
+        the day must not 400 the whole reorder."""
+        off_grid = TimeBlock.objects.create(
+            schedule=schedule, title="Dentist",
+            start_time="14:07", end_time="14:33", category="other",
+        )
+        on_grid = TimeBlock.objects.create(
+            schedule=schedule, title="Deep Work",
+            start_time="10:00", end_time="12:00", category="work",
+        )
+        resp = _post_reorder(auth_client, [
+            {"id": on_grid.id, "start_time": "08:00", "end_time": "10:00",
+             "sort_order": 0},
+            {"id": off_grid.id, "start_time": "14:07", "end_time": "14:33",
+             "sort_order": 10},
+        ])
+        assert resp.status_code == 200
+        off_grid.refresh_from_db()
+        assert off_grid.start_time.strftime("%H:%M") == "14:07"
+        assert off_grid.sort_order == 10
+
+    def test_changed_time_still_enforces_granularity(self, auth_client, schedule):
+        """Changing an off-grid block's times to *new* off-grid values
+        still 400s — only unchanged times skip the granularity check."""
+        off_grid = TimeBlock.objects.create(
+            schedule=schedule, title="Dentist",
+            start_time="14:07", end_time="14:33", category="other",
+        )
+        resp = _post_reorder(auth_client, [
+            {"id": off_grid.id, "start_time": "15:02", "end_time": "15:28",
+             "sort_order": 0},
+        ])
+        assert resp.status_code == 400
+
     def test_start_not_before_end_rejected(self, auth_client, three_blocks):
         b1, _, _ = three_blocks
         resp = _post_reorder(auth_client, [

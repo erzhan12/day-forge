@@ -1,5 +1,6 @@
 from ai import views as ai_views
 from analytics import views as analytics_views
+from calendar_sync import travel_rules as calendar_travel_rules
 from calendar_sync import views as calendar_views
 from django.contrib import admin
 from django.urls import path
@@ -31,6 +32,14 @@ urlpatterns = [
         "api/schedules/<str:date>/blocks/restore/",
         schedules_api.restore_blocks,
         name="restore_blocks",
+    ),
+    # From-event create (feature 0026): the single sanctioned off-grid
+    # create path. The ``/from-event/`` literal disambiguates from the
+    # plain ``blocks/`` route above.
+    path(
+        "api/schedules/<str:date>/blocks/from-event/",
+        schedules_api.create_block_from_event,
+        name="create_block_from_event",
     ),
     # API: templates + rules
     path(
@@ -86,6 +95,18 @@ urlpatterns = [
         "api/calendar/events/<str:date>/",
         calendar_views.events,
         name="caldav_events",
+    ),
+    # Travel-time rules for from-event adds (feature 0026) — provider-
+    # agnostic, hence under /api/calendar/ but owned by calendar_sync.
+    path(
+        "api/calendar/travel-rules/",
+        calendar_travel_rules.travel_rules_collection,
+        name="travel_rules_collection",
+    ),
+    path(
+        "api/calendar/travel-rules/<int:pk>/",
+        calendar_travel_rules.travel_rule_detail,
+        name="travel_rule_detail",
     ),
     # API: Google Calendar (feature 0022)
     path(

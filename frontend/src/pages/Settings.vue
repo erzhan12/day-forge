@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from "vue"
 import { Link, router } from "@inertiajs/vue3"
-import type { Rule, Template } from "../types"
+import type { Rule, Template, TravelRule } from "../types"
 import TemplateEditor from "../components/TemplateEditor.vue"
 import RulesList from "../components/RulesList.vue"
+import TravelRulesList from "../components/TravelRulesList.vue"
 import DesignSelector from "../components/DesignSelector.vue"
 import SoundNotificationToggle from "../components/SoundNotificationToggle.vue"
 import ExternalCalendarPlacementToggle from "../components/ExternalCalendarPlacementToggle.vue"
@@ -21,10 +22,14 @@ useThemeFromProps()
 const props = defineProps<{
   templates: Template[]
   rules: Rule[]
+  travel_rules: TravelRule[]
 }>()
 
 const localTemplates = ref<Template[]>(props.templates.map((t) => ({ ...t })))
 const localRules = ref<Rule[]>(props.rules.map((r) => ({ ...r })))
+const localTravelRules = ref<TravelRule[]>(
+  props.travel_rules.map((r) => ({ ...r })),
+)
 
 watch(
   () => props.templates,
@@ -37,6 +42,13 @@ watch(
   () => props.rules,
   (next) => {
     localRules.value = next.map((r) => ({ ...r }))
+  },
+  { deep: true },
+)
+watch(
+  () => props.travel_rules,
+  (next) => {
+    localTravelRules.value = next.map((r) => ({ ...r }))
   },
   { deep: true },
 )
@@ -53,6 +65,9 @@ function refreshTemplates() {
 }
 function refreshRules() {
   router.reload({ only: ["rules"] })
+}
+function refreshTravelRules() {
+  router.reload({ only: ["travel_rules"] })
 }
 
 const today = todayString()
@@ -414,6 +429,13 @@ async function handleTodoistDisconnect() {
       </button>
 
       <ExternalCalendarPlacementToggle />
+
+      <h3 class="subsection-title">Travel-time rules</h3>
+      <p class="section-subtitle">
+        Prefill travel minutes and category when adding an external event to
+        your schedule, matched by event-title keyword.
+      </p>
+      <TravelRulesList :rules="localTravelRules" @changed="refreshTravelRules" />
     </section>
 
     <section class="section">

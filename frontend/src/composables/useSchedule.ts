@@ -26,6 +26,21 @@ export function useSchedule(date: DateSource) {
     return apiFetch(`/api/schedules/${readDate(date)}/blocks/`, "POST", data)
   }
 
+  // From-event create (feature 0026): the only client path allowed to
+  // submit off-grid times (external events carry arbitrary minutes).
+  function createBlockFromEvent(data: {
+    title: string
+    start_time: string
+    end_time: string
+    category: string
+  }): Promise<ApiResult> {
+    return apiFetch(
+      `/api/schedules/${readDate(date)}/blocks/from-event/`,
+      "POST",
+      data,
+    )
+  }
+
   function updateBlock(
     id: number,
     data: Record<string, unknown>,
@@ -66,5 +81,12 @@ export function useSchedule(date: DateSource) {
     )
   }
 
-  return { createBlock, updateBlock, deleteBlock, reorderBlocks, restoreBlocks }
+  return {
+    createBlock,
+    createBlockFromEvent,
+    updateBlock,
+    deleteBlock,
+    reorderBlocks,
+    restoreBlocks,
+  }
 }

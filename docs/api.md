@@ -10,7 +10,7 @@ JSON endpoints for managing schedules and time blocks. Page routes (`/`, `/sched
 - **CSRF:** Django's CSRF middleware is active. Clients must:
   1. Obtain the `XSRF-TOKEN` cookie by hitting any `@ensure_csrf_cookie` view (e.g. `GET /accounts/login/` or `GET /schedule/<date>/`).
   2. Send the token back in the `X-XSRF-TOKEN` header on every unsafe request. Missing or mismatched token → `403`.
-- **Time format:** `HH:MM`, 24-hour, 5-minute granularity (validated at the model layer).
+- **Time format:** `HH:MM`, 24-hour, 5-minute granularity (validated at the model layer). **Exception (feature 0026):** blocks created via `POST /api/schedules/{date}/blocks/from-event/` may carry arbitrary minutes (external calendar events don't snap). Such off-grid blocks are first-class afterwards: non-time `PATCH`es tolerate them, `restore` re-accepts them, and `reorder` skips the granularity check on *unchanged* times. Manually *changing* a time on any endpoint still enforces the 5-minute grid.
 - **Date format:** `YYYY-MM-DD`.
 - **Errors:** non-`2xx` responses return `{"errors": {<field>: <message>}}`. Field is either a request field name or a logical key (`time`, `body`, `detail`).
 
@@ -64,6 +64,29 @@ The overlap check runs inside `transaction.atomic()` but is **not** race-safe ag
 
 ---
 
+### `POST /api/schedules/{date}/blocks/from-event/` — feature 0026
+
+Create a time block from an external calendar event ("Add to schedule" in the External Calendars panel). Identical to `POST /api/schedules/{date}/blocks/` **except** the 5-minute granularity check is skipped — external events carry arbitrary minutes (e.g. `14:07`) and the clamp-to-day decision produces `23:59`. This is the single sanctioned off-grid create path; ordinary clients should keep using the plain create endpoint.
+
+The frontend computes the final local `HH:MM` pair (event local time ± travel-time rule minutes, clamped to `00:00`/`23:59`); this endpoint is TZ-agnostic and only parses, range-checks, and overlap-checks.
+
+**Request body**
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `title` | string | yes | 1–255 chars after `strip()`. Non-string → `400`. |
+| `start_time` | string | yes | `HH:MM`, any minute value, `< end_time`. |
+| `end_time` | string | yes | `HH:MM`, any minute value, `> start_time`. |
+| `category` | string | no | One of `work`, `personal`, `health`, `other`. Default `other`. |
+
+The raw request body is capped at **100 KB** (`413` before JSON parsing). Non-object JSON roots and non-string field values return structured `400`s.
+
+**Success — `201 Created`** — same shape as the plain create response.
+
+**Errors — `400`** — same keys as the plain create endpoint, including the identical overlap message `{"errors": {"time": "This block overlaps with an existing block."}}`. Re-adding the same event is always allowed (no dedupe) as long as the slot is free.
+
+---
+
 ### `PATCH /api/blocks/{pk}/`
 
 Partially update a time block. Only fields present in the request body are modified. The block must be owned (via `schedule.user`) by the authenticated user.
@@ -84,6 +107,8 @@ Partially update a time block. Only fields present in the request body are modif
 | `category` | string | One of `work`, `personal`, `health`, `other`. |
 | `is_completed` | boolean | — |
 | `sort_order` | integer | `0 ≤ n ≤ 10000`. Booleans rejected. |
+
+Non-time PATCHes (title, category, `is_completed`, `sort_order`) tolerate stored off-grid times (from-event blocks, feature 0026) — the field-level 5-minute validators are excluded from the final `full_clean` because time changes are validated explicitly beforehand. Supplying a new off-grid `start_time`/`end_time` still `400`s.
 
 **Success — `200 OK`** — same shape as the `POST` response.
 
@@ -149,8 +174,8 @@ Batch-update the times and sort order of multiple blocks after a drag-and-drop o
 |-------|------|----------|-------|
 | `updates` | array | yes | Non-empty list of block updates. |
 | `updates[].id` | integer | yes | TimeBlock primary key. No duplicates. |
-| `updates[].start_time` | string | yes | `HH:MM`, 5-minute increments. |
-| `updates[].end_time` | string | yes | `HH:MM`, 5-minute increments, `> start_time`. |
+| `updates[].start_time` | string | yes | `HH:MM`. 5-minute increments enforced only when the value **differs** from the stored one — unchanged off-grid times (from-event blocks, feature 0026) pass through, since a drag payload re-submits every block's unchanged times alongside new `sort_order`s. |
+| `updates[].end_time` | string | yes | Same rule as `start_time`; `> start_time` always enforced. |
 | `updates[].sort_order` | integer | yes | `0 ≤ n ≤ 10000`. |
 
 **Success — `200 OK`**
@@ -170,7 +195,7 @@ Returns the full block list for the schedule, ordered by `start_time`, `sort_ord
 | Status | `errors` key | Meaning |
 |--------|--------------|---------|
 | `400` | `updates` | Not a list, empty, duplicate IDs, cross-schedule blocks, or more than 100 entries. |
-| `400` | `start_time` / `end_time` | Invalid format, non-5-minute, or `start >= end`. |
+| `400` | `start_time` / `end_time` | Invalid format, `start >= end`, or a **changed** time off the 5-minute grid (unchanged off-grid times are accepted — see the field table). |
 | `400` | `sort_order` | Not an integer or out of bounds. |
 | `400` | `time` | Reorder would cause overlapping blocks (checked against full schedule). |
 | `403` | `detail` | CSRF token missing/invalid. |
@@ -216,8 +241,8 @@ Atomically replace all blocks on a schedule with a provided snapshot. Used by th
 |-------|------|----------|-------|
 | `blocks` | array | yes | May be empty (deletes all blocks). |
 | `blocks[].title` | string | yes | 1–255 chars. |
-| `blocks[].start_time` | string | yes | `HH:MM`, 5-minute increments. |
-| `blocks[].end_time` | string | yes | `HH:MM`, 5-minute increments, `> start_time`. |
+| `blocks[].start_time` | string | yes | `HH:MM`. **No 5-minute granularity check** — restore re-persists previously-valid states, which may include off-grid from-event blocks (feature 0026). |
+| `blocks[].end_time` | string | yes | `HH:MM`, `> start_time`. Same granularity note as `start_time`. |
 | `blocks[].category` | string | no | Default `other`. |
 | `blocks[].is_completed` | boolean | no | Default `false`. |
 | `blocks[].sort_order` | integer | no | Default `0`, `0 ≤ n ≤ 10000`. |
@@ -231,7 +256,7 @@ Atomically replace all blocks on a schedule with a provided snapshot. Used by th
 | `400` | `date` | Invalid date format. |
 | `400` | `blocks` | Not a list. |
 | `400` | `title` | Missing, empty, or > 255 chars. |
-| `400` | `start_time` / `end_time` | Invalid format, non-5-minute, or `start >= end`. |
+| `400` | `start_time` / `end_time` | Invalid format or `start >= end` (off-grid minutes are accepted — see the field table). |
 | `400` | `category` | Not one of the allowed choices. |
 | `400` | `time` | Restored blocks would overlap. |
 | `413` | `body` | Request body exceeds 100 KB (checked before JSON parsing). |
@@ -722,6 +747,63 @@ account, no label needed).
 | `500` | `Calendar service is misconfigured` — `CALDAV_ENCRYPTION_KEY` cannot decrypt the stored row (e.g. key rotation without re-write). **Operator action**: see `.claude/rules/project.md` § "CalDAV key rotation note". |
 
 All non-`2xx` use `{"errors": {"detail": "<message>"}}`.
+
+## Travel-time rules — feature 0026
+
+Per-user rules that prefill the "Add to schedule" dialog when adding an
+external calendar event to the timeline. Matching is a case-insensitive
+substring of `keyword` in the event title, evaluated client-side in
+ascending `order` — **first match wins**. Provider-agnostic (applies to
+CalDAV and Google events alike); owned by the `calendar_sync` app. All
+routes are `@login_required`; validation mirrors the templates_mgr rules
+endpoints.
+
+**Serialised shape**
+
+```json
+{
+  "id": 3,
+  "keyword": "dentist",
+  "travel_there_minutes": 30,
+  "travel_back_minutes": 30,
+  "category": "",
+  "order": 0
+}
+```
+
+`category` is `""` (no override → block defaults to `other`) or one of
+`work`, `personal`, `health`, `other`.
+
+### `GET /api/calendar/travel-rules/`
+
+Returns `{"travel_rules": [...]}` ordered by `(order, id)` ascending.
+
+### `POST /api/calendar/travel-rules/`
+
+Create a rule. Body fields:
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `keyword` | string | yes | 1–100 chars after `strip()`. |
+| `travel_there_minutes` | integer | no | `0 ≤ n ≤ 600`. Default `0`. Booleans rejected. |
+| `travel_back_minutes` | integer | no | Same bounds. Default `0`. |
+| `category` | string | no | `""` or a valid category. Default `""`. |
+| `order` | integer | no | `−1000000 ≤ n ≤ 1000000`. When omitted, assigned `(max order for the user) + 1` so new rows are born distinct and the up/down reorder swap always changes ordering. |
+
+Per-user cap: **100 rules** (`400` beyond it). Body capped at 100 KB
+(`413`). Success → `201` with the serialised rule.
+
+### `PATCH /api/calendar/travel-rules/{pk}/`
+
+Partial update; same field rules as `POST` (all optional, at least one
+required). Success → `200` with the serialised rule.
+
+### `DELETE /api/calendar/travel-rules/{pk}/`
+
+Success → `200 {"ok": true}`.
+
+Cross-user `pk` access returns `404` (not `403`) on both `PATCH` and
+`DELETE` — same id-enumeration convention as `PATCH /api/blocks/{pk}/`.
 
 ## Calendar (Google) — feature 0022
 

@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from calendar_sync.models import CalDAVAccount
+from calendar_sync.models import CalDAVAccount, TravelRule
 
 
 @admin.register(CalDAVAccount)
@@ -20,3 +20,13 @@ class CalDAVAccountAdmin(admin.ModelAdmin):
 
     def has_change_permission(self, request, obj=None):
         return False
+
+
+@admin.register(TravelRule)
+class TravelRuleAdmin(admin.ModelAdmin):
+    list_display = (
+        "user", "keyword", "travel_there_minutes", "travel_back_minutes",
+        "category", "order",
+    )
+    list_select_related = ("user",)
+    ordering = ("user", "order", "id")

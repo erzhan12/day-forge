@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, toRef } from "vue"
+import type { Ref } from "vue"
+import { computed, inject, toRef } from "vue"
 import type {
   GoogleAccountError,
   NormalizedEvent,
@@ -49,7 +50,15 @@ function eventIsPast(ev: NormalizedEvent): boolean {
   )
 }
 
-const emit = defineEmits<{ (e: "retry", provider: "apple" | "google"): void }>()
+const emit = defineEmits<{
+  (e: "retry", provider: "apple" | "google"): void
+  (e: "add-to-schedule", ev: NormalizedEvent): void
+}>()
+
+// From-event add is a schedule mutation path — honor the same disable
+// signal as AddBlockForm / drag / gap-click (draft generation, AI chat).
+const scheduleDisabled = inject<Ref<boolean> | null>("scheduleDisabled", null)
+const addDisabled = computed(() => Boolean(scheduleDisabled?.value))
 
 // Compose-time format: ISO8601 → HH:MM in viewer's local TZ. All-day
 // events show a flat "All day" badge instead of a time range.
@@ -127,6 +136,17 @@ function formatTime(iso: string): string {
           <span v-if="ev.account_label" class="ee-account-chip">{{ ev.account_label }}</span>
           <span v-else class="ee-calendar-chip">{{ ev.calendar_name }}</span>
         </div>
+        <!-- Hidden for all-day events (no timed window to map — locked). -->
+        <button
+          v-if="!ev.all_day"
+          type="button"
+          class="ee-add-btn"
+          :disabled="addDisabled"
+          data-testid="add-to-schedule"
+          @click="emit('add-to-schedule', ev)"
+        >
+          + Add to schedule
+        </button>
       </li>
     </ul>
 
@@ -205,6 +225,27 @@ function formatTime(iso: string): string {
   background: transparent;
   color: var(--danger-text);
   cursor: pointer;
+}
+
+.ee-add-btn {
+  align-self: flex-start;
+  font-size: 11px;
+  padding: 2px 8px;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.ee-add-btn:hover:not(:disabled) {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.ee-add-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .ee-list {
