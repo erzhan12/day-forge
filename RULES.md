@@ -590,3 +590,52 @@ the safe failure mode is silence — inverse of `chatSidebarStorage`).
 - Accepted cosmetic edges (documented in `docs/features/0023_PLAN.md`):
   empty-day pre-06:00 stub labeled "earlier" by `GapSlot`, and trailing-extent
   desync while dragging the last block past frozen-now.
+
+## Static assets / favicon (feature 0025)
+
+- **`frontend/public/` is the home for un-hashed static assets** (favicons,
+  logos). It is Vite's default `publicDir` (never overridden in
+  `vite.config.ts`), so its contents are copied verbatim into the `dist/`
+  root on build. Everything placed there is published **unauthenticated**
+  at `/static/<name>`.
+- **Full production chain — all four links required:** `frontend/public/`
+  → `npm run build` → `frontend/dist/` (the `STATICFILES_DIRS` entry, i.e.
+  the *collectstatic source*) → `collectstatic` → `STATIC_ROOT`
+  (`staticfiles/`) → served by `WhiteNoiseMiddleware`. `STATICFILES_DIRS`
+  alone is **not** a production serving path: with `DEBUG=False` WhiteNoise
+  reads only from `STATIC_ROOT` (no `WHITENOISE_USE_FINDERS`), so skipping
+  either `npm run build` or `collectstatic` yields silent 404s. The Docker
+  deploy does both (`deployment/docker/Dockerfile`,
+  `deployment/scripts/entrypoint.sh`).
+- Storage is Django's default `StaticFilesStorage` (no `STORAGES` /
+  `STATICFILES_STORAGE` override), **not** a manifest storage — `{% static %}`
+  is a plain string join that cannot fail on a missing file. A renamed or
+  deleted asset surfaces only as a runtime 404.
+- **Dual href pattern in `backend/templates/base.html`:** the Vite dev proxy
+  does NOT forward `/static/` to Django (see the `server.proxy` list in
+  `vite.config.ts`), so icon links live inside the existing
+  `{% if vite_dev_mode %}` split — absolute `http://localhost:5173/...` in
+  dev, `{% static %}` in prod. Dev hrefs are **absolute, matching the
+  adjacent `@vite/client` script tags**: root-relative hrefs would 404 when
+  the document is loaded from Django's `:8006` origin directly, which is a
+  working dev path precisely because those script tags are absolute.
+- **Any public asset *referenced from `base.html`* must be added to BOTH
+  branches** (assets that ship without a link — `icon-192/512`,
+  `logo-full` — need no template entry). `backend/tests/
+  test_base_template_icons.py` enforces this, since nothing else does: dev/prod
+  branch parity, each declared `sizes` against the PNG's actual IHDR pixel
+  dimensions (stdlib `struct`, no Pillow), on-disk existence in `public/`, and
+  the per-branch href convention. Its parse helper asserts the expected link
+  count so a template or regex drift fails loudly instead of passing vacuously.
+- Logo master (with wordmark) came from Midjourney; the icon-only crop
+  (anvil mark, no text) is the favicon source. **Neither master is in the
+  repo** — regenerating the icon set means re-exporting from the original
+  Midjourney artwork. Committed derivatives: 16/32/48 favicons, 180
+  apple-touch-icon, 192/512 PWA-ready icons, and 1024×1024 `logo-full.png`
+  (full lockup, currently unused in UI — available for a login-page header).
+  All seven were dimension-checked once by hand at commit time; only the
+  four linked from `base.html` are **continuously** enforced by the test
+  above — the unlinked 192/512/1024 files can drift silently.
+- The 192/512 icons are named "PWA-ready" but there is **no web app
+  manifest** in the repo and `base.html` links neither; they ship to
+  `staticfiles/` as deploy weight only, with zero page-load cost.

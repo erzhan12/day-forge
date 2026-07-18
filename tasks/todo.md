@@ -519,3 +519,15 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
 - [ ] **Manual smoke pending (feature 0023):** click-to-add on the new
   full-scale idle gap on today — verify the add-dialog pre-fills with
   `[lastEnd, now)` per `docs/features/0023_PLAN.md` § "Manual smoke".
+
+- [x] **App logo / favicon (feature 0025):** icon-only crop of the
+  Midjourney logo added to `frontend/public/` as favicons (16/32/48),
+  apple-touch-icon (180), and PWA-ready icons (192/512 — shipped but
+  *not* linked, no webmanifest exists yet). Only the four favicon /
+  apple-touch assets get `<link>` tags, added to both dev/prod branches
+  of `base.html` and pinned by `backend/tests/
+  test_base_template_icons.py`. Dev serving + prod build verified.
+- [ ] **Manual smoke pending (feature 0025):** load
+  http://localhost:5173/ with the dev stack up — browser tab shows the
+  anvil icon; optionally decide whether `logo-full.png` should appear on
+  the Login page.
