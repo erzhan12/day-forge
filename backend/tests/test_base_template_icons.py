@@ -27,6 +27,10 @@ EXPECTED_ICON_COUNT = 4
 
 DEV_ORIGIN = "http://localhost:5173/"
 
+# Requires the attribute order rel -> sizes -> href. Reordering them in
+# base.html yields zero matches, which surfaces as the count assertion in
+# _icon_links failing with "expected 4 icon links, parsed 0" rather than as
+# anything that names attribute order — check the template first if you see it.
 LINK_RE = re.compile(
     r'<link\s+rel="(?P<rel>icon|apple-touch-icon)"[^>]*?'
     r'sizes="(?P<sizes>[^"]+)"[^>]*?'

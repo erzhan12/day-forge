@@ -169,6 +169,24 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
 
 ## Follow-ups (discovered during manual testing)
 
+### Static assets / icons
+
+- [ ] **0025-followup: decide the fate of the three unlinked icon assets.**
+  `icon-192.png`, `icon-512.png` and `logo-full.png` total 329 KB and ship with
+  no `<link>` tag, no web app manifest, and no UI reference — they only enlarge
+  the `collectstatic` corpus and the production image. Either land the PWA
+  manifest (which gives 192/512 a purpose) and the login-page header (which
+  gives `logo-full` one), or drop the files and re-add them with the PR that
+  uses them. Raised by claude-review on PR #98.
+
+- [ ] **0025-followup: consider serving a real `favicon.ico` at the web root.**
+  Some crawlers, headless clients and link-checkers `GET /favicon.ico`
+  unconditionally regardless of `<link rel="icon">`, producing 404 log noise.
+  Only a genuine `.ico` at the root fixes this — adding
+  `rel="shortcut icon"` pointing at a PNG does not, since those clients never
+  parse the HTML. Zero user-visible impact on supported browsers, so this is
+  log hygiene only. Raised by claude-review on PR #98.
+
 ### Drag / Undo
 
 - [ ] **useDrag abort feedback.** When `blocksExternallyMutated` detects a concurrent mutation during drag, `endDrag` aborts silently (no toast) — consistent with `cancelDrag()`. Adding user feedback requires wiring a toast callback into `useDrag` (see `UndoToast.vue` for the pattern). Defer until user-reported confusion surfaces. Tracked per comment at `frontend/src/composables/useDrag.ts:413-415`.
