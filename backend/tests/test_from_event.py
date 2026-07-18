@@ -242,6 +242,46 @@ class TestOffGridBlockLifecycle:
         assert resp.status_code == 400
 
     @pytest.mark.django_db
+    def test_partial_end_patch_keeps_off_grid_start(
+        self, auth_client, off_grid_block
+    ):
+        """PATCH only end_time must not re-validate the inherited off-grid start."""
+        resp = auth_client.patch(
+            f"/api/blocks/{off_grid_block.id}/",
+            json.dumps({"end_time": "15:00"}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 200, resp.content
+        off_grid_block.refresh_from_db()
+        assert off_grid_block.start_time.strftime("%H:%M") == "14:07"
+        assert off_grid_block.end_time.strftime("%H:%M") == "15:00"
+
+    @pytest.mark.django_db
+    def test_partial_end_patch_rejects_off_grid_end(
+        self, auth_client, off_grid_block
+    ):
+        resp = auth_client.patch(
+            f"/api/blocks/{off_grid_block.id}/",
+            json.dumps({"end_time": "15:03"}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 400
+
+    @pytest.mark.django_db
+    def test_on_grid_time_pair_replace_succeeds(
+        self, auth_client, off_grid_block
+    ):
+        resp = auth_client.patch(
+            f"/api/blocks/{off_grid_block.id}/",
+            json.dumps({"start_time": "15:00", "end_time": "15:30"}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 200, resp.content
+        off_grid_block.refresh_from_db()
+        assert off_grid_block.start_time.strftime("%H:%M") == "15:00"
+        assert off_grid_block.end_time.strftime("%H:%M") == "15:30"
+
+    @pytest.mark.django_db
     def test_delete_succeeds(self, auth_client, off_grid_block):
         resp = auth_client.delete(f"/api/blocks/{off_grid_block.id}/")
         assert resp.status_code == 200

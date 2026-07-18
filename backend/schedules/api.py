@@ -366,11 +366,20 @@ def block_detail(request, pk):
                 setattr(block, field, value)
 
             if time_change:
-                err = _validate_five_minute_or_error(
-                    block.start_time, block.end_time
-                )
-                if err is not None:
-                    return err
+                # Granularity only on times the client supplied (feature
+                # 0026): a PATCH that changes only ``end_time`` on an
+                # off-grid from-event block must not re-fail the inherited
+                # off-grid ``start_time``. Same rule as AI move/resize and
+                # ``reorder_blocks`` unchanged-time skip.
+                supplied = []
+                if "start_time" in pending:
+                    supplied.append(block.start_time)
+                if "end_time" in pending:
+                    supplied.append(block.end_time)
+                if supplied:
+                    err = _validate_five_minute_or_error(*supplied)
+                    if err is not None:
+                        return err
                 err = _validate_time_range(block.start_time, block.end_time)
                 if err is not None:
                     return err
