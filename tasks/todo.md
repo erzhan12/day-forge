@@ -179,6 +179,13 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
   gives `logo-full` one), or drop the files and re-add them with the PR that
   uses them. Raised by claude-review on PR #98.
 
+- [ ] **0025-followup: record the icon set's provenance.** `RULES.md` says no
+  master is committed, but gives no pointer to the original Midjourney artwork
+  (prompt text, job ID, or account), so regenerating the icons is currently
+  blocked on whoever generated them. Needs the original author to supply the
+  details — then either commit the master under `docs/assets/` or note the job
+  reference in `RULES.md`. Raised by claude-review on PR #98.
+
 - [ ] **0025-followup: consider serving a real `favicon.ico` at the web root.**
   Some crawlers, headless clients and link-checkers `GET /favicon.ico`
   unconditionally regardless of `<link rel="icon">`, producing 404 log noise.

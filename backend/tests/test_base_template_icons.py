@@ -51,6 +51,7 @@ def _icon_links(vite_dev_mode):
     ]
     assert len(links) == EXPECTED_ICON_COUNT, (
         f"expected {EXPECTED_ICON_COUNT} icon links, parsed {len(links)}"
+        " — if 0, check attribute order in base.html (LINK_RE needs rel -> sizes -> href)"
     )
     return links
 
@@ -87,10 +88,11 @@ class TestBaseTemplateIcons:
     def test_dev_and_prod_branches_declare_the_same_icons(self):
         assert _icon_specs(vite_dev_mode=True) == _icon_specs(vite_dev_mode=False)
 
-    def test_exactly_one_apple_touch_icon_is_declared(self):
+    @pytest.mark.parametrize("vite_dev_mode", [True, False])
+    def test_exactly_one_apple_touch_icon_is_declared(self, vite_dev_mode):
         # iOS home-screen icon: a distinct rel, not interchangeable with
         # rel="icon". Parity across branches would not notice it changing.
-        rels = [rel for rel, _sizes, _f in _icon_specs(vite_dev_mode=False)]
+        rels = [rel for rel, _sizes, _f in _icon_specs(vite_dev_mode)]
         assert rels.count("apple-touch-icon") == 1
 
     @pytest.mark.parametrize("vite_dev_mode", [True, False])
@@ -103,6 +105,9 @@ class TestBaseTemplateIcons:
         # Branch parity alone would not catch a `sizes` attribute that is
         # wrong in *both* branches (e.g. favicon-16.png declared 48x48).
         for _rel, sizes, filename in _icon_specs(vite_dev_mode):
+            # "any" is legal on SVG icon links and would make the int() below
+            # raise a bare ValueError; assert first so the failure names itself.
+            assert re.fullmatch(r"\d+x\d+", sizes), f"unparseable sizes={sizes!r}"
             declared = tuple(int(n) for n in sizes.split("x"))
             assert _png_dimensions(PUBLIC_DIR / filename) == declared, (
                 f"{filename} declares sizes={sizes} but its IHDR disagrees"
