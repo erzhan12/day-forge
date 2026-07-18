@@ -639,3 +639,26 @@ the safe failure mode is silence — inverse of `chatSidebarStorage`).
 - The 192/512 icons are named "PWA-ready" but there is **no web app
   manifest** in the repo and `base.html` links neither; they ship to
   `staticfiles/` as deploy weight only, with zero page-load cost.
+
+## External event → timeline + travel rules (feature 0026)
+
+- **Off-grid times are sanctioned only via `POST .../blocks/from-event/`.**
+  Manual `create_block` still enforces 5-minute granularity. Any path that
+  re-runs `full_clean()` / `validate_five_minute_or_error` on *unchanged*
+  times will 400 off-grid blocks — use
+  `full_clean(exclude=["start_time", "end_time"])` and skip granularity when
+  submitted times match stored values (`block_detail`, `reorder_blocks`,
+  `restore_blocks`, AI move/resize). See `docs/features/0026_PLAN.md` critical
+  constraint #1.
+- **Frontend owns TZ mapping.** Panel events are UTC ISO; TimeBlock times are
+  naive local `HH:MM`. Compute final times in
+  `frontend/src/utils/travelRules.ts` (`computeEventBlockTimes` anchors to the
+  *viewed* local day, not the event's start day) before POST.
+- **Travel rules live in `calendar_sync.TravelRule`** (provider-agnostic).
+  Match = first ascending-`order` keyword substring (case-insensitive). Settings
+  UI: `TravelRulesList.vue` — "up" *decreases* `order` (top row wins; opposite
+  of `RulesList` priority bump).
+- **Drag/AI normalize-on-move:** round preserved duration **up** to the next
+  5-minute multiple (`roundUpDuration` in `useDrag.ts`; AI bare-move in
+  `_compute_move_resize_times`). Drag geometry must use the display-clamped
+  span (`[06:00, 23:00)`), not raw block times.
