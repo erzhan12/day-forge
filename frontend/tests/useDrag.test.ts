@@ -877,6 +877,11 @@ describe("useDrag off-grid geometry and payload (feature 0026)", () => {
     // Grab geometry anchors to the DISPLAYED position (06:00 = renderStart),
     // not the raw midnight start (which would put the ghost at −720px).
     expect(drag.ghostTop.value).toBe(0)
+    // The label must agree with that ghost from the very first frame, BEFORE
+    // any pointermove: seeding from the raw times showed "00:00–06:30" over a
+    // 30-minute ghost until the first move corrected it.
+    expect(drag.previewStartTime.value).toBe("06:00")
+    expect(drag.previewEndTime.value).toBe("06:30")
 
     fireMove(container, 60)
     const start = toMinutes(drag.previewStartTime.value)

@@ -71,7 +71,25 @@ vi.mock("../src/composables/useUndo", () => ({
   }),
 }))
 
+// Schedule.vue fetches travel rules on setup (feature 0026). Without this the
+// real composable issues a fetch during every mount in this file.
+const listRules = vi.fn().mockResolvedValue({ ok: true, rules: [] })
+
+vi.mock("../src/composables/useTravelRules", () => ({
+  useTravelRules: () => ({
+    listRules,
+    createRule: vi.fn(),
+    updateRule: vi.fn(),
+    deleteRule: vi.fn(),
+  }),
+}))
+
 vi.mock("../src/composables/useDrag", () => ({
+  // Schedule.vue imports this named helper for its drag-ghost geometry; a
+  // factory omitting it leaves the binding undefined and throws when a ghost
+  // renders.
+  clampedDragDuration: (b: { start_time: string; end_time: string }) =>
+    b.start_time === b.end_time ? 5 : 30,
   useDrag: () => ({
     isDragging: ref(false),
     dragBlockId: ref<number | null>(null),
@@ -400,6 +418,15 @@ describe("Schedule.vue auto-draft watcher", () => {
     await w.setProps({ date: "2026-05-05" })
     expect(dismissToast).toHaveBeenCalled()
   })
+
+  // KNOWN TEST GAP (feature 0026): `closeAddDialog()` in the date watcher is
+  // not pinned here. Driving it requires the ExternalEventsPanel to render,
+  // which needs a connected calendar — i.e. a file-wide `useCalendar` mock
+  // that would alter rendering for every other test in this file. The
+  // behaviour is exercised manually and the watcher's sibling resets
+  // (abandonInFlight, dismissToast) are covered above, so an edit to that
+  // watcher is unlikely to remove only the dialog line. Revisit if the panel
+  // gains a lighter-weight test seam.
 })
 
 // --- feature 0008: viewport-driven chat surface routing ----------------

@@ -362,22 +362,28 @@ def block_detail(request, pk):
                         {"errors": {"detail": "Not found."}}, status=404
                     )
 
+            stored_start, stored_end = block.start_time, block.end_time
+
             for field, value in pending.items():
                 setattr(block, field, value)
 
             if time_change:
-                # Granularity only on times the client supplied (feature
-                # 0026): a PATCH that changes only ``end_time`` on an
+                # Granularity only on times the client actually *changed*
+                # (feature 0026): a PATCH that alters only ``end_time`` on an
                 # off-grid from-event block must not re-fail the inherited
-                # off-grid ``start_time``. Same rule as AI move/resize and
-                # ``reorder_blocks`` unchanged-time skip.
-                supplied = []
-                if "start_time" in pending:
-                    supplied.append(block.start_time)
-                if "end_time" in pending:
-                    supplied.append(block.end_time)
-                if supplied:
-                    err = _validate_five_minute_or_error(*supplied)
+                # off-grid ``start_time``, and re-submitting a stored off-grid
+                # value unchanged must not 400 either. Identical rule to
+                # ``reorder_blocks`` — the two paths validate the same way.
+                changed = [
+                    t
+                    for t, stored, key in (
+                        (block.start_time, stored_start, "start_time"),
+                        (block.end_time, stored_end, "end_time"),
+                    )
+                    if key in pending and t != stored
+                ]
+                if changed:
+                    err = _validate_five_minute_or_error(*changed)
                     if err is not None:
                         return err
                 err = _validate_time_range(block.start_time, block.end_time)

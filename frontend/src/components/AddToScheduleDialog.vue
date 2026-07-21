@@ -17,6 +17,11 @@ const props = defineProps<{
   event: NormalizedEvent
   matchedRule: TravelRule | null
   date: string
+  // The travel-rule fetch failed, so `matchedRule` is null because the rules
+  // are UNKNOWN, not because none matched. Those two states produce identical
+  // 0/0/"other" prefills, so the distinction has to be shown or the user
+  // silently confirms an unpadded block believing their rule applied.
+  rulesUnavailable?: boolean
 }>()
 const emit = defineEmits<{
   (e: "close"): void
@@ -153,6 +158,10 @@ async function handleConfirm() {
         Prefilled from rule “{{ matchedRule.keyword }}”
       </p>
 
+      <div v-if="rulesUnavailable" class="ats-warning" data-testid="rules-unavailable">
+        Travel rules couldn’t be loaded, so none were applied. Check the times
+        below before adding.
+      </div>
       <div v-if="errorMessage" class="ats-error">{{ errorMessage }}</div>
 
       <div class="ats-fields">
@@ -287,6 +296,15 @@ async function handleConfirm() {
 .ats-error {
   background: var(--danger-surface);
   color: var(--danger-text);
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.ats-warning {
+  background: var(--warning-surface);
+  color: var(--warning-text);
+  border: 1px solid var(--warning-border);
   padding: 8px 10px;
   border-radius: 6px;
   font-size: 13px;

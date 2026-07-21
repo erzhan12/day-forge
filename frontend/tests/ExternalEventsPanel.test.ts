@@ -4,6 +4,7 @@
 
 import { describe, expect, it } from "vitest"
 import { mount } from "@vue/test-utils"
+import { ref } from "vue"
 
 import ExternalEventsPanel from "../src/components/ExternalEventsPanel.vue"
 import { todayString } from "../src/utils/date"
@@ -194,5 +195,67 @@ describe("ExternalEventsPanel", () => {
     const items = wrapper.findAll('[data-testid="external-event"]')
     expect(items[0].classes()).toContain("ee-item--past")
     expect(items[1].classes()).not.toContain("ee-item--past")
+  })
+})
+
+// Feature 0026 — the "+ Add to schedule" affordance.
+describe("ExternalEventsPanel add-to-schedule button", () => {
+  it("renders the button for a timed event", () => {
+    const wrapper = mount(ExternalEventsPanel, {
+      props: { events: [APPLE_EVENT], loading: false, connected: true },
+    })
+    expect(wrapper.find('[data-testid="add-to-schedule"]').exists()).toBe(true)
+  })
+
+  it("hides the button for all-day events", () => {
+    // Locked decision: an all-day event has no timed window to map onto the
+    // timeline, so it gets no add affordance at all (not a disabled one).
+    const wrapper = mount(ExternalEventsPanel, {
+      props: { events: [ALL_DAY_EVENT], loading: false, connected: true },
+    })
+    expect(wrapper.find('[data-testid="add-to-schedule"]').exists()).toBe(false)
+  })
+
+  it("renders the button only for the timed event in a mixed list", () => {
+    const wrapper = mount(ExternalEventsPanel, {
+      props: {
+        events: [APPLE_EVENT, ALL_DAY_EVENT],
+        loading: false,
+        connected: true,
+      },
+    })
+    expect(wrapper.findAll('[data-testid="external-event"]')).toHaveLength(2)
+    expect(wrapper.findAll('[data-testid="add-to-schedule"]')).toHaveLength(1)
+  })
+
+  it("emits add-to-schedule with the clicked event", async () => {
+    const wrapper = mount(ExternalEventsPanel, {
+      props: { events: [APPLE_EVENT], loading: false, connected: true },
+    })
+    await wrapper.find('[data-testid="add-to-schedule"]').trigger("click")
+
+    const emitted = wrapper.emitted("add-to-schedule")
+    expect(emitted).toHaveLength(1)
+    expect(emitted?.[0][0]).toMatchObject({ external_uid: "uid-1" })
+  })
+
+  it("disables the button when scheduleDisabled is injected true", () => {
+    const wrapper = mount(ExternalEventsPanel, {
+      props: { events: [APPLE_EVENT], loading: false, connected: true },
+      global: { provide: { scheduleDisabled: ref(true) } },
+    })
+    expect(
+      wrapper.find('[data-testid="add-to-schedule"]').attributes("disabled"),
+    ).toBeDefined()
+  })
+
+  it("leaves the button enabled when scheduleDisabled is false", () => {
+    const wrapper = mount(ExternalEventsPanel, {
+      props: { events: [APPLE_EVENT], loading: false, connected: true },
+      global: { provide: { scheduleDisabled: ref(false) } },
+    })
+    expect(
+      wrapper.find('[data-testid="add-to-schedule"]').attributes("disabled"),
+    ).toBeUndefined()
   })
 })

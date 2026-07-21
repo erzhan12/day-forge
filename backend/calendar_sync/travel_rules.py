@@ -181,7 +181,16 @@ def travel_rules_collection(request):
         max_order = TravelRule.objects.filter(user=request.user).aggregate(
             Max("order")
         )["order__max"]
-        cleaned["order"] = 0 if max_order is None else max_order + 1
+        # Clamp to MAX_ORDER so an omitted order can never store a value that
+        # the explicit-order validator above would reject on a later PATCH.
+        #
+        # At the bound the clamp trades born-distinct for in-range: a user who
+        # has already pushed a rule to MAX_ORDER gets a duplicate order rather
+        # than an out-of-range one. Reaching it takes a deliberate PATCH to
+        # 1_000_000 (creates never climb there — the per-user cap is 100), and
+        # the duplicate degrades only to TravelRulesList's equal-order branch,
+        # which nudges by ∓1 and now surfaces a row error if that fails.
+        cleaned["order"] = 0 if max_order is None else min(max_order + 1, MAX_ORDER)
 
     rule = TravelRule.objects.create(user=request.user, **cleaned)
     return JsonResponse(_rule_to_dict(rule), status=201)

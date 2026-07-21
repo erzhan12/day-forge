@@ -102,13 +102,13 @@ Partially update a time block. Only fields present in the request body are modif
 | Field | Type | Notes |
 |-------|------|-------|
 | `title` | string | 1–255 chars after `strip()`. |
-| `start_time` | string | `HH:MM`, 5-minute increments. If set, resulting `start < end` must still hold and no other block on the same schedule may overlap. |
+| `start_time` | string | `HH:MM`. 5-minute increments are required only when the value **differs** from the stored one — re-submitting a block's existing off-grid time is accepted. If set, resulting `start < end` must still hold and no other block on the same schedule may overlap. |
 | `end_time` | string | Same rules as `start_time`. |
 | `category` | string | One of `work`, `personal`, `health`, `other`. |
 | `is_completed` | boolean | — |
 | `sort_order` | integer | `0 ≤ n ≤ 10000`. Booleans rejected. |
 
-Non-time PATCHes (title, category, `is_completed`, `sort_order`) tolerate stored off-grid times (from-event blocks, feature 0026) — the field-level 5-minute validators are excluded from the final `full_clean` because time changes are validated explicitly beforehand. Supplying a new off-grid `start_time`/`end_time` still `400`s.
+Non-time PATCHes (title, category, `is_completed`, `sort_order`) tolerate stored off-grid times (from-event blocks, feature 0026) — the field-level 5-minute validators are excluded from the final `full_clean` because time changes are validated explicitly beforehand. Granularity is enforced only on times that actually **changed**, matching `blocks/reorder/`, so a client echoing a block's stored off-grid times back while editing its title is accepted. Supplying a *new* off-grid `start_time`/`end_time` still `400`s.
 
 **Success — `200 OK`** — same shape as the `POST` response.
 

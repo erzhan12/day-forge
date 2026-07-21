@@ -129,7 +129,13 @@ async function bumpOrder(rule: TravelRule, direction: "up" | "down") {
     const result = await updateRule(rule.id, {
       order: rule.order + (direction === "up" ? -1 : 1),
     })
-    if (result.ok) emit("changed")
+    if (result.ok) {
+      emit("changed")
+    } else {
+      // Without this the arrow is a silent no-op when the bias lands outside
+      // the API's accepted order range (rows already at a bound).
+      rowError.value = { id: rule.id, message: "Reorder failed" }
+    }
     return
   }
   const ruleResult = await updateRule(rule.id, { order: neighbour.order })

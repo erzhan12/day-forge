@@ -190,4 +190,70 @@ describe("useSchedule", () => {
     expect(JSON.parse(options.body)).toEqual({ blocks })
     expect(router.reload).toHaveBeenCalledWith({ only: ["blocks", "schedule"] })
   })
+
+  it("sends createBlockFromEvent to the from-event endpoint", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      text: () => Promise.resolve('{"id":7}'),
+    })
+    vi.stubGlobal("fetch", fetchSpy)
+
+    const { createBlockFromEvent } = useSchedule("2026-04-10")
+    // Off-grid minutes: the whole point of this endpoint is that it is the
+    // one client path allowed to submit times off the 5-minute grid.
+    const payload = {
+      title: "Dentist",
+      start_time: "14:07",
+      end_time: "14:33",
+      category: "other",
+    }
+    const result = await createBlockFromEvent(payload)
+
+    expect(result.ok).toBe(true)
+    const [url, options] = fetchSpy.mock.calls[0]
+    expect(url).toBe("/api/schedules/2026-04-10/blocks/from-event/")
+    expect(options.method).toBe("POST")
+    expect(JSON.parse(options.body)).toEqual(payload)
+    expect(router.reload).toHaveBeenCalledWith({ only: ["blocks", "schedule"] })
+  })
+
+  it("routes createBlockFromEvent away from the manual create endpoint", async () => {
+    // Regression guard: pointing this at /blocks/ would send off-grid times
+    // through the granularity-enforcing path and 400 every real event.
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      text: () => Promise.resolve("{}"),
+    })
+    vi.stubGlobal("fetch", fetchSpy)
+
+    const { createBlockFromEvent } = useSchedule("2026-04-10")
+    await createBlockFromEvent({
+      title: "X",
+      start_time: "09:03",
+      end_time: "09:47",
+      category: "other",
+    })
+
+    expect(fetchSpy.mock.calls[0][0]).not.toBe("/api/schedules/2026-04-10/blocks/")
+  })
+
+  it("resolves createBlockFromEvent date lazily from a getter", async () => {
+    let currentDate = "2026-06-01"
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      text: () => Promise.resolve("{}"),
+    })
+    vi.stubGlobal("fetch", fetchSpy)
+
+    const { createBlockFromEvent } = useSchedule(() => currentDate)
+    currentDate = "2026-06-02"
+    await createBlockFromEvent({
+      title: "Later day",
+      start_time: "10:11",
+      end_time: "10:44",
+      category: "other",
+    })
+
+    expect(fetchSpy.mock.calls[0][0]).toBe("/api/schedules/2026-06-02/blocks/from-event/")
+  })
 })

@@ -32,7 +32,7 @@ import {
 } from "../utils/scheduleTime"
 import { useSchedule } from "../composables/useSchedule"
 import { useUndo } from "../composables/useUndo"
-import { useDrag } from "../composables/useDrag"
+import { useDrag, clampedDragDuration } from "../composables/useDrag"
 import { useDraft } from "../composables/useDraft"
 import { useChat } from "../composables/useChat"
 import { useCalendar } from "../composables/useCalendar"
@@ -206,20 +206,56 @@ function retryExternalFetch(provider: "apple" | "google") {
 const travelRulesApi = useTravelRules()
 const travelRules = ref<TravelRule[]>([])
 const travelRulesReady = ref(false)
-travelRulesApi.listRules().then((result) => {
-  if (result.ok && result.rules) travelRules.value = result.rules
-  travelRulesReady.value = true
-})
+// True once a fetch has failed and none has since succeeded. Surfaced in the
+// dialog: without it a rules outage silently produces an unpadded block that
+// looks exactly like a correct "no rule matched" result.
+const travelRulesError = ref(false)
+
+// Only a *successful* fetch marks the rules ready. Setting the flag on
+// failure would strand `travelRules` at [] permanently: the retry in
+// `handleAddToSchedule` is gated on !ready, so every later add would silently
+// match nothing and create the block at raw event times.
+//
+// The in-flight promise is shared so concurrent Add clicks (or a click landing
+// while the initial fetch is still open) await one request instead of firing a
+// GET each.
+let rulesFetchInFlight: ReturnType<typeof travelRulesApi.listRules> | null = null
+
+function fetchTravelRules() {
+  if (!rulesFetchInFlight) {
+    rulesFetchInFlight = travelRulesApi.listRules().then((result) => {
+      if (result.ok && result.rules) {
+        travelRules.value = result.rules
+        travelRulesReady.value = true
+        travelRulesError.value = false
+      } else {
+        travelRulesError.value = true
+      }
+      rulesFetchInFlight = null
+      return result
+    })
+  }
+  return rulesFetchInFlight
+}
+
+fetchTravelRules()
 
 const addDialogEvent = ref<NormalizedEvent | null>(null)
 const addDialogRule = ref<TravelRule | null>(null)
 
 async function handleAddToSchedule(ev: NormalizedEvent) {
-  // Avoid matching against [] if the user clicks before the initial fetch lands.
+  // Avoid matching against [] if the user clicks before the initial fetch
+  // lands — or if that fetch failed, in which case this retries rather than
+  // silently skipping travel time forever. `fetchTravelRules` dedupes, so
+  // rapid clicks await one shared request instead of fanning out GETs.
   if (!travelRulesReady.value) {
-    const result = await travelRulesApi.listRules()
-    if (result.ok && result.rules) travelRules.value = result.rules
-    travelRulesReady.value = true
+    // The await below is a date-navigation window (issue #21). The dialog
+    // renders against the *live* `props.date`, so navigating while the fetch
+    // is open would pair this event with the newly-viewed day and POST it to
+    // the wrong schedule. Drop the stale click instead.
+    const clickedDate = props.date
+    await fetchTravelRules()
+    if (props.date !== clickedDate) return
   }
   addDialogRule.value = matchTravelRule(travelRules.value, ev.title)
   addDialogEvent.value = ev
@@ -271,6 +307,13 @@ watch(
     // Hide undo toast for the previous day; stack entries are preserved
     // so navigating back still allows undo on that date.
     dismissToast()
+    // Same cross-date hazard: the dialog renders against the live
+    // `props.date`, so an open one silently retargets on navigation. For a
+    // same-day event that only disables Confirm (the event falls outside the
+    // new day), but an overnight event still intersects the next day, so
+    // Confirm would stay enabled and write *that* day's slice — different
+    // times than the user saw when they clicked Add. Close it instead.
+    closeAddDialog()
   },
   { immediate: true },
 )
@@ -430,15 +473,11 @@ const draggedBlock = computed(() =>
 // (buildBaseDisplayItems clamps to [06:00, 23:00)): a day-bound-clamped
 // from-event block (feature 0026, raw 00:00–06:30 displayed 06:00–06:30)
 // must not size its ghost from the raw out-of-window span.
+// Shares `useDrag`'s geometry helper so the ghost can never again disagree
+// with the slot the drop will occupy (display-clamp + snap-grid round-up).
 function ghostClampedDuration(): number {
   if (!draggedBlock.value) return 0
-  const clampedStart = Math.max(
-    timeToMinutes(draggedBlock.value.start_time), DAY_START_MINUTES,
-  )
-  const clampedEnd = Math.min(
-    timeToMinutes(draggedBlock.value.end_time), DAY_END_MINUTES,
-  )
-  return Math.max(0, clampedEnd - clampedStart)
+  return clampedDragDuration(draggedBlock.value)
 }
 const ghostHeight = computed(() => {
   if (!draggedBlock.value) return 0
@@ -684,6 +723,7 @@ function logout() {
       :event="addDialogEvent"
       :matched-rule="addDialogRule"
       :date="date"
+      :rules-unavailable="travelRulesError"
       @close="closeAddDialog"
     />
     <ChatSidebar

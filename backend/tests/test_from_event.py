@@ -268,6 +268,51 @@ class TestOffGridBlockLifecycle:
         assert resp.status_code == 400
 
     @pytest.mark.django_db
+    def test_resubmitting_unchanged_off_grid_times_succeeds(
+        self, auth_client, off_grid_block
+    ):
+        """Echoing back the stored off-grid times must not 400.
+
+        ``reorder_blocks`` validates only *changed* times; ``block_detail``
+        does the same, so a client that PATCHes the whole block (times
+        included) while editing only the title stays working.
+        """
+        resp = auth_client.patch(
+            f"/api/blocks/{off_grid_block.id}/",
+            json.dumps(
+                {
+                    "title": "Dentist (same times)",
+                    "start_time": "14:07",
+                    "end_time": "14:33",
+                }
+            ),
+            content_type="application/json",
+        )
+        assert resp.status_code == 200, resp.content
+        off_grid_block.refresh_from_db()
+        assert off_grid_block.title == "Dentist (same times)"
+        assert off_grid_block.start_time.strftime("%H:%M") == "14:07"
+        assert off_grid_block.end_time.strftime("%H:%M") == "14:33"
+
+    @pytest.mark.django_db
+    def test_changing_one_time_to_off_grid_still_rejected(
+        self, auth_client, off_grid_block
+    ):
+        """The unchanged-time skip must not become a blanket bypass.
+
+        Start is echoed back unchanged (legal); end moves to a *new* off-grid
+        value and must still 400.
+        """
+        resp = auth_client.patch(
+            f"/api/blocks/{off_grid_block.id}/",
+            json.dumps({"start_time": "14:07", "end_time": "14:41"}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 400
+        off_grid_block.refresh_from_db()
+        assert off_grid_block.end_time.strftime("%H:%M") == "14:33"
+
+    @pytest.mark.django_db
     def test_on_grid_time_pair_replace_succeeds(
         self, auth_client, off_grid_block
     ):
@@ -528,3 +573,42 @@ class TestTravelRuleCrud:
     @pytest.mark.django_db
     def test_unauthenticated_redirects(self, client, db):
         assert client.get(RULES_URL).status_code == 302
+
+    @pytest.mark.django_db
+    def test_unauthenticated_create_redirects(self, client, db):
+        resp = client.post(
+            RULES_URL,
+            json.dumps({"keyword": "gym"}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 302
+        assert not TravelRule.objects.exists()
+
+    @pytest.mark.django_db
+    def test_unauthenticated_detail_verbs_redirect(self, client, user):
+        """The write verbs on the detail route are gated too, not just GET."""
+        rule = TravelRule.objects.create(user=user, keyword="gym", order=0)
+        url = f"{RULES_URL}{rule.id}/"
+
+        patch_resp = client.patch(
+            url,
+            json.dumps({"keyword": "hijacked"}),
+            content_type="application/json",
+        )
+        assert patch_resp.status_code == 302
+
+        delete_resp = client.delete(url)
+        assert delete_resp.status_code == 302
+
+        rule.refresh_from_db()
+        assert rule.keyword == "gym"
+
+    @pytest.mark.django_db
+    def test_csrf_enforced_on_create(self, csrf_auth_client):
+        resp = csrf_auth_client.post(
+            RULES_URL,
+            json.dumps({"keyword": "gym"}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 403
+        assert not TravelRule.objects.exists()

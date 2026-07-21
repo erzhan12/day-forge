@@ -169,6 +169,20 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
 
 ## Follow-ups (discovered during manual testing)
 
+### External calendar
+
+- [ ] **Overnight external events fade as "past" while still running
+  (pre-existing, surfaced during the feature 0026 review).**
+  `frontend/src/utils/externalEventPast.ts` compares only the *clock* minutes
+  of `ev.end` against `nowMinutes`, with no day-delta fold. An event running
+  `23:00 → 00:30 (+1 day)` has an end whose local wall-clock is `00:30` = 30
+  minutes, so from 00:30 onward on the viewed day the row renders faded even
+  though the event is ongoing or still upcoming. Same UTC→local class of bug
+  that `computeEventBlockTimes` was written to avoid, in the panel that owns
+  the Add button. **Not touched by feature 0026** — the file predates it and
+  is unmodified on that branch, so it was left alone to keep that PR scoped.
+  Fix needs the same viewed-day anchoring `travelRules.ts` uses.
+
 ### Static assets / icons
 
 - [ ] **0025-followup: decide the fate of the three unlinked icon assets.**

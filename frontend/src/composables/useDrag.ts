@@ -72,6 +72,24 @@ export function roundUpDuration(minutes: number): number {
   )
 }
 
+/**
+ * The on-grid height a block occupies while dragging: display-clamped to
+ * `[06:00, 23:00)`, then rounded up to the snap grid.
+ *
+ * Shared by the drag payload (`blockDuration` below) and Schedule.vue's drag
+ * ghost. These were computed independently and drifted — the ghost of an
+ * off-grid block rendered 26 min tall against a 30 min drop slot — so both
+ * now call this.
+ */
+export function clampedDragDuration(block: {
+  start_time: string
+  end_time: string
+}): number {
+  const clampedStart = Math.max(timeToMinutes(block.start_time), DAY_START_MINUTES)
+  const clampedEnd = Math.min(timeToMinutes(block.end_time), DAY_END_MINUTES)
+  return roundUpDuration(Math.max(0, clampedEnd - clampedStart))
+}
+
 export function resolveConflicts(
   blocks: TimeBlock[],
   draggedId: number,
@@ -397,11 +415,7 @@ export function useDrag(
       timeToMinutes(block.start_time),
       DAY_START_MINUTES,
     )
-    const clampedEndMinutes = Math.min(
-      timeToMinutes(block.end_time),
-      DAY_END_MINUTES,
-    )
-    blockDuration = roundUpDuration(clampedEndMinutes - clampedStartMinutes)
+    blockDuration = clampedDragDuration(block)
     dropValid = true
     pointerId = event.pointerId
 
@@ -422,8 +436,14 @@ export function useDrag(
       event.clientY - containerRect.top - containerPaddingTop + container.scrollTop
     grabOffsetY = cursorY - blockTopPx
 
-    previewStartTime.value = block.start_time
-    previewEndTime.value = block.end_time
+    // Seed the label from the same span the ghost is drawn with: the
+    // display-clamped start plus the snap-rounded duration. (The start itself
+    // is clamped, not snapped — an off-grid in-window start still reads e.g.
+    // 14:07 until the first pointermove snaps it.) Using the raw times here
+    // made a day-bound-clamped block (raw 00:00–06:30) render a 30-minute
+    // ghost at 06:00 while the label read "00:00–06:30".
+    previewStartTime.value = minutesToTime(clampedStartMinutes)
+    previewEndTime.value = minutesToTime(clampedStartMinutes + blockDuration)
     ghostTop.value = containerPaddingTop + blockTopPx
     previewBlocks.value = []
     shiftedBlockIds.value = new Set()
