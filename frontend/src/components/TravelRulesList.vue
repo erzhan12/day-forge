@@ -164,9 +164,9 @@ function categoryLabel(category: TravelRule["category"]): string {
 
 <template>
   <section class="travel-rules-list">
-    <header class="rules-header">
-      <h3>Travel-time rules</h3>
-    </header>
+    <!-- No internal heading: Settings.vue owns the "Travel-time rules"
+         subsection-title, matching the Apple/Google Calendar subsections
+         this list sits among. -->
     <p class="hint-text">
       When an event title contains the keyword, "Add to schedule" prefills
       these travel minutes. Top rule wins on multiple matches.
@@ -319,11 +319,6 @@ function categoryLabel(category: TravelRule["category"]): string {
   display: flex;
   flex-direction: column;
   gap: 12px;
-}
-
-.rules-header h3 {
-  margin: 0;
-  font-size: 16px;
 }
 
 .hint-text {

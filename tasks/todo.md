@@ -183,6 +183,17 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
   is unmodified on that branch, so it was left alone to keep that PR scoped.
   Fix needs the same viewed-day anchoring `travelRules.ts` uses.
 
+- [ ] **0026-followup: atomic reorder swap for rule lists.**
+  `TravelRulesList.bumpOrder` (and the pre-existing `RulesList.bumpPriority`
+  it mirrors) reorders by two sequential `updateRule` PATCHes with no
+  atomicity — a first-succeeds / second-fails sequence leaves two rows with
+  the same `order`. Self-corrects on the next successful reorder and the
+  equal-order branch nudges by ∓1, so it is not user-blocking. Accepted gap
+  in `docs/features/0026_REVIEW.md`. If it becomes user-visible, add one
+  dedicated atomic swap endpoint and point both components at it (fixing them
+  together avoids re-diverging the two siblings). Raised by claude-review on
+  PR #99.
+
 ### Static assets / icons
 
 - [ ] **0025-followup: decide the fate of the three unlinked icon assets.**
