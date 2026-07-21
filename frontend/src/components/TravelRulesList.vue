@@ -475,7 +475,7 @@ function categoryLabel(category: TravelRule["category"]): string {
 .row-delete-btn {
   background: transparent;
   border: none;
-  color: #ef4444;
+  color: var(--danger-text);
   font-size: 18px;
   cursor: pointer;
   width: 24px;
@@ -484,7 +484,7 @@ function categoryLabel(category: TravelRule["category"]): string {
 }
 
 .row-delete-btn:hover {
-  background: #fee2e2;
+  background: var(--danger-surface);
 }
 
 .rule-edit {
