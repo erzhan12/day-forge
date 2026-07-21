@@ -6,6 +6,8 @@ import type { NormalizedEvent } from "../types/calendar"
 import { useSchedule } from "../composables/useSchedule"
 import { computeEventBlockTimes } from "../utils/travelRules"
 import {
+  DAY_START,
+  DAY_END,
   DAY_START_MINUTES,
   DAY_END_MINUTES,
   timeToMinutes,
@@ -212,7 +214,7 @@ async function handleConfirm() {
         Zero-length event — add travel minutes to create a block.
       </p>
       <p v-else-if="outsideVisibleHours" class="ats-hint">
-        This block falls outside the visible timeline hours 06:00–23:00.
+        This block falls outside the visible timeline hours {{ DAY_START }}–{{ DAY_END }}.
       </p>
 
       <div class="ats-actions">

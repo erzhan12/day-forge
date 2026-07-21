@@ -183,6 +183,17 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
   is unmodified on that branch, so it was left alone to keep that PR scoped.
   Fix needs the same viewed-day anchoring `travelRules.ts` uses.
 
+- [ ] **0026-followup: Playwright smoke for the add-to-schedule flow.**
+  Script the add paths end-to-end in `frontend/scripts/playwright/`: add with
+  no rule (exact event times), add with a 30/30 rule (−30/+30), dialog
+  override wins over the matched rule, overlap returns the `errors.time`
+  message unchanged, re-add of the same event to a free slot. No LLM calls —
+  hits only calendar/schedule endpoints. Plus the off-grid lifecycle
+  (complete/rename/drag/undo on a `14:07–14:33` block) and reorder direction,
+  which are the highest-risk paths unit tests can't cover. Until this exists,
+  those paths are covered only by the manual smoke checklist. Raised by
+  claude-review on PR #99.
+
 - [ ] **0026-followup: atomic reorder swap for rule lists.**
   `TravelRulesList.bumpOrder` (and the pre-existing `RulesList.bumpPriority`
   it mirrors) reorders by two sequential `updateRule` PATCHes with no

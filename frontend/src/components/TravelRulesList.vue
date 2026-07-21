@@ -144,6 +144,11 @@ async function bumpOrder(rule: TravelRule, direction: "up" | "down") {
     emit("changed")
   } else {
     rowError.value = { id: rule.id, message: "Reorder failed" }
+    // Non-atomic swap (accepted gap, 0026-followup): if exactly one PATCH
+    // landed, the two rows now disagree. Re-emit so the parent refetches and
+    // the list shows the true server state rather than the stale pre-swap
+    // order — otherwise the visible order silently lies about what's stored.
+    if (ruleResult.ok !== neighbourResult.ok) emit("changed")
   }
 }
 

@@ -113,9 +113,24 @@ describe("TravelRulesList reorder direction", () => {
     expect(wrapper.emitted("changed")).toBeUndefined()
   })
 
-  it("surfaces an error when a swap PATCH fails", async () => {
+  it("surfaces an error and reconciles when exactly one swap PATCH fails", async () => {
+    // Partial failure: first PATCH lands, second doesn't. The rows now
+    // disagree, so the component must both flag the error AND re-emit so the
+    // parent refetches the true server state instead of showing stale order.
     const wrapper = mountList()
     updateRule.mockResolvedValueOnce({ ok: true }).mockResolvedValueOnce({ ok: false })
+    await upButtons(wrapper)[1].trigger("click")
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.text()).toContain("Reorder failed")
+    expect(wrapper.emitted("changed")).toHaveLength(1)
+  })
+
+  it("does not reconcile when both swap PATCHes fail", async () => {
+    // Both failed → nothing changed server-side, so the stale local order is
+    // already correct; only the error should show, no refetch.
+    const wrapper = mountList()
+    updateRule.mockResolvedValueOnce({ ok: false }).mockResolvedValueOnce({ ok: false })
     await upButtons(wrapper)[1].trigger("click")
     await wrapper.vm.$nextTick()
 
