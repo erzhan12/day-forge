@@ -1,4 +1,5 @@
 from calendar_sync.models import TravelRule
+from calendar_sync.travel_rules import serialize_travel_rule
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.csrf import ensure_csrf_cookie
 from inertia import render as inertia_render
@@ -54,17 +55,10 @@ def settings_view(request):
                 }
                 for r in rules
             ],
-            "travel_rules": [
-                {
-                    "id": r.id,
-                    "keyword": r.keyword,
-                    "travel_there_minutes": r.travel_there_minutes,
-                    "travel_back_minutes": r.travel_back_minutes,
-                    "category": r.category,
-                    "order": r.order,
-                }
-                for r in travel_rules
-            ],
+            # Same serializer the CRUD API uses, so the SSR prop and the
+            # GET /api/calendar/travel-rules/ response can't drift on a
+            # field change.
+            "travel_rules": [serialize_travel_rule(r) for r in travel_rules],
             "ui_preferences": {"theme": prefs.theme},
         },
         template_data={"initial_theme": prefs.theme},

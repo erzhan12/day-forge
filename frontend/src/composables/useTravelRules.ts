@@ -1,7 +1,10 @@
 import { type ApiResult, requestJson } from "./useHttp"
 import type { TravelRule } from "../types"
 
-export interface TravelRuleCreatePayload {
+// Both extend Record<string, unknown> so they satisfy requestJson's `body`
+// parameter directly — the explicit fields stay type-checked while the index
+// signature removes the previous `as unknown as Record<string, unknown>` cast.
+export interface TravelRuleCreatePayload extends Record<string, unknown> {
   keyword: string
   travel_there_minutes?: number
   travel_back_minutes?: number
@@ -9,7 +12,7 @@ export interface TravelRuleCreatePayload {
   order?: number
 }
 
-export interface TravelRulePatchPayload {
+export interface TravelRulePatchPayload extends Record<string, unknown> {
   keyword?: string
   travel_there_minutes?: number
   travel_back_minutes?: number
@@ -46,7 +49,7 @@ export function useTravelRules() {
     const result = await requestJson(
       "/api/calendar/travel-rules/",
       "POST",
-      payload as unknown as Record<string, unknown>,
+      payload,
     )
     if (result.ok) {
       return {
@@ -66,7 +69,7 @@ export function useTravelRules() {
     const result = await requestJson(
       `/api/calendar/travel-rules/${id}/`,
       "PATCH",
-      payload as unknown as Record<string, unknown>,
+      payload,
     )
     if (result.ok) {
       return {

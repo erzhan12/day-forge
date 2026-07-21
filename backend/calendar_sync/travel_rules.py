@@ -30,7 +30,7 @@ def _err(field: str, message: str, status: int = 400) -> JsonResponse:
     return JsonResponse({"errors": {field: message}}, status=status)
 
 
-def _rule_to_dict(r: TravelRule) -> dict:
+def serialize_travel_rule(r: TravelRule) -> dict:
     return {
         "id": r.id,
         "keyword": r.keyword,
@@ -149,7 +149,7 @@ def _parse_patch_payload(data) -> tuple[dict, JsonResponse | None]:
 def travel_rules_collection(request):
     if request.method == "GET":
         items = TravelRule.objects.filter(user=request.user).order_by("order", "id")
-        return JsonResponse({"travel_rules": [_rule_to_dict(r) for r in items]})
+        return JsonResponse({"travel_rules": [serialize_travel_rule(r) for r in items]})
 
     oversized = reject_oversized_body(request)
     if oversized is not None:
@@ -164,6 +164,11 @@ def travel_rules_collection(request):
     if err is not None:
         return err
 
+    # Known race (accepted gap, docs/features/0026_REVIEW.md): this count is
+    # not inside a lock, so two concurrent POSTs can both pass and briefly
+    # store 101 rows. Self-limiting — each request inserts one row and the
+    # next create is rejected — so it never grows unbounded. Not an atomic
+    # guarantee; don't rely on this as a hard invariant.
     if (
         TravelRule.objects.filter(user=request.user).count()
         >= MAX_TRAVEL_RULES_PER_USER
@@ -193,7 +198,7 @@ def travel_rules_collection(request):
         cleaned["order"] = 0 if max_order is None else min(max_order + 1, MAX_ORDER)
 
     rule = TravelRule.objects.create(user=request.user, **cleaned)
-    return JsonResponse(_rule_to_dict(rule), status=201)
+    return JsonResponse(serialize_travel_rule(rule), status=201)
 
 
 @login_required
@@ -225,4 +230,4 @@ def travel_rule_detail(request, pk):
     for field, value in cleaned.items():
         setattr(rule, field, value)
     rule.save(update_fields=[*cleaned.keys(), "updated_at"])
-    return JsonResponse(_rule_to_dict(rule))
+    return JsonResponse(serialize_travel_rule(rule))
