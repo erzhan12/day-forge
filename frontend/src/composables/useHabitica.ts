@@ -93,6 +93,11 @@ export function useHabitica() {
     if (!silent) {
       state.loading = true
     }
+    // Cleared eagerly so the next commit starts from a clean slate. Note this
+    // also runs on a SILENT background poll: if a prior fetch errored and the
+    // list is empty, the banner drops and the empty-state message flashes
+    // until this request commits. Accepted (matches useTodoist) — recorded so
+    // the flash reads as a known trade-off rather than a bug.
     state.error = null
 
     // Query flags are independent: `carry_overdue=1` (browser-local today)

@@ -52,6 +52,11 @@ function toggle(): void {
 </script>
 
 <template>
+  <!-- The `todoist-sidebar*` data-testids are deliberately NOT renamed to
+       match this component: frontend/scripts/playwright/*.mjs still selects
+       on them. They are Playwright's contract, not dead naming from the
+       TodoistSidebar → ExternalTasksSidebar rename. Same reasoning as the
+       localStorage key in externalTasksSidebarStorage.ts. -->
   <aside
     class="external-tasks-sidebar"
     :class="{ collapsed: !open }"

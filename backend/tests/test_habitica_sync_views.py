@@ -1,4 +1,5 @@
 import datetime
+import json
 from unittest.mock import patch
 
 import pytest
@@ -165,6 +166,24 @@ def test_complete_error_mapping(auth_client, account):
         resp = auth_client.post("/api/habitica/tasks/task-id/complete/")
     assert resp.status_code == 504
     _assert_envelope(resp)
+
+
+def test_account_post_rejects_oversized_body(auth_client, user):
+    """The body cap short-circuits before JSON parsing or any provider call.
+
+    Mirrors ``test_analytics_views.test_oversized_body_returns_413``.
+    """
+    big = "x" * 200_000
+    with patch("habitica_sync.service.verify_credentials") as verify:
+        resp = auth_client.post(
+            "/api/habitica/account/",
+            json.dumps({"api_user_id": "u", "api_token": big}),
+            content_type="application/json",
+        )
+
+    assert resp.status_code == 413
+    verify.assert_not_called()
+    assert not HabiticaAccount.objects.filter(user=user).exists()
 
 
 def test_tasks_rejects_malformed_date(auth_client, account):
