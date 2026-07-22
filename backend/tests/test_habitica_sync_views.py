@@ -168,6 +168,30 @@ def test_complete_error_mapping(auth_client, account):
     _assert_envelope(resp)
 
 
+def test_account_post_maps_improperly_configured_to_500(auth_client, user):
+    """A bad Fernet key surfaces on connect BEFORE it can surface anywhere else.
+
+    ``set_token`` encrypts, so this is the first path a misconfigured key
+    reaches — exactly what the habitica_sync.E001 hint describes. It must
+    return the same config envelope as the tasks/complete views rather than a
+    bare 500.
+    """
+    with patch("habitica_sync.service.verify_credentials"):
+        with patch.object(
+            HabiticaAccount, "set_token", side_effect=ImproperlyConfigured("bad key")
+        ):
+            resp = auth_client.post(
+                "/api/habitica/account/",
+                json.dumps({"api_user_id": "u", "api_token": "t"}),
+                content_type="application/json",
+            )
+
+    assert resp.status_code == 500
+    _assert_envelope(resp)
+    # The transaction must roll back — no half-written row.
+    assert not HabiticaAccount.objects.filter(user=user).exists()
+
+
 def test_account_post_rejects_oversized_body(auth_client, user):
     """The body cap short-circuits before JSON parsing or any provider call.
 

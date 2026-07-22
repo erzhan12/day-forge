@@ -87,14 +87,29 @@ def account(request: HttpRequest) -> JsonResponse:
     except service.HabiticaError as e:
         return _service_error_response(e)
 
-    with transaction.atomic():
-        acc, _ = HabiticaAccount.objects.select_for_update().get_or_create(
-            user=request.user,
+    try:
+        with transaction.atomic():
+            acc, _ = HabiticaAccount.objects.select_for_update().get_or_create(
+                user=request.user,
+            )
+            acc.api_user_id = cleaned["api_user_id"]
+            acc.set_token(cleaned["api_token"])
+            acc.last_verified_at = timezone.now()
+            acc.save()
+    except ImproperlyConfigured:
+        # set_token encrypts, so a missing/malformed HABITICA_ENCRYPTION_KEY
+        # surfaces HERE first — the habitica_sync.E001 hint says as much. The
+        # tasks and complete views already map this to the config envelope;
+        # without the same catch, connect was the one path that leaked a bare
+        # 500 instead. Under DEBUG=False that check blocks boot, but a
+        # DEBUG=True dev with a bad key hits this directly.
+        logger.exception(
+            "Habitica encryption misconfigured for user %s", request.user.id
         )
-        acc.api_user_id = cleaned["api_user_id"]
-        acc.set_token(cleaned["api_token"])
-        acc.last_verified_at = timezone.now()
-        acc.save()
+        return _envelope(
+            "Habitica service is misconfigured. Contact the administrator.",
+            500,
+        )
 
     return JsonResponse(_account_status_payload(acc))
 
