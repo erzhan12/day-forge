@@ -140,6 +140,29 @@ describe("ExternalTasksSidebar — show sections", () => {
     expect(headers.map((h) => h.text())).toEqual(["Todoist1", "Habitica1"])
   })
 
+  it("titles the panel 'Tasks & Calendar' when tasks and calendar coexist", () => {
+    // The combined branch of panelTitle/panelNoun. Only the tasks-only and
+    // calendar-only branches were covered, so this one was dead to tests —
+    // it was exercised by the deleted TodoistSidebar suite.
+    wrapper = mount(ExternalTasksSidebar, {
+      props: { ...baseProps(true), showHabitica: true, showExtra: true },
+      slots: { default: '<div class="stub-cal">CAL</div>' },
+      attachTo: document.body,
+    })
+
+    expect(wrapper.find(".external-tasks-sidebar-title").text()).toBe(
+      "Tasks & Calendar",
+    )
+    // panelNoun diverges from panelTitle on purpose: the landmark label spells
+    // out "and" rather than reading an ampersand aloud.
+    expect(wrapper.find('[data-testid="todoist-sidebar"]').attributes("aria-label")).toBe(
+      "Tasks and Calendar",
+    )
+    expect(
+      wrapper.find('[data-testid="todoist-sidebar-toggle"]').attributes("aria-label"),
+    ).toContain("Tasks & Calendar")
+  })
+
   it("renders slotted calendar content below task sections", () => {
     wrapper = mount(ExternalTasksSidebar, {
       props: { ...baseProps(true), showExtra: true },

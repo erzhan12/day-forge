@@ -183,6 +183,9 @@ function toggle(): void {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-secondary);
+  /* Dropped when .todoist-sidebar-title was renamed in Phase 0; restored so
+     the heading keeps the tracking every other sidebar title uses. */
+  letter-spacing: 0.02em;
 }
 
 .external-tasks-sidebar-actions {
