@@ -478,7 +478,10 @@ the error on first load before `fetchAccountStatus()` resolves.
   new fetch entry point, decide `silent` deliberately — a stray
   `loading=true` on a background refresh regresses the no-flash UX.
 - **Background polling (#71/#73)** — `EXTERNAL_TASKS_POLL_INTERVAL_SECONDS`
-  (default `10`, `0` disables) is passed to Schedule as
+  (default `60`, `0` disables; **do not lower without re-checking provider
+  rate limits** — the poll forces `?refresh=1` and Habitica costs two upstream
+  calls per tick, so the interval divides its ~30 req/min budget across open
+  tabs) is passed to Schedule as
   `external_tasks_poll_interval`. When `> 0` and the external-tasks sidebar is
   open on a wide viewport with at least one connected source,
   `useExternalTasksPoll` calls each connected source's `refreshTasks` on that
@@ -505,7 +508,7 @@ composable only — no duplicate sidebar chrome.
 the old Todoist-only poll. While the panel is open on a wide viewport with at
 least one connected source,
 `useExternalTasksPoll` silently calls `refreshTasks` on every connected
-composable every 10s (`?refresh=1`); pauses when `document.hidden`.
+composable every 60s (`?refresh=1`); pauses when `document.hidden`.
 
 ## Production deploy (feature 0016)
 

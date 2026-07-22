@@ -146,3 +146,34 @@ def test_timeout_maps_to_typed_error(account):
         get.side_effect = requests.Timeout("slow")
         with pytest.raises(service.HabiticaTimeoutError):
             service.fetch_tasks_for_date(account, datetime.date(2026, 7, 22))
+
+
+def test_every_outbound_call_disables_redirects(account):
+    """No call carrying ``x-api-key`` may follow a redirect.
+
+    ``requests`` strips ``Authorization`` when a redirect crosses hosts, but
+    Habitica authenticates with the CUSTOM ``x-api-key`` header, which is
+    forwarded verbatim instead — so the token would leak to the redirect
+    target. Asserting per-call-site individually is what let this regress
+    once already (only ``verify_credentials`` was covered), so this sweeps
+    ALL outbound calls: a newly added one is caught the moment it appears.
+    """
+    with (
+        patch("habitica_sync.service.requests.get") as get,
+        patch("habitica_sync.service.requests.post") as post,
+    ):
+        get.return_value = _response(data=[])
+        post.return_value = _response(data={"delta": 1})
+
+        service.verify_credentials("user-id", "token")
+        service.fetch_tasks_for_date(account, datetime.date(2026, 7, 22))
+        service.complete_task(account, "task-id")
+
+        calls = list(get.call_args_list) + list(post.call_args_list)
+
+    assert len(calls) >= 3, "expected verify + fetch + complete to have run"
+    for call in calls:
+        assert call.kwargs.get("allow_redirects") is False, (
+            f"outbound call {call.args[0]!r} may follow redirects and would "
+            f"forward the x-api-key token to the redirect target"
+        )

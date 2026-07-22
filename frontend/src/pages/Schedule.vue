@@ -70,7 +70,10 @@ const props = withDefaults(
     auto_draft_pending: false,
     has_template_for_type: false,
     slot_type: "weekday",
-    external_tasks_poll_interval: 10,
+    // Mirrors settings.EXTERNAL_TASKS_POLL_INTERVAL_SECONDS. The backend
+    // always sends the prop, so this fallback is near-unreachable — but a
+    // divergent value here misleads tests and static analysis.
+    external_tasks_poll_interval: 60,
   },
 )
 

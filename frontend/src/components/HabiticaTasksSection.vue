@@ -15,7 +15,15 @@ const emit = defineEmits<{
 
 <template>
   <div class="habitica-panel" data-testid="habitica-panel">
-    <span v-if="loading" class="habitica-loading" aria-live="polite">Loading...</span>
+    <!-- Only while rows are already on screen (background refresh). With an
+         empty list the skeleton below covers the loading state, and rendering
+         both produced "Loading…" stacked on top of three skeleton rows. -->
+    <span
+      v-if="loading && tasks.length > 0"
+      class="habitica-loading"
+      aria-live="polite"
+      >Loading…</span
+    >
 
     <div v-if="error" class="habitica-error" role="status">
       <span>{{ error }}</span>
@@ -45,10 +53,18 @@ const emit = defineEmits<{
       </li>
     </ul>
 
-    <p v-else-if="loading" class="habitica-skeleton" aria-hidden="true">
-      <span class="habitica-skel-row"></span>
-      <span class="habitica-skel-row"></span>
-      <span class="habitica-skel-row"></span>
+    <!-- The rows are decorative, but the state still needs announcing: the
+         visible "Loading…" text is suppressed in this branch, so the label
+         lives here instead. -->
+    <p
+      v-else-if="loading"
+      class="habitica-skeleton"
+      role="status"
+      aria-label="Loading Habitica tasks"
+    >
+      <span class="habitica-skel-row" aria-hidden="true"></span>
+      <span class="habitica-skel-row" aria-hidden="true"></span>
+      <span class="habitica-skel-row" aria-hidden="true"></span>
     </p>
 
     <p v-else class="habitica-empty">No Habitica tasks for this day.</p>

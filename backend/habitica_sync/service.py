@@ -138,6 +138,9 @@ def _fetch_tasks(api_user_id: str, token: str, task_type: str) -> list:
         params={"type": task_type},
         headers=_headers(api_user_id, token),
         timeout=settings.HABITICA_REQUEST_TIMEOUT,
+        # See verify_credentials: x-api-key is a CUSTOM header, so requests
+        # does not strip it across hosts the way it strips Authorization.
+        allow_redirects=False,
     )
     return _unwrap_task_envelope(response)
 
@@ -213,6 +216,9 @@ def complete_task(account, task_id: str) -> None:
             headers=_headers(account.api_user_id, token),
             json={},
             timeout=settings.HABITICA_REQUEST_TIMEOUT,
+            # See verify_credentials: x-api-key is a CUSTOM header, so requests
+            # does not strip it across hosts the way it strips Authorization.
+            allow_redirects=False,
         )
         _raise_for_status(response)
     except HabiticaError:
