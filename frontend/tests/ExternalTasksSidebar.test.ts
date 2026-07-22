@@ -72,6 +72,30 @@ describe("ExternalTasksSidebar — collapsed state", () => {
     await wrapper.find('[data-testid="todoist-sidebar-toggle"]').trigger("click")
     expect(wrapper.emitted("update:open")![0]).toEqual([true])
   })
+
+  it("toggle button reports aria-expanded=false and an Expand label", () => {
+    // The collapsed toggle is a SEPARATE element from the open-state one, so
+    // the aria-expanded=true test in the open block does not cover it.
+    wrapper = mountSidebar(false)
+    const btn = wrapper.find('[data-testid="todoist-sidebar-toggle"]')
+    expect(btn.attributes("aria-expanded")).toBe("false")
+    expect(btn.attributes("aria-label")).toContain("Expand")
+  })
+
+  it("hides the global Refresh button when collapsed", () => {
+    // Sources are connected (so showAnyTasks is true) but the rail is closed:
+    // refreshing what you cannot see should not be offered.
+    wrapper = mountSidebar(false, { showHabitica: true })
+    expect(wrapper.find('[data-testid="todoist-sidebar-refresh"]').exists()).toBe(
+      false,
+    )
+  })
+
+  it("emits update:open false when collapsing from the open state", async () => {
+    wrapper = mountSidebar(true)
+    await wrapper.find('[data-testid="todoist-sidebar-toggle"]').trigger("click")
+    expect(wrapper.emitted("update:open")![0]).toEqual([false])
+  })
 })
 
 describe("ExternalTasksSidebar — refresh and source routing", () => {

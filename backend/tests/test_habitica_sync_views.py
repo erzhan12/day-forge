@@ -4,6 +4,7 @@ from unittest.mock import patch
 import pytest
 from cryptography.fernet import Fernet
 from django.contrib.auth.models import User
+from django.core.exceptions import ImproperlyConfigured
 from django.test import Client
 from habitica_sync import service
 from habitica_sync.models import HabiticaAccount
@@ -163,6 +164,49 @@ def test_complete_error_mapping(auth_client, account):
         complete.side_effect = service.HabiticaTimeoutError("slow")
         resp = auth_client.post("/api/habitica/tasks/task-id/complete/")
     assert resp.status_code == 504
+    _assert_envelope(resp)
+
+
+def test_tasks_rejects_malformed_date(auth_client, account):
+    """A bad date must 400 BEFORE any provider call is attempted."""
+    with patch("habitica_sync.service.fetch_tasks_for_date") as fetch:
+        resp = auth_client.get("/api/habitica/tasks/not-a-date/")
+
+    assert resp.status_code == 400
+    _assert_envelope(resp)
+    fetch.assert_not_called()
+
+
+def test_tasks_maps_improperly_configured_to_500(auth_client, account):
+    """A rotated/broken Fernet key surfaces as a config-shaped 500.
+
+    This is the documented key-rotation recovery path in
+    `.claude/rules/project.md`; without a test the handler is dead code the
+    first time an operator actually rotates the key.
+    """
+    with patch("habitica_sync.service.fetch_tasks_for_date") as fetch:
+        fetch.side_effect = ImproperlyConfigured("bad key")
+        resp = auth_client.get("/api/habitica/tasks/2026-07-22/")
+
+    assert resp.status_code == 500
+    _assert_envelope(resp)
+
+
+def test_complete_maps_improperly_configured_to_500(auth_client, account):
+    with patch("habitica_sync.service.complete_task") as complete:
+        complete.side_effect = ImproperlyConfigured("bad key")
+        resp = auth_client.post("/api/habitica/tasks/task-id/complete/")
+
+    assert resp.status_code == 500
+    _assert_envelope(resp)
+
+
+def test_tasks_maps_provider_error_to_502(auth_client, account):
+    with patch("habitica_sync.service.fetch_tasks_for_date") as fetch:
+        fetch.side_effect = service.HabiticaProviderError("upstream broke")
+        resp = auth_client.get("/api/habitica/tasks/2026-07-22/")
+
+    assert resp.status_code == 502
     _assert_envelope(resp)
 
 

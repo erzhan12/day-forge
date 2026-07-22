@@ -504,7 +504,7 @@ the shell owns collapse/expand, width, and global refresh. Panel shows when
 composable only — no duplicate sidebar chrome.
 
 **Polling decision (#73):** one shared **`EXTERNAL_TASKS_POLL_INTERVAL_SECONDS`**
-(default **`10`**, `0` = off) for the whole panel — replaces
+(default **`60`**, `0` = off) for the whole panel — replaces
 the old Todoist-only poll. While the panel is open on a wide viewport with at
 least one connected source,
 `useExternalTasksPoll` silently calls `refreshTasks` on every connected

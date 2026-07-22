@@ -401,7 +401,7 @@ const externalTasksSidebarWidth = computed(() => {
 
 const schedulePageStyle = computed(() => ({
   "--chat-sidebar-width": chatSidebarWidth.value,
-  "--todoist-sidebar-width": externalTasksSidebarWidth.value,
+  "--external-tasks-sidebar-width": externalTasksSidebarWidth.value,
 }))
 
 // Per-component-instance set of dates the auto-draft has already been
@@ -784,7 +784,7 @@ function logout() {
   min-height: 100vh;
   background: var(--bg-schedule-gap);
   padding-right: var(--chat-sidebar-width, 0);
-  padding-left: var(--todoist-sidebar-width, 0);
+  padding-left: var(--external-tasks-sidebar-width, 0);
 }
 
 .schedule-body {

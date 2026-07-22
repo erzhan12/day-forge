@@ -30,8 +30,11 @@ vi.mock("../src/composables/useHttp", () => ({
 import { useHabitica } from "../src/composables/useHabitica"
 import type { HabiticaTask } from "../src/types/habitica"
 
+// No `as HabiticaTask` cast: the annotation alone must typecheck, so a field
+// rename or addition on the interface breaks this factory instead of silently
+// producing objects that do not match the real shape.
 function task(id: string, title = `Task ${id}`): HabiticaTask {
-  return { id, title, due_date: null, task_type: "todo" } as HabiticaTask
+  return { id, title, type: "todo", due_date: null, completed: false }
 }
 
 const TODAY = "2026-07-22"
