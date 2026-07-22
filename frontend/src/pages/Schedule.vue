@@ -10,7 +10,7 @@ import NowLine from "../components/NowLine.vue"
 import UndoToast from "../components/UndoToast.vue"
 import CommandBar from "../components/CommandBar.vue"
 import ChatSidebar from "../components/ChatSidebar.vue"
-import TodoistSidebar from "../components/TodoistSidebar.vue"
+import ExternalTasksSidebar from "../components/ExternalTasksSidebar.vue"
 import DraftBadge from "../components/DraftBadge.vue"
 import RegenerateDraftButton from "../components/RegenerateDraftButton.vue"
 import { todayString } from "../utils/date"
@@ -20,9 +20,9 @@ import {
   writeChatSidebarOpen,
 } from "../utils/chatSidebarStorage"
 import {
-  readTodoistSidebarOpen,
-  writeTodoistSidebarOpen,
-} from "../utils/todoistSidebarStorage"
+  readExternalTasksSidebarOpen,
+  writeExternalTasksSidebarOpen,
+} from "../utils/externalTasksSidebarStorage"
 import {
   DAY_START, DAY_END, DAY_START_MINUTES, DAY_END_MINUTES,
   PX_PER_MINUTE, timeToMinutes, findCurrentBlock,
@@ -42,7 +42,8 @@ import type {
   ProviderErrorBanner,
 } from "../types/calendar"
 import { useTodoist } from "../composables/useTodoist"
-import { useTodoistPoll } from "../composables/useTodoistPoll"
+import { useHabitica } from "../composables/useHabitica"
+import { useExternalTasksPoll } from "../composables/useExternalTasksPoll"
 import { useThemeFromProps } from "../composables/useThemeFromProps"
 import { useNowMinutes } from "../composables/useNowMinutes"
 import { useSoundNotifications } from "../composables/useSoundNotifications"
@@ -63,13 +64,13 @@ const props = withDefaults(
     auto_draft_pending?: boolean
     has_template_for_type?: boolean
     slot_type?: "weekday" | "weekend"
-    todoist_poll_interval?: number
+    external_tasks_poll_interval?: number
   }>(),
   {
     auto_draft_pending: false,
     has_template_for_type: false,
     slot_type: "weekday",
-    todoist_poll_interval: 0,
+    external_tasks_poll_interval: 10,
   },
 )
 
@@ -277,17 +278,38 @@ watch(
   (d) => todoist.fetchTasks(d),
   { immediate: true },
 )
-function retryFetchTasks() {
+function retryTodoistTasks() {
   todoist.fetchTasks(props.date)
 }
-// PART A — optimistic complete (row vanishes immediately, rolls back on
-// failure inside the composable).
-function completeTask(taskId: string) {
+function completeTodoistTask(taskId: string) {
   todoist.completeTask(taskId)
 }
-// PART B — manual live sync (force re-fetch, cache bypass, silent).
-function refreshTodoist() {
-  todoist.refreshTasks(props.date)
+
+const habitica = useHabitica()
+habitica.fetchAccountStatus()
+watch(
+  () => props.date,
+  (d) => habitica.fetchTasks(d),
+  { immediate: true },
+)
+function retryHabiticaTasks() {
+  habitica.fetchTasks(props.date)
+}
+function completeHabiticaTask(taskId: string) {
+  habitica.completeTask(taskId)
+}
+// Single fan-out point for BOTH the manual Refresh button and the background
+// poll. Keeping one copy is the whole reason the sidebar is source-agnostic:
+// two copies drift, and the failure mode is silent — manual Refresh and the
+// poll would quietly cover different sets of sources. Adding a third source
+// means editing exactly here.
+function refreshExternalTasks(date: string = props.date) {
+  if (todoist.state.statusKnown && todoist.state.connected) {
+    void todoist.refreshTasks(date)
+  }
+  if (habitica.state.statusKnown && habitica.state.connected) {
+    void habitica.refreshTasks(date)
+  }
 }
 
 // Multi-turn chat thread (feature 0007). State lives in `useChat`
@@ -326,25 +348,23 @@ const { isWide } = useViewport()
 const sidebarOpen = ref<boolean>(readChatSidebarOpen())
 watch(sidebarOpen, writeChatSidebarOpen)
 
-const todoistSidebarOpen = ref<boolean>(readTodoistSidebarOpen())
-watch(todoistSidebarOpen, writeTodoistSidebarOpen)
+const externalTasksSidebarOpen = ref<boolean>(readExternalTasksSidebarOpen())
+watch(externalTasksSidebarOpen, writeExternalTasksSidebarOpen)
 
-// Background Todoist sync (#71): poll while sidebar is open on wide layout.
-const todoistPollActive = computed(
+// Background external-task sync: poll while the left task rail is open.
+const externalTasksPollActive = computed(
   () =>
     isWide.value &&
-    todoist.state.statusKnown &&
-    todoist.state.connected &&
-    todoistSidebarOpen.value,
+    externalTasksSidebarOpen.value &&
+    ((todoist.state.statusKnown && todoist.state.connected) ||
+      (habitica.state.statusKnown && habitica.state.connected)),
 )
 
-useTodoistPoll({
-  intervalSeconds: toRef(props, "todoist_poll_interval"),
+useExternalTasksPoll({
+  intervalSeconds: toRef(props, "external_tasks_poll_interval"),
   date: toRef(props, "date"),
-  active: todoistPollActive,
-  refresh: (d) => {
-    void todoist.refreshTasks(d)
-  },
+  active: externalTasksPollActive,
+  refresh: (d) => refreshExternalTasks(d),
 })
 
 const chatSidebarWidth = computed(() => {
@@ -366,18 +386,19 @@ const externalCalendarInCenter = computed(
 const leftSidebarVisible = computed(
   () =>
     (todoist.state.statusKnown && todoist.state.connected) ||
+    (habitica.state.statusKnown && habitica.state.connected) ||
     (externalConnected.value && externalCalendarInSidebar.value),
 )
 
-const todoistSidebarWidth = computed(() => {
+const externalTasksSidebarWidth = computed(() => {
   if (!isWide.value) return "0px"
   if (!leftSidebarVisible.value) return "0px"
-  return todoistSidebarOpen.value ? "380px" : "32px"
+  return externalTasksSidebarOpen.value ? "380px" : "32px"
 })
 
 const schedulePageStyle = computed(() => ({
   "--chat-sidebar-width": chatSidebarWidth.value,
-  "--todoist-sidebar-width": todoistSidebarWidth.value,
+  "--todoist-sidebar-width": externalTasksSidebarWidth.value,
 }))
 
 // Per-component-instance set of dates the auto-draft has already been
@@ -690,17 +711,23 @@ function logout() {
       @dismiss="dismissToast"
     />
 
-    <TodoistSidebar
+    <ExternalTasksSidebar
       v-if="isWide && leftSidebarVisible"
-      v-model:open="todoistSidebarOpen"
-      :show-tasks="todoist.state.statusKnown && todoist.state.connected"
+      v-model:open="externalTasksSidebarOpen"
+      :show-todoist="todoist.state.statusKnown && todoist.state.connected"
+      :show-habitica="habitica.state.statusKnown && habitica.state.connected"
       :show-extra="externalConnected && externalCalendarInSidebar"
-      :tasks="todoist.state.tasks"
-      :loading="todoist.state.loading"
-      :error="todoist.state.error"
-      @retry="retryFetchTasks"
-      @complete="completeTask"
-      @refresh="refreshTodoist"
+      :todoist-tasks="todoist.state.tasks"
+      :todoist-loading="todoist.state.loading"
+      :todoist-error="todoist.state.error"
+      :habitica-tasks="habitica.state.tasks"
+      :habitica-loading="habitica.state.loading"
+      :habitica-error="habitica.state.error"
+      @todoist-retry="retryTodoistTasks"
+      @todoist-complete="completeTodoistTask"
+      @habitica-retry="retryHabiticaTasks"
+      @habitica-complete="completeHabiticaTask"
+      @refresh="refreshExternalTasks"
     >
       <!-- External-calendar panel (feature 0022): stacked under the Todoist
            list inside the left sidebar. Wide-screen only. -->
@@ -717,7 +744,7 @@ function logout() {
         @retry="retryExternalFetch"
         @add-to-schedule="handleAddToSchedule"
       />
-    </TodoistSidebar>
+    </ExternalTasksSidebar>
     <AddToScheduleDialog
       v-if="addDialogEvent"
       :event="addDialogEvent"

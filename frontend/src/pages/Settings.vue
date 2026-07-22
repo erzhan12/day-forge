@@ -15,6 +15,7 @@ import { useThemeFromProps } from "../composables/useThemeFromProps"
 import { useCalendarAccount } from "../composables/useCalendarAccount"
 import { useGoogleAccount } from "../composables/useGoogleAccount"
 import { useTodoistAccount } from "../composables/useTodoistAccount"
+import { useHabiticaAccount } from "../composables/useHabiticaAccount"
 import "../app.css"
 
 useThemeFromProps()
@@ -223,6 +224,56 @@ async function handleTodoistDisconnect() {
   if (result.ok) {
     todoistForm.token = ""
     todoistMessage.value = "Todoist disconnected."
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Habitica (feature 0024) — connect / disconnect via User ID + API token.
+// ---------------------------------------------------------------------------
+const habiticaAccount = useHabiticaAccount()
+const habiticaForm = reactive<{ api_user_id: string; api_token: string }>({
+  api_user_id: "",
+  api_token: "",
+})
+const habiticaMessage = ref<string | null>(null)
+
+onMounted(() => {
+  habiticaAccount.fetchAccountStatus()
+})
+
+const isHabiticaConnected = computed(() =>
+  Boolean(habiticaAccount.state.status?.connected),
+)
+const habiticaBusy = computed(
+  () => habiticaAccount._internals.accountOperationInFlight.value !== null,
+)
+const habiticaVerifiedAt = computed(() => {
+  const ts = habiticaAccount.state.status?.last_verified_at
+  return ts ? new Date(ts).toLocaleString() : null
+})
+const habiticaConnectedUserId = computed(
+  () => habiticaAccount.state.status?.api_user_id ?? null,
+)
+
+async function handleHabiticaConnect() {
+  habiticaMessage.value = null
+  const result = await habiticaAccount.connect({
+    api_user_id: habiticaForm.api_user_id.trim(),
+    api_token: habiticaForm.api_token.trim(),
+  })
+  if (result.ok) {
+    habiticaForm.api_token = ""
+    habiticaMessage.value = "Habitica connected."
+  }
+}
+
+async function handleHabiticaDisconnect() {
+  habiticaMessage.value = null
+  const result = await habiticaAccount.disconnect()
+  if (result.ok) {
+    habiticaForm.api_user_id = ""
+    habiticaForm.api_token = ""
+    habiticaMessage.value = "Habitica disconnected."
   }
 }
 </script>
@@ -507,6 +558,88 @@ async function handleTodoistDisconnect() {
         @click="handleTodoistDisconnect"
       >
         {{ todoistBusy ? "Disconnecting…" : "Disconnect" }}
+      </button>
+    </section>
+
+    <section class="section">
+      <h2 class="section-title">Habitica</h2>
+      <p class="section-subtitle">
+        Connect Habitica so Day Forge can display outstanding todos and today's
+        due dailies alongside your schedule.
+      </p>
+      <p class="section-subtitle">
+        Find your User ID and API token in
+        <a
+          href="https://habitica.com/user/settings/api"
+          target="_blank"
+          rel="noopener noreferrer"
+        >Habitica API settings</a>.
+      </p>
+
+      <p v-if="isHabiticaConnected" class="cal-status connected">
+        Connected to Habitica<span v-if="habiticaConnectedUserId">
+          · {{ habiticaConnectedUserId }}</span><span v-if="habiticaVerifiedAt">
+          · verified {{ habiticaVerifiedAt }}</span>
+      </p>
+      <p v-else class="cal-status">Not connected</p>
+
+      <p
+        v-if="habiticaAccount.state.error"
+        class="cal-error"
+        role="status"
+      >
+        {{ habiticaAccount.state.error }}
+      </p>
+      <p
+        v-else-if="habiticaMessage"
+        class="cal-message"
+        role="status"
+      >
+        {{ habiticaMessage }}
+      </p>
+
+      <form
+        v-if="!isHabiticaConnected"
+        class="cal-form"
+        @submit.prevent="handleHabiticaConnect"
+      >
+        <label class="cal-field">
+          <span>User ID</span>
+          <input
+            v-model="habiticaForm.api_user_id"
+            type="text"
+            autocomplete="off"
+            required
+            :disabled="habiticaBusy"
+          />
+        </label>
+        <label class="cal-field">
+          <span>API token</span>
+          <input
+            v-model="habiticaForm.api_token"
+            type="password"
+            autocomplete="off"
+            required
+            :disabled="habiticaBusy"
+          />
+        </label>
+        <button
+          type="submit"
+          class="cal-submit"
+          :disabled="habiticaBusy"
+        >
+          {{ habiticaBusy ? "Connecting..." : "Connect" }}
+        </button>
+      </form>
+
+      <button
+        v-else
+        type="button"
+        class="cal-disconnect"
+        :disabled="habiticaBusy"
+        @click="handleHabiticaDisconnect"
+      >
+        {{ habiticaBusy ? "Disconnecting..." : "Disconnect" }}
       </button>
     </section>
   </div>

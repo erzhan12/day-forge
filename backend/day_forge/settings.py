@@ -36,6 +36,7 @@ INSTALLED_APPS = [
     "analytics",
     "calendar_sync",
     "todoist_sync",
+    "habitica_sync",
     "gcal_sync",
 ]
 
@@ -307,19 +308,8 @@ TODOIST_REQUEST_TIMEOUT = float(os.environ.get("TODOIST_REQUEST_TIMEOUT", "10"))
 # todoist_sync/cache.py) keep correctness regardless of backend; the
 # ``todoist_sync.W001`` check warns when the backend is non-shared.
 TODOIST_CACHE_TTL_SECONDS = int(os.environ.get("TODOIST_CACHE_TTL_SECONDS", "300"))
-# Frontend poll interval for live Todoist sync while the sidebar is open.
-# ``0`` disables background polling (manual Refresh only). Passed to Schedule
-# via the ``todoist_poll_interval`` Inertia prop.
-TODOIST_POLL_INTERVAL_SECONDS = int(
-    os.environ.get("TODOIST_POLL_INTERVAL_SECONDS", "0")
-)
 # Same import-time positive-value guards as the CALDAV_* block: fail loudly
 # on a misconfigured deploy (ValueError, NOT ImproperlyConfigured).
-if TODOIST_POLL_INTERVAL_SECONDS < 0:
-    raise ValueError(
-        "TODOIST_POLL_INTERVAL_SECONDS must be a non-negative integer; "
-        f"got {TODOIST_POLL_INTERVAL_SECONDS!r}"
-    )
 if TODOIST_CACHE_TTL_SECONDS <= 0:
     raise ValueError(
         "TODOIST_CACHE_TTL_SECONDS must be a positive integer; "
@@ -329,6 +319,48 @@ if TODOIST_REQUEST_TIMEOUT <= 0:
     raise ValueError(
         "TODOIST_REQUEST_TIMEOUT must be a positive number; "
         f"got {TODOIST_REQUEST_TIMEOUT!r}"
+    )
+
+# ---------------------------------------------------------------------------
+# Habitica (feature 0024)
+# ---------------------------------------------------------------------------
+HABITICA_ENCRYPTION_KEY = os.environ.get("HABITICA_ENCRYPTION_KEY", "")
+HABITICA_CLIENT_ID = os.environ.get("HABITICA_CLIENT_ID", "")
+HABITICA_BASE_URL = os.environ.get(
+    "HABITICA_BASE_URL", "https://habitica.com/api/v3"
+).rstrip("/")
+HABITICA_REQUEST_TIMEOUT = float(os.environ.get("HABITICA_REQUEST_TIMEOUT", "10"))
+HABITICA_CACHE_TTL_SECONDS = int(os.environ.get("HABITICA_CACHE_TTL_SECONDS", "300"))
+if HABITICA_CACHE_TTL_SECONDS <= 0:
+    raise ValueError(
+        "HABITICA_CACHE_TTL_SECONDS must be a positive integer; "
+        f"got {HABITICA_CACHE_TTL_SECONDS!r}"
+    )
+if HABITICA_REQUEST_TIMEOUT <= 0:
+    raise ValueError(
+        "HABITICA_REQUEST_TIMEOUT must be a positive number; "
+        f"got {HABITICA_REQUEST_TIMEOUT!r}"
+    )
+
+# Background external-task refresh while the left task rail is open.
+# ``0`` disables polling; default 60 seconds.
+#
+# The 0024 plan locked this at 10s, but the poll calls ``refreshTasks``, which
+# sends ``refresh=1`` and therefore BYPASSES the server cache on every tick.
+# Habitica costs two upstream calls per tick (``type=todos`` + ``type=dailys``),
+# so 10s meant 12 calls/min per open tab against Habitica's ~30/min per-user
+# limit — two tabs came close, three exceeded it, and there is no client-side
+# backoff to recover from the resulting 429s. 60s gives 2 calls/min/tab, which
+# stays safe with several tabs open while keeping polled data genuinely fresh
+# (the alternative — dropping ``refresh=1`` — would cap freshness at the 300s
+# cache TTL and make polling largely pointless).
+EXTERNAL_TASKS_POLL_INTERVAL_SECONDS = int(
+    os.environ.get("EXTERNAL_TASKS_POLL_INTERVAL_SECONDS", "60")
+)
+if EXTERNAL_TASKS_POLL_INTERVAL_SECONDS < 0:
+    raise ValueError(
+        "EXTERNAL_TASKS_POLL_INTERVAL_SECONDS must be a non-negative integer; "
+        f"got {EXTERNAL_TASKS_POLL_INTERVAL_SECONDS!r}"
     )
 
 # ---------------------------------------------------------------------------

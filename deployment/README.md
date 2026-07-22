@@ -35,6 +35,9 @@ Add an **A record**: host `dayforge` → the droplet's public IP. (Subdomain of
 | `CSRF_TRUSTED_ORIGINS` | `https://dayforge.habitreward.org` |
 | `CALDAV_ENCRYPTION_KEY` | `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` |
 | `TODOIST_ENCRYPTION_KEY` | `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` |
+| `HABITICA_ENCRYPTION_KEY` | `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` |
+| `HABITICA_CLIENT_ID` | maintainer Habitica user ID for the `x-client` header (`{HABITICA_CLIENT_ID}-DayForge`) |
+| `EXTERNAL_TASKS_POLL_INTERVAL_SECONDS` | external-task sidebar refresh interval in seconds; default `60`, set `0` to disable |
 | `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` / `GOOGLE_OAUTH_REDIRECT_URI` | from the Google Cloud console OAuth (Web) client; redirect URI = `https://dayforge.habitreward.org/api/calendar/google/callback/` |
 | `GOOGLE_OAUTH_TOKEN_KEY` | `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` |
 | `LLM_API_KEY` | OpenRouter key |
@@ -47,6 +50,12 @@ Add an **A record**: host `dayforge` → the droplet's public IP. (Subdomain of
 > Apple Calendar (`calendar_sync.E001` blocks startup otherwise).
 > `TODOIST_ENCRYPTION_KEY` is also **required** for a `DEBUG=0` boot even if nobody
 > uses Todoist (`todoist_sync.E001` blocks startup otherwise).
+> `HABITICA_ENCRYPTION_KEY` and `HABITICA_CLIENT_ID` are **required** for a
+> `DEBUG=0` boot even if nobody uses Habitica (`habitica_sync.E001` blocks startup
+> otherwise).
+> Polling was renamed from `TODOIST_POLL_INTERVAL_SECONDS` to
+> `EXTERNAL_TASKS_POLL_INTERVAL_SECONDS`; unset env now defaults to `60`, so set
+> `EXTERNAL_TASKS_POLL_INTERVAL_SECONDS=0` explicitly to keep polling off.
 > **All four** `GOOGLE_OAUTH_*` vars (client id, client secret, redirect uri, token
 > key) are **required** for a `DEBUG=0` boot even if nobody connects Google
 > Calendar — `gcal_sync.E001` blocks startup if any is unset/malformed (a

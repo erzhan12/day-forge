@@ -748,6 +748,108 @@ account, no label needed).
 
 All non-`2xx` use `{"errors": {"detail": "<message>"}}`.
 
+## Habitica — feature 0024
+
+Habitica task integration via User ID + API token: read outstanding todos and
+today's due dailies, mark todos/dailies complete with `score/up`, and force a
+live refresh. Tokens are encrypted at rest with Fernet
+(`HABITICA_ENCRYPTION_KEY`); service code owns the only decrypt call sites.
+No OAuth, no task create/edit, no AI coupling.
+
+Every Habitica provider request sends `x-api-user`, `x-api-key`, and
+`x-client: {HABITICA_CLIENT_ID}-DayForge`. `HABITICA_CLIENT_ID` has no default
+and is required for `DEBUG=0` boot.
+
+### `GET /api/habitica/account/`
+
+Returns connection status and the non-secret Habitica User ID. Never returns an
+API token field.
+
+```json
+{
+  "connected": true,
+  "last_verified_at": "2026-07-22T09:00:00+00:00",
+  "api_user_id": "habitica-user-id"
+}
+```
+
+Disconnected shape:
+
+```json
+{ "connected": false, "last_verified_at": null, "api_user_id": null }
+```
+
+### `POST /api/habitica/account/`
+
+Verifies credentials with Habitica and upserts the per-user account row.
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `api_user_id` | string | yes | Habitica User ID for `x-api-user`; plaintext and returned in status. |
+| `api_token` | string | yes | Habitica API token; encrypted at rest and never returned. |
+
+Errors: `400` validation, `401` invalid credentials, `502` provider failure,
+`504` timeout. Non-`2xx` responses use `{"errors": {"detail": "<message>"}}`.
+
+### `DELETE /api/habitica/account/`
+
+Idempotent disconnect. Returns the disconnected status shape.
+
+### `GET /api/habitica/tasks/{date}/`
+
+Returns outstanding Habitica tasks for the selected schedule date. Results are
+cached per `(user, account_version, date, scope)` with
+`HABITICA_CACHE_TTL_SECONDS`.
+
+Filter rules:
+
+- Dated todos match `date`; completed todos are excluded.
+- On client today (`carry_overdue=1`) or project today, overdue unfinished todos
+  (`due_date < date`) and undated todos are also included.
+- On past/future dates, only todos due exactly on that date are included.
+- Dailies are fetched only for client today/project today, using Habitica's
+  `type=dailys` query value, and only returned when `isDue` is true.
+
+Query params:
+
+| Name | Notes |
+|------|-------|
+| `carry_overdue=1` | Browser-local today bridge; includes overdue/undated todos and today's due dailies. |
+| `refresh=1` | Bypasses the read cache and re-warms it. Used by the sidebar refresh and `EXTERNAL_TASKS_POLL_INTERVAL_SECONDS`. |
+
+Success:
+
+```json
+{
+  "tasks": [
+    {
+      "id": "habitica-task-id",
+      "title": "Morning routine",
+      "type": "daily",
+      "due_date": null,
+      "completed": false
+    }
+  ]
+}
+```
+
+Errors: `400` bad date, `401` invalid stored credentials, `502` provider
+failure/malformed envelope, `503` no Habitica account, `504` timeout, `500`
+misconfigured encryption key.
+
+### `POST /api/habitica/tasks/{id}/complete/`
+
+Scores up one Habitica todo or daily via `POST /tasks/{id}/score/up` with an
+empty JSON body. This is one-way; un-complete is not supported. Habitica returns
+`200` with XP/streak data, which Day Forge ignores and maps to:
+
+```json
+{ "ok": true }
+```
+
+Successful complete invalidates the Habitica task cache by bumping
+`account.updated_at`.
+
 ## Travel-time rules — feature 0026
 
 Per-user rules that prefill the "Add to schedule" dialog when adding an
@@ -986,7 +1088,7 @@ with no due date never appear (the view is date-scoped). Completed tasks are nev
 | Name | Type | Notes |
 |------|------|-------|
 | `carry_overdue` | string | Optional. Pass `1` to include overdue carryover when `date` is browser-local today but not project-local today. The Schedule page sets this automatically for today. |
-| `refresh` | string | Optional (feature 0021). Pass `1` to **bypass** the read cache and force a live provider re-fetch; the result still re-warms the cache, so a subsequent non-forced read is served from cache. Independent of `carry_overdue` (both can apply). Used by the sidebar Refresh button and background polling (`TODOIST_POLL_INTERVAL_SECONDS` > 0). |
+| `refresh` | string | Optional (feature 0021). Pass `1` to **bypass** the read cache and force a live provider re-fetch; the result still re-warms the cache, so a subsequent non-forced read is served from cache. Independent of `carry_overdue` (both can apply). Used by the sidebar Refresh button and background polling (`EXTERNAL_TASKS_POLL_INTERVAL_SECONDS` > 0). |
 
 The server caches the two filter modes **separately** (`exact` vs.
 `with_overdue`) under distinct keys, so toggling `carry_overdue` on the

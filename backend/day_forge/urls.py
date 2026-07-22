@@ -5,6 +5,7 @@ from calendar_sync import views as calendar_views
 from django.contrib import admin
 from django.urls import path
 from gcal_sync import views as gcal_views
+from habitica_sync import views as habitica_views
 from schedules import api as schedules_api
 from schedules import views as schedules_views
 from templates_mgr import api as templates_api
@@ -152,6 +153,22 @@ urlpatterns = [
         "api/todoist/tasks/<str:task_id>/complete/",
         todoist_views.complete,
         name="todoist_complete",
+    ),
+    # API: Habitica (feature 0024)
+    path(
+        "api/habitica/account/",
+        habitica_views.account,
+        name="habitica_account",
+    ),
+    path(
+        "api/habitica/tasks/<str:date>/",
+        habitica_views.tasks,
+        name="habitica_tasks",
+    ),
+    path(
+        "api/habitica/tasks/<str:task_id>/complete/",
+        habitica_views.complete,
+        name="habitica_complete",
     ),
     # Analytics
     path(

@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { ref } from "vue"
-import { useTodoistPoll } from "../src/composables/useTodoistPoll"
+import { useExternalTasksPoll } from "../src/composables/useExternalTasksPoll"
 
-describe("useTodoistPoll", () => {
+describe("useExternalTasksPoll", () => {
   beforeEach(() => {
     vi.useFakeTimers()
     Object.defineProperty(document, "hidden", {
@@ -26,7 +26,7 @@ describe("useTodoistPoll", () => {
     const date = ref("2026-06-23")
     const active = ref(true)
 
-    useTodoistPoll({ intervalSeconds, date, active, refresh })
+    useExternalTasksPoll({ intervalSeconds, date, active, refresh })
 
     vi.advanceTimersByTime(60_000)
     expect(refresh).not.toHaveBeenCalled()
@@ -38,7 +38,7 @@ describe("useTodoistPoll", () => {
     const date = ref("2026-06-23")
     const active = ref(true)
 
-    useTodoistPoll({ intervalSeconds, date, active, refresh })
+    useExternalTasksPoll({ intervalSeconds, date, active, refresh })
 
     vi.advanceTimersByTime(10_000)
     expect(refresh).toHaveBeenCalledTimes(1)
@@ -54,7 +54,7 @@ describe("useTodoistPoll", () => {
     const date = ref("2026-06-23")
     const active = ref(true)
 
-    useTodoistPoll({ intervalSeconds, date, active, refresh })
+    useExternalTasksPoll({ intervalSeconds, date, active, refresh })
 
     vi.advanceTimersByTime(10_000)
     expect(refresh).toHaveBeenCalledTimes(1)
@@ -70,7 +70,7 @@ describe("useTodoistPoll", () => {
     const date = ref("2026-06-23")
     const active = ref(true)
 
-    useTodoistPoll({ intervalSeconds, date, active, refresh })
+    useExternalTasksPoll({ intervalSeconds, date, active, refresh })
 
     date.value = "2026-06-24"
     vi.advanceTimersByTime(10_000)
@@ -83,7 +83,7 @@ describe("useTodoistPoll", () => {
     const date = ref("2026-06-23")
     const active = ref(true)
 
-    useTodoistPoll({ intervalSeconds, date, active, refresh })
+    useExternalTasksPoll({ intervalSeconds, date, active, refresh })
 
     Object.defineProperty(document, "hidden", {
       configurable: true,
@@ -99,7 +99,7 @@ describe("useTodoistPoll", () => {
     const date = ref("2026-06-23")
     const active = ref(true)
 
-    useTodoistPoll({ intervalSeconds, date, active, refresh })
+    useExternalTasksPoll({ intervalSeconds, date, active, refresh })
 
     Object.defineProperty(document, "hidden", {
       configurable: true,

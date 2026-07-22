@@ -10,6 +10,13 @@ This is a living document — update it as new patterns emerge.
 - Before committing, sanity-check with `git ls-files | grep -E '(^|/)\.env'` — should return nothing except `.env.example` if one exists.
 - User commands sent to `POST /api/ai/schedules/<date>/command/` are logged verbatim to `AIInteraction` (capped at 2 KB). Treat this table as sensitive; don't paste real secrets into the command bar while testing.
 
+## Unified External Tasks Sidebar
+
+- `ExternalTasksSidebar` is the single left task rail. It renders one static section per connected source, emits source-specific retry/complete events, and has one global silent Refresh button. Do not route a Habitica task through Todoist handlers.
+- `useExternalTasksPoll` is source-agnostic: while wide and the left task rail is open, it calls every connected source's `refreshTasks(date)`. It is controlled by `EXTERNAL_TASKS_POLL_INTERVAL_SECONDS` (`0` disables).
+- Habitica API gotchas: list dailies with `type=dailys`; send `x-client: {HABITICA_CLIENT_ID}-DayForge`; fetch dailies only for client-today/overdue-carry scope and only keep `isDue` tasks. Habitica undated todos show today only, and overdue todos carry to client today.
+- External task text from Todoist/Habitica is display-only and must not be added to draft/command/chat prompts.
+
 ## Dev Server Restart Modes
 
 - `make run` keeps Django's default autoreloader enabled. Use `make run-manual` when code edits should not restart the backend automatically; it passes `--noreload` to `manage.py runserver`.
@@ -294,11 +301,11 @@ healthy Apple events. Per-provider retry is routed separately
 (`retry(provider)`), Apple ≠ Google.
 
 **Panel placement (wide-only):** `ExternalEventsPanel` lives inside the left
-`TodoistSidebar` (default slot, stacked under the Todoist list) — **not** the
+`ExternalTasksSidebar` (default slot, stacked under external task sections) — **not** the
 main column. Users can switch back to the legacy center-column placement in
 **Settings → External Calendars → Event panel placement** (`externalCalendarPlacementStorage.ts`, device-local). The sidebar shows on wide viewports (`isWide`) when **either**
-Todoist or a calendar is connected (`Schedule.vue:leftSidebarVisible`), with
-`showTasks` / `showExtra` gating each section. Center placement renders the
+an external-task source or a calendar is connected (`Schedule.vue:leftSidebarVisible`), with
+per-source task gates / `showExtra` gating each section. Center placement renders the
 panel above `AddBlockForm` on all viewports (legacy behavior). On narrow/mobile
 with sidebar placement there is **no** external-calendar panel by design. Note: `useCalendar`/`useGoogleCalendar` still
 fetch on every date regardless of viewport, so on narrow the events are fetched
@@ -470,25 +477,24 @@ the error on first load before `fetchAccountStatus()` resolves.
   `loading`). The initial `fetchTasks` keeps `silent: false`. If you add a
   new fetch entry point, decide `silent` deliberately — a stray
   `loading=true` on a background refresh regresses the no-flash UX.
-- **Background polling (#71)** — `TODOIST_POLL_INTERVAL_SECONDS` (default
-  `0`) is passed to Schedule as `todoist_poll_interval`. When `> 0` and
-  the Todoist sidebar is open on a wide viewport with a connected account,
-  `useTodoistPoll` calls `refreshTasks` on that interval (`?refresh=1`,
-  silent). Polling pauses while `document.hidden`; one refresh fires when
-  the tab becomes visible again. Collapsing the sidebar or disconnecting
-  Todoist clears the interval.
+- **Background polling (#71/#73)** — `EXTERNAL_TASKS_POLL_INTERVAL_SECONDS`
+  (default `10`, `0` disables) is passed to Schedule as
+  `external_tasks_poll_interval`. When `> 0` and the external-tasks sidebar is
+  open on a wide viewport with at least one connected source,
+  `useExternalTasksPoll` calls each connected source's `refreshTasks` on that
+  interval (`?refresh=1`, silent). Polling pauses while `document.hidden`; one
+  refresh fires when the tab becomes visible again.
 - **Complete view parses no body** — `POST .../complete/` takes the id in
   the URL path and reads **no** `request.body`, so it has **no**
   `reject_oversized_body` guard (unlike `POST /account/`). Precedence is
   just `503` (no account) → `2xx`/service-error.
 
-## External tasks panel (issue #73 — planned)
+## External tasks panel (issue #73)
 
 **UX decision:** one **left-side panel** on Schedule, grouped by integration
 (Todoist, Habitica, future apps) — not a separate sidebar per provider.
-Today's `TodoistSidebar.vue` (feature 0020) will be refactored into a shell
-(`ExternalTasksSidebar.vue`) with per-source **sections**
-(`TodoistTasksSection`, `HabiticaTasksSection`, …). Each integration keeps
+`ExternalTasksSidebar.vue` is a source-agnostic shell with per-source
+sections (`TodoistTasksPanel`, `HabiticaTasksSection`, ...). Each integration keeps
 its own backend app (`*_sync`) and composable (`useTodoist`, `useHabitica`);
 the shell owns collapse/expand, width, and global refresh. Panel shows when
 **any** connected source is present. New integrations add a section +
@@ -496,8 +502,8 @@ composable only — no duplicate sidebar chrome.
 
 **Polling decision (#73):** one shared **`EXTERNAL_TASKS_POLL_INTERVAL_SECONDS`**
 (default **`10`**, `0` = off) for the whole panel — replaces
-`TODOIST_POLL_INTERVAL_SECONDS` / `useTodoistPoll` when the panel refactor
-lands. While the panel is open on a wide viewport with ≥1 connected source,
+the old Todoist-only poll. While the panel is open on a wide viewport with at
+least one connected source,
 `useExternalTasksPoll` silently calls `refreshTasks` on every connected
 composable every 10s (`?refresh=1`); pauses when `document.hidden`.
 

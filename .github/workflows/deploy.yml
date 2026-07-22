@@ -122,6 +122,9 @@ jobs:
           CSRF_TRUSTED_ORIGINS: ${{ secrets.CSRF_TRUSTED_ORIGINS }}
           CALDAV_ENCRYPTION_KEY: ${{ secrets.CALDAV_ENCRYPTION_KEY }}
           TODOIST_ENCRYPTION_KEY: ${{ secrets.TODOIST_ENCRYPTION_KEY }}
+          HABITICA_ENCRYPTION_KEY: ${{ secrets.HABITICA_ENCRYPTION_KEY }}
+          HABITICA_CLIENT_ID: ${{ secrets.HABITICA_CLIENT_ID }}
+          EXTERNAL_TASKS_POLL_INTERVAL_SECONDS: ${{ secrets.EXTERNAL_TASKS_POLL_INTERVAL_SECONDS }}
           GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
           GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
           GOOGLE_OAUTH_REDIRECT_URI: ${{ secrets.GOOGLE_OAUTH_REDIRECT_URI }}
@@ -149,6 +152,20 @@ jobs:
                   sys.exit(f"{name} must not contain newlines")
               return value
 
+          def optional(name: str) -> str | None:
+              """Unset secret -> omit the line entirely (settings.py default applies).
+
+              Distinct from ``require``: an unset optional must not fail the
+              deploy, but an explicitly-set one (e.g. the poll interval pinned
+              to ``0`` to keep background polling off) must reach the droplet.
+              """
+              value = os.environ.get(name, "")
+              if not value:
+                  return None
+              if "\n" in value or "\r" in value:
+                  sys.exit(f"{name} must not contain newlines")
+              return value
+
           def dotenv_line(key: str, value: str, *, quote: bool = True) -> str:
               """Single-quoted values: Compose env_file does not expand $ inside quotes."""
               if not quote:
@@ -163,6 +180,11 @@ jobs:
               dotenv_line("CSRF_TRUSTED_ORIGINS", require("CSRF_TRUSTED_ORIGINS")),
               dotenv_line("CALDAV_ENCRYPTION_KEY", require("CALDAV_ENCRYPTION_KEY")),
               dotenv_line("TODOIST_ENCRYPTION_KEY", require("TODOIST_ENCRYPTION_KEY")),
+              # Required: habitica_sync.E001 blocks DEBUG=0 boot without both,
+              # and this file REPLACES the droplet's .env wholesale, so a var
+              # omitted here is erased rather than preserved.
+              dotenv_line("HABITICA_ENCRYPTION_KEY", require("HABITICA_ENCRYPTION_KEY")),
+              dotenv_line("HABITICA_CLIENT_ID", require("HABITICA_CLIENT_ID")),
               dotenv_line("GOOGLE_OAUTH_CLIENT_ID", require("GOOGLE_OAUTH_CLIENT_ID")),
               dotenv_line("GOOGLE_OAUTH_CLIENT_SECRET", require("GOOGLE_OAUTH_CLIENT_SECRET")),
               dotenv_line("GOOGLE_OAUTH_REDIRECT_URI", require("GOOGLE_OAUTH_REDIRECT_URI")),
@@ -176,6 +198,15 @@ jobs:
               dotenv_line("DJANGO_SUPERUSER_PASSWORD", require("DJANGO_SUPERUSER_PASSWORD")),
               dotenv_line("DOCKER_IMAGE", require("IMAGE_REF")),
           ]
+
+          # Optional: unset -> settings.py default (10s). Set to 0 to keep
+          # background polling off, which deployment/README.md documents as the
+          # opt-out and which only works if the value actually reaches the .env.
+          _poll = optional("EXTERNAL_TASKS_POLL_INTERVAL_SECONDS")
+          if _poll is not None:
+              lines.append(
+                  dotenv_line("EXTERNAL_TASKS_POLL_INTERVAL_SECONDS", _poll)
+              )
           path = "/tmp/day-forge.env"
           with open(path, "w", encoding="utf-8") as f:
               f.write("\n".join(lines) + "\n")

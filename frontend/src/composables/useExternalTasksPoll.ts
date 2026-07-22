@@ -1,17 +1,15 @@
-// Background Todoist refresh while the sidebar is open (feature 0021 / #71).
-// Reuses `refreshTasks` (`?refresh=1`, silent) on a fixed interval. Pauses
-// ticks while the tab is hidden; refreshes once when the tab becomes visible.
+// Background external-task refresh while the left task rail is open.
 
 import { onBeforeUnmount, watch, type Ref } from "vue"
 
-export interface TodoistPollOptions {
+export interface ExternalTasksPollOptions {
   intervalSeconds: Ref<number>
   date: Ref<string>
   active: Ref<boolean>
   refresh: (date: string) => void | Promise<void>
 }
 
-export function useTodoistPoll(options: TodoistPollOptions): void {
+export function useExternalTasksPoll(options: ExternalTasksPollOptions): void {
   let timer: ReturnType<typeof setInterval> | null = null
 
   function clearTimer(): void {
