@@ -65,11 +65,64 @@ def test_fetch_filters_todos_and_due_dailies_for_client_today(account):
 
     assert [(t.id, t.type) for t in tasks] == [
         ("daily-due", "daily"),
-        ("overdue", "todo"),
         ("today", "todo"),
+        ("overdue", "todo"),
         ("undated", "todo"),
     ]
     assert get.call_args_list[1].kwargs["params"] == {"type": "dailys"}
+
+
+def test_fetch_preserves_api_array_order_within_type(account):
+    """Sidebar order follows Habitica API array order, not due date/title.
+
+    Habitica pre-sorts ``GET .../tasks/user?type=…`` via ``tasksOrder``. Task
+    documents have no ``position`` field — Day Forge must keep list order.
+    """
+    target = datetime.date(2026, 7, 22)
+    # Array order contradicts due-date and title order on purpose.
+    todos = [
+        {"id": "todo-late", "text": "Zebra", "date": "2026-07-22", "completed": False},
+        {"id": "todo-early", "text": "Apple", "date": "2026-07-21", "completed": False},
+        {"id": "todo-undated", "text": "Middle", "date": None, "completed": False},
+    ]
+    dailies = [
+        {"id": "daily-b", "text": "Beta", "isDue": True, "completed": False},
+        {"id": "daily-a", "text": "Alpha", "isDue": True, "completed": False},
+    ]
+
+    with patch("habitica_sync.service.django_tz.localdate", return_value=target):
+        with patch("habitica_sync.service.requests.get") as get:
+            get.side_effect = [_response(data=todos), _response(data=dailies)]
+            tasks = service.fetch_tasks_for_date(account, target)
+
+    assert [(t.id, t.type) for t in tasks] == [
+        ("daily-b", "daily"),
+        ("daily-a", "daily"),
+        ("todo-late", "todo"),
+        ("todo-early", "todo"),
+        ("todo-undated", "todo"),
+    ]
+    assert get.call_args_list[0].kwargs["params"] == {"type": "todos"}
+    assert get.call_args_list[1].kwargs["params"] == {"type": "dailys"}
+
+
+def test_fetch_filtered_subset_preserves_relative_api_order(account):
+    """Filtered-out tasks drop out; included peers keep relative API order."""
+    target = datetime.date(2026, 7, 22)
+    todos = [
+        {"id": "skip-done", "text": "Done", "date": "2026-07-22", "completed": True},
+        {"id": "keep-first", "text": "Keep 1", "date": "2026-07-22", "completed": False},
+        {"id": "skip-future", "text": "Future", "date": "2026-07-24", "completed": False},
+        {"id": "keep-second", "text": "Keep 2", "date": "2026-07-21", "completed": False},
+    ]
+
+    with patch("habitica_sync.service.django_tz.localdate", return_value=target):
+        with patch("habitica_sync.service.requests.get") as get:
+            get.side_effect = [_response(data=todos), _response(data=[])]
+            tasks = service.fetch_tasks_for_date(account, target)
+
+    assert [t.id for t in tasks] == ["keep-first", "keep-second"]
+    assert get.call_args_list[0].kwargs["params"] == {"type": "todos"}
 
 
 def test_future_exact_date_skips_dailies_and_undated_overdue(account):

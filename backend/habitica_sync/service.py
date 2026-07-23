@@ -96,23 +96,25 @@ def _normalize_due_date(raw: str | None) -> str | None:
     return date.fromisoformat(raw).isoformat()
 
 
-def _normalize_todo(task) -> NormalizedHabiticaTask:
+def _normalize_todo(task, *, position: int = 0) -> NormalizedHabiticaTask:
     return NormalizedHabiticaTask(
         id=str(task["id"]),
         title=str(task["text"]),
         type="todo",
         due_date=_normalize_due_date(task.get("date")),
         completed=bool(task.get("completed")),
+        position=position,
     )
 
 
-def _normalize_daily(task) -> NormalizedHabiticaTask:
+def _normalize_daily(task, *, position: int = 0) -> NormalizedHabiticaTask:
     return NormalizedHabiticaTask(
         id=str(task["id"]),
         title=str(task["text"]),
         type="daily",
         due_date=None,
         completed=bool(task.get("completed")),
+        position=position,
     )
 
 
@@ -155,9 +157,9 @@ def fetch_tasks_for_date(
     token = account.get_token()
     try:
         normalized: list[NormalizedHabiticaTask] = []
-        for raw in _fetch_tasks(account.api_user_id, token, "todos"):
+        for idx, raw in enumerate(_fetch_tasks(account.api_user_id, token, "todos")):
             try:
-                task = _normalize_todo(raw)
+                task = _normalize_todo(raw, position=idx)
                 if not task.completed and _include_todo(
                     task,
                     target_date,
@@ -172,9 +174,11 @@ def fetch_tasks_for_date(
                 )
 
         if is_project_today(target_date) or include_overdue_carryover:
-            for raw in _fetch_tasks(account.api_user_id, token, "dailys"):
+            for idx, raw in enumerate(
+                _fetch_tasks(account.api_user_id, token, "dailys")
+            ):
                 try:
-                    task = _normalize_daily(raw)
+                    task = _normalize_daily(raw, position=idx)
                     if raw.get("isDue") is True and not task.completed:
                         normalized.append(task)
                 except (KeyError, ValueError, TypeError) as e:
@@ -187,8 +191,7 @@ def fetch_tasks_for_date(
         normalized.sort(
             key=lambda t: (
                 -int(t.type == "daily"),
-                t.due_date or "9999-12-31",
-                t.title.casefold(),
+                t.position,
                 t.id,
             )
         )

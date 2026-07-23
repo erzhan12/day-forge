@@ -10,6 +10,7 @@ class NormalizedHabiticaTask:
     type: str
     due_date: str | None
     completed: bool
+    position: int = 0
 
 
 def normalized_task_to_dict(task: NormalizedHabiticaTask) -> dict:

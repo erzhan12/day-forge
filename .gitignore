@@ -36,3 +36,6 @@ staticfiles/
 
 # IDE
 .idea/
+
+# Git worktrees (local feature checkouts)
+.worktrees/

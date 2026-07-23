@@ -14,7 +14,7 @@ This is a living document — update it as new patterns emerge.
 
 - `ExternalTasksSidebar` is the single left task rail. It renders one static section per connected source, emits source-specific retry/complete events, and has one global silent Refresh button. Do not route a Habitica task through Todoist handlers.
 - `useExternalTasksPoll` is source-agnostic: while wide and the left task rail is open, it calls every connected source's `refreshTasks(date)`. It is controlled by `EXTERNAL_TASKS_POLL_INTERVAL_SECONDS` (`0` disables).
-- Habitica API gotchas: list dailies with `type=dailys`; send `x-client: {HABITICA_CLIENT_ID}-DayForge`; fetch dailies only for client-today/overdue-carry scope and only keep `isDue` tasks. Habitica undated todos show today only, and overdue todos carry to client today.
+- Habitica API gotchas: list dailies with `type=dailys`; send `x-client: {HABITICA_CLIENT_ID}-DayForge`; fetch dailies only for client-today/overdue-carry scope and only keep `isDue` tasks. Habitica undated todos show today only, and overdue todos carry to client today. Sidebar order follows the pre-sorted `GET .../tasks/user?type=…` array (Habitica applies `tasksOrder` server-side; task JSON has no `position` field) — Day Forge stores that index as an internal sort key (dailies block, then todos block), not due date or title.
 - External task text from Todoist/Habitica is display-only and must not be added to draft/command/chat prompts.
 
 ## Dev Server Restart Modes
