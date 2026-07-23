@@ -571,6 +571,46 @@ the safe failure mode is silence — inverse of `chatSidebarStorage`).
   (clears the interval, `nowDate=null`) and never re-arms. Not fixable
   without the forbidden second timer.
 
+## Desktop notifications (feature 0028, issue #100)
+
+Opt-in browser desktop notification at block start/end, **independent** of the
+sound toggle (both may fire on the same boundary). Frontend-only, default off,
+persisted per-device (`desktopNotificationStorage.ts`, same strict-only-on-**true**
+silence-safe default as sound). Only fires while the Schedule page is mounted —
+no Service Worker, no closed-tab alerts.
+
+- **Shared detector, not a copy.** The crossed-since-last-sample state machine
+  now lives in `useBlockBoundaryDetector.ts`; both `useSoundNotifications` and
+  `useDesktopNotifications` call it with their own `enabled` ref + `onBoundary`
+  callback. Each keeps an **independent** `lastSeenMinute`/`fired` cursor, so
+  disabling one channel does not advance the other's. Two `watch(nowMinutes)`
+  on the same ref is intentional and cheap — **still never add a second interval**.
+- **Persist `true` only after permission is `granted`.** `setEnabled(true)`
+  calls `Notification.requestPermission()` from the checkbox `@change` user
+  gesture, wrapped in try/catch (a throw == denied). Denied/default ⇒ off +
+  `permissionDenied` hint; never persists `true`.
+- **Stale-request guard is a mandatory, standalone early return.** Each
+  `setEnabled` bumps a `requestSeq` token; after the awaited
+  `requestPermission` (and after normalising a throw), `if (token !== requestSeq) return`
+  BEFORE the granted/denied branches — a late grant arriving after the user
+  toggled off must leave the exact `setEnabled(false)` off-state
+  (`permissionDenied === false`), never resurrect `true` or stamp a spurious hint.
+- **`notSupported` is a distinct flag from `permissionDenied`**, initialised
+  unconditionally at setup (`typeof Notification === "undefined"`) so an
+  unsupported browser shows the disabled switch + "doesn't support" copy on
+  first render — never the "allow in site settings" copy. Mount also clears a
+  stale storage `true` on both the unsupported and revoked-permission paths.
+- **The component `@change` handler MUST resync the DOM after the await:**
+  `el.checked = enabled.value`. `:checked` is a one-way bind, so a **repeated**
+  denied click (neither `enabled` nor `permissionDenied` changes) would leave
+  the box visually ON without it. Covered by `DesktopNotificationToggle.test.ts`.
+- **OS tag embeds `boundaryMinutes`** (`day-forge:${type}:${id}:${date}:${minutes}`)
+  to stay aligned with the detector's minute-in-`fired`-key — a re-timed block
+  re-fires, so its tag must differ or the OS coalesces the new alert.
+- **No AI/provider egress.** Notification title/body are display-only English
+  strings in `desktopNotificationCopy.ts` (single place for a future i18n pass);
+  never sent to any LLM prompt.
+
 ## Timeline trailing stub (features 0017 + 0023)
 
 - **`computeTrailingAnchor` in `frontend/src/utils/scheduleTime.ts` is the

@@ -47,6 +47,7 @@ import { useExternalTasksPoll } from "../composables/useExternalTasksPoll"
 import { useThemeFromProps } from "../composables/useThemeFromProps"
 import { useNowMinutes } from "../composables/useNowMinutes"
 import { useSoundNotifications } from "../composables/useSoundNotifications"
+import { useDesktopNotifications } from "../composables/useDesktopNotifications"
 import { useExternalCalendarPlacement } from "../composables/useExternalCalendarPlacement"
 import ExternalEventsPanel from "../components/ExternalEventsPanel.vue"
 import AddToScheduleDialog from "../components/AddToScheduleDialog.vue"
@@ -469,6 +470,14 @@ const showAnalyticsLink = computed(() => {
 // rides the same 60s sampler above — no extra interval. Off-today nulls from
 // useNowMinutes keep it silent on past/future dates.
 useSoundNotifications(nowMinutes, nowDate, getBlocks)
+
+// Desktop notifications (issue #100): browser desktop notification when the
+// wall clock crosses a block's start/end. Opt-in + permission-gated (read
+// from localStorage inside the composable), rides the same 60s sampler and
+// shared boundary detector — no extra interval. Independent of the sound
+// toggle; off-today nulls from useNowMinutes keep it silent on past/future
+// dates.
+useDesktopNotifications(nowMinutes, nowDate, getBlocks)
 
 // During drag, use preview blocks for real-time visual feedback
 const effectiveBlocks = computed(() =>

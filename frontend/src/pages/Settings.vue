@@ -7,6 +7,7 @@ import RulesList from "../components/RulesList.vue"
 import TravelRulesList from "../components/TravelRulesList.vue"
 import DesignSelector from "../components/DesignSelector.vue"
 import SoundNotificationToggle from "../components/SoundNotificationToggle.vue"
+import DesktopNotificationToggle from "../components/DesktopNotificationToggle.vue"
 import ExternalCalendarPlacementToggle from "../components/ExternalCalendarPlacementToggle.vue"
 import { todayString } from "../utils/date"
 // Keeps `<html data-theme>` in sync with ui_preferences across reloads.
@@ -291,6 +292,10 @@ async function handleHabiticaDisconnect() {
 
     <section class="section">
       <SoundNotificationToggle />
+    </section>
+
+    <section class="section">
+      <DesktopNotificationToggle />
     </section>
 
     <section class="section">
