@@ -592,3 +592,11 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
   http://localhost:5173/ with the dev stack up — browser tab shows the
   anvil icon; optionally decide whether `logo-full.png` should appear on
   the Login page.
+
+- [ ] **Section nesting nit (feature 0028, PR #108 P3):** `DesktopNotificationToggle.vue`
+  renders a `<section class="desktop-section">` root that `Settings.vue` wraps
+  in `<section class="section">`, producing `section > section`. Deferred, not
+  fixed: this mirrors the pre-existing `SoundNotificationToggle.vue` structure
+  the plan mandated mirroring — changing desktop-only would diverge from the
+  sibling. If reworked, do BOTH toggles together (root → fragment/div, keep
+  `aria-labelledby` on the inner `<h2>`) so the pair stays consistent.

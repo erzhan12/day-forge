@@ -11,7 +11,7 @@ export function readDesktopNotificationsEnabled(): boolean {
   try {
     const raw = localStorage.getItem(DESKTOP_NOTIFICATIONS_KEY)
     if (raw === null) return false
-    return JSON.parse(raw) === true ? true : false
+    return JSON.parse(raw) === true
   } catch {
     return false
   }

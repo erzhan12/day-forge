@@ -17,6 +17,9 @@ import {
   useDesktopNotifications,
   useDesktopNotificationSetting,
 } from "../src/composables/useDesktopNotifications"
+import { SOUND_NOTIFICATIONS_KEY } from "../src/utils/soundNotificationStorage"
+import { useSoundNotifications } from "../src/composables/useSoundNotifications"
+import { closeAudioContext } from "../src/utils/audioContext"
 
 // --- Notification mock ------------------------------------------------------
 
@@ -456,5 +459,79 @@ describe("showDesktopNotification", () => {
     expect(() =>
       showDesktopNotification("start", block(1, "09:30", "10:00"), "2026-06-15", 570),
     ).not.toThrow()
+  })
+})
+
+// --- independent-cursor contract (dual channel) -----------------------------
+
+// Mounting sound + desktop on the SAME nowMinutes/nowDate/getBlocks refs and
+// disabling one channel must not stop the other — each detector owns its own
+// lastSeenMinute/fired cursor (RULES.md §Desktop notifications). Requires a
+// Web Audio mock in addition to the Notification mock stubbed above.
+
+class MockOscillator {
+  frequency = { setValueAtTime: vi.fn() }
+  connect = vi.fn()
+  start = vi.fn()
+  stop = vi.fn()
+}
+class MockGain {
+  gain = {
+    setValueAtTime: vi.fn(),
+    linearRampToValueAtTime: vi.fn(),
+    exponentialRampToValueAtTime: vi.fn(),
+  }
+  connect = vi.fn()
+}
+let dualOscillators: MockOscillator[] = []
+class MockAudioContext {
+  state = "suspended"
+  currentTime = 0
+  destination = {}
+  resume = vi.fn(() => Promise.resolve())
+  close = vi.fn(() => Promise.resolve())
+  createOscillator = vi.fn(() => {
+    const o = new MockOscillator()
+    dualOscillators.push(o)
+    return o
+  })
+  createGain = vi.fn(() => new MockGain())
+}
+
+describe("independent cursors: disabling desktop leaves sound firing", () => {
+  it("sound fires and desktop does not after the desktop channel is disabled mid-run", async () => {
+    dualOscillators = []
+    // Both channels enabled + permitted at mount.
+    localStorage.setItem(SOUND_NOTIFICATIONS_KEY, "true")
+    localStorage.setItem(DESKTOP_NOTIFICATIONS_KEY, "true")
+    MockNotification.permission = "granted"
+    MockNotification.requestPermission = vi.fn(() => Promise.resolve("granted"))
+    vi.stubGlobal("AudioContext", MockAudioContext)
+
+    const blocks = ref<TimeBlock[]>([block(1, "09:30", "10:00")]) // start 570
+    const nowMinutes = ref<number | null>(null)
+    const nowDate = ref<string | null>("2026-06-15")
+    let desktopApi!: ReturnType<typeof useDesktopNotifications>
+    const Harness = defineComponent({
+      setup() {
+        const getBlocks = () => blocks.value
+        useSoundNotifications(nowMinutes, nowDate, getBlocks)
+        desktopApi = useDesktopNotifications(nowMinutes, nowDate, getBlocks)
+        return {}
+      },
+      template: "<div />",
+    })
+    const wrapper = mount(Harness)
+
+    await tick(nowMinutes, 569) // prime both cursors
+    await desktopApi.setEnabled(false) // disable ONLY desktop mid-run
+    await nextTick()
+    await tick(nowMinutes, 570) // cross the start boundary
+
+    expect(dualOscillators.length).toBe(1) // sound cursor advanced + fired
+    expect(instances().length).toBe(0) // desktop stayed silent
+
+    wrapper.unmount()
+    closeAudioContext()
   })
 })
