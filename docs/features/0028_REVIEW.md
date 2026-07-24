@@ -41,8 +41,19 @@ list.
   `useBlockBoundaryDetector.test.ts` owns that behaviour (case 6); the desktop
   suite only needs channel-wiring coverage, which it has.
 - P3: no dual-harness test mounting sound + desktop together to lock the
-  independent-cursor contract. **Recorded gap, not fixed** — behaviour follows
-  from separate closures; non-blocking.
+  independent-cursor contract. **Fixed** in the PR #108 review cycles — both
+  directions now asserted (disable desktop → sound fires; disable sound →
+  desktop fires).
+
+### PR #108 claude-review — 2 cycles, both APPROVED
+- Cycle 1 (3 × P3): simplified a redundant boolean ternary; added the first
+  dual-harness independent-cursor test; deferred the `section > section`
+  nesting nit (mirrors the sibling SoundNotificationToggle, tracked in
+  `tasks/todo.md`).
+- Cycle 2 (4 × P3): wrapped the notification `onclick` `window.focus()` in
+  try/catch; removed a dead `notSupported` reassignment; added the mirror
+  independent-cursor test (disable sound → desktop fires); section-nesting nit
+  re-acknowledged as already-tracked (bot: "no fix needed here alone").
 
 ## Verification
 - `cd frontend && npm test` — **629 passed** (57 files).

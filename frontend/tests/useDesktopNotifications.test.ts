@@ -534,4 +534,39 @@ describe("independent cursors: disabling desktop leaves sound firing", () => {
     wrapper.unmount()
     closeAudioContext()
   })
+
+  it("desktop fires and sound does not after the sound channel is disabled mid-run", async () => {
+    dualOscillators = []
+    localStorage.setItem(SOUND_NOTIFICATIONS_KEY, "true")
+    localStorage.setItem(DESKTOP_NOTIFICATIONS_KEY, "true")
+    MockNotification.permission = "granted"
+    MockNotification.requestPermission = vi.fn(() => Promise.resolve("granted"))
+    vi.stubGlobal("AudioContext", MockAudioContext)
+
+    const blocks = ref<TimeBlock[]>([block(1, "09:30", "10:00")]) // start 570
+    const nowMinutes = ref<number | null>(null)
+    const nowDate = ref<string | null>("2026-06-15")
+    let soundApi!: ReturnType<typeof useSoundNotifications>
+    const Harness = defineComponent({
+      setup() {
+        const getBlocks = () => blocks.value
+        soundApi = useSoundNotifications(nowMinutes, nowDate, getBlocks)
+        useDesktopNotifications(nowMinutes, nowDate, getBlocks)
+        return {}
+      },
+      template: "<div />",
+    })
+    const wrapper = mount(Harness)
+
+    await tick(nowMinutes, 569) // prime both cursors
+    soundApi.setEnabled(false) // disable ONLY sound mid-run
+    await nextTick()
+    await tick(nowMinutes, 570) // cross the start boundary
+
+    expect(instances().length).toBe(1) // desktop cursor advanced + fired
+    expect(dualOscillators.length).toBe(0) // sound stayed silent
+
+    wrapper.unmount()
+    closeAudioContext()
+  })
 })

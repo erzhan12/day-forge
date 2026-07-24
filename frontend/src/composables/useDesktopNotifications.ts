@@ -77,8 +77,9 @@ export function useDesktopNotificationSetting(): {
     const token = ++requestSeq
 
     if (typeof Notification === "undefined") {
+      // notSupported is already true from the unconditional setup init (support
+      // is immutable per page load) — no reassignment needed here.
       enabled.value = false
-      notSupported.value = true
       permissionDenied.value = false
       return
     }
@@ -136,7 +137,14 @@ export function showDesktopNotification(
       tag: `day-forge:${type}:${block.id}:${date}:${boundaryMinutes}`,
     })
     n.onclick = () => {
-      window.focus()
+      // Guard window.focus() — it can throw in a sandboxed iframe / hardened
+      // browser; a throw here would surface as an unhandled error from the OS
+      // click callback. Same swallow policy as the construction path.
+      try {
+        window.focus()
+      } catch {
+        // ignore — best-effort focus
+      }
       n.close()
     }
   } catch {
