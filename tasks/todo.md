@@ -600,3 +600,10 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
   the plan mandated mirroring — changing desktop-only would diverge from the
   sibling. If reworked, do BOTH toggles together (root → fragment/div, keep
   `aria-labelledby` on the inner `<h2>`) so the pair stays consistent.
+
+- [ ] **Dismissed-vs-denied hint copy (feature 0028, PR #108 P3):** the
+  `"default"` permission result (user dismissed the prompt without deciding)
+  currently shows the same "Browser blocked… allow in site settings" hint as an
+  explicit `"denied"`. Plan-mandated for MVP (`denied/default ⇒ permissionDenied`),
+  so deferred. Future copy/i18n pass: add a `permissionDefault` flag →
+  "Click again to re-request notification permission."
