@@ -272,7 +272,7 @@ describe("useBlockBoundaryDetector", () => {
       nowMinutes: 570,
       nowDate: "2026-06-15",
     })
-    await nextTick() // flush; no tick() — refs were set before mount
+    await nextTick() // safety flush — immediate watch already fired synchronously during setup()
     expect(onBoundary).toHaveBeenCalledTimes(1)
     expect(onBoundary.mock.calls[0][0]).toMatchObject({
       type: "start",
@@ -288,7 +288,7 @@ describe("useBlockBoundaryDetector", () => {
       nowMinutes: 600,
       nowDate: "2026-06-15",
     })
-    await nextTick()
+    await nextTick() // safety flush — immediate watch already fired synchronously during setup()
     expect(onBoundary).toHaveBeenCalledTimes(1)
     expect(onBoundary.mock.calls[0][0]).toMatchObject({
       type: "end",
@@ -304,7 +304,26 @@ describe("useBlockBoundaryDetector", () => {
       nowMinutes: 840, // 14:00
       nowDate: "2026-06-15",
     })
+    await nextTick() // safety flush — immediate watch already fired synchronously during setup()
+    expect(onBoundary).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it("17. disabled at mount with pre-populated boundary does not fire, and re-enable next minute stays silent", async () => {
+    const { wrapper, nowMinutes, enabled, onBoundary } = mountDetector({
+      enabled: false,
+      blocks: [block(1, "09:30", "10:00")], // start 570
+      nowMinutes: 570,
+      nowDate: "2026-06-15",
+    })
+    await nextTick() // immediate watch hit disabled gate — no fire, lastSeen not advanced
+    expect(onBoundary).not.toHaveBeenCalled()
+
+    enabled.value = true // watch(enabled) resets lastSeenMinute → fresh first tick
     await nextTick()
+    // Enabling does not re-run the nowMinutes watcher; next sample is first-tick
+    // exact-only at 571 → start@570 does not fire (same spirit as test 13).
+    await tick(nowMinutes, 571)
     expect(onBoundary).not.toHaveBeenCalled()
     wrapper.unmount()
   })

@@ -230,8 +230,11 @@ describe("useSoundNotifications — chime synthesis", () => {
       nowMinutes: 570,
       nowDate: "2026-06-15",
     })
-    await nextTick() // no tick() — simulates useNowMinutes sampling before mount
+    await nextTick() // safety flush — immediate watch already fired synchronously during setup()
     expect(createdOscillators.length).toBe(1)
+    const osc = createdOscillators[0]
+    expect(freqAt(osc, 0)).toBe(660) // start note 1
+    expect(freqAt(osc, 1)).toBeGreaterThan(freqAt(osc, 0)) // rising
     wrapper.unmount()
   })
 })

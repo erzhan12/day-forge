@@ -312,7 +312,7 @@ describe("useDesktopNotifications — detector parity", () => {
       nowMinutes: 570,
       nowDate: "2026-06-15",
     })
-    await nextTick() // no tick() — simulates useNowMinutes sampling before mount
+    await nextTick() // safety flush — immediate watch already fired synchronously during setup()
     expect(instances().length).toBe(1)
     const n = instances()[0]
     expect(n.title).toBe("Block started")
