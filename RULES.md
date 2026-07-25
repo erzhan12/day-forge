@@ -564,8 +564,12 @@ the safe failure mode is silence — inverse of `chatSidebarStorage`).
   unmount.
 - **Detection is crossed-since-last-sample `(prev, now]`, not exact equality**
   — a background-tab tick is throttled/coalesced and can skip the exact
-  boundary minute. First tick of a date fires exact-`now` only (no
-  back-fill); a backward clock step (DST / manual) fires nothing.
+  boundary minute. First sample for a cursor (including registration with
+  pre-populated `nowMinutes` via `{ immediate: true }` on the shared detector
+  watch — issue #113 / feature 0029) fires exact-`now` only (no same-day
+  back-fill); a backward clock step (DST / manual) fires nothing. That
+  registration-time prime closes the open-at-boundary miss when Schedule's
+  `useNowMinutes` samples wall clock before the notification composables mount.
 - **Inherited limitation:** a tab left open across midnight stops firing
   until date navigation, because `useNowMinutes.tick()` calls `leaveToday()`
   (clears the interval, `nowDate=null`) and never re-arms. Not fixable
@@ -585,6 +589,9 @@ no Service Worker, no closed-tab alerts.
   callback. Each keeps an **independent** `lastSeenMinute`/`fired` cursor, so
   disabling one channel does not advance the other's. Two `watch(nowMinutes)`
   on the same ref is intentional and cheap — **still never add a second interval**.
+  The detector's `{ immediate: true }` registration-time evaluation (feature
+  0029) applies to both channels equally: open-at-boundary fires once with
+  exact-`now` matching; earlier same-day boundaries are not back-filled.
 - **Persist `true` only after permission is `granted`.** `setEnabled(true)`
   calls `Notification.requestPermission()` from the checkbox `@change` user
   gesture, wrapped in try/catch (a throw == denied). Denied/default ⇒ off +

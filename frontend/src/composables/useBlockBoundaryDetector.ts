@@ -12,6 +12,12 @@ import { timeToMinutes } from "../utils/scheduleTime"
 // advance the other. Piggybacks the existing 60s `useNowMinutes` sampler; it
 // does NOT create its own interval.
 //
+// The `nowMinutes` watch uses `{ immediate: true }` so registration with
+// pre-populated refs (Schedule samples wall clock via useNowMinutes before
+// this detector mounts) is treated as a first tick with exact-`now` matching
+// — fires a boundary that equals the current minute, but never replays earlier
+// same-day boundaries (issue #113 / feature 0029).
+//
 // The detector works in integer minutes-since-midnight so the
 // crossed-since-last-sample window is plain arithmetic. `timeToMinutes` is the
 // canonical "HH:MM" → minutes converter used across the schedule code.
@@ -64,50 +70,59 @@ export function useBlockBoundaryDetector(
     if (on) lastSeenMinute = null
   })
 
-  watch(nowMinutes, () => {
-    // Step 1: primary suppression gate. First so a disabled setting short-
-    // circuits before any block work AND without advancing lastSeenMinute.
-    if (!enabled.value) return
+  // `{ immediate: true }` so a pre-populated `nowMinutes` (Schedule mounts
+  // `useNowMinutes` before this detector) is evaluated as the first tick —
+  // otherwise the open-at-boundary minute is skipped until the next sampler
+  // tick ~60s later (issue #113 / feature 0029). Same body; no second path.
+  watch(
+    nowMinutes,
+    () => {
+      // Step 1: primary suppression gate. First so a disabled setting short-
+      // circuits before any block work AND without advancing lastSeenMinute.
+      if (!enabled.value) return
 
-    // Step 2: off-today guard. useNowMinutes nulls both off-today, so no
-    // future/past-date block ever fires.
-    const now = nowMinutes.value
-    const date = nowDate.value
-    if (now === null || date === null) return
+      // Step 2: off-today guard. useNowMinutes nulls both off-today, so no
+      // future/past-date block ever fires.
+      const now = nowMinutes.value
+      const date = nowDate.value
+      if (now === null || date === null) return
 
-    const prev = lastSeenMinute
+      const prev = lastSeenMinute
 
-    // Eligible-window predicate:
-    //  - first tick of a date (prev === null): only boundaries exactly at
-    //    `now` — never back-fill the whole day from midnight.
-    //  - backward step (now <= prev, e.g. DST fall-back / manual clock
-    //    change): fire nothing; just resync lastSeenMinute below.
-    //  - normal/coalesced forward tick: half-open interval (prev, now].
-    const inWindow = (boundary: number): boolean => {
-      if (prev === null) return boundary === now
-      if (now <= prev) return false
-      return boundary > prev && boundary <= now
-    }
-
-    for (const block of getBlocks()) {
-      const s = timeToMinutes(block.start_time)
-      const e = timeToMinutes(block.end_time)
-      // Key includes the boundary minute so re-timing a block (an edit, or a
-      // drag that shifts its time) after the old boundary already fired still
-      // fires the NEW boundary; a stationary re-flow at the same minute still
-      // self-dedupes. Bounded — `fired` is cleared on date change.
-      const startKey = `start:${block.id}:${date}:${s}`
-      const endKey = `end:${block.id}:${date}:${e}`
-      if (inWindow(s) && !fired.has(startKey)) {
-        onBoundary({ type: "start", block, date, boundaryMinutes: s })
-        fired.add(startKey)
+      // Eligible-window predicate:
+      //  - first sample for this cursor (prev === null), including registration
+      //    with pre-populated refs: only boundaries exactly at `now` — never
+      //    back-fill earlier same-day boundaries.
+      //  - backward step (now <= prev, e.g. DST fall-back / manual clock
+      //    change): fire nothing; just resync lastSeenMinute below.
+      //  - normal/coalesced forward tick: half-open interval (prev, now].
+      const inWindow = (boundary: number): boolean => {
+        if (prev === null) return boundary === now
+        if (now <= prev) return false
+        return boundary > prev && boundary <= now
       }
-      if (inWindow(e) && !fired.has(endKey)) {
-        onBoundary({ type: "end", block, date, boundaryMinutes: e })
-        fired.add(endKey)
-      }
-    }
 
-    lastSeenMinute = now
-  })
+      for (const block of getBlocks()) {
+        const s = timeToMinutes(block.start_time)
+        const e = timeToMinutes(block.end_time)
+        // Key includes the boundary minute so re-timing a block (an edit, or a
+        // drag that shifts its time) after the old boundary already fired still
+        // fires the NEW boundary; a stationary re-flow at the same minute still
+        // self-dedupes. Bounded — `fired` is cleared on date change.
+        const startKey = `start:${block.id}:${date}:${s}`
+        const endKey = `end:${block.id}:${date}:${e}`
+        if (inWindow(s) && !fired.has(startKey)) {
+          onBoundary({ type: "start", block, date, boundaryMinutes: s })
+          fired.add(startKey)
+        }
+        if (inWindow(e) && !fired.has(endKey)) {
+          onBoundary({ type: "end", block, date, boundaryMinutes: e })
+          fired.add(endKey)
+        }
+      }
+
+      lastSeenMinute = now
+    },
+    { immediate: true },
+  )
 }

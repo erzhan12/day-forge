@@ -303,6 +303,22 @@ describe("useDesktopNotifications — detector parity", () => {
     expect(instances().length).toBe(0)
     wrapper.unmount()
   })
+
+  it("pre-populated boundary minute at mount → one Notification (open-at-boundary)", async () => {
+    MockNotification.permission = "granted"
+    const { wrapper } = mountDetector({
+      enabled: true,
+      blocks: [block(1, "09:30", "10:00")], // start 570
+      nowMinutes: 570,
+      nowDate: "2026-06-15",
+    })
+    await nextTick() // no tick() — simulates useNowMinutes sampling before mount
+    expect(instances().length).toBe(1)
+    const n = instances()[0]
+    expect(n.title).toBe("Block started")
+    expect(tagOf(n)).toBe("day-forge:start:1:2026-06-15:570")
+    wrapper.unmount()
+  })
 })
 
 // --- permission / setting flow ----------------------------------------------

@@ -220,6 +220,20 @@ describe("useSoundNotifications — chime synthesis", () => {
     expect(createdOscillators.length).toBe(0)
     wrapper.unmount()
   })
+
+  // Open-at-boundary (issue #113 / feature 0029): pre-populated start minute
+  // at mount must chime once (parity with desktop Notification case).
+  it("pre-populated boundary minute at mount → one chime (open-at-boundary)", async () => {
+    const { wrapper } = mountDetector({
+      enabled: true,
+      blocks: [block(1, "09:30", "10:00")], // start 570
+      nowMinutes: 570,
+      nowDate: "2026-06-15",
+    })
+    await nextTick() // no tick() — simulates useNowMinutes sampling before mount
+    expect(createdOscillators.length).toBe(1)
+    wrapper.unmount()
+  })
 })
 
 describe("useSoundNotificationSetting — autoplay unlock + persistence", () => {

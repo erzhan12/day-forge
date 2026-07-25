@@ -261,4 +261,51 @@ describe("useBlockBoundaryDetector", () => {
     expect(onBoundary).not.toHaveBeenCalled()
     wrapper.unmount()
   })
+
+  // Open-at-boundary (issue #113 / feature 0029): Schedule's useNowMinutes
+  // samples wall clock before the detector mounts. Pre-populated refs must be
+  // treated as the first tick (exact-now only) — no same-day back-fill.
+  it("14. pre-populated nowMinutes at mount fires start boundary exactly once", async () => {
+    const { wrapper, onBoundary } = mountDetector({
+      enabled: true,
+      blocks: [block(1, "09:30", "10:00")], // start 570
+      nowMinutes: 570,
+      nowDate: "2026-06-15",
+    })
+    await nextTick() // flush; no tick() — refs were set before mount
+    expect(onBoundary).toHaveBeenCalledTimes(1)
+    expect(onBoundary.mock.calls[0][0]).toMatchObject({
+      type: "start",
+      boundaryMinutes: 570,
+    })
+    wrapper.unmount()
+  })
+
+  it("15. pre-populated nowMinutes at mount fires end boundary exactly once", async () => {
+    const { wrapper, onBoundary } = mountDetector({
+      enabled: true,
+      blocks: [block(1, "09:30", "10:00")], // end 600
+      nowMinutes: 600,
+      nowDate: "2026-06-15",
+    })
+    await nextTick()
+    expect(onBoundary).toHaveBeenCalledTimes(1)
+    expect(onBoundary.mock.calls[0][0]).toMatchObject({
+      type: "end",
+      boundaryMinutes: 600,
+    })
+    wrapper.unmount()
+  })
+
+  it("16. pre-populated mid-block minute does not back-fill earlier boundaries", async () => {
+    const { wrapper, onBoundary } = mountDetector({
+      enabled: true,
+      blocks: [block(1, "09:00", "10:00")], // start 540 / end 600
+      nowMinutes: 840, // 14:00
+      nowDate: "2026-06-15",
+    })
+    await nextTick()
+    expect(onBoundary).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
 })
