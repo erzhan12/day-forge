@@ -91,7 +91,7 @@ describe("useBlockBoundaryDetector", () => {
       enabled: true,
       blocks: [block(1, "09:30", "10:00")], // start 570
     })
-    await tick(nowMinutes, 569) // prime (first tick, exact-only, no fire)
+    await tick(nowMinutes, 569) // first tick that can fire (immediate ran with now=null → early return); exact-only, 570 ≠ 569
     await tick(nowMinutes, 570) // window (569, 570] — start fires
     expect(onBoundary).toHaveBeenCalledTimes(1)
     const event = onBoundary.mock.calls[0][0] as BoundaryEvent
