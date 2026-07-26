@@ -294,27 +294,37 @@ def snapshot_apply_context(
 
 
 def compute_apply_context_fingerprint(
-    schedule=None,
-    blocks=None,
-    rules=None,
+    schedule: Any | None = None,
+    blocks: Iterable | None = None,
+    rules: Iterable | None = None,
     *,
     schedule_id: int | None = None,
     schedule_date: str | datetime.date | None = None,
 ) -> str:
-    """Thin fingerprint helper for views and unit tests."""
-    if schedule is not None and schedule_id is None:
-        schedule_id = schedule.id
-        schedule_date = schedule.date
-    if schedule_date is None:
-        raise ValueError("schedule_date is required")
-    if isinstance(schedule_date, str):
-        schedule_date = datetime.date.fromisoformat(schedule_date)
+    """Thin fingerprint helper for views and unit tests.
 
-    if blocks is not None:
-        blocks_list = list(blocks)
+    Delegates to ``snapshot_from_blocks`` / ``snapshot_apply_context`` so the
+    hash payload stays single-sourced with the apply-path snapshot helpers.
+    """
+    blocks_list = list(blocks) if blocks is not None else []
+    rules_arg: Iterable = () if rules is None else rules
+
+    if schedule is not None and (
+        blocks_list and not isinstance(blocks_list[0], BlockSnapshot)
+    ):
+        schedule_snap = snapshot_from_blocks(schedule, blocks_list)
+    else:
+        if schedule is not None and schedule_id is None:
+            schedule_id = schedule.id
+            schedule_date = schedule.date
+        if schedule_date is None:
+            raise ValueError("schedule_date is required")
+        if isinstance(schedule_date, str):
+            schedule_date = datetime.date.fromisoformat(schedule_date)
         if blocks_list and isinstance(blocks_list[0], BlockSnapshot):
             block_snaps = tuple(sorted(blocks_list, key=lambda b: b.id))
         elif blocks_list:
+            # ORM rows without a schedule object (unusual); mirror snapshot_from_blocks.
             block_snaps = tuple(
                 sorted(
                     (
@@ -333,26 +343,13 @@ def compute_apply_context_fingerprint(
             )
         else:
             block_snaps = ()
-    else:
-        block_snaps = ()
+        schedule_snap = ScheduleSnapshot(
+            id=schedule_id,
+            date=schedule_date,
+            blocks=block_snaps,
+        )
 
-    if rules is not None:
-        rules_list = list(rules)
-        if rules_list and isinstance(rules_list[0], RuleSnapshot):
-            rule_snaps = tuple(sorted(rules_list, key=lambda r: (-r.priority, r.id)))
-        elif rules_list:
-            rule_snaps = _rules_from_iterable(rules_list)
-        else:
-            rule_snaps = ()
-    else:
-        rule_snaps = ()
-
-    schedule_snap = ScheduleSnapshot(
-        id=schedule_id,
-        date=schedule_date,
-        blocks=block_snaps,
-    )
-    return _hash_payload(_fingerprint_payload(schedule_snap, rule_snaps))
+    return snapshot_apply_context(schedule_snap, rules_arg).fingerprint
 
 
 def _day_bounds(day_start: str, day_end: str) -> tuple[datetime.time, datetime.time]:
@@ -628,9 +625,10 @@ def _validate_candidate(
     day_end: str,
 ) -> PlanError | None:
     day_start_t, day_end_t = _day_bounds(day_start, day_end)
-    # Inherited-only integrity violations use min batch action_index (always 0
-    # for 0..n-1 enumerations); keep parsed_actions in the signature for callers.
-    fallback_index = 0 if not parsed_actions else min(range(len(parsed_actions)))
+    # Inherited-only integrity violations use min batch action_index; indices
+    # are always 0..n-1 from enumerate, so the envelope fallback is 0.
+    fallback_index = 0
+    _ = parsed_actions
     violations: list[tuple[int, int, int, str]] = []
 
     changed_ids = set(merged_updates.keys()) | {-(c.action_index + 1) for c in creates}
