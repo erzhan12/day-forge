@@ -1138,6 +1138,10 @@ class TestBatchMutationExecutor:
             raise RuntimeError("status transition failed")
 
         monkeypatch.setattr(Schedule, "mark_active_on_edit", _boom)
+        # Intentional: mark_active failure aborts the atomic block (diff rolls
+        # back) and propagates as RuntimeError → Django 500. This test asserts
+        # the rollback + failed audit; the HTTP 500 envelope is Django's
+        # default error handler, not a custom JsonResponse.
         with pytest.raises(RuntimeError, match="status transition failed"):
             _post(auth_client, {"command": "move gym"})
         block.refresh_from_db()

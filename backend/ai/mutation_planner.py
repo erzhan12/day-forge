@@ -305,15 +305,24 @@ def compute_apply_context_fingerprint(
 
     Delegates to ``snapshot_from_blocks`` / ``snapshot_apply_context`` so the
     hash payload stays single-sourced with the apply-path snapshot helpers.
+
+    Call-site modes:
+    - Views (``ai_command`` / ``ai_chat``): ORM ``schedule`` + ORM ``blocks`` +
+      Rule rows → ``snapshot_from_blocks`` then ``snapshot_apply_context``.
+    - Unit tests: ``BlockSnapshot`` list with ``schedule_id`` /
+      ``schedule_date`` kwargs (no ORM schedule).
+    - Empty schedule / no blocks: build an empty ``ScheduleSnapshot`` from ids.
     """
     blocks_list = list(blocks) if blocks is not None else []
     rules_arg: Iterable = () if rules is None else rules
 
+    # Mode 1 — production apply path: ORM schedule + ORM TimeBlock rows.
     if schedule is not None and (
         blocks_list and not isinstance(blocks_list[0], BlockSnapshot)
     ):
         schedule_snap = snapshot_from_blocks(schedule, blocks_list)
     else:
+        # Mode 2/3 — tests (BlockSnapshot list) or empty-block schedule.
         if schedule is not None and schedule_id is None:
             schedule_id = schedule.id
             schedule_date = schedule.date
@@ -620,7 +629,6 @@ def _validate_candidate(
     candidate: dict[int, BlockCandidate],
     merged_updates: dict[int, UpdateMutation],
     creates: list[CreateMutation],
-    parsed_actions: Sequence[dict],
     day_start: str,
     day_end: str,
 ) -> PlanError | None:
@@ -628,7 +636,6 @@ def _validate_candidate(
     # Inherited-only integrity violations use min batch action_index; indices
     # are always 0..n-1 from enumerate, so the envelope fallback is 0.
     fallback_index = 0
-    _ = parsed_actions
     violations: list[tuple[int, int, int, str]] = []
 
     changed_ids = set(merged_updates.keys()) | {-(c.action_index + 1) for c in creates}
@@ -761,7 +768,6 @@ def plan_mutations(
         candidate,
         merged_updates,
         creates,
-        parsed_actions,
         day_start,
         day_end,
     )
