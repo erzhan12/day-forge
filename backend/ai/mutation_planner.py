@@ -273,15 +273,18 @@ def _rules_from_iterable(rules: Iterable) -> tuple[RuleSnapshot, ...]:
 
 def snapshot_apply_context(
     schedule_snapshot: ScheduleSnapshot,
-    rules: Iterable | Sequence[RuleSnapshot],
+    rules: Sequence[RuleSnapshot] | Iterable,
 ) -> ApplyContextSnapshot:
     """Canonical apply-context snapshot + fingerprint for stale-intent guard."""
-    if not rules:
+    # Materialise first so a one-shot iterator is not partially consumed by the
+    # RuleSnapshot type check (would silently drop the first rule).
+    rules_list = list(rules)
+    if not rules_list:
         rule_snaps = ()
-    elif isinstance(next(iter(rules)), RuleSnapshot):
-        rule_snaps = tuple(sorted(rules, key=lambda r: (-r.priority, r.id)))
+    elif isinstance(rules_list[0], RuleSnapshot):
+        rule_snaps = tuple(sorted(rules_list, key=lambda r: (-r.priority, r.id)))
     else:
-        rule_snaps = _rules_from_iterable(rules)
+        rule_snaps = _rules_from_iterable(rules_list)
     fingerprint = _hash_payload(_fingerprint_payload(schedule_snapshot, rule_snaps))
     return ApplyContextSnapshot(
         schedule=schedule_snapshot,
@@ -307,32 +310,40 @@ def compute_apply_context_fingerprint(
     if isinstance(schedule_date, str):
         schedule_date = datetime.date.fromisoformat(schedule_date)
 
-    if blocks is not None and blocks and isinstance(blocks[0], BlockSnapshot):
-        block_snaps = tuple(sorted(blocks, key=lambda b: b.id))
-    elif blocks is not None:
-        block_snaps = tuple(
-            sorted(
-                (
-                    BlockSnapshot(
-                        id=b.id,
-                        start_time=b.start_time,
-                        end_time=b.end_time,
-                        title=b.title,
-                        category=b.category,
-                        is_completed=b.is_completed,
-                    )
-                    for b in blocks
-                ),
-                key=lambda b: b.id,
+    if blocks is not None:
+        blocks_list = list(blocks)
+        if blocks_list and isinstance(blocks_list[0], BlockSnapshot):
+            block_snaps = tuple(sorted(blocks_list, key=lambda b: b.id))
+        elif blocks_list:
+            block_snaps = tuple(
+                sorted(
+                    (
+                        BlockSnapshot(
+                            id=b.id,
+                            start_time=b.start_time,
+                            end_time=b.end_time,
+                            title=b.title,
+                            category=b.category,
+                            is_completed=b.is_completed,
+                        )
+                        for b in blocks_list
+                    ),
+                    key=lambda b: b.id,
+                )
             )
-        )
+        else:
+            block_snaps = ()
     else:
         block_snaps = ()
 
-    if rules is not None and rules and isinstance(rules[0], RuleSnapshot):
-        rule_snaps = tuple(sorted(rules, key=lambda r: (-r.priority, r.id)))
-    elif rules is not None:
-        rule_snaps = _rules_from_iterable(rules)
+    if rules is not None:
+        rules_list = list(rules)
+        if rules_list and isinstance(rules_list[0], RuleSnapshot):
+            rule_snaps = tuple(sorted(rules_list, key=lambda r: (-r.priority, r.id)))
+        elif rules_list:
+            rule_snaps = _rules_from_iterable(rules_list)
+        else:
+            rule_snaps = ()
     else:
         rule_snaps = ()
 
@@ -342,10 +353,6 @@ def compute_apply_context_fingerprint(
         blocks=block_snaps,
     )
     return _hash_payload(_fingerprint_payload(schedule_snap, rule_snaps))
-
-
-def _min_batch_index(parsed_actions: Sequence[dict]) -> int:
-    return 0 if not parsed_actions else 0
 
 
 def _day_bounds(day_start: str, day_end: str) -> tuple[datetime.time, datetime.time]:
@@ -432,7 +439,6 @@ def _normalize_actions(
         start_supplied = "start_time" in action
         end_supplied = "end_time" in action
         bare_move = kind == "move" and not end_supplied
-        bare_move_derived_end = bare_move and wrapped is not False
         if bare_move:
             bare_move_derived_end = True
             wrapped_flag = wrapped
@@ -622,7 +628,9 @@ def _validate_candidate(
     day_end: str,
 ) -> PlanError | None:
     day_start_t, day_end_t = _day_bounds(day_start, day_end)
-    fallback_index = _min_batch_index(parsed_actions)
+    # Inherited-only integrity violations use min batch action_index (always 0
+    # for 0..n-1 enumerations); keep parsed_actions in the signature for callers.
+    fallback_index = 0 if not parsed_actions else min(range(len(parsed_actions)))
     violations: list[tuple[int, int, int, str]] = []
 
     changed_ids = set(merged_updates.keys()) | {-(c.action_index + 1) for c in creates}
