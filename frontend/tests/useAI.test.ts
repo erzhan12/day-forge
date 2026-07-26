@@ -6,6 +6,7 @@ vi.mock("@inertiajs/vue3", () => ({
 
 import { useAI } from "../src/composables/useAI"
 import { router } from "@inertiajs/vue3"
+import { SCHEDULE_CHANGED_RETRY_MESSAGE } from "../src/utils/aiScheduleConflict"
 
 function okJson(body: Record<string, unknown>) {
   return {
@@ -114,6 +115,45 @@ describe("useAI.submitCommand", () => {
     )
     await submitCommand("2026-04-18", "hi")
     expect(apiHealthy.value).toBe(true)
+  })
+
+  it("409 schedule_changed shows retry message, reloads, no second request, apiHealthy true", async () => {
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValue(
+        errJson(409, { errors: { detail: "schedule_changed" } }),
+      )
+    vi.stubGlobal("fetch", fetchSpy)
+
+    const { submitCommand, apiHealthy, lastError } = useAI()
+    apiHealthy.value = false
+    const result = await submitCommand("2026-04-18", "move gym")
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+    expect(result.ok).toBe(false)
+    expect(apiHealthy.value).toBe(true)
+    expect(lastError.value).toBe(SCHEDULE_CHANGED_RETRY_MESSAGE)
+    expect(router.reload).toHaveBeenCalledOnce()
+    expect(router.reload).toHaveBeenCalledWith({ only: ["blocks", "schedule"] })
+  })
+
+  it("unrelated 409 stays an ordinary error without reload", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          errJson(409, { errors: { detail: "draft schedule already has blocks" } }),
+        ),
+    )
+
+    const { submitCommand, apiHealthy, lastError } = useAI()
+    const result = await submitCommand("2026-04-18", "generate draft")
+
+    expect(result.ok).toBe(false)
+    expect(apiHealthy.value).toBe(true)
+    expect(lastError.value).toBe("draft schedule already has blocks")
+    expect(router.reload).not.toHaveBeenCalled()
   })
 
   it("400 does not flip apiHealthy", async () => {

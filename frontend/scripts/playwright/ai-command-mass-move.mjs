@@ -1,12 +1,10 @@
 // Mass-edit smoke test — verifies the AI command bar can shift N blocks
 // in a single command (e.g. "move all blocks at/after 1pm one hour later").
 //
-// Motivation: the per-action overlap check in
-// backend/ai/views.py:_apply_move_or_resize runs sequentially against
-// the in-memory blocks_by_id. For a forward shift, moves must arrive in
-// REVERSE chronological order or the first move collides with the
-// next-block's current slot. SYSTEM_PROMPT does not hint at this, so
-// success depends on the LLM figuring out the ordering on its own.
+// Motivation: feature 0030's final-state planner (issue #38) validates the
+// whole batch against the target schedule state, so move order no longer
+// matters — this smoke test still proves a single command can shift N
+// blocks without per-action ordering tricks.
 //
 // 💸 COST WARNING — one real LLM call per run. Same constraints as
 // ai-command-add-block.mjs: run SERIALLY with other ai-*.mjs scripts

@@ -16,6 +16,10 @@
 import { router } from "@inertiajs/vue3"
 import { ref } from "vue"
 import type { TimeBlock, UndoAction } from "../types"
+import {
+  isScheduleChangedConflict,
+  SCHEDULE_CHANGED_RETRY_MESSAGE,
+} from "../utils/aiScheduleConflict"
 import { scheduleChanged } from "../utils/scheduleDiff"
 import { type ApiResult, requestJson } from "./useHttp"
 
@@ -223,6 +227,22 @@ export function useChat() {
     // Failure path — keep the optimistically-appended user message and
     // append a synthetic assistant bubble carrying the error so the
     // user has a record they can edit and retry against.
+    if (isScheduleChangedConflict(result)) {
+      apiHealthy.value = true
+      lastError.value = SCHEDULE_CHANGED_RETRY_MESSAGE
+      messages.value = [
+        ...messages.value,
+        {
+          role: "assistant",
+          content: SCHEDULE_CHANGED_RETRY_MESSAGE,
+          ask: null,
+          explanation: null,
+          ts: Date.now(),
+        },
+      ]
+      router.reload({ only: ["blocks", "schedule"] })
+      return
+    }
     if (
       result.status === undefined ||
       result.status === 502 ||

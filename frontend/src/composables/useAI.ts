@@ -8,6 +8,10 @@
 
 import { ref } from "vue"
 import { router } from "@inertiajs/vue3"
+import {
+  isScheduleChangedConflict,
+  SCHEDULE_CHANGED_RETRY_MESSAGE,
+} from "../utils/aiScheduleConflict"
 import { type ApiResult, requestJson } from "./useHttp"
 
 interface AISubmitResult extends ApiResult {
@@ -61,6 +65,12 @@ export function useAI() {
     }
 
     // Network failure from `requestJson` has no status; treat as unhealthy.
+    if (isScheduleChangedConflict(result)) {
+      apiHealthy.value = true
+      lastError.value = SCHEDULE_CHANGED_RETRY_MESSAGE
+      router.reload({ only: ["blocks", "schedule"] })
+      return { ok: false, errors: result.errors, status: result.status }
+    }
     if (
       result.status === undefined ||
       result.status === 502 ||

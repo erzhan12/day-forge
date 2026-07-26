@@ -326,6 +326,8 @@ def block_detail(request, pk):
 
     try:
         with transaction.atomic():
+            locked_schedule = Schedule.objects.select_for_update().get(pk=schedule_id)
+
             if time_change:
                 # Close the PATCH-vs-PATCH TOCTOU race: two concurrent
                 # requests editing *different* blocks in the same schedule
@@ -341,9 +343,7 @@ def block_detail(request, pk):
                 # don't pay for a second SELECT just to refresh the same
                 # row that's already in memory under the lock.
                 schedule_blocks = list(
-                    TimeBlock.objects
-                    .filter(schedule_id=schedule_id)
-                    .select_for_update()
+                    TimeBlock.objects.filter(schedule_id=schedule_id).select_for_update()
                 )
                 block = next((b for b in schedule_blocks if b.pk == pk), None)
                 if block is None:
@@ -351,12 +351,12 @@ def block_detail(request, pk):
                         {"errors": {"detail": "Not found."}}, status=404
                     )
             else:
-                # No time change → no schedule-wide lock needed. Re-read
-                # the target block so we pick up any committed changes
-                # and refuse stale writes. A concurrent delete surfaces
-                # cleanly as a 404.
                 try:
-                    block = TimeBlock.objects.select_related("schedule").get(pk=pk)
+                    block = (
+                        TimeBlock.objects.filter(schedule_id=schedule_id, pk=pk)
+                        .select_for_update()
+                        .get()
+                    )
                 except TimeBlock.DoesNotExist:
                     return JsonResponse(
                         {"errors": {"detail": "Not found."}}, status=404
@@ -410,11 +410,11 @@ def block_detail(request, pk):
             # Manual time edits enforced granularity + range explicitly
             # above; model ``clean()`` (start >= end) still runs.
             block.full_clean(exclude=["start_time", "end_time"])
-            block.save()
+            block.save(update_fields=list(pending.keys()))
+            locked_schedule.mark_active_on_edit()
     except ValidationError as e:
         return JsonResponse({"errors": e.message_dict}, status=400)
 
-    block.schedule.mark_active_on_edit()
     return JsonResponse(_block_to_dict(block))
 
 
@@ -506,6 +506,32 @@ def reorder_blocks(request):
         )
 
     update_map = {u["id"]: u for u in updates}
+    requested_ids = set(ids)
+
+    # Ownership-filtered preflight: resolve only rows owned by the caller.
+    # Missing and foreign ids must be indistinguishable 404s.
+    owned_blocks = list(
+        TimeBlock.objects.filter(id__in=ids, schedule__user=request.user)
+    )
+    owned_ids = {b.id for b in owned_blocks}
+    if owned_ids != requested_ids:
+        return JsonResponse(
+            {"errors": {"detail": "One or more blocks not found."}},
+            status=404,
+        )
+
+    owned_schedule_ids = {b.schedule_id for b in owned_blocks}
+    if len(owned_schedule_ids) > 1:
+        return JsonResponse(
+            {
+                "errors": {
+                    "updates": "All blocks must belong to the same schedule."
+                }
+            },
+            status=400,
+        )
+
+    schedule_id = next(iter(owned_schedule_ids))
 
     # Validate each update entry's contents (no DB access required).
     # Granularity is deferred to the in-lock loop below: a drag payload
@@ -533,86 +559,21 @@ def reorder_blocks(request):
     schedule = None
     try:
         with transaction.atomic():
-            # Single locked SELECT that both fetches and row-locks every
-            # block belonging to any schedule that contains at least one
-            # requested ID. Reading the two lines carefully:
-            #
-            #   * The INNER queryset
-            #     ``TimeBlock.objects.filter(id__in=ids).values("schedule")``
-            #     is intentionally left lazy. Django inlines it as a
-            #     subquery and the whole thing compiles to one statement:
-            #       SELECT ... WHERE schedule_id IN
-            #         (SELECT schedule_id FROM ... WHERE id IN (...))
-            #       FOR UPDATE;
-            #     Do NOT wrap the inner queryset in ``list()`` / ``len()``
-            #     / a loop — materialising it would split this into two
-            #     separate statements, the first one unlocked, opening a
-            #     TOCTOU window where a concurrent writer could move a
-            #     block between schedules between the two reads.
-            #
-            #   * The OUTER ``list(...)`` here is the opposite — it
-            #     *must* materialise the final queryset under the
-            #     ``select_for_update`` lock, inside the ``atomic()``
-            #     block, so the row locks are acquired immediately and
-            #     held for the whole transaction. Without ``list(...)``
-            #     the queryset would stay lazy and the lock would only
-            #     fire when the rows are actually iterated — potentially
-            #     outside the ``atomic()`` block. Evaluate-now is the
-            #     whole point.
-            #
-            # SQLite silently ignores ``select_for_update`` (see the
-            # ``schedules.W001`` system check); PostgreSQL honours it.
+            locked_schedule = Schedule.objects.select_for_update().get(pk=schedule_id)
             schedule_blocks = list(
-                TimeBlock.objects.select_related("schedule__user")
-                .filter(
-                    schedule__in=TimeBlock.objects.filter(id__in=ids).values(
-                        "schedule"
-                    )
-                )
+                TimeBlock.objects.filter(schedule_id=schedule_id)
                 .select_for_update()
+                .order_by("id")
             )
 
             blocks_by_id = {b.id: b for b in schedule_blocks}
-            present_ids = set(blocks_by_id.keys())
-            requested_ids = set(ids)
-            missing = requested_ids - present_ids
-
-            # Cross-schedule check first: if the requested blocks straddle
-            # multiple schedules, that is a 400 regardless of ownership.
-            requested_schedule_ids = {
-                blocks_by_id[i].schedule_id for i in requested_ids if i in blocks_by_id
-            }
-            if len(requested_schedule_ids) > 1:
-                return JsonResponse(
-                    {
-                        "errors": {
-                            "updates": "All blocks must belong to the same schedule."
-                        }
-                    },
-                    status=400,
-                )
-
-            if missing:
-                # A requested ID that isn't in ``schedule_blocks`` does not
-                # exist in the DB: the outer fetch pulls every row for any
-                # schedule that contains a requested ID, so if the row were
-                # live it would have been included. Return 404 without any
-                # further probing — an extra existence query here would
-                # only leak information about IDs in other users' schedules.
+            if not requested_ids.issubset(blocks_by_id.keys()):
                 return JsonResponse(
                     {"errors": {"detail": "One or more blocks not found."}},
                     status=404,
                 )
 
-            # All requested IDs are present and live in a single schedule.
-            schedule = blocks_by_id[ids[0]].schedule
-            if schedule.user != request.user:
-                # 404 (not 403) on cross-user access — see the matching
-                # comment in ``block_detail`` for the rationale.
-                return JsonResponse(
-                    {"errors": {"detail": "One or more blocks not found."}},
-                    status=404,
-                )
+            schedule = locked_schedule
 
             # Build the candidate state from the in-memory blocks (no extra
             # query) by mutating the updated blocks in place and including
@@ -665,6 +626,8 @@ def reorder_blocks(request):
                 # were checked explicitly; model ``clean()`` still runs.
                 b.full_clean(exclude=["start_time", "end_time"])
                 b.save()
+
+            locked_schedule.mark_active_on_edit()
     except ValidationError as e:
         return JsonResponse({"errors": e.message_dict}, status=400)
 
@@ -676,8 +639,6 @@ def reorder_blocks(request):
         "reorder_blocks: %d updates, %.3fs",
         len(updates), time.monotonic() - t0,
     )
-    if schedule is not None:
-        schedule.mark_active_on_edit()
     return JsonResponse(
         {"blocks": [_block_to_dict(b) for b in result_blocks]},
     )

@@ -119,6 +119,12 @@ The frontend refreshes `currentHHMM` on a 1-minute interval (matches `Schedule.v
 - Caller orders rules by `-priority` before passing them in; the formatter preserves caller order, so a future "filter inactive at the prompt layer" refactor would silently break the priority-desc invariant.
 - Chat-specific: rules render into the **trusted** schedule-context message (the first user-role message), not the untrusted prior-transcript flatten. A tampered client must not be able to impersonate or shadow the user's defaults — see `backend/ai/service.py:run_chat`.
 
+## AI batch mutations (feature 0030, issue #38)
+
+- Command and chat apply route through a pure **final-state planner** (`backend/ai/mutation_planner.py`): the LLM's action batch is normalized into a target schedule, validated holistically, then diffed. Move order no longer matters.
+- Before the LLM call, views capture an **apply-context fingerprint** (prompt-visible block fields + active Rules). `_apply_actions_sync` locks **User → Schedule → TimeBlock** rows, re-reads Rules, and compares fingerprints; mismatch → `409 {"errors": {"detail": "schedule_changed"}}`, no mutations, `AIInteraction.success` stays false. Skipped when `parsed_actions` is empty. Unrelated to draft's empty-schedule `409`. Clients refresh schedule state and retry explicitly — the server never auto-retries.
+- Rule POST/PATCH/DELETE take the same **User-first** lock so a Rule edit cannot slip between fingerprint capture and AI apply.
+
 ## Locking an empty child queryset locks nothing
 
 - `SELECT ... FOR UPDATE WHERE parent_id = ?` against a child table acquires zero row locks when the child set is empty. Two concurrent writers both pass the in-lock emptiness check and both insert.

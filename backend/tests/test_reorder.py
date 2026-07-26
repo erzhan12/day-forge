@@ -271,3 +271,94 @@ class TestReorderBlocks:
         )
         assert resp.status_code == 413
         assert "too large" in resp.json()["errors"]["body"].lower()
+
+    def test_own_plus_foreign_matches_own_plus_missing_404(
+        self, auth_client, three_blocks, db
+    ):
+        """Slice 7: mixed own+foreign and own+missing return the same 404."""
+        b1, _, _ = three_blocks
+        other = User.objects.create_user(username="foreigner", password="pass123")
+        sched = Schedule.objects.create(date="2026-04-10", user=other)
+        foreign = TimeBlock.objects.create(
+            schedule=sched,
+            title="Foreign",
+            start_time="08:00",
+            end_time="09:00",
+            category="work",
+        )
+        own_update = {
+            "id": b1.id,
+            "start_time": "07:00",
+            "end_time": "08:00",
+            "sort_order": 0,
+        }
+        resp_foreign = _post_reorder(
+            auth_client,
+            [
+                own_update,
+                {
+                    "id": foreign.id,
+                    "start_time": "09:00",
+                    "end_time": "10:00",
+                    "sort_order": 10,
+                },
+            ],
+        )
+        resp_missing = _post_reorder(
+            auth_client,
+            [
+                own_update,
+                {
+                    "id": 99999,
+                    "start_time": "09:00",
+                    "end_time": "10:00",
+                    "sort_order": 10,
+                },
+            ],
+        )
+        assert resp_foreign.status_code == 404
+        assert resp_missing.status_code == 404
+        assert resp_foreign.json() == resp_missing.json()
+
+    def test_reorder_locks_schedule_before_children(
+        self, auth_client, three_blocks, monkeypatch
+    ):
+        """Slice 7: parent Schedule lock precedes child TimeBlock locks."""
+        from django.db.models.query import QuerySet
+
+        b1, _, _ = three_blocks
+        call_order: list[str] = []
+        select_related_models: list = []
+        original_qs_sfu = QuerySet.select_for_update
+        original_qs_select_related = QuerySet.select_related
+
+        def qs_sfu_spy(self, *args, **kwargs):
+            if self.model is Schedule:
+                call_order.append("schedule")
+            elif self.model is TimeBlock:
+                call_order.append("timeblock")
+            return original_qs_sfu(self, *args, **kwargs)
+
+        def qs_select_related_spy(self, *args, **kwargs):
+            select_related_models.append(self.model)
+            return original_qs_select_related(self, *args, **kwargs)
+
+        monkeypatch.setattr(QuerySet, "select_for_update", qs_sfu_spy, raising=True)
+        monkeypatch.setattr(
+            QuerySet, "select_related", qs_select_related_spy, raising=True
+        )
+
+        resp = _post_reorder(
+            auth_client,
+            [
+                {
+                    "id": b1.id,
+                    "start_time": "07:00",
+                    "end_time": "08:00",
+                    "sort_order": 0,
+                },
+            ],
+        )
+        assert resp.status_code == 200
+        assert call_order == ["schedule", "timeblock"]
+        assert TimeBlock not in select_related_models

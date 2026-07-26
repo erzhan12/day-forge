@@ -1,3 +1,4 @@
+import datetime
 import json
 
 import pytest
@@ -428,3 +429,66 @@ class TestBlockDetail:
         )
         assert resp.status_code == 200
         assert resp.json()["sort_order"] == 5
+
+    @pytest.mark.django_db
+    def test_non_time_patch_preserves_concurrent_time_update(
+        self, auth_client, time_block, monkeypatch
+    ):
+        """Slice 7: column-scoped save must not overwrite newer DB times."""
+        newer_start = datetime.time(11, 0)
+        newer_end = datetime.time(12, 0)
+        save_calls: list[list[str] | None] = []
+        original_save = TimeBlock.save
+
+        def _save_spy(self, *args, **kwargs):
+            TimeBlock.objects.filter(pk=self.pk).update(
+                start_time=newer_start,
+                end_time=newer_end,
+            )
+            save_calls.append(kwargs.get("update_fields"))
+            return original_save(self, *args, **kwargs)
+
+        monkeypatch.setattr(TimeBlock, "save", _save_spy)
+
+        resp = auth_client.patch(
+            f"/api/blocks/{time_block.pk}/",
+            json.dumps({"title": "Updated Title", "is_completed": True}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 200
+
+        time_block.refresh_from_db()
+        assert time_block.title == "Updated Title"
+        assert time_block.is_completed is True
+        assert time_block.start_time == newer_start
+        assert time_block.end_time == newer_end
+
+        assert len(save_calls) == 1
+        assert set(save_calls[0]) == {"title", "is_completed"}
+
+    @pytest.mark.django_db
+    def test_non_time_patch_locks_parent_schedule_first(
+        self, auth_client, time_block, monkeypatch
+    ):
+        """Slice 7: every PATCH locks Schedule before the target TimeBlock."""
+        from django.db.models.query import QuerySet
+
+        call_order: list[str] = []
+        original_qs_sfu = QuerySet.select_for_update
+
+        def qs_sfu_spy(self, *args, **kwargs):
+            if self.model is Schedule:
+                call_order.append("schedule")
+            elif self.model is TimeBlock:
+                call_order.append("timeblock")
+            return original_qs_sfu(self, *args, **kwargs)
+
+        monkeypatch.setattr(QuerySet, "select_for_update", qs_sfu_spy, raising=True)
+
+        resp = auth_client.patch(
+            f"/api/blocks/{time_block.pk}/",
+            json.dumps({"title": "Locked"}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 200
+        assert call_order == ["schedule", "timeblock"]

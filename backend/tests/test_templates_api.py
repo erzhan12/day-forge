@@ -273,6 +273,119 @@ class TestRulesCRUD:
         assert resp.status_code == 200
         assert not Rule.objects.filter(pk=r.id).exists()
 
+    def test_rule_post_locks_user_before_count_and_create(
+        self, auth_client, user, monkeypatch
+    ):
+        """Slice 7: Rule POST acquires the user row lock before count/create."""
+        events: list[str] = []
+        original_user_sfu = User.objects.select_for_update
+        original_filter = Rule.objects.filter
+        original_create = Rule.objects.create
+
+        def user_sfu_spy(*args, **kwargs):
+            events.append("user_lock")
+            return original_user_sfu(*args, **kwargs)
+
+        def filter_spy(*args, **kwargs):
+            qs = original_filter(*args, **kwargs)
+            original_count = qs.count
+
+            def count_spy():
+                events.append("count")
+                return original_count()
+
+            qs.count = count_spy
+            return qs
+
+        def create_spy(*args, **kwargs):
+            events.append("create")
+            return original_create(*args, **kwargs)
+
+        monkeypatch.setattr(
+            User.objects, "select_for_update", user_sfu_spy, raising=True
+        )
+        monkeypatch.setattr(Rule.objects, "filter", filter_spy, raising=True)
+        monkeypatch.setattr(Rule.objects, "create", create_spy, raising=True)
+
+        resp = _post(
+            auth_client,
+            "/api/rules/",
+            {"text": "Lock order", "priority": 1},
+        )
+        assert resp.status_code == 201
+        assert events == ["user_lock", "count", "create"]
+
+    def test_rule_patch_locks_user_before_refetch_and_save(
+        self, auth_client, user, monkeypatch
+    ):
+        """Slice 7: Rule PATCH locks the user row before target re-fetch."""
+        r = Rule.objects.create(user=user, text="Old", priority=1)
+        call_order: list[str] = []
+        original_user_sfu = User.objects.select_for_update
+        original_get = Rule.objects.get
+
+        def user_sfu_spy(*args, **kwargs):
+            call_order.append("user_lock")
+            return original_user_sfu(*args, **kwargs)
+
+        def get_spy(*args, **kwargs):
+            call_order.append("get")
+            return original_get(*args, **kwargs)
+
+        monkeypatch.setattr(
+            User.objects, "select_for_update", user_sfu_spy, raising=True
+        )
+        monkeypatch.setattr(Rule.objects, "get", get_spy, raising=True)
+
+        resp = _patch(auth_client, f"/api/rules/{r.id}/", {"text": "New"})
+        assert resp.status_code == 200
+        assert call_order == ["user_lock", "get"]
+
+    def test_rule_delete_locks_user_before_refetch(
+        self, auth_client, user, monkeypatch
+    ):
+        """Slice 7: Rule DELETE locks the user row before target re-fetch."""
+        r = Rule.objects.create(user=user, text="Gone")
+        call_order: list[str] = []
+        original_user_sfu = User.objects.select_for_update
+        original_get = Rule.objects.get
+
+        def user_sfu_spy(*args, **kwargs):
+            call_order.append("user_lock")
+            return original_user_sfu(*args, **kwargs)
+
+        def get_spy(*args, **kwargs):
+            call_order.append("get")
+            return original_get(*args, **kwargs)
+
+        monkeypatch.setattr(
+            User.objects, "select_for_update", user_sfu_spy, raising=True
+        )
+        monkeypatch.setattr(Rule.objects, "get", get_spy, raising=True)
+
+        resp = auth_client.delete(f"/api/rules/{r.id}/")
+        assert resp.status_code == 200
+        assert call_order == ["user_lock", "get"]
+
+    def test_rule_patch_404_when_target_deleted_under_lock(
+        self, auth_client, user, monkeypatch
+    ):
+        """Slice 7: a delete between user lock and re-fetch returns uniform 404."""
+        r = Rule.objects.create(user=user, text="Vanish")
+        original_user_sfu = User.objects.select_for_update
+
+        def user_sfu_spy(*args, **kwargs):
+            Rule.objects.filter(pk=r.pk).delete()
+            return original_user_sfu(*args, **kwargs)
+
+        monkeypatch.setattr(
+            User.objects, "select_for_update", user_sfu_spy, raising=True
+        )
+
+        resp = _patch(auth_client, f"/api/rules/{r.id}/", {"text": "Too late"})
+        assert resp.status_code == 404
+        assert resp.json() == {"errors": {"detail": "Not found."}}
+
 
 @pytest.mark.django_db
 class TestRulePriorityBounds:

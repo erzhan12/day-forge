@@ -9,6 +9,7 @@ import hashlib
 import json
 
 import pytest
+from asgiref.sync import sync_to_async
 from ai.models import AIInteraction
 from ai.service import (
     AIChatResult,
@@ -555,3 +556,236 @@ class TestActiveRulesWiring:
         resp = _post(auth_client, {"messages": [_user_turn("hi")]})
         assert resp.status_code == 200
         assert captured["rules_texts"] == ["HIGH rule", "LOW rule"]
+
+
+# --- Slice 5: chat apply + regression guards (feature 0030) ---
+
+
+class TestChatBatchMutationExecutor:
+    """Shared ``_apply_actions_sync`` path through ``/chat/``."""
+
+    @pytest.mark.django_db
+    def test_chat_apply_uses_shared_planner(
+        self, auth_client, today_schedule, monkeypatch
+    ):
+        block_a = TimeBlock.objects.create(
+            schedule=today_schedule,
+            title="A",
+            start_time="09:00",
+            end_time="10:00",
+            category="work",
+        )
+        block_b = TimeBlock.objects.create(
+            schedule=today_schedule,
+            title="B",
+            start_time="11:00",
+            end_time="12:00",
+            category="work",
+        )
+        _patch_run_chat(
+            monkeypatch,
+            AIChatResult(
+                raw_response_text="{}",
+                parsed_actions=[
+                    {
+                        "type": "move",
+                        "task_id": block_a.id,
+                        "start_time": "11:00",
+                        "end_time": "12:00",
+                    },
+                    {
+                        "type": "move",
+                        "task_id": block_b.id,
+                        "start_time": "09:00",
+                        "end_time": "10:00",
+                    },
+                ],
+                explanation="Swapped A and B",
+                ask=None,
+            ),
+        )
+        resp = _post(
+            auth_client,
+            {"messages": [_user_turn("swap A and B")]},
+        )
+        assert resp.status_code == 200, resp.content
+        data = resp.json()
+        assert data["applied"] is True
+        block_a.refresh_from_db()
+        block_b.refresh_from_db()
+        assert block_a.start_time.strftime("%H:%M") == "11:00"
+        assert block_a.end_time.strftime("%H:%M") == "12:00"
+        assert block_b.start_time.strftime("%H:%M") == "09:00"
+        assert block_b.end_time.strftime("%H:%M") == "10:00"
+        today_schedule.refresh_from_db()
+        assert today_schedule.status == "active"
+
+    @pytest.mark.django_db
+    def test_chat_apply_returns_409_when_schedule_changes_during_run_chat(
+        self, auth_client, today_schedule, monkeypatch
+    ):
+        block = TimeBlock.objects.create(
+            schedule=today_schedule,
+            title="Gym",
+            start_time="09:00",
+            end_time="10:00",
+            category="health",
+        )
+
+        async def _run(messages, schedule, blocks, rules, now):
+            await sync_to_async(
+                TimeBlock.objects.filter(pk=block.pk).update,
+                thread_sensitive=True,
+            )(title="Renamed during LLM")
+            return AIChatResult(
+                raw_response_text="{}",
+                parsed_actions=[
+                    {"type": "move", "task_id": block.id, "start_time": "11:00"}
+                ],
+                explanation="Moved",
+                ask=None,
+            )
+
+        monkeypatch.setattr("ai.views.run_chat", _run)
+        resp = _post(
+            auth_client,
+            {"messages": [_user_turn("move gym")]},
+        )
+        assert resp.status_code == 409
+        assert resp.json()["errors"]["detail"] == "schedule_changed"
+        block.refresh_from_db()
+        assert block.title == "Renamed during LLM"
+        assert block.start_time.strftime("%H:%M") == "09:00"
+        interaction = AIInteraction.objects.get(schedule=today_schedule)
+        assert interaction.success is False
+        today_schedule.refresh_from_db()
+        assert today_schedule.status == Schedule.Status.DRAFT
+
+    @pytest.mark.django_db
+    def test_chat_apply_returns_409_when_rule_changes_during_run_chat(
+        self, auth_client, user, today_schedule, monkeypatch
+    ):
+        block = TimeBlock.objects.create(
+            schedule=today_schedule,
+            title="Work",
+            start_time="09:00",
+            end_time="10:00",
+            category="work",
+        )
+        rule = Rule.objects.create(
+            user=user, text="Original rule", priority=5, is_active=True
+        )
+
+        async def _run(messages, schedule, blocks, rules, now):
+            await sync_to_async(
+                Rule.objects.filter(pk=rule.pk).update,
+                thread_sensitive=True,
+            )(text="Changed during LLM")
+            return AIChatResult(
+                raw_response_text="{}",
+                parsed_actions=[
+                    {"type": "move", "task_id": block.id, "start_time": "11:00"}
+                ],
+                explanation="Moved",
+                ask=None,
+            )
+
+        monkeypatch.setattr("ai.views.run_chat", _run)
+        resp = _post(
+            auth_client,
+            {"messages": [_user_turn("move work")]},
+        )
+        assert resp.status_code == 409
+        assert resp.json()["errors"]["detail"] == "schedule_changed"
+        block.refresh_from_db()
+        assert block.start_time.strftime("%H:%M") == "09:00"
+        interaction = AIInteraction.objects.get(schedule=today_schedule)
+        assert interaction.success is False
+        today_schedule.refresh_from_db()
+        assert today_schedule.status == Schedule.Status.DRAFT
+
+    @pytest.mark.django_db
+    def test_chat_empty_actions_skips_apply_on_fingerprint_mismatch(
+        self, auth_client, user, today_schedule, monkeypatch
+    ):
+        rule = Rule.objects.create(
+            user=user, text="Original rule", priority=5, is_active=True
+        )
+        apply_called = {"v": False}
+        original_apply = None
+
+        async def _run(messages, schedule, blocks, rules, now):
+            await sync_to_async(
+                Rule.objects.filter(pk=rule.pk).update,
+                thread_sensitive=True,
+            )(text="Changed during LLM")
+            return AIChatResult(
+                raw_response_text="{}",
+                parsed_actions=[],
+                explanation="Nothing to do",
+                ask=None,
+            )
+
+        def _spy_apply(schedule, result, *, expected_fingerprint, interaction_id=None):
+            apply_called["v"] = True
+            return original_apply(
+                schedule,
+                result,
+                expected_fingerprint=expected_fingerprint,
+                interaction_id=interaction_id,
+            )
+
+        monkeypatch.setattr("ai.views.run_chat", _run)
+        import ai.views
+
+        original_apply = ai.views._apply_actions_sync
+        monkeypatch.setattr(ai.views, "_apply_actions_sync", _spy_apply)
+
+        resp = _post(
+            auth_client,
+            {"messages": [_user_turn("thanks")]},
+        )
+        assert resp.status_code == 200
+        assert apply_called["v"] is False
+        interaction = AIInteraction.objects.get(schedule=today_schedule)
+        assert interaction.success is True
+        data = resp.json()
+        assert data["applied"] is False
+        assert data["blocks"] is None
+
+    @pytest.mark.django_db
+    def test_chat_happy_path_with_active_rule_and_nonempty_actions(
+        self, auth_client, user, today_schedule, monkeypatch
+    ):
+        Rule.objects.create(
+            user=user, text="Prefer 25m pomodoros", priority=10, is_active=True
+        )
+        block = TimeBlock.objects.create(
+            schedule=today_schedule,
+            title="Focus",
+            start_time="09:00",
+            end_time="10:00",
+            category="work",
+        )
+
+        async def _run(messages, schedule, blocks, rules, now):
+            assert all(hasattr(r, "id") for r in rules)
+            return AIChatResult(
+                raw_response_text="{}",
+                parsed_actions=[
+                    {"type": "move", "task_id": block.id, "start_time": "11:00"}
+                ],
+                explanation="Moved",
+                ask=None,
+            )
+
+        monkeypatch.setattr("ai.views.run_chat", _run)
+        resp = _post(
+            auth_client,
+            {"messages": [_user_turn("move focus later")]},
+        )
+        assert resp.status_code == 200
+        block.refresh_from_db()
+        assert block.start_time.strftime("%H:%M") == "11:00"
+        interaction = AIInteraction.objects.get(schedule=today_schedule)
+        assert interaction.success is True

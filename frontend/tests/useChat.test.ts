@@ -34,6 +34,7 @@ import {
   _resetChatStateForTests,
   useChat,
 } from "../src/composables/useChat"
+import { SCHEDULE_CHANGED_RETRY_MESSAGE } from "../src/utils/aiScheduleConflict"
 
 const BLOCK = {
   id: 1,
@@ -156,6 +157,54 @@ describe("useChat", () => {
     expect(last.explanation).toBe("I understood you want gym")
     expect(chat.pendingAsk.value).toBe("when?")
     expect(routerReload).not.toHaveBeenCalled()
+  })
+
+  it("409 schedule_changed shows retry message, reloads, no undo, apiHealthy true", async () => {
+    const chat = useChat()
+    chat.setActiveDate("2026-05-07")
+    chat.apiHealthy.value = false
+    requestJsonMock.mockResolvedValue({
+      ok: false,
+      status: 409,
+      errors: { detail: "schedule_changed" },
+    })
+    const pushUndo = vi.fn()
+
+    await chat.submitTurn("move gym", snapshotBlocks, pushUndo)
+
+    expect(requestJsonMock).toHaveBeenCalledTimes(1)
+    expect(pushUndo).not.toHaveBeenCalled()
+    expect(routerReload).toHaveBeenCalledOnce()
+    expect(routerReload).toHaveBeenCalledWith({ only: ["blocks", "schedule"] })
+    expect(chat.apiHealthy.value).toBe(true)
+    expect(chat.lastError.value).toBe(SCHEDULE_CHANGED_RETRY_MESSAGE)
+    expect(chat.messages.value.length).toBe(2)
+    expect(chat.messages.value[1]).toMatchObject({
+      role: "assistant",
+      content: SCHEDULE_CHANGED_RETRY_MESSAGE,
+    })
+    expect(chat.isProcessing.value).toBe(false)
+  })
+
+  it("unrelated 409 stays an ordinary error without reload", async () => {
+    const chat = useChat()
+    chat.setActiveDate("2026-05-07")
+    requestJsonMock.mockResolvedValue({
+      ok: false,
+      status: 409,
+      errors: { detail: "draft schedule already has blocks" },
+    })
+
+    await chat.submitTurn("generate", snapshotBlocks, vi.fn())
+
+    expect(requestJsonMock).toHaveBeenCalledTimes(1)
+    expect(routerReload).not.toHaveBeenCalled()
+    expect(chat.apiHealthy.value).toBe(true)
+    expect(chat.lastError.value).toBe("draft schedule already has blocks")
+    expect(chat.messages.value[1]).toMatchObject({
+      role: "assistant",
+      content: "draft schedule already has blocks",
+    })
   })
 
   it("error path keeps user message and appends synthetic assistant error", async () => {

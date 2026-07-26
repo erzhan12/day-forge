@@ -14,6 +14,7 @@ import logging
 
 from ai.prompts import DAY_END, DAY_START
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.models import User
 from django.db import IntegrityError, transaction
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
@@ -349,27 +350,29 @@ def rules_collection(request):
     if err is not None:
         return err
 
-    if Rule.objects.filter(user=request.user).count() >= MAX_RULES_PER_USER:
-        return _err(
-            "rules",
-            f"You have reached the maximum of {MAX_RULES_PER_USER} rules.",
-            status=400,
-        )
-
-    rule = Rule.objects.create(user=request.user, **cleaned)
+    with transaction.atomic():
+        User.objects.select_for_update().get(pk=request.user.pk)
+        if Rule.objects.filter(user=request.user).count() >= MAX_RULES_PER_USER:
+            return _err(
+                "rules",
+                f"You have reached the maximum of {MAX_RULES_PER_USER} rules.",
+                status=400,
+            )
+        rule = Rule.objects.create(user=request.user, **cleaned)
     return JsonResponse(_rule_to_dict(rule), status=201)
 
 
 @login_required
 @require_http_methods(["PATCH", "DELETE"])
 def rule_detail(request, pk):
-    try:
-        rule = Rule.objects.get(pk=pk, user=request.user)
-    except Rule.DoesNotExist:
-        return JsonResponse({"errors": {"detail": "Not found."}}, status=404)
-
     if request.method == "DELETE":
-        rule.delete()
+        with transaction.atomic():
+            User.objects.select_for_update().get(pk=request.user.pk)
+            try:
+                rule = Rule.objects.get(pk=pk, user=request.user)
+            except Rule.DoesNotExist:
+                return JsonResponse({"errors": {"detail": "Not found."}}, status=404)
+            rule.delete()
         return JsonResponse({"ok": True})
 
     oversized = reject_oversized_body(request)
@@ -385,9 +388,16 @@ def rule_detail(request, pk):
     if err is not None:
         return err
 
-    for field, value in cleaned.items():
-        setattr(rule, field, value)
-    rule.save(update_fields=list(cleaned.keys()))
+    with transaction.atomic():
+        User.objects.select_for_update().get(pk=request.user.pk)
+        try:
+            rule = Rule.objects.get(pk=pk, user=request.user)
+        except Rule.DoesNotExist:
+            return JsonResponse({"errors": {"detail": "Not found."}}, status=404)
+
+        for field, value in cleaned.items():
+            setattr(rule, field, value)
+        rule.save(update_fields=list(cleaned.keys()))
     return JsonResponse(_rule_to_dict(rule))
 
 

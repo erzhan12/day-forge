@@ -7,6 +7,7 @@ for real.
 import json
 
 import pytest
+from asgiref.sync import sync_to_async
 from ai.models import AIInteraction
 from ai.service import (
     AICommandResult,
@@ -827,3 +828,350 @@ class TestApplyActionsLocksScheduleRow:
         resp = _post(auth_client, {"command": "add standup at 10"})
         assert resp.status_code == 200, resp.content
         assert called["v"]
+
+
+# --- Slice 4: executor integration (feature 0030) ---
+
+MASS_SHIFT_SEED = [
+    ("Block A", "13:15", "14:00"),
+    ("Block B", "14:15", "15:00"),
+    ("Block C", "15:30", "16:30"),
+]
+
+MASS_SHIFT_EXPECTED = [
+    ("14:15", "15:00"),
+    ("15:15", "16:00"),
+    ("16:30", "17:30"),
+]
+
+
+@pytest.mark.django_db
+class TestBatchMutationExecutor:
+    def test_mass_move_forward_shift_applies_all_blocks(
+        self, auth_client, today_schedule, monkeypatch
+    ):
+        blocks = []
+        for title, start, end in MASS_SHIFT_SEED:
+            blocks.append(
+                TimeBlock.objects.create(
+                    schedule=today_schedule,
+                    title=title,
+                    start_time=start,
+                    end_time=end,
+                    category="work",
+                )
+            )
+        _patch_run(
+            monkeypatch,
+            AICommandResult(
+                raw_response_text="{}",
+                parsed_actions=[
+                    {"type": "move", "task_id": blocks[0].id, "start_time": "14:15"},
+                    {"type": "move", "task_id": blocks[1].id, "start_time": "15:15"},
+                    {"type": "move", "task_id": blocks[2].id, "start_time": "16:30"},
+                ],
+                explanation="Shifted afternoon blocks",
+            ),
+        )
+        resp = _post(auth_client, {"command": "move afternoon blocks later"})
+        assert resp.status_code == 200, resp.content
+        for block, (expected_start, expected_end) in zip(blocks, MASS_SHIFT_EXPECTED):
+            block.refresh_from_db()
+            assert block.start_time.strftime("%H:%M") == expected_start
+            assert block.end_time.strftime("%H:%M") == expected_end
+
+    def test_apply_returns_409_when_schedule_changes_during_run_command(
+        self, auth_client, today_schedule, monkeypatch
+    ):
+        block = TimeBlock.objects.create(
+            schedule=today_schedule,
+            title="Gym",
+            start_time="09:00",
+            end_time="10:00",
+            category="health",
+        )
+
+        async def _run(command, schedule, blocks, rules, now):
+            await sync_to_async(
+                TimeBlock.objects.filter(pk=block.pk).update,
+                thread_sensitive=True,
+            )(start_time="08:00")
+            return AICommandResult(
+                raw_response_text="{}",
+                parsed_actions=[
+                    {"type": "move", "task_id": block.id, "start_time": "11:00"}
+                ],
+                explanation="Moved",
+            )
+
+        monkeypatch.setattr("ai.views.run_command", _run)
+        resp = _post(auth_client, {"command": "move gym"})
+        assert resp.status_code == 409
+        assert resp.json()["errors"]["detail"] == "schedule_changed"
+        block.refresh_from_db()
+        assert block.start_time.strftime("%H:%M") == "08:00"
+        assert block.end_time.strftime("%H:%M") == "10:00"
+        interaction = AIInteraction.objects.get(schedule=today_schedule)
+        assert interaction.success is False
+        today_schedule.refresh_from_db()
+        assert today_schedule.status == Schedule.Status.DRAFT
+
+    def test_apply_returns_409_when_rule_changes_during_run_command(
+        self, auth_client, user, today_schedule, monkeypatch
+    ):
+        block = TimeBlock.objects.create(
+            schedule=today_schedule,
+            title="Work",
+            start_time="09:00",
+            end_time="10:00",
+            category="work",
+        )
+        rule = Rule.objects.create(
+            user=user, text="Original rule", priority=5, is_active=True
+        )
+
+        async def _run(command, schedule, blocks, rules, now):
+            await sync_to_async(
+                Rule.objects.filter(pk=rule.pk).update,
+                thread_sensitive=True,
+            )(text="Changed during LLM")
+            return AICommandResult(
+                raw_response_text="{}",
+                parsed_actions=[
+                    {"type": "move", "task_id": block.id, "start_time": "11:00"}
+                ],
+                explanation="Moved",
+            )
+
+        monkeypatch.setattr("ai.views.run_command", _run)
+        resp = _post(auth_client, {"command": "move work"})
+        assert resp.status_code == 409
+        assert resp.json()["errors"]["detail"] == "schedule_changed"
+        block.refresh_from_db()
+        assert block.start_time.strftime("%H:%M") == "09:00"
+        interaction = AIInteraction.objects.get(schedule=today_schedule)
+        assert interaction.success is False
+
+    def test_happy_path_with_active_rule_and_nonempty_actions(
+        self, auth_client, user, today_schedule, monkeypatch
+    ):
+        Rule.objects.create(
+            user=user, text="Prefer 25m pomodoros", priority=10, is_active=True
+        )
+        block = TimeBlock.objects.create(
+            schedule=today_schedule,
+            title="Focus",
+            start_time="09:00",
+            end_time="10:00",
+            category="work",
+        )
+
+        async def _run(command, schedule, blocks, rules, now):
+            assert all(hasattr(r, "id") for r in rules)
+            return AICommandResult(
+                raw_response_text="{}",
+                parsed_actions=[
+                    {"type": "move", "task_id": block.id, "start_time": "11:00"}
+                ],
+                explanation="Moved",
+            )
+
+        monkeypatch.setattr("ai.views.run_command", _run)
+        resp = _post(auth_client, {"command": "move focus"})
+        assert resp.status_code == 200
+        block.refresh_from_db()
+        assert block.start_time.strftime("%H:%M") == "11:00"
+        interaction = AIInteraction.objects.get(schedule=today_schedule)
+        assert interaction.success is True
+
+    def test_command_empty_actions_skips_apply_on_fingerprint_mismatch(
+        self, auth_client, today_schedule, monkeypatch
+    ):
+        block = TimeBlock.objects.create(
+            schedule=today_schedule,
+            title="Gym",
+            start_time="09:00",
+            end_time="10:00",
+            category="health",
+        )
+        apply_called = {"v": False}
+        original_apply = None
+
+        async def _run(command, schedule, blocks, rules, now):
+            await sync_to_async(
+                TimeBlock.objects.filter(pk=block.pk).update,
+                thread_sensitive=True,
+            )(start_time="08:00")
+            return AICommandResult(
+                raw_response_text="{}",
+                parsed_actions=[],
+                explanation="Nothing to do",
+            )
+
+        def _spy_apply(schedule, result, *, expected_fingerprint, interaction_id=None):
+            apply_called["v"] = True
+            return original_apply(
+                schedule,
+                result,
+                expected_fingerprint=expected_fingerprint,
+                interaction_id=interaction_id,
+            )
+
+        monkeypatch.setattr("ai.views.run_command", _run)
+        import ai.views
+
+        original_apply = ai.views._apply_actions_sync
+        monkeypatch.setattr(ai.views, "_apply_actions_sync", _spy_apply)
+
+        resp = _post(auth_client, {"command": "thanks"})
+        assert resp.status_code == 200
+        assert apply_called["v"] is False
+        interaction = AIInteraction.objects.get(schedule=today_schedule)
+        assert interaction.success is True
+        block.refresh_from_db()
+        assert block.start_time.strftime("%H:%M") == "08:00"
+        assert len(resp.json()["blocks"]) == 1
+        assert resp.json()["blocks"][0]["start_time"] == "08:00"
+
+    def test_multiple_creates_receive_distinct_sort_orders(
+        self, auth_client, today_schedule, monkeypatch
+    ):
+        _patch_run(
+            monkeypatch,
+            AICommandResult(
+                raw_response_text="{}",
+                parsed_actions=[
+                    {
+                        "type": "add",
+                        "title": "First",
+                        "start_time": "09:00",
+                        "end_time": "09:30",
+                        "category": "work",
+                    },
+                    {
+                        "type": "add",
+                        "title": "Second",
+                        "start_time": "10:00",
+                        "end_time": "10:30",
+                        "category": "work",
+                    },
+                ],
+                explanation="Added two",
+            ),
+        )
+        resp = _post(auth_client, {"command": "add two blocks"})
+        assert resp.status_code == 200
+        orders = list(
+            TimeBlock.objects.filter(schedule=today_schedule)
+            .order_by("sort_order")
+            .values_list("sort_order", flat=True)
+        )
+        assert orders == [0, 1]
+
+    def test_persist_validation_error_rolls_back_with_action_index(
+        self, auth_client, today_schedule, monkeypatch
+    ):
+        block = TimeBlock.objects.create(
+            schedule=today_schedule,
+            title="Keep",
+            start_time="09:00",
+            end_time="10:00",
+            category="work",
+        )
+        _patch_run(
+            monkeypatch,
+            AICommandResult(
+                raw_response_text="{}",
+                parsed_actions=[
+                    {"type": "remove", "task_id": block.id},
+                    {
+                        "type": "add",
+                        "title": "Bad",
+                        "start_time": "11:00",
+                        "end_time": "11:30",
+                        "category": "work",
+                    },
+                ],
+                explanation="Replace",
+            ),
+        )
+        from django.core.exceptions import ValidationError
+
+        original_full_clean = TimeBlock.full_clean
+        call_count = {"n": 0}
+
+        def _failing_full_clean(self, *args, **kwargs):
+            call_count["n"] += 1
+            if self.title == "Bad":
+                raise ValidationError({"title": "forced failure"})
+            return original_full_clean(self, *args, **kwargs)
+
+        monkeypatch.setattr(TimeBlock, "full_clean", _failing_full_clean)
+        resp = _post(auth_client, {"command": "replace block"})
+        assert resp.status_code == 400
+        assert resp.json()["errors"]["action_index"] == 1
+        assert TimeBlock.objects.filter(pk=block.pk).exists()
+        assert not TimeBlock.objects.filter(title="Bad").exists()
+
+    def test_mark_active_on_edit_failure_rolls_back_diff(
+        self, auth_client, today_schedule, monkeypatch
+    ):
+        block = TimeBlock.objects.create(
+            schedule=today_schedule,
+            title="Gym",
+            start_time="09:00",
+            end_time="10:00",
+            category="health",
+        )
+        _patch_run(
+            monkeypatch,
+            AICommandResult(
+                raw_response_text="{}",
+                parsed_actions=[
+                    {"type": "move", "task_id": block.id, "start_time": "11:00"}
+                ],
+                explanation="Moved",
+            ),
+        )
+
+        def _boom(self):
+            raise RuntimeError("status transition failed")
+
+        monkeypatch.setattr(Schedule, "mark_active_on_edit", _boom)
+        with pytest.raises(RuntimeError, match="status transition failed"):
+            _post(auth_client, {"command": "move gym"})
+        block.refresh_from_db()
+        assert block.start_time.strftime("%H:%M") == "09:00"
+        interaction = AIInteraction.objects.get(schedule=today_schedule)
+        assert interaction.success is False
+
+    @pytest.mark.parametrize(
+        "initial_status",
+        [Schedule.Status.DRAFT, Schedule.Status.REVIEWED],
+    )
+    def test_nonempty_command_transitions_to_active(
+        self, auth_client, user, monkeypatch, initial_status
+    ):
+        schedule = Schedule.objects.create(
+            user=user, date="2026-04-18", status=initial_status
+        )
+        _patch_run(
+            monkeypatch,
+            AICommandResult(
+                raw_response_text="{}",
+                parsed_actions=[
+                    {
+                        "type": "add",
+                        "title": "Standup",
+                        "start_time": "10:00",
+                        "end_time": "10:15",
+                        "category": "work",
+                    }
+                ],
+                explanation="Added",
+            ),
+        )
+        resp = _post(auth_client, {"command": "add standup"})
+        assert resp.status_code == 200
+        schedule.refresh_from_db()
+        assert schedule.status == Schedule.Status.ACTIVE

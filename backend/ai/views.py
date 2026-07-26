@@ -13,6 +13,7 @@ import logging
 from asgiref.sync import sync_to_async
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -31,6 +32,16 @@ from schedules.validators import validate_five_minute_granularity
 from templates_mgr.models import Rule, Template
 
 from ai.models import AIInteraction
+from ai.mutation_planner import (
+    PlanError,
+    compute_apply_context_fingerprint,
+    plan_mutations,
+    snapshot_apply_context,
+    snapshot_from_blocks,
+)
+from ai.mutation_planner import (
+    compute_move_resize_times as _compute_move_resize_times,
+)
 from ai.prompts import DAY_END, DAY_START
 from ai.service import (
     AIError,
@@ -75,17 +86,16 @@ async def _load_active_rules(user) -> list[Rule]:
     context. Active/user-owned filtering lives here; the prompt builders
     just render whatever they're handed.
 
-    ``.only("text", "priority")`` defers the unused columns (``id``,
-    ``user_id``, ``created_at``, ``is_active``) — the prompt formatter
-    only reads ``.text``, and we already filter on ``is_active=True``
-    so re-fetching that flag is wasted bytes. Per-user rule counts are
-    small, so the saving is modest, but it costs one line.
+    ``.only("id", "text", "priority")`` eagerly selects the columns needed
+    for prompt rendering and the apply-context fingerprint. Ordered by
+    ``(-priority, id)`` so equal-priority rules are deterministic in both
+    the prompt and the stale-intent guard.
     """
     return [
         r
         async for r in Rule.objects.filter(user=user, is_active=True)
-        .only("text", "priority")
-        .order_by("-priority")
+        .only("id", "text", "priority")
+        .order_by("-priority", "id")
     ]
 
 
@@ -372,40 +382,6 @@ def _apply_remove(
     return None
 
 
-def _compute_move_resize_times(action, block):
-    """Resolve the effective ``(new_start, new_end)`` for a move/resize
-    action and flag a midnight wrap.
-
-    Returns ``(new_start, new_end, wrapped_past_midnight)``.
-    """
-    kind = action["type"]
-    new_start = parse_time(action["start_time"]) if "start_time" in action else block.start_time
-    new_end = parse_time(action["end_time"]) if "end_time" in action else block.end_time
-
-    if kind == "move" and "end_time" not in action:
-        # Preserve original duration for bare "move to HH:MM" commands,
-        # rounded UP to the next 5-minute multiple: an off-grid duration
-        # (from-event block, feature 0026) would otherwise land the
-        # computed ``new_end`` off-grid. Same normalize-on-move semantics
-        # as the drag round-up in ``useDrag.ts``.
-        original = (
-            datetime.datetime.combine(datetime.date.min, block.end_time)
-            - datetime.datetime.combine(datetime.date.min, block.start_time)
-        )
-        minutes = int(original.total_seconds()) // 60
-        rounded = max(5, -(-minutes // 5) * 5)
-        new_end = (
-            datetime.datetime.combine(datetime.date.min, new_start)
-            + datetime.timedelta(minutes=rounded)
-        ).time()
-        # ``.time()`` silently wraps if the duration crosses midnight
-        # (e.g. moving a 22:00-23:30 block to 23:00 would yield 00:30).
-        if new_end <= new_start:
-            return new_start, new_end, True
-
-    return new_start, new_end, False
-
-
 def _apply_move_or_resize(
     schedule, blocks_by_id, action, action_index: int, block
 ) -> JsonResponse | None:
@@ -523,7 +499,63 @@ def _apply_action(
 # ---------------------------------------------------------------------------
 
 
-def _apply_actions_sync(schedule, result) -> None:
+def _persist_mutation_diff(schedule, locked_blocks, diff) -> None:
+    """Apply a planner ``MutationDiff`` under the existing row lock.
+
+    Deletes → updates → creates, each group sorted deterministically.
+    Creates receive consecutive ``sort_order`` values starting at
+    ``max(surviving sort_order) + 1``. Defense-in-depth ``full_clean``
+    failures map back to the originating diff entry's ``action_index``.
+    """
+    blocks_by_id = {b.id: b for b in locked_blocks}
+
+    for entry in sorted(diff.deletes, key=lambda e: e.block_id):
+        block = blocks_by_id.pop(entry.block_id, None)
+        if block is not None:
+            block.delete()
+
+    for entry in sorted(diff.updates, key=lambda e: e.block_id):
+        block = blocks_by_id.get(entry.block_id)
+        if block is None:
+            continue
+        block.start_time = entry.start_time
+        block.end_time = entry.end_time
+        try:
+            block.full_clean(exclude=["start_time", "end_time"])
+        except ValidationError as e:
+            raise _Rollback(
+                _action_error(entry.action_index, _validation_error_detail(e))
+            )
+        block.save()
+
+    max_sort = max((b.sort_order for b in blocks_by_id.values()), default=-1)
+    for entry in sorted(diff.creates, key=lambda e: e.action_index):
+        max_sort += 1
+        block = TimeBlock(
+            schedule=schedule,
+            title=entry.title.strip(),
+            start_time=entry.start_time,
+            end_time=entry.end_time,
+            category=entry.category,
+            sort_order=max_sort,
+        )
+        try:
+            block.full_clean()
+        except ValidationError as e:
+            raise _Rollback(
+                _action_error(entry.action_index, _validation_error_detail(e))
+            )
+        block.save()
+        blocks_by_id[block.id] = block
+
+
+def _apply_actions_sync(
+    schedule,
+    result,
+    *,
+    expected_fingerprint: str,
+    interaction_id: int | None = None,
+) -> None:
     """Apply parsed actions under one atomic+select_for_update lock.
 
     Used by both ``ai_command`` and ``ai_chat`` (the command-style apply
@@ -531,19 +563,50 @@ def _apply_actions_sync(schedule, result) -> None:
     locks the parent ``Schedule`` row and re-checks emptiness — different
     semantics that don't merge cleanly.
     """
+    if not result.parsed_actions:
+        return
+
     with transaction.atomic():
-        # Parent-row lock serializes with ``_apply_draft_sync`` and with
-        # ``create_block`` / ``restore_blocks`` on an empty day — locking
-        # only the (empty) TimeBlock queryset acquires zero rows.
-        Schedule.objects.select_for_update().get(pk=schedule.pk)
+        User.objects.select_for_update().get(pk=schedule.user_id)
+        locked_schedule = Schedule.objects.select_for_update().get(pk=schedule.pk)
         locked_blocks = list(
-            TimeBlock.objects.filter(schedule=schedule).select_for_update()
+            TimeBlock.objects.filter(schedule=locked_schedule).select_for_update()
         )
-        blocks_by_id = {b.id: b for b in locked_blocks}
-        for idx, action in enumerate(result.parsed_actions):
-            err = _apply_action(schedule, blocks_by_id, action, idx)
-            if err is not None:
-                raise _Rollback(err)
+        locked_rules = list(
+            Rule.objects.filter(user_id=schedule.user_id, is_active=True)
+            .only("id", "text", "priority")
+            .order_by("-priority", "id")
+        )
+        schedule_snapshot = snapshot_from_blocks(locked_schedule, locked_blocks)
+        locked_context = snapshot_apply_context(schedule_snapshot, locked_rules)
+        if locked_context.fingerprint != expected_fingerprint:
+            logger.warning(
+                "schedule_changed during AI apply "
+                "(user=%s, schedule=%s, interaction=%s)",
+                schedule.user_id,
+                schedule.id,
+                interaction_id,
+            )
+            raise _Rollback(
+                JsonResponse(
+                    {"errors": {"detail": "schedule_changed"}},
+                    status=409,
+                )
+            )
+
+        plan_result = plan_mutations(
+            locked_context.schedule,
+            result.parsed_actions,
+            day_start=DAY_START,
+            day_end=DAY_END,
+        )
+        if isinstance(plan_result, PlanError):
+            raise _Rollback(
+                _action_error(plan_result.action_index, plan_result.detail)
+            )
+
+        _persist_mutation_diff(locked_schedule, locked_blocks, plan_result.diff)
+        locked_schedule.mark_active_on_edit()
 
 
 def _apply_draft_sync(schedule, result) -> None:
@@ -628,6 +691,11 @@ async def ai_command(request, date):
         )
     ]
     rules = await _load_active_rules(user)
+    expected_fingerprint = compute_apply_context_fingerprint(
+        schedule=schedule,
+        blocks=current_blocks,
+        rules=rules,
+    )
     # Async view: the await on the LLM client yields the event loop while
     # the network call is in flight. Under WSGI/sync gunicorn this still
     # runs in Django's thread-pool executor (no concurrency win); under
@@ -662,9 +730,27 @@ async def ai_command(request, date):
         schedule, command, result.raw_response_text, result.parsed_actions
     )
 
+    if not result.parsed_actions:
+        await _mark_success(interaction)
+        result_blocks = [
+            b
+            async for b in TimeBlock.objects.filter(schedule=schedule).order_by(
+                "start_time", "sort_order"
+            )
+        ]
+        return JsonResponse(
+            {
+                "blocks": [block_to_dict(b) for b in result_blocks],
+                "explanation": result.explanation,
+            }
+        )
+
     try:
         await sync_to_async(_apply_actions_sync, thread_sensitive=True)(
-            schedule, result
+            schedule,
+            result,
+            expected_fingerprint=expected_fingerprint,
+            interaction_id=interaction.id if interaction else None,
         )
     except _Rollback as rb:
         logger.warning(
@@ -676,14 +762,6 @@ async def ai_command(request, date):
         return rb.response
 
     await _mark_success(interaction)
-
-    # Status flip is gated on actions being non-empty: RULES.md treats a
-    # 200 with ``actions: []`` as a successful no-op (LLM ambiguity /
-    # out-of-window guard), and undo registration follows the same gate.
-    # Promoting a draft to active on a no-op LLM response would lie about
-    # user intent.
-    if len(result.parsed_actions) > 0:
-        await sync_to_async(schedule.mark_active_on_edit, thread_sensitive=True)()
 
     result_blocks = [
         b
@@ -1041,6 +1119,11 @@ async def ai_chat(request, date):
         )
     ]
     rules = await _load_active_rules(user)
+    expected_fingerprint = compute_apply_context_fingerprint(
+        schedule=schedule,
+        blocks=current_blocks,
+        rules=rules,
+    )
     now = timezone.localtime()
 
     try:
@@ -1095,7 +1178,10 @@ async def ai_chat(request, date):
     # the LLM call and the apply surfaces as a clean per-action error.
     try:
         await sync_to_async(_apply_actions_sync, thread_sensitive=True)(
-            schedule, result
+            schedule,
+            result,
+            expected_fingerprint=expected_fingerprint,
+            interaction_id=interaction.id if interaction else None,
         )
     except _Rollback as rb:
         logger.warning(
@@ -1107,7 +1193,6 @@ async def ai_chat(request, date):
         return rb.response
 
     await _mark_success(interaction)
-    await sync_to_async(schedule.mark_active_on_edit, thread_sensitive=True)()
 
     result_blocks = [
         b
