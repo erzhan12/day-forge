@@ -35,12 +35,10 @@ from ai.models import AIInteraction
 from ai.mutation_planner import (
     PlanError,
     compute_apply_context_fingerprint,
+    compute_move_resize_times as _compute_move_resize_times,
     plan_mutations,
     snapshot_apply_context,
     snapshot_from_blocks,
-)
-from ai.mutation_planner import (
-    compute_move_resize_times as _compute_move_resize_times,
 )
 from ai.prompts import DAY_END, DAY_START
 from ai.service import (
