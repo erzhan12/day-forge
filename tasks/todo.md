@@ -169,6 +169,15 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
 
 ## Follow-ups (discovered during manual testing)
 
+### 0031 poll — deferred PR #116 style nits
+
+- [ ] **Hoist `import asyncio` to module top in `backend/tests/test_gcal_sync_views.py`.**
+  Two feature-0031 cache tests (`test_without_refresh_cached_account_not_refetched`,
+  `test_non_one_refresh_value_does_not_bypass_cache`) import `asyncio` in-body,
+  matching the pre-existing companion they were copied from. claude-review PR #116
+  cycle-3 (#1, P2-style) suggested a top-level import for suite consistency —
+  low-value sweep, deferred to avoid another review cycle mid-approval.
+
 ### External calendar
 
 - [ ] **Overnight external events fade as "past" while still running
