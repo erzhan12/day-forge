@@ -381,7 +381,10 @@ const externalCalendarInCenter = computed(
 )
 
 // Mirrors ExternalEventsPanel render conditions: center on any viewport;
-// sidebar only when the wide left rail is open.
+// sidebar only when the wide left rail is open. Keep in lockstep with the
+// template — center panel `v-if` below (search `variant="center"`) and the
+// sidebar slot gated by `ExternalTasksSidebar.vue` `v-if="open"`. If either
+// render condition changes, update this predicate.
 const externalCalendarVisible = computed(
   () =>
     externalCalendarInCenter.value ||

@@ -164,7 +164,7 @@ describe("useGoogleCalendar.refreshEvents", () => {
     requestJsonMock.mockResolvedValueOnce({
       ok: true,
       status: 200,
-      data: { events: [] },
+      data: { events: [], account_errors: [] },
     })
     const cal = useGoogleCalendar()
     await cal.refreshEvents("2026-05-07")
@@ -209,12 +209,12 @@ describe("useGoogleCalendar.refreshEvents", () => {
     d2.resolve({
       ok: true,
       status: 200,
-      data: { events: [eventPayload("d2", "Day 2")] },
+      data: { events: [eventPayload("d2", "Day 2")], account_errors: [] },
     })
     d1.resolve({
       ok: true,
       status: 200,
-      data: { events: [eventPayload("d1", "Day 1")] },
+      data: { events: [eventPayload("d1", "Day 1")], account_errors: [] },
     })
 
     await p2
@@ -241,7 +241,7 @@ describe("useGoogleCalendar.refreshEvents", () => {
     d2.resolve({
       ok: true,
       status: 200,
-      data: { events: [eventPayload("fresh", "Fresh")] },
+      data: { events: [eventPayload("fresh", "Fresh")], account_errors: [] },
     })
     await p1
     await p2
