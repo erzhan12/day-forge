@@ -329,6 +329,111 @@ class TestEvents:
         assert [e["title"] for e in data["events"]] == ["Cached"]
         mock.assert_not_called()  # served entirely from cache
 
+    def test_refresh_bypasses_all_accounts_and_rewarms(self, auth_client, user):
+        """``?refresh=1`` puts every connected account into the fetch path,
+        even when one account has a pre-seeded cache entry, and re-warms."""
+        import asyncio
+
+        acc_cached = _make_account(
+            user, google_account_id="s1", email="cached@gmail.com"
+        )
+        acc_other = _make_account(
+            user, google_account_id="s2", email="other@gmail.com"
+        )
+        stale = [
+            {
+                "title": "Stale",
+                "start": "2026-05-07T09:00:00+00:00",
+                "end": "2026-05-07T10:00:00+00:00",
+                "calendar_name": "Primary",
+                "all_day": False,
+                "external_uid": "stale@google",
+                "account_label": "cached@gmail.com",
+            }
+        ]
+        asyncio.run(
+            gcal_cache.set_cached_events(
+                acc_cached, datetime.date(2026, 5, 7), stale
+            )
+        )
+
+        fetched_ids: list[int] = []
+
+        async def fake_fetch(acc, td):
+            fetched_ids.append(acc.id)
+            return [_ev(f"Fresh-{acc.email}", "2026-05-07T09:00:00+00:00")]
+
+        with (
+            patch.object(views.service, "fetch_events_for_account", fake_fetch),
+            patch.object(
+                views.gcal_cache,
+                "set_cached_events",
+                wraps=gcal_cache.set_cached_events,
+            ) as set_cache,
+        ):
+            resp = auth_client.get(
+                "/api/calendar/google/events/2026-05-07/?refresh=1"
+            )
+
+        data = resp.json()
+        assert resp.status_code == 200
+        assert acc_cached.id in fetched_ids
+        assert acc_other.id in fetched_ids
+        assert set_cache.await_count == 2
+        titles = sorted(e["title"] for e in data["events"])
+        assert titles == ["Fresh-cached@gmail.com", "Fresh-other@gmail.com"]
+
+        # Re-warmed entries serve the next non-forced GET (no provider call).
+        mock = MagicMock()
+        with patch.object(views.service, "fetch_events_for_account", mock):
+            r2 = auth_client.get("/api/calendar/google/events/2026-05-07/")
+        assert r2.status_code == 200
+        mock.assert_not_called()
+        assert sorted(e["title"] for e in r2.json()["events"]) == titles
+
+    def test_without_refresh_cached_account_not_refetched(self, auth_client, user):
+        """Companion: without ``?refresh=1`` a cached account is NOT re-fetched."""
+        import asyncio
+
+        acc_cached = _make_account(
+            user, google_account_id="s1", email="cached@gmail.com"
+        )
+        acc_uncached = _make_account(
+            user, google_account_id="s2", email="uncached@gmail.com"
+        )
+        payload = [
+            {
+                "title": "Cached",
+                "start": "2026-05-07T09:00:00+00:00",
+                "end": "2026-05-07T10:00:00+00:00",
+                "calendar_name": "Primary",
+                "all_day": False,
+                "external_uid": "cached@google",
+                "account_label": "cached@gmail.com",
+            }
+        ]
+        asyncio.run(
+            gcal_cache.set_cached_events(
+                acc_cached, datetime.date(2026, 5, 7), payload
+            )
+        )
+
+        fetched_ids: list[int] = []
+
+        async def fake_fetch(acc, td):
+            fetched_ids.append(acc.id)
+            return [_ev("Live", "2026-05-07T11:00:00+00:00")]
+
+        with patch.object(views.service, "fetch_events_for_account", fake_fetch):
+            resp = auth_client.get("/api/calendar/google/events/2026-05-07/")
+
+        data = resp.json()
+        assert resp.status_code == 200
+        assert acc_cached.id not in fetched_ids
+        assert fetched_ids == [acc_uncached.id]
+        assert "Cached" in [e["title"] for e in data["events"]]
+        assert "Live" in [e["title"] for e in data["events"]]
+
     def test_parsed_date_contract(self, auth_client, user):
         _make_account(user)
         captured = {}

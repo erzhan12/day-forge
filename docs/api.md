@@ -797,6 +797,12 @@ account_version)` cache (TTL = `CALDAV_CACHE_TTL_SECONDS`, default
 |------|------|-------|
 | `date` | string | `YYYY-MM-DD`. Invalid → `400`. |
 
+**Query params**
+
+| Name | Type | Notes |
+|------|------|-------|
+| `refresh` | string | Optional (feature 0031). Pass `1` to **bypass** the read cache and force a live provider re-fetch; the result still re-warms the cache, so a subsequent non-forced read is served from cache. Used by background polling (`EXTERNAL_TASKS_POLL_INTERVAL_SECONDS` > 0) via silent `refreshEvents`. |
+
 **Success — `200 OK`**
 
 ```json
@@ -1046,6 +1052,18 @@ Returns the refreshed list in the same shape as `GET /accounts/`.
 `async` multi-account fetch (the deploy is ASGI/uvicorn). Fetches across every
 connected account × selected calendar concurrently. Server-side per-`(user,
 account, date, account_version)` cache (TTL = `GOOGLE_CACHE_TTL_SECONDS`).
+
+**Path params**
+
+| Name | Type | Notes |
+|------|------|-------|
+| `date` | string | `YYYY-MM-DD`. Invalid → `400`. |
+
+**Query params**
+
+| Name | Type | Notes |
+|------|------|-------|
+| `refresh` | string | Optional (feature 0031). Pass `1` to **bypass** every connected account's read cache and force live re-fetches; each success still re-warms that account's cache. Used by background polling (`EXTERNAL_TASKS_POLL_INTERVAL_SECONDS` > 0) via silent `refreshEvents`. |
 
 **Success — `200 OK`** (composite shape; `account_errors` is **always**
 present, empty when all accounts loaded):

@@ -43,7 +43,7 @@ import type {
 } from "../types/calendar"
 import { useTodoist } from "../composables/useTodoist"
 import { useHabitica } from "../composables/useHabitica"
-import { useExternalTasksPoll } from "../composables/useExternalTasksPoll"
+import { useExternalSourcePoll } from "../composables/useExternalSourcePoll"
 import { useThemeFromProps } from "../composables/useThemeFromProps"
 import { useNowMinutes } from "../composables/useNowMinutes"
 import { useSoundNotifications } from "../composables/useSoundNotifications"
@@ -303,16 +303,29 @@ function completeHabiticaTask(taskId: string) {
   habitica.completeTask(taskId)
 }
 // Single fan-out point for BOTH the manual Refresh button and the background
-// poll. Keeping one copy is the whole reason the sidebar is source-agnostic:
-// two copies drift, and the failure mode is silent — manual Refresh and the
-// poll would quietly cover different sets of sources. Adding a third source
-// means editing exactly here.
+// poll (tasks branch). Keeping one copy is the whole reason the sidebar is
+// source-agnostic: two copies drift, and the failure mode is silent — manual
+// Refresh and the poll would quietly cover different sets of sources. Adding
+// a third task source means editing exactly here. Calendars use a separate
+// fan-out (`refreshExternalCalendars`) so the task Refresh button stays
+// task-only.
 function refreshExternalTasks(date: string = props.date) {
   if (todoist.state.statusKnown && todoist.state.connected) {
     void todoist.refreshTasks(date)
   }
   if (habitica.state.statusKnown && habitica.state.connected) {
     void habitica.refreshTasks(date)
+  }
+}
+
+// Single fan-out for connected calendars (background poll only — not wired
+// to the task Refresh button). Same statusKnown&&connected gate as tasks.
+function refreshExternalCalendars(date: string = props.date) {
+  if (calendar.state.statusKnown && calendar.state.connected) {
+    void calendar.refreshEvents(date)
+  }
+  if (googleCalendar.state.statusKnown && googleCalendar.state.connected) {
+    void googleCalendar.refreshEvents(date)
   }
 }
 
@@ -355,27 +368,9 @@ watch(sidebarOpen, writeChatSidebarOpen)
 const externalTasksSidebarOpen = ref<boolean>(readExternalTasksSidebarOpen())
 watch(externalTasksSidebarOpen, writeExternalTasksSidebarOpen)
 
-// Background external-task sync: poll while the left task rail is open.
-const externalTasksPollActive = computed(
-  () =>
-    isWide.value &&
-    externalTasksSidebarOpen.value &&
-    ((todoist.state.statusKnown && todoist.state.connected) ||
-      (habitica.state.statusKnown && habitica.state.connected)),
-)
-
-useExternalTasksPoll({
-  intervalSeconds: toRef(props, "external_tasks_poll_interval"),
-  date: toRef(props, "date"),
-  active: externalTasksPollActive,
-  refresh: (d) => refreshExternalTasks(d),
-})
-
-const chatSidebarWidth = computed(() => {
-  if (!isWide.value) return "0px"
-  return sidebarOpen.value ? "380px" : "32px"
-})
-
+// Placement must be declared before the poller: its watch({ immediate: true })
+// evaluates externalPollActive → calendarsBranch → externalCalendarVisible
+// synchronously during setup (TDZ if these consts sit below the poll call).
 const { placement: externalCalendarPlacement } = useExternalCalendarPlacement()
 
 const externalCalendarInSidebar = computed(
@@ -384,6 +379,50 @@ const externalCalendarInSidebar = computed(
 const externalCalendarInCenter = computed(
   () => externalCalendarPlacement.value === "center",
 )
+
+// Mirrors ExternalEventsPanel render conditions: center on any viewport;
+// sidebar only when the wide left rail is open.
+const externalCalendarVisible = computed(
+  () =>
+    externalCalendarInCenter.value ||
+    (externalCalendarInSidebar.value &&
+      isWide.value &&
+      externalTasksSidebarOpen.value),
+)
+
+const tasksBranch = computed(
+  () =>
+    isWide.value &&
+    externalTasksSidebarOpen.value &&
+    ((todoist.state.statusKnown && todoist.state.connected) ||
+      (habitica.state.statusKnown && habitica.state.connected)),
+)
+
+const calendarsBranch = computed(
+  () => externalConnected.value && externalCalendarVisible.value,
+)
+
+// Background external-task and external-calendar sync: poll while either
+// the task rail (with a connected task source) or a visible calendar panel
+// is active.
+const externalPollActive = computed(
+  () => tasksBranch.value || calendarsBranch.value,
+)
+
+useExternalSourcePoll({
+  intervalSeconds: toRef(props, "external_tasks_poll_interval"),
+  date: toRef(props, "date"),
+  active: externalPollActive,
+  refresh: (d) => {
+    if (tasksBranch.value) refreshExternalTasks(d)
+    if (calendarsBranch.value) refreshExternalCalendars(d)
+  },
+})
+
+const chatSidebarWidth = computed(() => {
+  if (!isWide.value) return "0px"
+  return sidebarOpen.value ? "380px" : "32px"
+})
 
 // The left sidebar hosts the Todoist list and, when placement is "sidebar",
 // the external-calendar panel — so it shows when EITHER is connected.
@@ -562,6 +601,15 @@ function handleAddHere(payload: { start_time: string; end_time: string }) {
 function logout() {
   router.post("/accounts/logout/")
 }
+
+defineExpose({
+  externalPollActive,
+  externalCalendarVisible,
+  tasksBranch,
+  calendarsBranch,
+  refreshExternalTasks,
+  refreshExternalCalendars,
+})
 </script>
 
 <template>

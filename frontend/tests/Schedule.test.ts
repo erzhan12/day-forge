@@ -16,7 +16,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { mount, VueWrapper, flushPromises } from "@vue/test-utils"
-import { nextTick, ref, type Ref } from "vue"
+import { nextTick, reactive, ref, type Ref } from "vue"
 
 // --- mocks ---------------------------------------------------------------
 
@@ -104,9 +104,110 @@ vi.mock("../src/composables/useDrag", () => ({
   }),
 }))
 
+// Controllable external-source mocks (feature 0031). Defaults keep panels
+// hidden so existing auto-draft / chat-routing tests stay unchanged.
+function makeProviderState() {
+  return reactive({
+    events: [] as unknown[],
+    tasks: [] as unknown[],
+    loading: false,
+    error: null as string | null,
+    connected: false,
+    statusKnown: false,
+    accountErrors: [] as unknown[],
+  })
+}
+
+const calendarState = makeProviderState()
+const googleCalendarState = makeProviderState()
+const todoistState = makeProviderState()
+const habiticaState = makeProviderState()
+
+const calendarRefreshEvents = vi.fn()
+const googleCalendarRefreshEvents = vi.fn()
+const todoistRefreshTasks = vi.fn()
+const habiticaRefreshTasks = vi.fn()
+
+function resetExternalProviderMocks(): void {
+  for (const state of [
+    calendarState,
+    googleCalendarState,
+    todoistState,
+    habiticaState,
+  ]) {
+    state.events = []
+    state.tasks = []
+    state.loading = false
+    state.error = null
+    state.connected = false
+    state.statusKnown = false
+    state.accountErrors = []
+  }
+  calendarRefreshEvents.mockClear()
+  googleCalendarRefreshEvents.mockClear()
+  todoistRefreshTasks.mockClear()
+  habiticaRefreshTasks.mockClear()
+  capturedPollOptions = null
+}
+
+vi.mock("../src/composables/useCalendar", () => ({
+  useCalendar: () => ({
+    state: calendarState,
+    fetchEvents: vi.fn(),
+    refreshEvents: calendarRefreshEvents,
+    fetchAccountStatus: vi.fn(),
+  }),
+}))
+
+vi.mock("../src/composables/useGoogleCalendar", () => ({
+  useGoogleCalendar: () => ({
+    state: googleCalendarState,
+    fetchEvents: vi.fn(),
+    refreshEvents: googleCalendarRefreshEvents,
+    fetchAccountStatus: vi.fn(),
+  }),
+}))
+
+vi.mock("../src/composables/useTodoist", () => ({
+  useTodoist: () => ({
+    state: todoistState,
+    fetchTasks: vi.fn(),
+    refreshTasks: todoistRefreshTasks,
+    completeTask: vi.fn(),
+    fetchAccountStatus: vi.fn(),
+  }),
+}))
+
+vi.mock("../src/composables/useHabitica", () => ({
+  useHabitica: () => ({
+    state: habiticaState,
+    fetchTasks: vi.fn(),
+    refreshTasks: habiticaRefreshTasks,
+    completeTask: vi.fn(),
+    fetchAccountStatus: vi.fn(),
+  }),
+}))
+
+type CapturedPollOptions = {
+  intervalSeconds: { value: number }
+  date: { value: string }
+  active: { value: boolean }
+  refresh: (date: string) => void | Promise<void>
+}
+
+let capturedPollOptions: CapturedPollOptions | null = null
+
+vi.mock("../src/composables/useExternalSourcePoll", () => ({
+  useExternalSourcePoll: (opts: CapturedPollOptions) => {
+    capturedPollOptions = opts
+  },
+}))
+
 // Import AFTER all mocks so the SUT picks them up.
 import Schedule from "../src/pages/Schedule.vue"
 import type { Schedule as ScheduleType, TimeBlock } from "../src/types"
+import { useExternalCalendarPlacement } from "../src/composables/useExternalCalendarPlacement"
+import { EXTERNAL_TASKS_SIDEBAR_OPEN_KEY } from "../src/utils/externalTasksSidebarStorage"
 
 // --- helpers -------------------------------------------------------------
 
@@ -206,6 +307,7 @@ describe("Schedule.vue auto-draft watcher", () => {
   beforeEach(() => {
     stubLocalStorage()
     stubMatchMedia(false)
+    resetExternalProviderMocks()
     generateDraft.mockResolvedValue({ ok: true, explanation: null })
     isGeneratingDraft.value = false
     lastDraftError.value = null
@@ -439,6 +541,7 @@ describe("Schedule.vue chat surface routing (feature 0008)", () => {
   beforeEach(() => {
     stubLocalStorage()
     stubMatchMedia(false)
+    resetExternalProviderMocks()
   })
 
   afterEach(() => {
@@ -553,5 +656,203 @@ describe("Schedule.vue chat surface routing (feature 0008)", () => {
     wrapper = mountStubbedSchedule()
     const el = wrapper.find(".schedule-page").element as HTMLElement
     expect(window.getComputedStyle(el).boxSizing).toBe("content-box")
+  })
+})
+
+// --- feature 0031: external source poll gating -----------------------
+
+type ScheduleExposed = {
+  externalPollActive: boolean
+  externalCalendarVisible: boolean
+  tasksBranch: boolean
+  calendarsBranch: boolean
+  refreshExternalTasks: (date?: string) => void
+  refreshExternalCalendars: (date?: string) => void
+}
+
+describe("Schedule.vue external source poll gating (feature 0031)", () => {
+  const { setPlacement } = useExternalCalendarPlacement()
+
+  beforeEach(() => {
+    stubLocalStorage()
+    stubMatchMedia(false)
+    resetExternalProviderMocks()
+    setPlacement("sidebar")
+    localStorage.setItem(EXTERNAL_TASKS_SIDEBAR_OPEN_KEY, JSON.stringify(true))
+  })
+
+  afterEach(() => {
+    wrapper?.unmount()
+    wrapper = null
+    localStorage.clear()
+    vi.unstubAllGlobals()
+    vi.clearAllMocks()
+  })
+
+  function mountPollSchedule() {
+    wrapper = mount(Schedule, {
+      props: {
+        schedule: makeSchedule("2026-05-04"),
+        blocks: [],
+        date: "2026-05-04",
+        auto_draft_pending: false,
+        has_template_for_type: true,
+        slot_type: "weekday" as const,
+        external_tasks_poll_interval: 60,
+      },
+      global: {
+        stubs: {
+          ...STUBS,
+          ChatSidebar: true,
+          ExternalTasksSidebar: true,
+          ExternalEventsPanel: true,
+          ExternalCalendarPlacementToggle: true,
+          AddToScheduleDialog: true,
+        },
+      },
+    })
+    return wrapper
+  }
+
+  function exposed(w: VueWrapper): ScheduleExposed {
+    return w.vm as unknown as ScheduleExposed
+  }
+
+  it("center placement + narrow viewport + calendar connected → poll active and fans out to refreshEvents", () => {
+    stubMatchMedia(false)
+    setPlacement("center")
+    calendarState.statusKnown = true
+    calendarState.connected = true
+
+    const w = mountPollSchedule()
+    const vm = exposed(w)
+
+    expect(vm.externalCalendarVisible).toBe(true)
+    expect(vm.calendarsBranch).toBe(true)
+    expect(vm.tasksBranch).toBe(false)
+    expect(vm.externalPollActive).toBe(true)
+    expect(capturedPollOptions?.active.value).toBe(true)
+
+    capturedPollOptions!.refresh("2026-05-04")
+    expect(calendarRefreshEvents).toHaveBeenCalledWith("2026-05-04")
+    expect(todoistRefreshTasks).not.toHaveBeenCalled()
+    expect(habiticaRefreshTasks).not.toHaveBeenCalled()
+  })
+
+  it("sidebar placement + wide + open + calendar connected → poll active", () => {
+    stubMatchMedia(true)
+    setPlacement("sidebar")
+    localStorage.setItem(EXTERNAL_TASKS_SIDEBAR_OPEN_KEY, JSON.stringify(true))
+    calendarState.statusKnown = true
+    calendarState.connected = true
+
+    const w = mountPollSchedule()
+    const vm = exposed(w)
+
+    expect(vm.externalCalendarVisible).toBe(true)
+    expect(vm.calendarsBranch).toBe(true)
+    expect(vm.externalPollActive).toBe(true)
+
+    capturedPollOptions!.refresh("2026-05-04")
+    expect(calendarRefreshEvents).toHaveBeenCalledWith("2026-05-04")
+  })
+
+  it("sidebar placement + narrow + calendar connected → calendars branch false", () => {
+    stubMatchMedia(false)
+    setPlacement("sidebar")
+    calendarState.statusKnown = true
+    calendarState.connected = true
+
+    const w = mountPollSchedule()
+    const vm = exposed(w)
+
+    expect(vm.externalCalendarVisible).toBe(false)
+    expect(vm.calendarsBranch).toBe(false)
+    expect(vm.externalPollActive).toBe(false)
+
+    if (capturedPollOptions) {
+      capturedPollOptions.refresh("2026-05-04")
+    }
+    expect(calendarRefreshEvents).not.toHaveBeenCalled()
+  })
+
+  it("sidebar placement + wide + collapsed + calendar connected → calendars branch false", () => {
+    stubMatchMedia(true)
+    setPlacement("sidebar")
+    localStorage.setItem(EXTERNAL_TASKS_SIDEBAR_OPEN_KEY, JSON.stringify(false))
+    calendarState.statusKnown = true
+    calendarState.connected = true
+
+    const w = mountPollSchedule()
+    const vm = exposed(w)
+
+    expect(vm.externalCalendarVisible).toBe(false)
+    expect(vm.calendarsBranch).toBe(false)
+    expect(vm.externalPollActive).toBe(false)
+
+    if (capturedPollOptions) {
+      capturedPollOptions.refresh("2026-05-04")
+    }
+    expect(calendarRefreshEvents).not.toHaveBeenCalled()
+  })
+
+  it("calendar-only tick (task rail closed) calls calendar refresh not task refresh", () => {
+    stubMatchMedia(true)
+    setPlacement("center")
+    localStorage.setItem(EXTERNAL_TASKS_SIDEBAR_OPEN_KEY, JSON.stringify(false))
+    calendarState.statusKnown = true
+    calendarState.connected = true
+    todoistState.statusKnown = true
+    todoistState.connected = true
+
+    const w = mountPollSchedule()
+    const vm = exposed(w)
+
+    expect(vm.calendarsBranch).toBe(true)
+    expect(vm.tasksBranch).toBe(false)
+    expect(vm.externalPollActive).toBe(true)
+
+    capturedPollOptions!.refresh("2026-05-04")
+    expect(calendarRefreshEvents).toHaveBeenCalledWith("2026-05-04")
+    expect(todoistRefreshTasks).not.toHaveBeenCalled()
+  })
+
+  it("tasks-only tick does not call calendar refresh", () => {
+    stubMatchMedia(true)
+    setPlacement("sidebar")
+    localStorage.setItem(EXTERNAL_TASKS_SIDEBAR_OPEN_KEY, JSON.stringify(true))
+    todoistState.statusKnown = true
+    todoistState.connected = true
+    // Calendar connected but sidebar-placed panel would be visible too —
+    // leave calendar disconnected so only the tasks branch is active.
+    calendarState.statusKnown = true
+    calendarState.connected = false
+
+    const w = mountPollSchedule()
+    const vm = exposed(w)
+
+    expect(vm.tasksBranch).toBe(true)
+    expect(vm.calendarsBranch).toBe(false)
+    expect(vm.externalPollActive).toBe(true)
+
+    capturedPollOptions!.refresh("2026-05-04")
+    expect(todoistRefreshTasks).toHaveBeenCalledWith("2026-05-04")
+    expect(calendarRefreshEvents).not.toHaveBeenCalled()
+    expect(googleCalendarRefreshEvents).not.toHaveBeenCalled()
+  })
+
+  it("disconnected provider's refreshEvents is never called", () => {
+    stubMatchMedia(false)
+    setPlacement("center")
+    calendarState.statusKnown = true
+    calendarState.connected = true
+    googleCalendarState.statusKnown = true
+    googleCalendarState.connected = false
+
+    mountPollSchedule()
+    capturedPollOptions!.refresh("2026-05-04")
+
+    expect(calendarRefreshEvents).toHaveBeenCalledWith("2026-05-04")
+    expect(googleCalendarRefreshEvents).not.toHaveBeenCalled()
   })
 })

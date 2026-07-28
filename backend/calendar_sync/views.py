@@ -5,7 +5,7 @@ Three URL paths, four method handlers:
   - GET    /api/calendar/account/         — status + default_base_url
   - POST   /api/calendar/account/         — verify + persist (upsert)
   - DELETE /api/calendar/account/         — disconnect
-  - GET    /api/calendar/events/<date>/   — fetch events (cached)
+  - GET    /api/calendar/events/<date>/   — fetch events (cached; ?refresh=1 bypasses)
 
 All non-2xx responses use the envelope ``{"errors": {"detail": ...}}``
 to match ``frontend/src/composables/useHttp.ts:77``.
@@ -161,9 +161,15 @@ def events(request: HttpRequest, date: str) -> JsonResponse:
     except CalDAVAccount.DoesNotExist:
         return _envelope("No CalDAV account configured", 503)
 
-    cached = calendar_cache.get_cached_events(account_row, parsed_date)
-    if cached is not None:
-        return JsonResponse({"events": cached})
+    # ``?refresh=1`` forces a cache-bypass live re-fetch (manual Refresh /
+    # background poll). Additive: a non-forced read still hits the cache,
+    # and the forced read re-warms it below.
+    force_refresh = request.GET.get("refresh") == "1"
+
+    if not force_refresh:
+        cached = calendar_cache.get_cached_events(account_row, parsed_date)
+        if cached is not None:
+            return JsonResponse({"events": cached})
 
     try:
         events_list = service.fetch_events_for_date(account_row, parsed_date)

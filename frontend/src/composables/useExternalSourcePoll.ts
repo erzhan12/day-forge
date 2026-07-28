@@ -1,15 +1,16 @@
-// Background external-task refresh while the left task rail is open.
+// Background external-task and external-calendar refresh while a
+// connected source panel is visible.
 
 import { onBeforeUnmount, watch, type Ref } from "vue"
 
-export interface ExternalTasksPollOptions {
+export interface ExternalSourcePollOptions {
   intervalSeconds: Ref<number>
   date: Ref<string>
   active: Ref<boolean>
   refresh: (date: string) => void | Promise<void>
 }
 
-export function useExternalTasksPoll(options: ExternalTasksPollOptions): void {
+export function useExternalSourcePoll(options: ExternalSourcePollOptions): void {
   let timer: ReturnType<typeof setInterval> | null = null
 
   function clearTimer(): void {

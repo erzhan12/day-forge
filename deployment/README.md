@@ -37,7 +37,7 @@ Add an **A record**: host `dayforge` → the droplet's public IP. (Subdomain of
 | `TODOIST_ENCRYPTION_KEY` | `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` |
 | `HABITICA_ENCRYPTION_KEY` | `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` |
 | `HABITICA_CLIENT_ID` | maintainer Habitica user ID for the `x-client` header (`{HABITICA_CLIENT_ID}-DayForge`) |
-| `EXTERNAL_TASKS_POLL_INTERVAL_SECONDS` | external-task sidebar refresh interval in seconds; default `60`, set `0` to disable |
+| `EXTERNAL_TASKS_POLL_INTERVAL_SECONDS` | external task + calendar background refresh interval in seconds; default `60`, set `0` to disable |
 | `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` / `GOOGLE_OAUTH_REDIRECT_URI` | from the Google Cloud console OAuth (Web) client; redirect URI = `https://dayforge.habitreward.org/api/calendar/google/callback/` |
 | `GOOGLE_OAUTH_TOKEN_KEY` | `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` |
 | `LLM_API_KEY` | OpenRouter key |

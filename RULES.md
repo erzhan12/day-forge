@@ -13,7 +13,7 @@ This is a living document — update it as new patterns emerge.
 ## Unified External Tasks Sidebar
 
 - `ExternalTasksSidebar` is the single left task rail. It renders one static section per connected source, emits source-specific retry/complete events, and has one global silent Refresh button. Do not route a Habitica task through Todoist handlers.
-- `useExternalTasksPoll` is source-agnostic: while wide and the left task rail is open, it calls every connected source's `refreshTasks(date)`. It is controlled by `EXTERNAL_TASKS_POLL_INTERVAL_SECONDS` (`0` disables).
+- `useExternalSourcePoll` is source-agnostic: while `externalPollActive` (task rail open with a connected task source, and/or a visible connected calendar panel), it fans out to each connected source's silent refresh (`refreshTasks` / `refreshEvents`). It is controlled by `EXTERNAL_TASKS_POLL_INTERVAL_SECONDS` (`0` disables).
 - Habitica API gotchas: list dailies with `type=dailys`; send `x-client: {HABITICA_CLIENT_ID}-DayForge`; fetch dailies only for client-today/overdue-carry scope and only keep `isDue` tasks. Habitica undated todos show today only, and overdue todos carry to client today. Sidebar order follows the pre-sorted `GET .../tasks/user?type=…` array (Habitica applies `tasksOrder` server-side; task JSON has no `position` field) — Day Forge stores that index as an internal sort key (dailies block, then todos block), not due date or title.
 - External task text from Todoist/Habitica is display-only and must not be added to draft/command/chat prompts.
 
@@ -488,11 +488,11 @@ the error on first load before `fetchAccountStatus()` resolves.
   rate limits** — the poll forces `?refresh=1` and Habitica costs two upstream
   calls per tick, so the interval divides its ~30 req/min budget across open
   tabs) is passed to Schedule as
-  `external_tasks_poll_interval`. When `> 0` and the external-tasks sidebar is
-  open on a wide viewport with at least one connected source,
-  `useExternalTasksPoll` calls each connected source's `refreshTasks` on that
-  interval (`?refresh=1`, silent). Polling pauses while `document.hidden`; one
-  refresh fires when the tab becomes visible again.
+  `external_tasks_poll_interval`. When `> 0` and `externalPollActive` (task
+  rail open with a connected task source, and/or a visible connected calendar
+  panel), `useExternalSourcePoll` fans out to each connected source's silent
+  refresh (`refreshTasks` / `refreshEvents`, `?refresh=1`). Polling pauses
+  while `document.hidden`; one refresh fires when the tab becomes visible again.
 - **Complete view parses no body** — `POST .../complete/` takes the id in
   the URL path and reads **no** `request.body`, so it has **no**
   `reject_oversized_body` guard (unlike `POST /account/`). Precedence is
@@ -509,12 +509,13 @@ the shell owns collapse/expand, width, and global refresh. Panel shows when
 **any** connected source is present. New integrations add a section +
 composable only — no duplicate sidebar chrome.
 
-**Polling decision (#73):** one shared **`EXTERNAL_TASKS_POLL_INTERVAL_SECONDS`**
-(default **`60`**, `0` = off) for the whole panel — replaces
-the old Todoist-only poll. While the panel is open on a wide viewport with at
-least one connected source,
-`useExternalTasksPoll` silently calls `refreshTasks` on every connected
-composable every 60s (`?refresh=1`); pauses when `document.hidden`.
+**Polling decision (#73 / #0031):** one shared **`EXTERNAL_TASKS_POLL_INTERVAL_SECONDS`**
+(default **`60`**, `0` = off) for external tasks **and** calendars — replaces
+the old Todoist-only poll. While `externalPollActive`,
+`useExternalSourcePoll` silently calls `refreshTasks` / `refreshEvents` on
+each connected composable every 60s (`?refresh=1`); pauses when
+`document.hidden`. Task and calendar fan-outs are gated separately so a
+calendar-only tick never polls rail-closed Habitica.
 
 ## Production deploy (feature 0016)
 

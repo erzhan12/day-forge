@@ -143,6 +143,160 @@ describe("useCalendar.fetchEvents", () => {
   })
 })
 
+describe("useCalendar.refreshEvents", () => {
+  beforeEach(() => {
+    requestJsonMock.mockReset()
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it("appends refresh=1 to the events URL", async () => {
+    requestJsonMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      data: { events: [] },
+    })
+    const calendar = useCalendar()
+    await calendar.refreshEvents("2026-05-07")
+
+    expect(requestJsonMock.mock.calls[0][0]).toBe(
+      "/api/calendar/events/2026-05-07/?refresh=1",
+    )
+  })
+
+  it("stays silent: loading never flips true and events stay populated until the atomic commit", async () => {
+    const dRefresh = defer<{ ok: boolean; data?: object; status?: number }>()
+    requestJsonMock.mockReturnValueOnce(dRefresh.promise)
+    const calendar = useCalendar()
+    calendar.state.events = [eventPayload("A", "A"), eventPayload("B", "B")]
+    calendar.state.connected = true
+    calendar.state.statusKnown = true
+
+    const p = calendar.refreshEvents("2026-05-07")
+    expect(calendar.state.loading).toBe(false)
+    expect(calendar.state.events).toHaveLength(2)
+
+    dRefresh.resolve({
+      ok: true,
+      status: 200,
+      data: { events: [eventPayload("C", "C")] },
+    })
+    await p
+
+    expect(calendar.state.loading).toBe(false)
+    expect(calendar.state.events.map((e) => e.external_uid)).toEqual(["C"])
+  })
+
+  it("shares the dual commit guard with fetchEvents (a superseded refresh is dropped)", async () => {
+    const d1 = defer<{ ok: boolean; data?: object; status?: number }>()
+    const d2 = defer<{ ok: boolean; data?: object; status?: number }>()
+    requestJsonMock.mockReturnValueOnce(d1.promise).mockReturnValueOnce(d2.promise)
+
+    const calendar = useCalendar()
+    const p1 = calendar.refreshEvents("2026-05-01")
+    const p2 = calendar.fetchEvents("2026-05-02")
+
+    d2.resolve({
+      ok: true,
+      status: 200,
+      data: { events: [eventPayload("d2", "Day 2")] },
+    })
+    d1.resolve({
+      ok: true,
+      status: 200,
+      data: { events: [eventPayload("d1", "Day 1")] },
+    })
+
+    await p2
+    await p1
+
+    expect(calendar.state.events).toHaveLength(1)
+    expect(calendar.state.events[0].title).toBe("Day 2")
+  })
+
+  it("aborts an in-flight fetchEvents when refreshEvents supersedes it", async () => {
+    const d1 = defer<{ ok: boolean; data?: object; status?: number }>()
+    const d2 = defer<{ ok: boolean; data?: object; status?: number }>()
+    requestJsonMock.mockReturnValueOnce(d1.promise).mockReturnValueOnce(d2.promise)
+
+    const calendar = useCalendar()
+    const p1 = calendar.fetchEvents("2026-05-07")
+    const firstSignal = requestJsonMock.mock.calls[0][3]?.signal as AbortSignal
+    expect(firstSignal.aborted).toBe(false)
+
+    const p2 = calendar.refreshEvents("2026-05-07")
+    expect(firstSignal.aborted).toBe(true)
+
+    // Prior request rejects with AbortError — must not touch state.
+    d1.reject(new DOMException("aborted", "AbortError"))
+    d2.resolve({
+      ok: true,
+      status: 200,
+      data: { events: [eventPayload("fresh", "Fresh")] },
+    })
+    await p1
+    await p2
+
+    expect(calendar.state.error).toBeNull()
+    expect(calendar.state.events[0].title).toBe("Fresh")
+  })
+
+  it("silent refresh on a non-503 error leaves last-good events untouched", async () => {
+    requestJsonMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      data: { events: [eventPayload("keep", "Keep")] },
+    })
+    const calendar = useCalendar()
+    await calendar.fetchEvents("2026-05-07")
+    expect(calendar.state.events).toHaveLength(1)
+
+    requestJsonMock.mockResolvedValueOnce({
+      ok: false,
+      status: 504,
+      errors: { detail: "timed out" },
+    })
+    await calendar.refreshEvents("2026-05-07")
+
+    expect(calendar.state.events).toHaveLength(1)
+    expect(calendar.state.events[0].title).toBe("Keep")
+    expect(calendar.state.error).toMatch(/unavailable/i)
+  })
+
+  it("silent refresh that aborts an in-flight load blanks on non-503 failure", async () => {
+    requestJsonMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      data: { events: [eventPayload("dayA", "Day A")] },
+    })
+    const calendar = useCalendar()
+    await calendar.fetchEvents("2026-05-07")
+    expect(calendar.state.events[0].title).toBe("Day A")
+
+    const dLoad = defer<{ ok: boolean; data?: object; status?: number; errors?: object }>()
+    const dRefresh = defer<{ ok: boolean; data?: object; status?: number; errors?: object }>()
+    requestJsonMock.mockReturnValueOnce(dLoad.promise).mockReturnValueOnce(dRefresh.promise)
+
+    const pLoad = calendar.fetchEvents("2026-05-08")
+    expect(calendar.state.loading).toBe(true)
+
+    const pRefresh = calendar.refreshEvents("2026-05-08")
+    dLoad.reject(new DOMException("aborted", "AbortError"))
+    dRefresh.resolve({
+      ok: false,
+      status: 504,
+      errors: { detail: "timed out" },
+    })
+    await pLoad
+    await pRefresh
+
+    expect(calendar.state.events).toEqual([])
+    expect(calendar.state.error).toMatch(/unavailable/i)
+  })
+})
+
 describe("useCalendar.fetchAccountStatus", () => {
   beforeEach(() => {
     requestJsonMock.mockReset()

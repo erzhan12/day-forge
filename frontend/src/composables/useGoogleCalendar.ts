@@ -63,7 +63,21 @@ export function useGoogleCalendar() {
     }
   }
 
-  async function fetchEvents(date: string): Promise<void> {
+  // Shared fetch body for both the initial load (`fetchEvents`) and the
+  // manual/background refresh (`refreshEvents`).
+  //   - `force`  → append `refresh=1` so the backend bypasses its read cache.
+  //   - `silent` → skip the `loading=true` skeleton flip so existing rows
+  //     stay visible during a background refresh (no skeleton flash). On a
+  //     whole-request (non-503, non-ok) failure, a *steady-state* silent
+  //     refresh also leaves last-good events/accountErrors on screen (only
+  //     sets `error`). If silent supersedes an in-flight non-silent load
+  //     (`state.loading` still true), blank on failure — otherwise a
+  //     date-change fetch aborted by a poll could leave the prior day's
+  //     events under the new date.
+  async function _fetchEvents(
+    date: string,
+    { force = false, silent = false }: { force?: boolean; silent?: boolean } = {},
+  ): Promise<void> {
     eventsAbortController.value?.abort()
     const controller = new AbortController()
     eventsAbortController.value = controller
@@ -72,13 +86,23 @@ export function useGoogleCalendar() {
     const seq = ++eventsRequestSeq.value
     const expectedDate = date
 
-    state.loading = true
+    // Capture before flipping loading: steady-state silent polls preserve
+    // last-good rows on error; silent that interrupts a loading fetch does not.
+    const preserveOnError = silent && !state.loading
+
+    if (!silent) {
+      state.loading = true
+    }
     state.error = null
+
+    const eventsUrl = force
+      ? `/api/calendar/google/events/${date}/?refresh=1`
+      : `/api/calendar/google/events/${date}/`
 
     let result
     try {
       result = await requestJson(
-        `/api/calendar/google/events/${date}/`,
+        eventsUrl,
         "GET",
         undefined,
         { signal: controller.signal },
@@ -114,14 +138,24 @@ export function useGoogleCalendar() {
       state.statusKnown = true
       return
     }
-    // Whole-request failure (no 200) → there are no valid Google events for
-    // this date. Clear stale events/banners so only the error banner shows —
-    // the panel is non-suppressing, so leaving them would render stale events
-    // from a prior date/fetch alongside the new error.
-    state.events = []
-    state.accountErrors = []
+    // Whole-request failure (no 200).
+    if (!preserveOnError) {
+      state.events = []
+      state.accountErrors = []
+    }
     const msg = statusToMessage(result.status)
     state.error = msg ?? extractErrorMessage(result.errors)
+  }
+
+  // Initial / date-change load — shows the skeleton on first fetch.
+  function fetchEvents(date: string): Promise<void> {
+    return _fetchEvents(date, { force: false, silent: false })
+  }
+
+  // Background poll / forced re-fetch — cache bypass, silent so existing
+  // events stay visible (no skeleton flash). Atomic commit on success.
+  function refreshEvents(date: string): Promise<void> {
+    return _fetchEvents(date, { force: true, silent: true })
   }
 
   async function fetchAccountStatus(): Promise<void> {
@@ -157,7 +191,7 @@ export function useGoogleCalendar() {
     }
   }
 
-  return { state, fetchEvents, fetchAccountStatus }
+  return { state, fetchEvents, refreshEvents, fetchAccountStatus }
 }
 
 function extractErrorMessage(

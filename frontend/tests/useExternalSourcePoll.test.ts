@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { ref } from "vue"
-import { useExternalTasksPoll } from "../src/composables/useExternalTasksPoll"
+import { useExternalSourcePoll } from "../src/composables/useExternalSourcePoll"
 
-describe("useExternalTasksPoll", () => {
+describe("useExternalSourcePoll", () => {
   beforeEach(() => {
     vi.useFakeTimers()
     Object.defineProperty(document, "hidden", {
@@ -26,7 +26,7 @@ describe("useExternalTasksPoll", () => {
     const date = ref("2026-06-23")
     const active = ref(true)
 
-    useExternalTasksPoll({ intervalSeconds, date, active, refresh })
+    useExternalSourcePoll({ intervalSeconds, date, active, refresh })
 
     vi.advanceTimersByTime(60_000)
     expect(refresh).not.toHaveBeenCalled()
@@ -38,7 +38,7 @@ describe("useExternalTasksPoll", () => {
     const date = ref("2026-06-23")
     const active = ref(true)
 
-    useExternalTasksPoll({ intervalSeconds, date, active, refresh })
+    useExternalSourcePoll({ intervalSeconds, date, active, refresh })
 
     vi.advanceTimersByTime(10_000)
     expect(refresh).toHaveBeenCalledTimes(1)
@@ -48,13 +48,28 @@ describe("useExternalTasksPoll", () => {
     expect(refresh).toHaveBeenCalledTimes(2)
   })
 
+  it("invokes refresh while active for a calendar-only (source-agnostic) poll", () => {
+    // Calendar-only activation in Schedule.vue is just `active=true` with a
+    // fan-out that calls refreshEvents — the poller itself is source-agnostic.
+    const refresh = vi.fn()
+    const intervalSeconds = ref(10)
+    const date = ref("2026-06-23")
+    const active = ref(true)
+
+    useExternalSourcePoll({ intervalSeconds, date, active, refresh })
+
+    vi.advanceTimersByTime(10_000)
+    expect(refresh).toHaveBeenCalledTimes(1)
+    expect(refresh).toHaveBeenCalledWith("2026-06-23")
+  })
+
   it("stops polling when active becomes false", () => {
     const refresh = vi.fn()
     const intervalSeconds = ref(10)
     const date = ref("2026-06-23")
     const active = ref(true)
 
-    useExternalTasksPoll({ intervalSeconds, date, active, refresh })
+    useExternalSourcePoll({ intervalSeconds, date, active, refresh })
 
     vi.advanceTimersByTime(10_000)
     expect(refresh).toHaveBeenCalledTimes(1)
@@ -70,7 +85,7 @@ describe("useExternalTasksPoll", () => {
     const date = ref("2026-06-23")
     const active = ref(true)
 
-    useExternalTasksPoll({ intervalSeconds, date, active, refresh })
+    useExternalSourcePoll({ intervalSeconds, date, active, refresh })
 
     date.value = "2026-06-24"
     vi.advanceTimersByTime(10_000)
@@ -83,7 +98,7 @@ describe("useExternalTasksPoll", () => {
     const date = ref("2026-06-23")
     const active = ref(true)
 
-    useExternalTasksPoll({ intervalSeconds, date, active, refresh })
+    useExternalSourcePoll({ intervalSeconds, date, active, refresh })
 
     Object.defineProperty(document, "hidden", {
       configurable: true,
@@ -99,7 +114,7 @@ describe("useExternalTasksPoll", () => {
     const date = ref("2026-06-23")
     const active = ref(true)
 
-    useExternalTasksPoll({ intervalSeconds, date, active, refresh })
+    useExternalSourcePoll({ intervalSeconds, date, active, refresh })
 
     Object.defineProperty(document, "hidden", {
       configurable: true,

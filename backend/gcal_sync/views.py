@@ -6,7 +6,7 @@ Five URL paths under ``/api/calendar/google/``:
   - GET    /api/calendar/google/callback/             — code→token, upsert, 302 → Settings
   - GET    /api/calendar/google/accounts/             — list connected accounts
   - DELETE /api/calendar/google/accounts/<id>/        — disconnect one account
-  - GET    /api/calendar/google/events/<date>/        — async multi-account fetch
+  - GET    /api/calendar/google/events/<date>/        — multi-account fetch (?refresh=1 bypasses)
 
 All non-2xx JSON responses use the envelope ``{"errors": {"detail": ...}}``
 to match ``frontend/src/composables/useHttp.ts``. The connect/callback views
@@ -178,14 +178,21 @@ async def events(request: HttpRequest, date: str) -> JsonResponse:
     merged: list[dict] = []
     account_errors: list[dict] = []
 
-    # Cache hits go straight into the merged list; misses are fetched.
+    # ``?refresh=1`` forces a cache-bypass live re-fetch for every account
+    # (manual Refresh / background poll). Additive: a non-forced read still
+    # serves cache hits; forced reads re-warm via ``set_cached_events`` below.
+    force_refresh = request.GET.get("refresh") == "1"
+
+    # Cache hits go straight into the merged list; misses (and all accounts
+    # under force_refresh) are fetched.
     pending: list = []
     for acc in accounts_list:
-        cached = await gcal_cache.get_cached_events(acc, target_date)
-        if cached is not None:
-            merged.extend(cached)
-        else:
-            pending.append(acc)
+        if not force_refresh:
+            cached = await gcal_cache.get_cached_events(acc, target_date)
+            if cached is not None:
+                merged.extend(cached)
+                continue
+        pending.append(acc)
 
     results = await asyncio.gather(
         *[service.fetch_events_for_account(acc, target_date) for acc in pending],

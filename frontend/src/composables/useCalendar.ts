@@ -58,7 +58,22 @@ export function useCalendar() {
     }
   }
 
-  async function fetchEvents(date: string): Promise<void> {
+  // Shared fetch body for both the initial load (`fetchEvents`) and the
+  // manual/background refresh (`refreshEvents`).
+  //   - `force`  → append `refresh=1` so the backend bypasses its read cache.
+  //   - `silent` → skip the `loading=true` skeleton flip so existing rows
+  //     stay visible during a background refresh (no skeleton flash). The
+  //     commit is still atomic and the error clear / commit-guard / abort
+  //     logic is unchanged.
+  //   Non-503 errors: CalDAV normally leaves last-good events (unlike
+  //   Google's non-silent blank). Exception: a silent refresh that
+  //   supersedes an in-flight load (`state.loading` still true) blanks —
+  //   otherwise a date-change fetch aborted by a poll can leave the prior
+  //   day's events under the new date.
+  async function _fetchEvents(
+    date: string,
+    { force = false, silent = false }: { force?: boolean; silent?: boolean } = {},
+  ): Promise<void> {
     eventsAbortController.value?.abort()
     const controller = new AbortController()
     eventsAbortController.value = controller
@@ -67,13 +82,22 @@ export function useCalendar() {
     const seq = ++eventsRequestSeq.value
     const expectedDate = date
 
-    state.loading = true
+    // Silent interrupting a loading fetch must blank on error (see header).
+    const blankOnError = silent && state.loading
+
+    if (!silent) {
+      state.loading = true
+    }
     state.error = null
+
+    const eventsUrl = force
+      ? `/api/calendar/events/${date}/?refresh=1`
+      : `/api/calendar/events/${date}/`
 
     let result
     try {
       result = await requestJson(
-        `/api/calendar/events/${date}/`,
+        eventsUrl,
         "GET",
         undefined,
         { signal: controller.signal },
@@ -109,8 +133,22 @@ export function useCalendar() {
       state.statusKnown = true
       return
     }
+    if (blankOnError) {
+      state.events = []
+    }
     const msg = statusToMessage(result.status)
     state.error = msg ?? extractErrorMessage(result.errors)
+  }
+
+  // Initial / date-change load — shows the skeleton on first fetch.
+  function fetchEvents(date: string): Promise<void> {
+    return _fetchEvents(date, { force: false, silent: false })
+  }
+
+  // Background poll / forced re-fetch — cache bypass, silent so existing
+  // events stay visible (no skeleton flash). Atomic commit on success.
+  function refreshEvents(date: string): Promise<void> {
+    return _fetchEvents(date, { force: true, silent: true })
   }
 
   async function fetchAccountStatus(): Promise<void> {
@@ -146,7 +184,7 @@ export function useCalendar() {
     }
   }
 
-  return { state, fetchEvents, fetchAccountStatus }
+  return { state, fetchEvents, refreshEvents, fetchAccountStatus }
 }
 
 function extractErrorMessage(

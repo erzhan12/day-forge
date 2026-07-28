@@ -10,8 +10,10 @@ from unittest.mock import MagicMock, patch
 
 import caldav
 import pytest
+from calendar_sync import cache as calendar_cache
 from calendar_sync import service
 from calendar_sync.models import CalDAVAccount
+from calendar_sync.schemas import NormalizedEvent
 from cryptography.fernet import Fernet
 from django.contrib.auth.models import User
 from django.test import Client
@@ -304,6 +306,81 @@ class TestEventsEndpoint:
             # Cache hit must not open a second DAV client.
             assert cls.call_count == first_calls
             assert r1.json() == r2.json()
+
+    def test_refresh_bypasses_cache_and_rewarms(self, auth_client, account):
+        """``?refresh=1`` must bypass a pre-seeded cache entry, hit the
+        provider, and re-warm via ``set_cached_events``."""
+        target = datetime.date(2026, 5, 7)
+        calendar_cache.set_cached_events(
+            account,
+            target,
+            [
+                {
+                    "title": "Stale",
+                    "start": "2026-05-07T09:00:00+00:00",
+                    "end": "2026-05-07T10:00:00+00:00",
+                    "calendar_name": "Personal",
+                    "all_day": False,
+                    "external_uid": "stale@example.com",
+                    "account_label": "",
+                }
+            ],
+        )
+        fresh = NormalizedEvent(
+            title="Fresh",
+            start=datetime.datetime(2026, 5, 7, 14, 0, tzinfo=datetime.UTC),
+            end=datetime.datetime(2026, 5, 7, 15, 0, tzinfo=datetime.UTC),
+            calendar_name="Personal",
+            all_day=False,
+            external_uid="fresh@example.com",
+        )
+        with (
+            patch(
+                "calendar_sync.service.fetch_events_for_date",
+                return_value=[fresh],
+            ) as fetch,
+            patch(
+                "calendar_sync.views.calendar_cache.set_cached_events",
+                wraps=calendar_cache.set_cached_events,
+            ) as set_cache,
+        ):
+            resp = auth_client.get("/api/calendar/events/2026-05-07/?refresh=1")
+
+        assert resp.status_code == 200
+        assert [e["title"] for e in resp.json()["events"]] == ["Fresh"]
+        fetch.assert_called_once()
+        set_cache.assert_called_once()
+
+        # Re-warmed entry serves the next non-forced GET (no provider call).
+        with patch("calendar_sync.service.fetch_events_for_date") as fetch2:
+            r2 = auth_client.get("/api/calendar/events/2026-05-07/")
+        assert r2.status_code == 200
+        assert [e["title"] for e in r2.json()["events"]] == ["Fresh"]
+        fetch2.assert_not_called()
+
+    def test_cache_hit_without_refresh_skips_service(self, auth_client, account):
+        """Companion: without ``?refresh=1`` a pre-seeded cache hit still
+        short-circuits (no service call)."""
+        calendar_cache.set_cached_events(
+            account,
+            datetime.date(2026, 5, 7),
+            [
+                {
+                    "title": "Cached",
+                    "start": "2026-05-07T09:00:00+00:00",
+                    "end": "2026-05-07T10:00:00+00:00",
+                    "calendar_name": "Personal",
+                    "all_day": False,
+                    "external_uid": "cached@example.com",
+                    "account_label": "",
+                }
+            ],
+        )
+        with patch("calendar_sync.service.fetch_events_for_date") as fetch:
+            resp = auth_client.get("/api/calendar/events/2026-05-07/")
+        assert resp.status_code == 200
+        assert [e["title"] for e in resp.json()["events"]] == ["Cached"]
+        fetch.assert_not_called()
 
     def test_auth_error_returns_401_envelope(self, auth_client, account):
         with patch(
