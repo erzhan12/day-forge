@@ -398,8 +398,14 @@ const tasksBranch = computed(
       (habitica.state.statusKnown && habitica.state.connected)),
 )
 
+// Per-source statusKnown && connected mirrors tasksBranch — avoids a poll
+// tick during the brief account-status load window (connected before
+// statusKnown), where refreshExternalCalendars would only no-op anyway.
 const calendarsBranch = computed(
-  () => externalConnected.value && externalCalendarVisible.value,
+  () =>
+    ((calendar.state.statusKnown && calendar.state.connected) ||
+      (googleCalendar.state.statusKnown && googleCalendar.state.connected)) &&
+    externalCalendarVisible.value,
 )
 
 // Background external-task and external-calendar sync: poll while either
@@ -602,6 +608,8 @@ function logout() {
   router.post("/accounts/logout/")
 }
 
+// Test seam — poll-gating internals asserted by Schedule.test.ts; not part
+// of the public component API. Do not wire parent code against these.
 defineExpose({
   externalPollActive,
   externalCalendarVisible,

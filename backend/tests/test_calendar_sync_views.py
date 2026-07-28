@@ -382,6 +382,35 @@ class TestEventsEndpoint:
         assert [e["title"] for e in resp.json()["events"]] == ["Cached"]
         fetch.assert_not_called()
 
+    @pytest.mark.parametrize("value", ["0", "true", "yes", ""])
+    def test_non_one_refresh_value_does_not_bypass_cache(
+        self, auth_client, account, value
+    ):
+        """Only the exact string ``"1"`` bypasses; any other ``refresh``
+        value serves from cache (``request.GET.get("refresh") == "1"``)."""
+        calendar_cache.set_cached_events(
+            account,
+            datetime.date(2026, 5, 7),
+            [
+                {
+                    "title": "Cached",
+                    "start": "2026-05-07T09:00:00+00:00",
+                    "end": "2026-05-07T10:00:00+00:00",
+                    "calendar_name": "Personal",
+                    "all_day": False,
+                    "external_uid": "cached@example.com",
+                    "account_label": "",
+                }
+            ],
+        )
+        with patch("calendar_sync.service.fetch_events_for_date") as fetch:
+            resp = auth_client.get(
+                f"/api/calendar/events/2026-05-07/?refresh={value}"
+            )
+        assert resp.status_code == 200
+        assert [e["title"] for e in resp.json()["events"]] == ["Cached"]
+        fetch.assert_not_called()
+
     def test_auth_error_returns_401_envelope(self, auth_client, account):
         with patch(
             "calendar_sync.service.fetch_events_for_date",

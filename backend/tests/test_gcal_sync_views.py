@@ -434,6 +434,53 @@ class TestEvents:
         assert "Cached" in [e["title"] for e in data["events"]]
         assert "Live" in [e["title"] for e in data["events"]]
 
+    @pytest.mark.parametrize("value", ["0", "true", "yes", ""])
+    def test_non_one_refresh_value_does_not_bypass_cache(
+        self, auth_client, user, value
+    ):
+        """Only the exact string ``"1"`` bypasses; any other ``refresh``
+        value keeps a cached account off the fetch path
+        (``request.GET.get("refresh") == "1"``)."""
+        import asyncio
+
+        acc_cached = _make_account(
+            user, google_account_id="s1", email="cached@gmail.com"
+        )
+        acc_uncached = _make_account(
+            user, google_account_id="s2", email="uncached@gmail.com"
+        )
+        payload = [
+            {
+                "title": "Cached",
+                "start": "2026-05-07T09:00:00+00:00",
+                "end": "2026-05-07T10:00:00+00:00",
+                "calendar_name": "Primary",
+                "all_day": False,
+                "external_uid": "cached@google",
+                "account_label": "cached@gmail.com",
+            }
+        ]
+        asyncio.run(
+            gcal_cache.set_cached_events(
+                acc_cached, datetime.date(2026, 5, 7), payload
+            )
+        )
+
+        fetched_ids: list[int] = []
+
+        async def fake_fetch(acc, td):
+            fetched_ids.append(acc.id)
+            return [_ev("Live", "2026-05-07T11:00:00+00:00")]
+
+        with patch.object(views.service, "fetch_events_for_account", fake_fetch):
+            resp = auth_client.get(
+                f"/api/calendar/google/events/2026-05-07/?refresh={value}"
+            )
+
+        assert resp.status_code == 200
+        assert acc_cached.id not in fetched_ids
+        assert fetched_ids == [acc_uncached.id]
+
     def test_parsed_date_contract(self, auth_client, user):
         _make_account(user)
         captured = {}

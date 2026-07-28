@@ -82,8 +82,10 @@ export function useCalendar() {
     const seq = ++eventsRequestSeq.value
     const expectedDate = date
 
-    // Silent interrupting a loading fetch must blank on error (see header).
-    const blankOnError = silent && state.loading
+    // Steady-state silent poll preserves last-good rows on error; a silent
+    // refresh interrupting a loading fetch does not (see header). Polarity
+    // matches `useGoogleCalendar.ts`.
+    const preserveOnError = silent && !state.loading
 
     if (!silent) {
       state.loading = true
@@ -133,7 +135,7 @@ export function useCalendar() {
       state.statusKnown = true
       return
     }
-    if (blankOnError) {
+    if (!preserveOnError) {
       state.events = []
     }
     const msg = statusToMessage(result.status)
