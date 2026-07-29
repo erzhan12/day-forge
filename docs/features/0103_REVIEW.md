@@ -18,7 +18,7 @@ agent (`--mode ask`), run in parallel.
 | # | Engine(s) | Sev | Finding | Verdict |
 |---|-----------|-----|---------|---------|
 | 1 | codex + cursor | P3 | `get_or_create` (api.py:68) ran **before** the type guards; sibling `create_block_from_event` runs it after — malformed payload created an empty `Schedule` row as a side effect | **ACCEPTED / fixed** — moved `get_or_create` below the type-guard block, mirroring the sibling. Pre-existing ordering (already true for the other early-return 400 paths) but aligned with the plan's "mirror sibling" intent. |
-| 2 | codex + cursor | P3 | `assert resp.status_code != 500` (3 sites) is dead after the preceding `== 400` | **REJECTED / kept** — intentional documentation of issue #103's "400 (never 500)" acceptance criterion; harmless, communicates regression intent. |
+| 2 | codex + cursor + claude-review (PR #118) | P3 | `assert resp.status_code != 500` is dead after the preceding `== 400` | **ACCEPTED / fixed** (on PR review) — initially kept as intent-documentation, but claude-review re-raised with the sound point that the assertion is unreachable and misleads readers into thinking it gives independent signal; method names + `== 400` already carry the "never 500" intent. Removed all four sites. |
 | 3 | cursor | P3 | No test for non-string `end_time` (only `start_time` covered); loop is symmetric so code is correct, coverage gap only | **ACCEPTED / fixed** — added `test_non_string_end_time_returns_400`. |
 
 ### Fixes applied

@@ -322,7 +322,6 @@ class TestCreateBlock:
             content_type="application/json",
         )
         assert resp.status_code == 400
-        assert resp.status_code != 500
         assert resp.json()["errors"]["title"] == "Title must be a string."
 
     @pytest.mark.django_db
@@ -338,7 +337,6 @@ class TestCreateBlock:
             content_type="application/json",
         )
         assert resp.status_code == 400
-        assert resp.status_code != 500
         assert resp.json()["errors"]["category"] == "Category must be a string."
 
     @pytest.mark.django_db
@@ -353,7 +351,6 @@ class TestCreateBlock:
             content_type="application/json",
         )
         assert resp.status_code == 400
-        assert resp.status_code != 500
         assert resp.json()["errors"]["start_time"] == "start_time must be a string."
 
     @pytest.mark.django_db
@@ -368,7 +365,6 @@ class TestCreateBlock:
             content_type="application/json",
         )
         assert resp.status_code == 400
-        assert resp.status_code != 500
         assert resp.json()["errors"]["end_time"] == "end_time must be a string."
 
     @pytest.mark.django_db
