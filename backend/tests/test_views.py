@@ -487,10 +487,7 @@ class TestBlockDetail:
     def test_non_string_category_returns_400_not_500(
         self, auth_client, time_block, bad_category
     ):
-        # ``isinstance(..., str)`` guards both the unhashable case (``[]`` →
-        # TypeError on ``not in VALID_CATEGORIES`` → 500) and hashable
-        # non-strings (``42``); the parametrize locks in that the guard is a
-        # pure string check, not just an unhashable-type shield.
+        # [] unhashable (500 without guard); 42 hashable non-str — guard is a pure str check.
         resp = auth_client.patch(
             f"/api/blocks/{time_block.pk}/",
             json.dumps({"category": bad_category}),
