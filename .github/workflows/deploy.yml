@@ -43,6 +43,11 @@ jobs:
         working-directory: frontend
         run: npm ci --no-audit --no-fund
 
+      # Fail-closed security gate: blocks the deploy if any high/critical
+      # advisory hits the prod dependency graph (see docs/features/0102_REVIEW.md).
+      # EMERGENCY BYPASS (backend-only hotfix blocked by an unresolvable frontend
+      # advisory): temporarily raise this to `--audit-level=critical` on a branch,
+      # or comment out this step, and open a follow-up to restore + patch the dep.
       - name: Frontend prod audit
         working-directory: frontend
         run: npm audit --omit=dev --audit-level=high

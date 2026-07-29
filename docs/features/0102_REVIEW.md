@@ -27,3 +27,7 @@ Cursor verification log confirmed independently: audit step placement, fail-clos
 - Backend untouched → no ruff/pytest impact.
 
 **Result:** SUCCESS — zero valid P1/P2, verification green.
+
+## claude-review (PR #117) follow-up — APPROVED, 2 P2 polish applied
+- **P2 bundle size:** axios 1.18.1 pulls Node-native transitives (`https-proxy-agent`, `agent-base`, `debug`, `ms`). Verified they do **not** enter the browser bundle (Vite uses axios' XHR adapter; Node http adapter tree-shaken). Baseline `dist/assets/app.js` = 374,089 B → PR = 384,637 B (**+10.5 KB / +2.8%**), attributable to axios core growth across 4 minor versions, not the Node transitives. Acceptable for a security bump.
+- **P2 CI escape hatch:** added an inline emergency-bypass comment above the audit step in `deploy.yml` (raise to `--audit-level=critical` or comment out the step for a blocked backend-only hotfix).
