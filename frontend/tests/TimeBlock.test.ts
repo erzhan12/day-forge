@@ -460,6 +460,34 @@ describe("TimeBlock", () => {
     expect(mockUpdateBlock).not.toHaveBeenCalled()
   })
 
+  it("disables the compact-layout checkbox while the schedule is disabled", async () => {
+    // The compact (<=30m) branch renders a separate <input>; assert it also
+    // carries the native disabled state (both branches bind :disabled="disabled").
+    const wrapper = mount(TimeBlock, {
+      props: {
+        block: makeBlock({ start_time: "09:00", end_time: "09:25" }),
+        date: "2026-04-10",
+      },
+      global: {
+        provide: {
+          undo: { pushUndo: mockPushUndo, snapshotBlocks: mockSnapshotBlocks },
+          drag: {
+            startDrag: vi.fn(),
+            isDragging: ref(false),
+            dragBlockId: ref(null),
+            shiftedBlockIds: ref(new Set()),
+          },
+          scheduleContainer: ref(null),
+          scheduleDisabled: ref(true),
+        },
+      },
+    })
+    expect(wrapper.find(".time-block").classes()).toContain("compact")
+    expect((wrapper.find(".checkbox").element as HTMLInputElement).disabled).toBe(true)
+    await wrapper.find(".checkbox").trigger("change")
+    expect(mockUpdateBlock).not.toHaveBeenCalled()
+  })
+
   it("labels a rapid re-toggle by the written value, not a stale prop", async () => {
     // unchecked → check (in-flight) → uncheck before any reload. The second
     // chain writes is_completed:false, so the undo label must be "Unchecked"

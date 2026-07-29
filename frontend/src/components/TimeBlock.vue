@@ -244,7 +244,6 @@ async function toggleCompleted() {
     if (attempt < TOGGLE_RETRY_DELAYS_MS.length) {
       await sleep(TOGGLE_RETRY_DELAYS_MS[attempt])
       if (myGen !== generation.value) return
-      continue
     }
   }
 
