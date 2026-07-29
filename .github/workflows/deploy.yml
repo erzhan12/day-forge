@@ -4,6 +4,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      skip_prod_audit:
+        description: 'Skip npm prod audit (EMERGENCY only — open follow-up to restore)'
+        type: boolean
+        default: false
 
 concurrency:
   group: deploy-${{ github.ref }}
@@ -46,9 +51,11 @@ jobs:
       # Fail-closed security gate: blocks the deploy if any high/critical
       # advisory hits the prod dependency graph (see docs/features/0102_REVIEW.md).
       # EMERGENCY BYPASS (backend-only hotfix blocked by an unresolvable frontend
-      # advisory): temporarily raise this to `--audit-level=critical` on a branch,
-      # or comment out this step, and open a follow-up to restore + patch the dep.
+      # advisory): trigger a manual `workflow_dispatch` run with skip_prod_audit=true.
+      # This leaves an audit trail in the Actions history and re-engages the gate
+      # automatically on the next push. Then open a follow-up to patch the dep.
       - name: Frontend prod audit
+        if: ${{ !inputs.skip_prod_audit }}
         working-directory: frontend
         run: npm audit --omit=dev --audit-level=high
 

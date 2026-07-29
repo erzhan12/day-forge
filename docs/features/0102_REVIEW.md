@@ -25,6 +25,8 @@ Cursor verification log confirmed independently: audit step placement, fail-clos
 - `npm ci` → OK (lockfile ↔ package.json in sync).
 - `npm run type-check` → clean. `npm test` → 664 passed (57 files). `npm run build` → OK.
 - Backend untouched → no ruff/pytest impact.
+- **Lockfile cosmetics:** six entries lose their `"peer": true` annotation (`vue@3.5.32`, two `@inertiajs/vue3` peer entries, `typescript`, `nwsapi`, `source-map-js`) — expected metadata churn from npm re-evaluating peers during the transitive bumps. No behavioral impact; `npm ci` is strict and does not regenerate the lockfile.
+- **New Node-adapter prod entries:** axios 1.18.1 adds four prod-scope Node-native packages (`https-proxy-agent@5.0.1`, `agent-base@6.0.2`, `debug@4.4.3`, `ms@2.1.3`). Node-adapter-only, tree-shaken from the browser bundle (above). If any ever attracts a high/critical advisory, the new `npm audit --omit=dev --audit-level=high` CI gate catches it before it ships.
 
 **Result:** SUCCESS — zero valid P1/P2, verification green.
 
