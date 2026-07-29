@@ -1,6 +1,6 @@
 import { router } from "@inertiajs/vue3"
 import { type DateSource, readDate } from "../utils/dateSource"
-import { type ApiResult, requestJson } from "./useHttp"
+import { type ApiResult, type RequestOptions, requestJson } from "./useHttp"
 
 export type { ApiResult }
 
@@ -8,8 +8,9 @@ async function apiFetch(
   url: string,
   method: string,
   body?: Record<string, unknown>,
+  options?: RequestOptions,
 ): Promise<ApiResult> {
-  const result = await requestJson(url, method, body)
+  const result = await requestJson(url, method, body, options)
   if (result.ok) {
     router.reload({ only: ["blocks", "schedule"] })
   }
@@ -44,8 +45,9 @@ export function useSchedule(date: DateSource) {
   function updateBlock(
     id: number,
     data: Record<string, unknown>,
+    options?: RequestOptions,
   ): Promise<ApiResult> {
-    return apiFetch(`/api/blocks/${id}/`, "PATCH", data)
+    return apiFetch(`/api/blocks/${id}/`, "PATCH", data, options)
   }
 
   function deleteBlock(id: number): Promise<ApiResult> {
