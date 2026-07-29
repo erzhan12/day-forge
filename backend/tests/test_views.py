@@ -300,6 +300,92 @@ class TestCreateBlock:
         assert resp.status_code == 201, resp.content
         assert called["v"]
 
+    @pytest.mark.django_db
+    def test_non_object_body_returns_400(self, auth_client, schedule):
+        resp = auth_client.post(
+            "/api/schedules/2026-04-07/blocks/",
+            json.dumps([1, 2, 3]),
+            content_type="application/json",
+        )
+        assert resp.status_code == 400
+        assert resp.json()["errors"]["body"] == "Request body must be a JSON object."
+
+    @pytest.mark.django_db
+    def test_non_string_title_returns_400_not_500(self, auth_client, schedule):
+        resp = auth_client.post(
+            "/api/schedules/2026-04-07/blocks/",
+            json.dumps({
+                "start_time": "09:00",
+                "end_time": "10:00",
+                "title": 123,
+            }),
+            content_type="application/json",
+        )
+        assert resp.status_code == 400
+        assert resp.status_code != 500
+        assert resp.json()["errors"]["title"] == "Title must be a string."
+
+    @pytest.mark.django_db
+    def test_non_string_category_returns_400_not_500(self, auth_client, schedule):
+        resp = auth_client.post(
+            "/api/schedules/2026-04-07/blocks/",
+            json.dumps({
+                "start_time": "10:00",
+                "end_time": "11:00",
+                "title": "x",
+                "category": [],
+            }),
+            content_type="application/json",
+        )
+        assert resp.status_code == 400
+        assert resp.status_code != 500
+        assert resp.json()["errors"]["category"] == "Category must be a string."
+
+    @pytest.mark.django_db
+    def test_non_string_start_time_returns_400(self, auth_client, schedule):
+        resp = auth_client.post(
+            "/api/schedules/2026-04-07/blocks/",
+            json.dumps({
+                "start_time": 123,
+                "end_time": "10:00",
+                "title": "x",
+            }),
+            content_type="application/json",
+        )
+        assert resp.status_code == 400
+        assert resp.status_code != 500
+        assert resp.json()["errors"]["start_time"] == "start_time must be a string."
+
+    @pytest.mark.django_db
+    def test_non_string_end_time_returns_400(self, auth_client, schedule):
+        resp = auth_client.post(
+            "/api/schedules/2026-04-07/blocks/",
+            json.dumps({
+                "start_time": "09:00",
+                "end_time": 123,
+                "title": "x",
+            }),
+            content_type="application/json",
+        )
+        assert resp.status_code == 400
+        assert resp.status_code != 500
+        assert resp.json()["errors"]["end_time"] == "end_time must be a string."
+
+    @pytest.mark.django_db
+    def test_oversized_body_returns_413(self, auth_client, schedule):
+        resp = auth_client.post(
+            "/api/schedules/2026-04-07/blocks/",
+            json.dumps({
+                "title": "x" * 200_000,
+                "start_time": "14:00",
+                "end_time": "15:00",
+                "category": "work",
+            }),
+            content_type="application/json",
+        )
+        assert resp.status_code == 413
+        assert resp.json()["errors"]["body"] == "Request body too large."
+
 
 class TestBlockDetail:
     @pytest.mark.django_db

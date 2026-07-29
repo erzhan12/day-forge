@@ -718,6 +718,11 @@ no Service Worker, no closed-tab alerts.
   submitted times match stored values (`block_detail`, `reorder_blocks`,
   `restore_blocks`, AI move/resize). See `docs/features/0026_PLAN.md` critical
   constraint #1.
+- **`create_block` type guards mirror `create_block_from_event` inline**
+  (feature 0103): oversized-body 413, non-object body 400, and
+  `isinstance(..., str)` checks for times/title/category — same messages,
+  no shared helper. Non-string title/category used to 500
+  (`AttributeError` / unhashable `TypeError`).
 - **Frontend owns TZ mapping.** Panel events are UTC ISO; TimeBlock times are
   naive local `HH:MM`. Compute final times in
   `frontend/src/utils/travelRules.ts` (`computeEventBlockTimes` anchors to the

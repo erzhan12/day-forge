@@ -50,18 +50,45 @@ def create_block(request, date):
     except ValueError:
         return JsonResponse({"errors": {"date": "Invalid date format."}}, status=400)
 
+    oversized = _reject_oversized_body(request)
+    if oversized is not None:
+        return oversized
+
     try:
         data = json.loads(request.body)
     except json.JSONDecodeError:
         return JsonResponse({"errors": {"body": "Invalid JSON."}}, status=400)
 
-    schedule, _ = Schedule.objects.get_or_create(user=request.user, date=parsed_date)
+    if not isinstance(data, dict):
+        return JsonResponse(
+            {"errors": {"body": "Request body must be a JSON object."}},
+            status=400,
+        )
 
+    # Explicit type checks: non-string title (``.strip()`` → AttributeError)
+    # or unhashable category (``in``-set → TypeError) would otherwise 500.
+    # Run before ``get_or_create`` so a malformed payload is rejected without
+    # the side effect of creating an empty Schedule row (mirrors
+    # ``create_block_from_event``).
     for field in ("start_time", "end_time"):
         if field not in data:
             return JsonResponse(
                 {"errors": {field: f"{field} is required."}}, status=400
             )
+        if not isinstance(data[field], str):
+            return JsonResponse(
+                {"errors": {field: f"{field} must be a string."}}, status=400
+            )
+    if "title" in data and not isinstance(data["title"], str):
+        return JsonResponse(
+            {"errors": {"title": "Title must be a string."}}, status=400
+        )
+    if "category" in data and not isinstance(data["category"], str):
+        return JsonResponse(
+            {"errors": {"category": "Category must be a string."}}, status=400
+        )
+
+    schedule, _ = Schedule.objects.get_or_create(user=request.user, date=parsed_date)
 
     start, end, err = _validate_block_times(data["start_time"], data["end_time"])
     if err is not None:
@@ -154,9 +181,8 @@ def create_block_from_event(request, date):
             status=400,
         )
 
-    # Explicit type checks: ``create_block`` would 500 on a non-string
-    # title (``.strip()`` → AttributeError) or an unhashable category
-    # (``in``-set → TypeError); don't inherit that hole here.
+    # Explicit type checks: non-string title (``.strip()`` → AttributeError)
+    # or unhashable category (``in``-set → TypeError) would otherwise 500.
     for field in ("start_time", "end_time"):
         if field not in data:
             return JsonResponse(
