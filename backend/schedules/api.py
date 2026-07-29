@@ -334,6 +334,13 @@ def block_detail(request, pk):
             )
         pending["is_completed"] = data["is_completed"]
     if "category" in data:
+        # Guard before the ``in``-set check: an unhashable category
+        # (list/dict) would otherwise raise TypeError → 500 (mirrors
+        # ``create_block``).
+        if not isinstance(data["category"], str):
+            return JsonResponse(
+                {"errors": {"category": "Category must be a string."}}, status=400
+            )
         if data["category"] not in VALID_CATEGORIES:
             choices = ", ".join(sorted(VALID_CATEGORIES))
             return JsonResponse(

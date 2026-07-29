@@ -483,6 +483,18 @@ class TestBlockDetail:
         assert "category" in resp.json()["errors"]
 
     @pytest.mark.django_db
+    def test_non_string_category_returns_400_not_500(self, auth_client, time_block):
+        # An unhashable category (list/dict) would raise TypeError on the
+        # ``not in VALID_CATEGORIES`` set membership → 500 without a type guard.
+        resp = auth_client.patch(
+            f"/api/blocks/{time_block.pk}/",
+            json.dumps({"category": []}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 400
+        assert resp.json()["errors"]["category"] == "Category must be a string."
+
+    @pytest.mark.django_db
     def test_patch_sort_order_non_integer_rejected(self, auth_client, time_block):
         resp = auth_client.patch(
             f"/api/blocks/{time_block.pk}/",

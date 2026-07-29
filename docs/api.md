@@ -57,7 +57,7 @@ Create a time block on the schedule for the given date, owned by the authenticat
 | `date` | Path date is not `YYYY-MM-DD`. |
 | `title` | Missing, empty after strip, or > 255 chars. |
 | `start_time` / `end_time` | Missing or not in `HH:MM` format. |
-| `category` | Not one of the allowed choices. |
+| `category` | Not a string, or not one of the allowed choices. |
 | `time` | `start_time >= end_time`, or block overlaps an existing block on the same schedule. |
 
 The overlap check runs inside `transaction.atomic()` but is **not** race-safe against concurrent requests on SQLite (no row locks available). Any production deployment that serves real concurrent users should move to PostgreSQL (where `select_for_update` actually takes row locks) and add a DB-level exclusion constraint on `(schedule, [start_time, end_time))` as defence-in-depth. The same caveat applies to `PATCH /api/blocks/{pk}/`, `POST /api/blocks/reorder/`, and `POST /api/schedules/{date}/blocks/restore/`.
@@ -119,7 +119,7 @@ Non-time PATCHes (title, category, `is_completed`, `sort_order`) tolerate stored
 | `400` | `body` | Request body is not valid JSON. |
 | `400` | `title` | Not a string, empty after strip, or > 255 chars. |
 | `400` | `start_time` / `end_time` | Not in `HH:MM` format. |
-| `400` | `category` | Not one of the allowed choices. |
+| `400` | `category` | Not a string, or not one of the allowed choices. |
 | `400` | `sort_order` | Not an integer, or out of bounds. |
 | `400` | `time` | Resulting `start >= end`, or overlaps another block. |
 | `403` | `detail` | CSRF token missing/invalid. |
@@ -257,7 +257,7 @@ Atomically replace all blocks on a schedule with a provided snapshot. Used by th
 | `400` | `blocks` | Not a list. |
 | `400` | `title` | Missing, empty, or > 255 chars. |
 | `400` | `start_time` / `end_time` | Invalid format or `start >= end` (off-grid minutes are accepted — see the field table). |
-| `400` | `category` | Not one of the allowed choices. |
+| `400` | `category` | Not a string, or not one of the allowed choices. |
 | `400` | `time` | Restored blocks would overlap. |
 | `413` | `body` | Request body exceeds 100 KB (checked before JSON parsing). |
 
