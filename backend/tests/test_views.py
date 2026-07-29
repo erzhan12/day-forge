@@ -483,7 +483,7 @@ class TestBlockDetail:
         assert "category" in resp.json()["errors"]
 
     @pytest.mark.django_db
-    @pytest.mark.parametrize("bad_category", [[], 42])
+    @pytest.mark.parametrize("bad_category", [[], 42, None])
     def test_non_string_category_returns_400_not_500(
         self, auth_client, time_block, bad_category
     ):
