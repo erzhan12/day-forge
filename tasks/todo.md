@@ -181,6 +181,20 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
   check (mirrors the `create_block` guard) + `test_non_string_category_returns_400_not_500`
   in `TestBlockDetail`.
 
+### 0119 hardening — `restore_blocks` has the same category-type 500
+
+- [ ] **`restore_blocks` 500s on non-string per-block `category` (same bug class as #103 / #119).**
+  `backend/schedules/api.py` `restore_blocks` (~line 753) runs
+  `category = entry.get("category", "other")` then
+  `if category not in VALID_CATEGORIES:` with no `isinstance` guard (the
+  loop guards `title` and `is_completed` but not `category`). A restore
+  payload with `{"category": []}` raises `TypeError: unhashable type` →
+  HTTP 500. Surfaced by claude-review on PR #120 (P2). Deferred to keep
+  PR #120 scoped to `block_detail` (issue #119). Fix: add
+  `isinstance(category, str)` guard before the enum check (per-block error
+  message, mirror the loop's `title (block {i})` style) + a
+  `TestRestoreBlocks` regression test. Filed as issue #121.
+
 ### 0031 poll — deferred PR #116 style nits
 
 - [ ] **Hoist `import asyncio` to module top in `backend/tests/test_gcal_sync_views.py`.**

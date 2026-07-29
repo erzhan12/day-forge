@@ -257,7 +257,7 @@ Atomically replace all blocks on a schedule with a provided snapshot. Used by th
 | `400` | `blocks` | Not a list. |
 | `400` | `title` | Missing, empty, or > 255 chars. |
 | `400` | `start_time` / `end_time` | Invalid format or `start >= end` (off-grid minutes are accepted — see the field table). |
-| `400` | `category` | Not a string, or not one of the allowed choices. |
+| `400` | `category` | Not one of the allowed choices. |
 | `400` | `time` | Restored blocks would overlap. |
 | `413` | `body` | Request body exceeds 100 KB (checked before JSON parsing). |
 

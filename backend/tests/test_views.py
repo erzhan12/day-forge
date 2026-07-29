@@ -483,12 +483,17 @@ class TestBlockDetail:
         assert "category" in resp.json()["errors"]
 
     @pytest.mark.django_db
-    def test_non_string_category_returns_400_not_500(self, auth_client, time_block):
-        # An unhashable category (list/dict) would raise TypeError on the
-        # ``not in VALID_CATEGORIES`` set membership → 500 without a type guard.
+    @pytest.mark.parametrize("bad_category", [[], 42])
+    def test_non_string_category_returns_400_not_500(
+        self, auth_client, time_block, bad_category
+    ):
+        # ``isinstance(..., str)`` guards both the unhashable case (``[]`` →
+        # TypeError on ``not in VALID_CATEGORIES`` → 500) and hashable
+        # non-strings (``42``); the parametrize locks in that the guard is a
+        # pure string check, not just an unhashable-type shield.
         resp = auth_client.patch(
             f"/api/blocks/{time_block.pk}/",
-            json.dumps({"category": []}),
+            json.dumps({"category": bad_category}),
             content_type="application/json",
         )
         assert resp.status_code == 400
