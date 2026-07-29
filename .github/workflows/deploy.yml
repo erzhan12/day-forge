@@ -43,6 +43,10 @@ jobs:
         working-directory: frontend
         run: npm ci --no-audit --no-fund
 
+      - name: Frontend prod audit
+        working-directory: frontend
+        run: npm audit --omit=dev --audit-level=high
+
       - name: Frontend type-check + tests
         working-directory: frontend
         run: |
