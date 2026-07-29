@@ -10,6 +10,11 @@ This is a living document — update it as new patterns emerge.
 - Before committing, sanity-check with `git ls-files | grep -E '(^|/)\.env'` — should return nothing except `.env.example` if one exists.
 - User commands sent to `POST /api/ai/schedules/<date>/command/` are logged verbatim to `AIInteraction` (capped at 2 KB). Treat this table as sensitive; don't paste real secrets into the command bar while testing.
 
+## CI: frontend prod-audit gate (feature 0102)
+
+- The `test` job in `.github/workflows/deploy.yml` runs `npm audit --omit=dev --audit-level=high` after `npm ci` — a fail-closed gate blocking any deploy whose prod dependency graph carries a high/critical advisory.
+- **Emergency bypass** (a backend-only hotfix blocked by an unresolvable frontend advisory): trigger a manual `workflow_dispatch` run with `skip_prod_audit=true`. It leaves an Actions audit trail and re-engages automatically on the next push. Full usage is in the inline comment above the audit step. Open a follow-up to patch the dep afterward.
+
 ## Unified External Tasks Sidebar
 
 - `ExternalTasksSidebar` is the single left task rail. It renders one static section per connected source, emits source-specific retry/complete events, and has one global silent Refresh button. Do not route a Habitica task through Todoist handlers.
