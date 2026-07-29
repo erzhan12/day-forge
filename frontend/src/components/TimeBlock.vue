@@ -107,7 +107,6 @@ watch(
   },
 )
 
-
 onUnmounted(() => {
   toggleAbort?.abort()
   generation.value++
@@ -212,7 +211,7 @@ async function toggleCompleted() {
   const blockTitle = props.block.title
 
   for (let attempt = 0; attempt < TOGGLE_RETRY_DELAYS_MS.length + 1; attempt++) {
-    let result
+    let result: Awaited<ReturnType<typeof updateBlock>> | { ok: false }
     try {
       result = await updateBlock(
         blockId,
