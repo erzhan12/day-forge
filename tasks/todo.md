@@ -169,6 +169,19 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
 
 ## Follow-ups (discovered during manual testing)
 
+### 0103 hardening — sibling `block_detail` has the same category-type 500
+
+- [ ] **`block_detail` PATCH 500s on non-string `category` (same bug class as issue #103).**
+  `backend/schedules/api.py` `block_detail` (~line 337) runs
+  `if data["category"] not in VALID_CATEGORIES:` with no prior `isinstance`
+  guard; `VALID_CATEGORIES` is a `set`, so `"category": []` raises
+  `TypeError: unhashable type: 'list'` → HTTP 500. Surfaced by claude-review
+  on PR #118 cycle-2 (P1). **Pre-existing on `main`, not introduced by PR #118**
+  — deliberately deferred to keep PR #118 scoped to `create_block` (issue #103).
+  Fix: add `isinstance(data["category"], str)` guard before the enum check
+  (mirror the `create_block` guard) + add `test_non_string_category_returns_400_not_500`
+  to `TestBlockDetail`. Worth filing as its own hardening issue.
+
 ### 0031 poll — deferred PR #116 style nits
 
 - [ ] **Hoist `import asyncio` to module top in `backend/tests/test_gcal_sync_views.py`.**
