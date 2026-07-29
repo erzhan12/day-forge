@@ -1,3 +1,12 @@
+<script lang="ts">
+// Module scope: allocated once and shared across all TimeBlock instances
+// (pure constants, no per-component state).
+// All failures retry (including 4xx) — accepted tradeoff: a genuine
+// validation 4xx pays the full 4.3s backoff before the error surfaces.
+const TOGGLE_RETRY_DELAYS_MS = [300, 1000, 3000] as const
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
+</script>
+
 <script setup lang="ts">
 import { ref, computed, nextTick, inject, watch, onUnmounted } from "vue"
 import type { Ref } from "vue"
@@ -98,10 +107,6 @@ watch(
   },
 )
 
-// All failures retry (including 4xx) — accepted tradeoff: a genuine
-// validation 4xx pays the full 4.3s backoff before the error surfaces.
-const TOGGLE_RETRY_DELAYS_MS = [300, 1000, 3000]
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 onUnmounted(() => {
   toggleAbort?.abort()

@@ -264,6 +264,8 @@ describe("TimeBlock", () => {
 
   it("aborts an in-flight PATCH on re-toggle so a late success cannot pushUndo", async () => {
     // Signal-aware mock: pending promise rejects AbortError when signal aborts.
+    // A local counter (not the mock's live call array) decides first-vs-later.
+    let callCount = 0
     mockUpdateBlock.mockImplementation(
       (
         _id: number,
@@ -271,6 +273,7 @@ describe("TimeBlock", () => {
         options?: { signal?: AbortSignal },
       ) =>
         new Promise<{ ok: boolean }>((resolve, reject) => {
+          callCount++
           const signal = options?.signal
           if (signal?.aborted) {
             reject(new DOMException("Aborted", "AbortError"))
@@ -279,7 +282,7 @@ describe("TimeBlock", () => {
           const onAbort = () => reject(new DOMException("Aborted", "AbortError"))
           signal?.addEventListener("abort", onAbort, { once: true })
           // First call stays pending until aborted; second resolves ok.
-          if (mockUpdateBlock.mock.calls.length === 1) {
+          if (callCount === 1) {
             // leave pending — aborted by second click
             return
           }
