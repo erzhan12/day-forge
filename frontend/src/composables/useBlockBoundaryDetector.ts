@@ -18,9 +18,28 @@ import { timeToMinutes } from "../utils/scheduleTime"
 // — fires a boundary that equals the current minute, but never replays earlier
 // same-day boundaries (issue #113 / feature 0029).
 //
+// Suspension-gap clamp (issue #112 / feature 0033): a same-day forward jump
+// above MAX_COALESCE_GAP_MINUTES clamps the eligible window to
+// `(now - MAX_COALESCE_GAP_MINUTES, now]` so multi-hour device-sleep /
+// lunch-break resumes do not replay every stale boundary in `(prev, now]`.
+// Modest coalescing (delta ≤ horizon) and normal cadence keep the full
+// `(prev, now]` replay. Rejected alternative: a `visibilitychange` listener
+// — the clamp is a pure function of the gap the detector already observes,
+// and a listener would race the resume tick; resume delivery can still wait
+// up to one sampler period (NOW_UPDATE_INTERVAL_MS) which is delivery latency,
+// not a dropped recent boundary (those stay inside the clamped window).
+//
 // The detector works in integer minutes-since-midnight so the
 // crossed-since-last-sample window is plain arithmetic. `timeToMinutes` is the
 // canonical "HH:MM" → minutes converter used across the schedule code.
+
+// Boundary-staleness horizon (feature 0033 / issue #112). On any sample,
+// boundaries at or older than this many minutes (age ≥ N, i.e. at or before
+// `now - N`) are treated as stale and not fired. Chosen > test #7's 4-minute
+// coalesced jump so feature 0019's modest-coalescing contract stays on the
+// full `(prev, now]` replay path; multi-hour same-day suspension resumes
+// clamp to `(now - N, now]`.
+const MAX_COALESCE_GAP_MINUTES = 5
 
 export interface BoundaryEvent {
   type: SoundEventType
@@ -88,18 +107,35 @@ export function useBlockBoundaryDetector(
       if (now === null || date === null) return
 
       const prev = lastSeenMinute
+      // Clamp the window start on a large same-day forward jump so a multi-
+      // hour suspension resume only fires last-N-minute boundaries (issue
+      // #112). When prev === null (first tick / enable-toggle) or the gap is
+      // within the horizon, effectivePrev === prev and behaviour is unchanged.
+      // lastSeenMinute itself is never mutated here — still assigned `= now`
+      // at the end of the body. The fired Set is not cleared (date-scoped
+      // idempotency; a same-day gap must not resurrect already-fired keys).
+      const effectivePrev =
+        prev === null ? null : Math.max(prev, now - MAX_COALESCE_GAP_MINUTES)
 
       // Eligible-window predicate:
-      //  - first sample for this cursor (prev === null), including registration
-      //    with pre-populated refs: only boundaries exactly at `now` — never
-      //    back-fill earlier same-day boundaries.
-      //  - backward step (now <= prev, e.g. DST fall-back / manual clock
-      //    change): fire nothing; just resync lastSeenMinute below.
-      //  - normal/coalesced forward tick: half-open interval (prev, now].
+      //  - first sample for this cursor (effectivePrev === null), including
+      //    registration with pre-populated refs: only boundaries exactly at
+      //    `now` — never back-fill earlier same-day boundaries.
+      //  - backward step (now <= effectivePrev, e.g. DST fall-back / manual
+      //    clock change): fire nothing; just resync lastSeenMinute below.
+      //  - normal / modest-coalesced forward tick
+      //    (now - prev <= MAX_COALESCE_GAP_MINUTES): half-open (prev, now]
+      //    — effectivePrev === prev, full replay of leapt boundaries.
+      //  - suspension resume (now - prev > MAX_COALESCE_GAP_MINUTES): clamped
+      //    half-open (now - MAX_COALESCE_GAP_MINUTES, now] — only last-N-
+      //    minute boundaries fire; multi-hour burst suppressed (issue #112).
+      //    No visibilitychange listener: the clamp is sufficient for burst
+      //    suppression; resume sample still waits for the next useNowMinutes
+      //    tick (≤ one sampler period of delivery latency).
       const inWindow = (boundary: number): boolean => {
-        if (prev === null) return boundary === now
-        if (now <= prev) return false
-        return boundary > prev && boundary <= now
+        if (effectivePrev === null) return boundary === now
+        if (now <= effectivePrev) return false
+        return boundary > effectivePrev && boundary <= now
       }
 
       for (const block of getBlocks()) {

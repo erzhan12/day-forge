@@ -3,6 +3,9 @@ import type { Ref } from "vue"
 import { todayString } from "../utils/date"
 
 const NOW_UPDATE_INTERVAL_MS = 60_000
+// Hidden-tab timer throttling and device-sleep suspension gaps are handled
+// downstream by useBlockBoundaryDetector's MAX_COALESCE_GAP_MINUTES clamp
+// (feature 0033 / issue #112) — no visibilitychange listener here.
 
 function sampleNow(): { minutes: number; hhmm: string } {
   const now = new Date()

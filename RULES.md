@@ -591,6 +591,16 @@ the safe failure mode is silence — inverse of `chatSidebarStorage`).
   back-fill); a backward clock step (DST / manual) fires nothing. That
   registration-time prime closes the open-at-boundary miss when Schedule's
   `useNowMinutes` samples wall clock before the notification composables mount.
+- **Suspension-gap clamp (feature 0033 / issue #112):**
+  `MAX_COALESCE_GAP_MINUTES = 5` in `useBlockBoundaryDetector.ts`. On a
+  same-day forward jump above the horizon, `inWindow` uses
+  `effectivePrev = max(prev, now - 5)` so only `(now - 5, now]` fires —
+  multi-hour device-sleep / lunch resumes do not replay every stale
+  boundary. Modest coalescing (`now - prev ≤ 5`, including the 4-minute
+  test #7 jump) and normal cadence stay on the full `(prev, now]` path.
+  Do **not** add a `visibilitychange` listener in the sampler or detector;
+  the clamp is a pure function of the gap already observed. Resume delivery
+  can wait up to one sampler period (latency, not a dropped recent boundary).
 - **Inherited limitation:** a tab left open across midnight stops firing
   until date navigation, because `useNowMinutes.tick()` calls `leaveToday()`
   (clears the interval, `nowDate=null`) and never re-arms. Not fixable

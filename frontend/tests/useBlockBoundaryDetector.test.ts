@@ -327,4 +327,114 @@ describe("useBlockBoundaryDetector", () => {
     expect(onBoundary).not.toHaveBeenCalled()
     wrapper.unmount()
   })
+
+  // --- Feature 0033 / issue #112: suspension-gap clamp -------------------
+  // MAX_COALESCE_GAP_MINUTES = 5. A same-day forward jump above the horizon
+  // clamps the eligible window to (now - 5, now]; modest coalescing
+  // (delta ≤ 5) and normal cadence stay on the unbounded (prev, now] path.
+
+  it("18. multi-hour same-day jump does not replay stale boundaries", async () => {
+    const { wrapper, nowMinutes, onBoundary } = mountDetector({
+      enabled: true,
+      blocks: [
+        block(1, "09:00", "10:00"), // start 540 / end 600
+        block(2, "11:00", "12:00"), // start 660 / end 720
+      ],
+    })
+    await tick(nowMinutes, 590) // prime lastSeenMinute; no boundary at 590
+    await tick(nowMinutes, 840) // 14:00 resume; jump 250 > 5
+    // Without the clamp, (590, 840] would fire 600/660/720. With clamp,
+    // window is (835, 840] — none of those boundaries are in it.
+    expect(onBoundary).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it("19. resume jump fires only boundaries within the staleness horizon", async () => {
+    const { wrapper, nowMinutes, onBoundary } = mountDetector({
+      enabled: true,
+      blocks: [
+        block(1, "13:30", "23:00"), // start 810 = now - 30 (stale)
+        block(2, "14:00", "23:00"), // start 840 = now (in horizon)
+      ],
+    })
+    await tick(nowMinutes, 500) // prime
+    await tick(nowMinutes, 840) // jump 340 > 5 → effectivePrev = 835
+    // Must fail on main (unclamped window fires both 810 and 840).
+    expect(onBoundary).toHaveBeenCalledTimes(1)
+    expect(onBoundary.mock.calls[0][0]).toMatchObject({
+      type: "start",
+      boundaryMinutes: 840,
+    })
+    wrapper.unmount()
+  })
+
+  it("20. modest coalesced jump (== horizon) still replays every leapt boundary", async () => {
+    const { wrapper, nowMinutes, onBoundary } = mountDetector({
+      enabled: true,
+      blocks: [
+        block(1, "09:31", "23:00"), // start 571
+        block(2, "09:33", "09:35"), // start 573 / end 575
+      ],
+    })
+    await tick(nowMinutes, 570) // prime
+    await tick(nowMinutes, 575) // delta exactly 5 → effectivePrev = prev
+    // Window (570, 575]: start@571, start@573, end@575.
+    expect(onBoundary).toHaveBeenCalledTimes(3)
+    const minutes = onBoundary.mock.calls.map(
+      (c) => (c[0] as BoundaryEvent).boundaryMinutes,
+    )
+    expect(minutes.sort((a, b) => a - b)).toEqual([571, 573, 575])
+    wrapper.unmount()
+  })
+
+  it("21. one-minute forward tick still fires its boundary", async () => {
+    const { wrapper, nowMinutes, onBoundary } = mountDetector({
+      enabled: true,
+      blocks: [block(1, "09:30", "10:00")], // start 570
+    })
+    await tick(nowMinutes, 569)
+    await tick(nowMinutes, 570)
+    expect(onBoundary).toHaveBeenCalledTimes(1)
+    expect(onBoundary.mock.calls[0][0]).toMatchObject({
+      type: "start",
+      boundaryMinutes: 570,
+    })
+    wrapper.unmount()
+  })
+
+  it("22. a boundary within the horizon of a big jump still fires", async () => {
+    const { wrapper, nowMinutes, onBoundary } = mountDetector({
+      enabled: true,
+      blocks: [block(1, "13:58", "23:00")], // start 838 = now - 2
+    })
+    await tick(nowMinutes, 500) // prime
+    await tick(nowMinutes, 840) // jump >> 5 → window (835, 840]
+    // Distinguishes clamp from a plain exact-`now` reset (which would drop 838).
+    expect(onBoundary).toHaveBeenCalledTimes(1)
+    expect(onBoundary.mock.calls[0][0]).toMatchObject({
+      type: "start",
+      boundaryMinutes: 838,
+    })
+    wrapper.unmount()
+  })
+
+  it("23. first over-horizon minute is dropped by the half-open lower edge", async () => {
+    const { wrapper, nowMinutes, onBoundary } = mountDetector({
+      enabled: true,
+      blocks: [
+        block(1, "09:31", "23:00"), // start 571 = prev + 1 = now - 5
+        block(2, "09:36", "23:00"), // start 576 = now
+      ],
+    })
+    await tick(nowMinutes, 570) // prime
+    await tick(nowMinutes, 576) // delta 6 → effectivePrev = 571
+    // Half-open (571, 576]: 571 excluded, 576 fires. Must fail on main
+    // (unclamped (570, 576] fires both).
+    expect(onBoundary).toHaveBeenCalledTimes(1)
+    expect(onBoundary.mock.calls[0][0]).toMatchObject({
+      type: "start",
+      boundaryMinutes: 576,
+    })
+    wrapper.unmount()
+  })
 })
