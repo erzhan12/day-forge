@@ -12,6 +12,7 @@ import type { Ref } from "vue"
 import { mount, type VueWrapper } from "@vue/test-utils"
 import type { TimeBlock } from "../src/types"
 import {
+  MAX_COALESCE_GAP_MINUTES,
   useBlockBoundaryDetector,
   type BoundaryEvent,
 } from "../src/composables/useBlockBoundaryDetector"
@@ -329,9 +330,18 @@ describe("useBlockBoundaryDetector", () => {
   })
 
   // --- Feature 0033 / issue #112: suspension-gap clamp -------------------
-  // MAX_COALESCE_GAP_MINUTES = 5. A same-day forward jump above the horizon
-  // clamps the eligible window to (now - 5, now]; modest coalescing
-  // (delta ≤ 5) and normal cadence stay on the unbounded (prev, now] path.
+  // A same-day forward jump above MAX_COALESCE_GAP_MINUTES clamps the
+  // eligible window to (now - horizon, now]; modest coalescing
+  // (delta ≤ horizon) and normal cadence stay on the unbounded (prev, now]
+  // path. Fixtures below use the imported constant where the delta is the
+  // point (#20/#23) so retuning the horizon can't silently pass; the guard
+  // below pins the literal boundary minutes chosen for horizon === 5.
+
+  it("horizon guard: fixtures assume MAX_COALESCE_GAP_MINUTES === 5", () => {
+    // Several fixtures below encode horizon 5 in literal boundary minutes
+    // (e.g. #23's 571 === now - 5). If the constant is tuned, update them.
+    expect(MAX_COALESCE_GAP_MINUTES).toBe(5)
+  })
 
   it("18. multi-hour same-day jump does not replay stale boundaries", async () => {
     const { wrapper, nowMinutes, onBoundary } = mountDetector({
@@ -377,7 +387,7 @@ describe("useBlockBoundaryDetector", () => {
       ],
     })
     await tick(nowMinutes, 570) // prime
-    await tick(nowMinutes, 575) // delta exactly 5 → effectivePrev = prev
+    await tick(nowMinutes, 570 + MAX_COALESCE_GAP_MINUTES) // delta == horizon → effectivePrev = prev
     // Window (570, 575]: start@571, start@573, end@575.
     expect(onBoundary).toHaveBeenCalledTimes(3)
     const minutes = onBoundary.mock.calls.map(
@@ -427,7 +437,7 @@ describe("useBlockBoundaryDetector", () => {
       ],
     })
     await tick(nowMinutes, 570) // prime
-    await tick(nowMinutes, 576) // delta 6 → effectivePrev = 571
+    await tick(nowMinutes, 570 + MAX_COALESCE_GAP_MINUTES + 1) // delta horizon+1 → effectivePrev = 571
     // Half-open (571, 576]: 571 excluded, 576 fires. Must fail on main
     // (unclamped (570, 576] fires both).
     expect(onBoundary).toHaveBeenCalledTimes(1)
@@ -435,6 +445,25 @@ describe("useBlockBoundaryDetector", () => {
       type: "start",
       boundaryMinutes: 576,
     })
+    wrapper.unmount()
+  })
+
+  it("24. visibilitychange resume behaves identically to a large tick jump", async () => {
+    // The detector reads only `nowMinutes`; it never touches `document.hidden`.
+    // A tab hidden across a long suspension and then revealed is faithfully
+    // modelled as a single large forward `tick()` on resume — so this is the
+    // same scenario as #18, asserted explicitly for readers unaware of the
+    // detector's `document`-agnostic architecture. (Plan 0033 optional case.)
+    const { wrapper, nowMinutes, onBoundary } = mountDetector({
+      enabled: true,
+      blocks: [
+        block(1, "09:00", "10:00"), // start 540 / end 600
+        block(2, "11:00", "12:00"), // start 660 / end 720
+      ],
+    })
+    await tick(nowMinutes, 590) // last sample before the tab was hidden
+    await tick(nowMinutes, 840) // tab revealed hours later; resume jump 250 > horizon
+    expect(onBoundary).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 })

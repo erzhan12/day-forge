@@ -39,7 +39,7 @@ import { timeToMinutes } from "../utils/scheduleTime"
 // coalesced jump so feature 0019's modest-coalescing contract stays on the
 // full `(prev, now]` replay path; multi-hour same-day suspension resumes
 // clamp to `(now - N, now]`.
-const MAX_COALESCE_GAP_MINUTES = 5
+export const MAX_COALESCE_GAP_MINUTES = 5
 
 export interface BoundaryEvent {
   type: SoundEventType

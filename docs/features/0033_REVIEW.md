@@ -40,3 +40,14 @@ No P1/P2 from either engine. Two P3s (non-blocking, not actioned):
 - No code changed during this review round (zero valid P1/P2).
 
 **Result:** SUCCESS — zero valid P1/P2, tests + type-check green.
+
+## claude-review bot (PR #123)
+
+- **Verdict:** APPROVED. No P0/P1/P2. Two P3 polish items — both applied:
+  1. Exported `MAX_COALESCE_GAP_MINUTES` and imported it in the test file;
+     delta-driven ticks (#20/#23) now derive from the constant and a horizon
+     guard test pins the literal-minute fixtures to `=== 5`.
+  2. Added explicit visibility-resume case #24 (large tick jump ≡ #18),
+     documenting the detector's `document`-agnostic architecture.
+- **Verification after P3 fixes:** `npm test -- useBlockBoundaryDetector`
+  **25/25 pass**; `npx vue-tsc --noEmit` clean.
