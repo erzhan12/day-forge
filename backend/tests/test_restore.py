@@ -70,6 +70,23 @@ class TestRestoreBlocks:
         ])
         assert resp.status_code == 400
 
+    def test_non_string_category_returns_400_not_500(self, auth_client, user):
+        # Fresh date — no pre-existing Schedule. Non-hashable list category
+        # must 400 (not 500) and must not orphan an empty Schedule row.
+        resp = _post_restore(auth_client, "2026-04-20", [
+            {
+                "title": "X",
+                "start_time": "08:00",
+                "end_time": "09:00",
+                "category": ["work"],
+                "is_completed": False,
+                "sort_order": 0,
+            },
+        ])
+        assert resp.status_code == 400
+        assert resp.json()["errors"]["category"] == "Category must be a string (block 0)."
+        assert Schedule.objects.filter(user=user, date="2026-04-20").exists() is False
+
     def test_restore_empty_title_rejected(self, auth_client, schedule):
         resp = _post_restore(auth_client, "2026-04-07", [
             {"title": "", "start_time": "08:00", "end_time": "09:00", "category": "work",

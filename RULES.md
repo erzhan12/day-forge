@@ -742,6 +742,13 @@ no Service Worker, no closed-tab alerts.
   `isinstance(..., str)` checks for times/title/category — same messages,
   no shared helper. Non-string title/category used to 500
   (`AttributeError` / unhashable `TypeError`).
+- **`restore_blocks` / `block_detail` share the same category-type pitfall**
+  (features 0034 / issue #119): always `isinstance(..., str)` *before*
+  `not in VALID_CATEGORIES` — set membership hashes the operand, so a
+  `list`/`dict` category raises `TypeError` → HTTP 500. Restore uses the
+  per-block `(block {i})` suffix. Also defer `Schedule.objects.get_or_create`
+  until after validation (same class as #103) so a 400 on a new date does
+  not orphan an empty `Schedule` row.
 - **Frontend owns TZ mapping.** Panel events are UTC ISO; TimeBlock times are
   naive local `HH:MM`. Compute final times in
   `frontend/src/utils/travelRules.ts` (`computeEventBlockTimes` anchors to the

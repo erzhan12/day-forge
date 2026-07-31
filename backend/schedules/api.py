@@ -706,8 +706,6 @@ def restore_blocks(request, date):
             {"errors": {"blocks": "A list of blocks is required."}}, status=400
         )
 
-    schedule, _ = Schedule.objects.get_or_create(user=request.user, date=parsed_date)
-
     # Validate each block entry
     validated = []
     for i, entry in enumerate(blocks_data):
@@ -751,6 +749,11 @@ def restore_blocks(request, date):
 
         # Category
         category = entry.get("category", "other")
+        if not isinstance(category, str):
+            return JsonResponse(
+                {"errors": {"category": f"Category must be a string (block {i})."}},
+                status=400,
+            )
         if category not in VALID_CATEGORIES:
             choices = ", ".join(sorted(VALID_CATEGORIES))
             return JsonResponse(
@@ -789,12 +792,22 @@ def restore_blocks(request, date):
                 {"errors": {"time": "Restored blocks would overlap."}}, status=400
             )
 
-    # Apply atomically: delete all existing, then create the snapshot
-    # in a single ``bulk_create`` call. ``bulk_create`` skips
-    # ``Model.save()`` and ``Model.full_clean()``, so we explicitly
-    # ``full_clean()`` every instance in a pre-pass first — if any
-    # block is invalid the whole request 400s before we touch the DB,
-    # so atomicity holds trivially.
+    # Every per-block field was already validated above, so any bad-input
+    # request has 400'd before reaching this point — meaning the DB is still
+    # untouched on the failure path. Deferring get_or_create until here (vs.
+    # its old spot before the loop) is what makes that true for a brand-new
+    # date too: an invalid block no longer orphans an empty Schedule row
+    # (same class as #103).
+    schedule, _ = Schedule.objects.get_or_create(user=request.user, date=parsed_date)
+    # Apply atomically: delete all existing, then create the snapshot in a
+    # single ``bulk_create`` call. ``bulk_create`` skips ``Model.save()`` and
+    # ``Model.full_clean()``, so we ``full_clean()`` every instance in a
+    # pre-pass first. This runs after get_or_create because it needs each
+    # instance's ``schedule`` FK set; it is belt-and-suspenders only — every
+    # check it performs (title max-length, category choices == VALID_CATEGORIES,
+    # start<end via Model.clean) is already enforced by the manual loop above,
+    # so it cannot reject a block that got this far and thus never leaves an
+    # orphaned Schedule.
     t0 = time.monotonic()
     try:
         instances = [
