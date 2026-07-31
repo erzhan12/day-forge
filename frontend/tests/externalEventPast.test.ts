@@ -46,4 +46,23 @@ describe("isExternalEventPast", () => {
     const ev = timed("2026-05-08T10:00:00", "2026-05-08T11:00:00")
     expect(isExternalEventPast(ev, "2026-05-08", today, null)).toBe(false)
   })
+
+  it("keeps an overnight event running until its next-day end", () => {
+    const overnight = timed("2026-05-07T23:00:00", "2026-05-08T00:30:00")
+    expect(isExternalEventPast(overnight, today, today, 23 * 60)).toBe(false)
+    expect(isExternalEventPast(overnight, today, today, 15 * 60)).toBe(false)
+  })
+
+  it("marks an event that ended on a prior local day as past", () => {
+    // Discriminating fixture: end clock-minutes (18:00 = 1080) exceed nowMinutes
+    // (noon = 720), so the buggy no-fold compare returns false (1080 <= 720) and
+    // only the negative-dayDelta fold makes it true (-1440 + 1080 = -360 <= 720).
+    const priorEnd = timed("2026-05-05T17:00:00", "2026-05-06T18:00:00")
+    expect(isExternalEventPast(priorEnd, today, today, 12 * 60)).toBe(true)
+  })
+
+  it("returns false on today before the first tick (nowMinutes null)", () => {
+    const ev = timed("2026-05-07T09:00:00", "2026-05-07T10:00:00")
+    expect(isExternalEventPast(ev, today, today, null)).toBe(false)
+  })
 })

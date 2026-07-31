@@ -202,17 +202,31 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
 
 ### External calendar
 
-- [ ] **Overnight external events fade as "past" while still running
+- [x] **Overnight external events fade as "past" while still running
   (pre-existing, surfaced during the feature 0026 review).**
   `frontend/src/utils/externalEventPast.ts` compares only the *clock* minutes
   of `ev.end` against `nowMinutes`, with no day-delta fold. An event running
   `23:00 → 00:30 (+1 day)` has an end whose local wall-clock is `00:30` = 30
   minutes, so from 00:30 onward on the viewed day the row renders faded even
-  though the event is ongoing or still upcoming. Same UTC→local class of bug
-  that `computeEventBlockTimes` was written to avoid, in the panel that owns
-  the Add button. **Not touched by feature 0026** — the file predates it and
-  is unmodified on that branch, so it was left alone to keep that PR scoped.
-  Fix needs the same viewed-day anchoring `travelRules.ts` uses.
+  though the event is ongoing or still upcoming.
+  **Fixed in feature 0035** (`feature/0035-overnight-external-past`): added a
+  DST-safe `localDayDelta` (local-midnight anchoring + `Math.round`) and folded
+  it into the today/timed branch (`dayDelta * 1440 + isoToLocalMinutes(ev.end)
+  <= nowMinutes`); 3 added tests in `externalEventPast.test.ts`.
+
+- [ ] **0035 follow-up: `ExternalEventsPanel` `today` computed is non-reactive —
+  stale across a live midnight rollover.** `ExternalEventsPanel.vue` derives
+  `const today = computed(() => todayString())`; `todayString()` reads
+  `new Date()` and is not reactive, so the computed evaluates once at mount and
+  never recomputes. If the panel stays mounted across local midnight, `today`
+  remains yesterday until remount/navigation — so an event that genuinely ended
+  overnight can stay un-faded. **Pre-existing** (already drives the panel's
+  `viewedDate </>/=== today` comparisons); feature 0035's `dayDelta` fold merely
+  adds one more consumer of the same value and does not worsen it. Proper fix:
+  plumb the fresh `useNowMinutes().nowDate` (Schedule already tracks it, updates
+  at rollover, but does not pass it to the panel) into `ExternalEventsPanel` as a
+  prop and derive `today` reactively (`props.nowDate ?? todayString()`), plus a
+  rollover-coverage test. Surfaced by codex during ext-plan-review of 0035.
 
 - [ ] **0026-followup: Playwright smoke for the add-to-schedule flow.**
   Script the add paths end-to-end in `frontend/scripts/playwright/`: add with
