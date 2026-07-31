@@ -214,8 +214,8 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
   it into the today/timed branch (`dayDelta * 1440 + isoToLocalMinutes(ev.end)
   <= nowMinutes`); 3 added tests in `externalEventPast.test.ts`.
 
-- [ ] **0035 follow-up: `ExternalEventsPanel` `today` computed is non-reactive —
-  stale across a live midnight rollover.** `ExternalEventsPanel.vue` derives
+- [ ] **0036-followup (unassigned): `ExternalEventsPanel` `today` computed is
+  non-reactive — stale across a live midnight rollover.** `ExternalEventsPanel.vue` derives
   `const today = computed(() => todayString())`; `todayString()` reads
   `new Date()` and is not reactive, so the computed evaluates once at mount and
   never recomputes. If the panel stays mounted across local midnight, `today`

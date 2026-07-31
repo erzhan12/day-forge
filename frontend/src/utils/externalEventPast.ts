@@ -8,6 +8,8 @@ function isoToLocalMinutes(iso: string): number {
 
 /** DST-safe local civil-day difference from `today` to the local date of `iso`. */
 function localDayDelta(today: string, iso: string): number {
+  // `today` is guaranteed `YYYY-MM-DD` by todayString(); a malformed value would
+  // make dayDelta NaN and NaN <= nowMinutes silently return false.
   const [y, m, d] = today.split("-").map(Number)
   const todayMidnight = new Date(y, m - 1, d)
   const endDate = new Date(iso)

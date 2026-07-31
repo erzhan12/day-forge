@@ -47,9 +47,15 @@ describe("isExternalEventPast", () => {
     expect(isExternalEventPast(ev, "2026-05-08", today, null)).toBe(false)
   })
 
-  it("keeps an overnight event running until its next-day end", () => {
+  it("keeps an overnight event not-past at late-evening nowMinutes", () => {
     const overnight = timed("2026-05-07T23:00:00", "2026-05-08T00:30:00")
     expect(isExternalEventPast(overnight, today, today, 23 * 60)).toBe(false)
+  })
+
+  it("keeps an overnight event not-past at daytime nowMinutes (collapsed-clock bug case)", () => {
+    // The core regression: without the day-delta fold, ev.end 00:30 collapses to
+    // 30 min and 30 <= 900 marks the still-upcoming overnight event as past.
+    const overnight = timed("2026-05-07T23:00:00", "2026-05-08T00:30:00")
     expect(isExternalEventPast(overnight, today, today, 15 * 60)).toBe(false)
   })
 
