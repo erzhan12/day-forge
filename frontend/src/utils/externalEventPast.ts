@@ -16,6 +16,8 @@ function localDayDelta(today: string, iso: string): number {
     endDate.getMonth(),
     endDate.getDate(),
   )
+  // Math.round, not Math.floor: a spring-forward day is 23h, so the anchored
+  // diff can be N*86_400_000 - 3_600_000; floor would yield N-1 (DST off-by-one).
   return Math.round(
     (endMidnight.getTime() - todayMidnight.getTime()) / 86400000,
   )
