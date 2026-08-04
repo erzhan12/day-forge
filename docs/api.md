@@ -768,6 +768,8 @@ set to `now()`; `updated_at` advances (rotates the events cache key).
 - `401` — `CalDAVAuthError` from iCloud.
 - `502` — `CalDAVProviderError`.
 - `504` — `CalDAVTimeoutError`.
+- `429 Too Many Requests` — connection-verification budget exhausted;
+  `{"errors": {"detail": "Rate limit exceeded. Try again later."}}`.
 - `500` — `Calendar service is misconfigured` (server-side
   encryption-key issue; ops-only). **Operator action**: confirm
   `CALDAV_ENCRYPTION_KEY` matches the value used when the
@@ -883,7 +885,9 @@ Verifies credentials with Habitica and upserts the per-user account row.
 | `api_token` | string | yes | Habitica API token; encrypted at rest and never returned. |
 
 Errors: `400` validation, `401` invalid credentials, `502` provider failure,
-`504` timeout. Non-`2xx` responses use `{"errors": {"detail": "<message>"}}`.
+`504` timeout, `429 Too Many Requests` when the connection-verification budget
+is exhausted (`{"errors": {"detail": "Rate limit exceeded. Try again later."}}`).
+Non-`2xx` responses use `{"errors": {"detail": "<message>"}}`.
 
 ### `DELETE /api/habitica/account/`
 
@@ -1156,6 +1160,8 @@ to `now()`; `updated_at` advances (rotates the tasks cache key).
 - `401` — `TodoistAuthError` (Todoist rejected the token).
 - `502` — `TodoistProviderError`.
 - `504` — `TodoistTimeoutError`.
+- `429 Too Many Requests` — connection-verification budget exhausted;
+  `{"errors": {"detail": "Rate limit exceeded. Try again later."}}`.
 - `500` — `Todoist service is misconfigured. Contact the administrator.`
   (server-side encryption-key issue; ops-only). **Operator action**: see
   `.claude/rules/project.md` § "Todoist token rotation note".

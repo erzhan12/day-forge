@@ -5,6 +5,7 @@ from unittest.mock import patch
 import pytest
 from cryptography.fernet import Fernet
 from django.contrib.auth.models import User
+from django.core.cache import cache
 from django.core.exceptions import ImproperlyConfigured
 from django.test import Client
 from habitica_sync import service
@@ -190,6 +191,86 @@ def test_account_post_maps_improperly_configured_to_500(auth_client, user):
     _assert_envelope(resp)
     # The transaction must roll back — no half-written row.
     assert not HabiticaAccount.objects.filter(user=user).exists()
+
+
+class TestConnectRateLimit:
+    URL = "/api/habitica/account/"
+
+    @staticmethod
+    def post(client, api_token="valid-token"):
+        return client.post(
+            TestConnectRateLimit.URL,
+            data={"api_user_id": "habitica-user", "api_token": api_token},
+            content_type="application/json",
+        )
+
+    def test_returns_429_once_connect_budget_exceeded(self, auth_client, settings):
+        settings.HABITICA_CONNECT_RATE_LIMIT_PER_HOUR = 2
+        with patch("habitica_sync.service.verify_credentials") as verify:
+            assert self.post(auth_client).status_code == 200
+            assert self.post(auth_client).status_code == 200
+            response = self.post(auth_client)
+
+        assert response.status_code == 429
+        assert "rate limit" in response.json()["errors"]["detail"].lower()
+        assert verify.call_count == 2
+
+    def test_429_short_circuits_before_verify_credentials(self, auth_client, settings):
+        settings.HABITICA_CONNECT_RATE_LIMIT_PER_HOUR = 1
+        with patch("habitica_sync.service.verify_credentials") as verify:
+            assert self.post(auth_client).status_code == 200
+            assert self.post(auth_client).status_code == 429
+
+        verify.assert_called_once_with("habitica-user", "valid-token")
+
+    def test_counter_stored_under_expected_key(self, auth_client, user, settings):
+        settings.HABITICA_CONNECT_RATE_LIMIT_PER_HOUR = 3
+        key = f"connect_rl:habitica:{user.id}"
+        assert cache.get(key) is None
+        with patch("habitica_sync.service.verify_credentials"):
+            assert self.post(auth_client).status_code == 200
+            assert cache.get(key) == 1
+            assert self.post(auth_client).status_code == 200
+            assert cache.get(key) == 2
+
+    def test_failed_verify_still_consumes_token(self, auth_client, user, settings):
+        settings.HABITICA_CONNECT_RATE_LIMIT_PER_HOUR = 2
+        key = f"connect_rl:habitica:{user.id}"
+        with patch("habitica_sync.service.verify_credentials") as verify:
+            verify.side_effect = service.HabiticaAuthError("bad token")
+            assert self.post(auth_client).status_code == 401
+            assert self.post(auth_client).status_code == 401
+            assert cache.get(key) == 2
+            assert self.post(auth_client).status_code == 429
+
+        assert verify.call_count == 2
+
+    @pytest.mark.parametrize(
+        "body, content_type, status",
+        [
+            ({}, "application/json", 400),
+            (
+                {"api_user_id": "habitica-user", "api_token": "x" * 200_000},
+                "application/json",
+                413,
+            ),
+            ("{", "application/json", 400),
+        ],
+    )
+    def test_400_body_does_not_consume_token(
+        self, auth_client, user, body, content_type, status
+    ):
+        response = auth_client.post(self.URL, data=body, content_type=content_type)
+        assert response.status_code == status
+        assert cache.get(f"connect_rl:habitica:{user.id}") is None
+
+    def test_get_and_delete_not_rate_limited(self, auth_client, user, settings):
+        settings.HABITICA_CONNECT_RATE_LIMIT_PER_HOUR = 1
+        key = f"connect_rl:habitica:{user.id}"
+        for _ in range(3):
+            assert auth_client.get(self.URL).status_code == 200
+            assert auth_client.delete(self.URL).status_code == 200
+        assert cache.get(key) is None
 
 
 def test_account_post_rejects_oversized_body(auth_client, user):

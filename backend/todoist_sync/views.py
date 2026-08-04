@@ -16,6 +16,7 @@ import datetime
 import json
 import logging
 
+from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ImproperlyConfigured
 from django.db import transaction
@@ -23,6 +24,11 @@ from django.http import HttpRequest, JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 from schedules.http import reject_oversized_body
+from schedules.ratelimit import (
+    connect_rate_limit_key,
+    consume_rate_limit,
+    rate_limited_response,
+)
 
 from todoist_sync import cache as todoist_cache
 from todoist_sync import service
@@ -109,6 +115,10 @@ def account(request: HttpRequest) -> JsonResponse:
     cleaned, errors = validate_account_payload(data)
     if errors:
         return JsonResponse({"errors": errors}, status=400)
+
+    key = connect_rate_limit_key("todoist", request.user.id)
+    if not consume_rate_limit(key, settings.TODOIST_CONNECT_RATE_LIMIT_PER_HOUR):
+        return rate_limited_response()
 
     try:
         service.verify_credentials(cleaned["token"])

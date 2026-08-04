@@ -273,6 +273,9 @@ CALDAV_REQUEST_TIMEOUT = float(os.environ.get("CALDAV_REQUEST_TIMEOUT", "10"))
 # calendar_sync/cache.py) keep correctness intact regardless of backend;
 # the ``calendar_sync.W001`` check warns when the backend is non-shared.
 CALDAV_CACHE_TTL_SECONDS = int(os.environ.get("CALDAV_CACHE_TTL_SECONDS", "300"))
+CALDAV_CONNECT_RATE_LIMIT_PER_HOUR = int(
+    os.environ.get("CALDAV_CONNECT_RATE_LIMIT_PER_HOUR", "20")
+)
 # Match the ANALYTICS_STREAK_* import-time validation pattern: fail
 # loudly on a misconfigured deploy rather than silently producing
 # zero-TTL caches (every request a cache miss, hammering iCloud).
@@ -280,6 +283,11 @@ if CALDAV_CACHE_TTL_SECONDS <= 0:
     raise ValueError(
         "CALDAV_CACHE_TTL_SECONDS must be a positive integer; "
         f"got {CALDAV_CACHE_TTL_SECONDS!r}"
+    )
+if CALDAV_CONNECT_RATE_LIMIT_PER_HOUR <= 0:
+    raise ValueError(
+        "CALDAV_CONNECT_RATE_LIMIT_PER_HOUR must be a positive integer; "
+        f"got {CALDAV_CONNECT_RATE_LIMIT_PER_HOUR!r}"
     )
 if CALDAV_REQUEST_TIMEOUT <= 0:
     raise ValueError(
@@ -308,12 +316,20 @@ TODOIST_REQUEST_TIMEOUT = float(os.environ.get("TODOIST_REQUEST_TIMEOUT", "10"))
 # todoist_sync/cache.py) keep correctness regardless of backend; the
 # ``todoist_sync.W001`` check warns when the backend is non-shared.
 TODOIST_CACHE_TTL_SECONDS = int(os.environ.get("TODOIST_CACHE_TTL_SECONDS", "300"))
+TODOIST_CONNECT_RATE_LIMIT_PER_HOUR = int(
+    os.environ.get("TODOIST_CONNECT_RATE_LIMIT_PER_HOUR", "20")
+)
 # Same import-time positive-value guards as the CALDAV_* block: fail loudly
 # on a misconfigured deploy (ValueError, NOT ImproperlyConfigured).
 if TODOIST_CACHE_TTL_SECONDS <= 0:
     raise ValueError(
         "TODOIST_CACHE_TTL_SECONDS must be a positive integer; "
         f"got {TODOIST_CACHE_TTL_SECONDS!r}"
+    )
+if TODOIST_CONNECT_RATE_LIMIT_PER_HOUR <= 0:
+    raise ValueError(
+        "TODOIST_CONNECT_RATE_LIMIT_PER_HOUR must be a positive integer; "
+        f"got {TODOIST_CONNECT_RATE_LIMIT_PER_HOUR!r}"
     )
 if TODOIST_REQUEST_TIMEOUT <= 0:
     raise ValueError(
@@ -331,10 +347,18 @@ HABITICA_BASE_URL = os.environ.get(
 ).rstrip("/")
 HABITICA_REQUEST_TIMEOUT = float(os.environ.get("HABITICA_REQUEST_TIMEOUT", "10"))
 HABITICA_CACHE_TTL_SECONDS = int(os.environ.get("HABITICA_CACHE_TTL_SECONDS", "300"))
+HABITICA_CONNECT_RATE_LIMIT_PER_HOUR = int(
+    os.environ.get("HABITICA_CONNECT_RATE_LIMIT_PER_HOUR", "20")
+)
 if HABITICA_CACHE_TTL_SECONDS <= 0:
     raise ValueError(
         "HABITICA_CACHE_TTL_SECONDS must be a positive integer; "
         f"got {HABITICA_CACHE_TTL_SECONDS!r}"
+    )
+if HABITICA_CONNECT_RATE_LIMIT_PER_HOUR <= 0:
+    raise ValueError(
+        "HABITICA_CONNECT_RATE_LIMIT_PER_HOUR must be a positive integer; "
+        f"got {HABITICA_CONNECT_RATE_LIMIT_PER_HOUR!r}"
     )
 if HABITICA_REQUEST_TIMEOUT <= 0:
     raise ValueError(

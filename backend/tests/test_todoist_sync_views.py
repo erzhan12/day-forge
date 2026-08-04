@@ -17,6 +17,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from cryptography.fernet import Fernet
 from django.contrib.auth.models import User
+from django.core.cache import cache
 from django.test import Client
 from todoist_sync import service
 from todoist_sync.models import TodoistAccount
@@ -211,6 +212,82 @@ class TestAccountPost:
             )
         assert resp.status_code == 502
         _assert_envelope(resp)
+
+
+class TestConnectRateLimit:
+    URL = "/api/todoist/account/"
+
+    @staticmethod
+    def post(client, token="valid-token"):
+        return client.post(
+            TestConnectRateLimit.URL,
+            data={"token": token},
+            content_type="application/json",
+        )
+
+    def test_returns_429_once_connect_budget_exceeded(self, auth_client, settings):
+        settings.TODOIST_CONNECT_RATE_LIMIT_PER_HOUR = 2
+        with patch("todoist_sync.service.verify_credentials") as verify:
+            assert self.post(auth_client).status_code == 200
+            assert self.post(auth_client).status_code == 200
+            response = self.post(auth_client)
+
+        assert response.status_code == 429
+        assert "rate limit" in response.json()["errors"]["detail"].lower()
+        assert verify.call_count == 2
+
+    def test_429_short_circuits_before_verify_credentials(self, auth_client, settings):
+        settings.TODOIST_CONNECT_RATE_LIMIT_PER_HOUR = 1
+        with patch("todoist_sync.service.verify_credentials") as verify:
+            assert self.post(auth_client).status_code == 200
+            assert self.post(auth_client).status_code == 429
+
+        verify.assert_called_once_with("valid-token")
+
+    def test_counter_stored_under_expected_key(self, auth_client, user, settings):
+        settings.TODOIST_CONNECT_RATE_LIMIT_PER_HOUR = 3
+        key = f"connect_rl:todoist:{user.id}"
+        assert cache.get(key) is None
+        with patch("todoist_sync.service.verify_credentials"):
+            assert self.post(auth_client).status_code == 200
+            assert cache.get(key) == 1
+            assert self.post(auth_client).status_code == 200
+            assert cache.get(key) == 2
+
+    def test_failed_verify_still_consumes_token(self, auth_client, user, settings):
+        settings.TODOIST_CONNECT_RATE_LIMIT_PER_HOUR = 2
+        key = f"connect_rl:todoist:{user.id}"
+        with patch("todoist_sync.service.verify_credentials") as verify:
+            verify.side_effect = service.TodoistAuthError("bad token")
+            assert self.post(auth_client).status_code == 401
+            assert self.post(auth_client).status_code == 401
+            assert cache.get(key) == 2
+            assert self.post(auth_client).status_code == 429
+
+        assert verify.call_count == 2
+
+    @pytest.mark.parametrize(
+        "body, content_type, status",
+        [
+            ({}, "application/json", 400),
+            ({"token": "x" * 200_000}, "application/json", 413),
+            ("{", "application/json", 400),
+        ],
+    )
+    def test_400_body_does_not_consume_token(
+        self, auth_client, user, body, content_type, status
+    ):
+        response = auth_client.post(self.URL, data=body, content_type=content_type)
+        assert response.status_code == status
+        assert cache.get(f"connect_rl:todoist:{user.id}") is None
+
+    def test_get_and_delete_not_rate_limited(self, auth_client, user, settings):
+        settings.TODOIST_CONNECT_RATE_LIMIT_PER_HOUR = 1
+        key = f"connect_rl:todoist:{user.id}"
+        for _ in range(3):
+            assert auth_client.get(self.URL).status_code == 200
+            assert auth_client.delete(self.URL).status_code == 200
+        assert cache.get(key) is None
 
 
 # ---- DELETE /api/todoist/account/ ---------------------------------------

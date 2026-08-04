@@ -77,6 +77,33 @@ class TestStreakWindowValidation:
             _exec_settings(monkeypatch, ANALYTICS_STREAK_WINDOW_DAYS="-5")
 
 
+@pytest.mark.parametrize(
+    ("name", "env_name"),
+    [
+        ("CALDAV_CONNECT_RATE_LIMIT_PER_HOUR", "CALDAV_CONNECT_RATE_LIMIT_PER_HOUR"),
+        ("TODOIST_CONNECT_RATE_LIMIT_PER_HOUR", "TODOIST_CONNECT_RATE_LIMIT_PER_HOUR"),
+        ("HABITICA_CONNECT_RATE_LIMIT_PER_HOUR", "HABITICA_CONNECT_RATE_LIMIT_PER_HOUR"),
+    ],
+)
+def test_connect_rate_limit_default_is_twenty(monkeypatch, name, env_name):
+    monkeypatch.delenv(env_name, raising=False)
+    ns = _exec_settings(monkeypatch)
+    assert ns[name] == 20
+
+
+@pytest.mark.parametrize(
+    ("name", "env_name"),
+    [
+        ("CALDAV_CONNECT_RATE_LIMIT_PER_HOUR", "CALDAV_CONNECT_RATE_LIMIT_PER_HOUR"),
+        ("TODOIST_CONNECT_RATE_LIMIT_PER_HOUR", "TODOIST_CONNECT_RATE_LIMIT_PER_HOUR"),
+        ("HABITICA_CONNECT_RATE_LIMIT_PER_HOUR", "HABITICA_CONNECT_RATE_LIMIT_PER_HOUR"),
+    ],
+)
+def test_zero_connect_rate_limit_raises_at_import(monkeypatch, name, env_name):
+    with pytest.raises(ValueError, match=name):
+        _exec_settings(monkeypatch, **{env_name: "0"})
+
+
 class TestCacheBackendConstruction:
     """Feature 0015: ``CACHES['default']`` is derived from ``REDIS_URL`` at
     import time. ``REDIS_URL`` is set explicitly (incl. to ``""``) in every

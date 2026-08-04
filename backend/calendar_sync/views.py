@@ -23,6 +23,11 @@ from django.http import HttpRequest, JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 from schedules.http import reject_oversized_body
+from schedules.ratelimit import (
+    connect_rate_limit_key,
+    consume_rate_limit,
+    rate_limited_response,
+)
 
 from calendar_sync import cache as calendar_cache
 from calendar_sync import service
@@ -117,6 +122,10 @@ def account(request: HttpRequest) -> JsonResponse:
         return JsonResponse({"errors": errors}, status=400)
 
     base_url = cleaned["base_url"] or settings.CALDAV_DEFAULT_BASE_URL
+
+    key = connect_rate_limit_key("caldav", request.user.id)
+    if not consume_rate_limit(key, settings.CALDAV_CONNECT_RATE_LIMIT_PER_HOUR):
+        return rate_limited_response()
 
     try:
         service.verify_credentials(
