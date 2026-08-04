@@ -91,6 +91,7 @@ def test_connect_rate_limit_default_is_twenty(monkeypatch, name, env_name):
     assert ns[name] == 20
 
 
+@pytest.mark.parametrize("value", ["0", "-1"])
 @pytest.mark.parametrize(
     ("name", "env_name"),
     [
@@ -99,9 +100,14 @@ def test_connect_rate_limit_default_is_twenty(monkeypatch, name, env_name):
         ("HABITICA_CONNECT_RATE_LIMIT_PER_HOUR", "HABITICA_CONNECT_RATE_LIMIT_PER_HOUR"),
     ],
 )
-def test_zero_connect_rate_limit_raises_at_import(monkeypatch, name, env_name):
+def test_non_positive_connect_rate_limit_raises_at_import(
+    monkeypatch, name, env_name, value
+):
+    # Both "0" and "-1" must raise: the guard is `<= 0`, so the "-1" case
+    # pins the boundary against a mistyped `< 0` that would silently
+    # allow a permanently-429 limit of 0.
     with pytest.raises(ValueError, match=name):
-        _exec_settings(monkeypatch, **{env_name: "0"})
+        _exec_settings(monkeypatch, **{env_name: value})
 
 
 class TestCacheBackendConstruction:

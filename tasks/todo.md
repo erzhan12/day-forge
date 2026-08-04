@@ -169,6 +169,17 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
 
 ## Follow-ups (discovered during manual testing)
 
+### 0036 — dedup the three `TestConnectRateLimit` classes
+
+- [ ] **Extract the three near-identical `TestConnectRateLimit` classes
+  (~80 lines ×3 in `test_calendar_sync_views.py` / `test_todoist_sync_views.py`
+  / `test_habitica_sync_views.py`) into a shared parametrized base.**
+  Parametrize over `(url, provider_slug, settings_attr, mock_target,
+  valid_body, auth_error_class)`. Non-blocking maintainability cleanup —
+  deferred from PR #126 review (claude-review cycle-3 P3, previously noted
+  in the feature's own review trail). Not done inline because it touches
+  three files and needs a design pass on the parametrize surface.
+
 ### 0103 hardening — sibling `block_detail` has the same category-type 500
 
 - [x] **`block_detail` PATCH 500s on non-string `category` (same bug class as issue #103).**
