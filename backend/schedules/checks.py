@@ -10,6 +10,8 @@ from django.conf import settings
 from django.core.checks import Warning, register
 from django.db import connections
 
+# Defined locally per module — intentional; each app's checks.py keeps its
+# own copy so no app depends on another (see ai/checks.py, todoist_sync, etc.).
 _INEFFECTIVE_CACHE_BACKENDS = (
     "django.core.cache.backends.locmem.LocMemCache",
     "django.core.cache.backends.filebased.FileBasedCache",
@@ -97,7 +99,7 @@ def warn_ineffective_cache_for_connect_rate_limits(app_configs, **kwargs):
 
     errors.append(
         Warning(
-            f"The connect rate limits use an ineffective cache backend "
+            "The connect rate limits use an ineffective cache backend "
             f"({backend}) with DEBUG=False. The per-user "
             "*_CONNECT_RATE_LIMIT_PER_HOUR counters live in "
             "CACHES['default'], which does not enforce the budget "

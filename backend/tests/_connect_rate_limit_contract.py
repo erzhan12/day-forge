@@ -91,18 +91,15 @@ class ConnectRateLimitContract:
         assert verify.call_count == 2
 
     @pytest.mark.parametrize(
-        "case, status",
-        [("empty", 400), ("oversized", 413), ("malformed", 400)],
+        "body, status",
+        [({}, 400), (None, 413), ("{", 400)],
     )
     def test_pre_validation_does_not_consume_token(
-        self, auth_client, user, case, status
+        self, auth_client, user, body, status
     ):
-        if case == "empty":
-            body = {}
-        elif case == "oversized":
-            body = self.oversized_body
-        else:
-            body = "{"
+        # None is the sentinel for the provider's oversized body (→ 413);
+        # the empty dict (→ 400) and malformed "{" (→ 400) are literal.
+        body = self.oversized_body if body is None else body
         response = auth_client.post(
             self.URL, data=body, content_type="application/json"
         )
