@@ -30,6 +30,11 @@ from unittest.mock import patch
 import pytest
 from django.core.cache import cache
 
+# Parametrize sentinel: stands in for each subclass's ``oversized_body``
+# (resolved per-instance inside the test, since the decorator can't read
+# ``self``). A named sentinel reads clearer than a bare ``None``.
+_OVERSIZED = object()
+
 
 class ConnectRateLimitContract:
     URL: str
@@ -92,14 +97,14 @@ class ConnectRateLimitContract:
 
     @pytest.mark.parametrize(
         "body, status",
-        [({}, 400), (None, 413), ("{", 400)],
+        [({}, 400), (_OVERSIZED, 413), ("{", 400)],
     )
     def test_pre_validation_does_not_consume_token(
         self, auth_client, user, body, status
     ):
-        # None is the sentinel for the provider's oversized body (→ 413);
-        # the empty dict (→ 400) and malformed "{" (→ 400) are literal.
-        body = self.oversized_body if body is None else body
+        # _OVERSIZED resolves to the provider's oversized body (→ 413); the
+        # empty dict (→ 400) and malformed "{" (→ 400) are literal.
+        body = self.oversized_body if body is _OVERSIZED else body
         response = auth_client.post(
             self.URL, data=body, content_type="application/json"
         )
