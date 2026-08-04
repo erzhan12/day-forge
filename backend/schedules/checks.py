@@ -71,7 +71,9 @@ def warn_ineffective_cache_for_connect_rate_limits(app_configs, **kwargs):
 
     - ``LocMemCache`` — per-process, so each worker enforces its own
       window; the effective budget is roughly ``limit × worker_count``.
-      A single-worker deploy is unaffected.
+      A single-worker deploy is unaffected, but the warning still fires
+      for it (Django exposes no worker-count setting to gate on) — on a
+      single-worker LocMem box it is purely informational.
     - ``DummyCache`` — stores nothing, so ``cache.add``/``incr`` never
       accumulate; the limiter is **disabled entirely** at *any* worker
       count.

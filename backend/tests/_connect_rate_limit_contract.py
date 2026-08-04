@@ -113,6 +113,10 @@ class ConnectRateLimitContract:
 
     def test_get_and_delete_not_rate_limited(self, auth_client, user, settings):
         setattr(settings, self.SETTINGS_ATTR, 1)
+        # No account is pre-created: GET (status) returns 200 with
+        # connected=False and DELETE is idempotent (200), for all three
+        # providers today. A future provider whose DELETE returns 204/404
+        # with no row on file must relax these assertions.
         for _ in range(3):
             assert auth_client.get(self.URL).status_code == 200
             assert auth_client.delete(self.URL).status_code == 200

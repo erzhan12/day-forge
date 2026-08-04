@@ -226,3 +226,11 @@ class TestConnectRateLimitCacheWarning:
     def test_w002_silent_when_debug_true(self):
         with override_settings(DEBUG=True, CACHES={"default": {"BACKEND": LOCMEM}}):
             assert warn_ineffective_cache_for_connect_rate_limits(None) == []
+
+    def test_w002_silent_when_backend_key_absent(self):
+        """Known gap: a CACHES['default'] with no BACKEND key reads as ""
+        (not in the ineffective set), so the check stays silent even though
+        Django would fall back to LocMemCache. Pinned to document the
+        behaviour; no fix intended (matches the sibling app checks)."""
+        with override_settings(DEBUG=False, CACHES={"default": {"LOCATION": "/tmp"}}):
+            assert warn_ineffective_cache_for_connect_rate_limits(None) == []
