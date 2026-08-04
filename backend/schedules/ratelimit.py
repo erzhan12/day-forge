@@ -24,6 +24,14 @@ def consume_rate_limit(key: str, limit: int) -> bool:
         try:
             count = cache.incr(key)
         except ValueError:
+            # The key evicted between add and incr (documented Redis
+            # expiry race). Reseeding silently resets the window for this
+            # user, so log it — a burst of these is a security-relevant
+            # signal, not routine.
+            logger.warning(
+                "Connect rate limit key evicted mid-window; reseeding (key=%s)",
+                key,
+            )
             cache.set(key, 1, CONNECT_RATE_LIMIT_WINDOW_SECONDS)
             count = 1
 

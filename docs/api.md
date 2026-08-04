@@ -770,7 +770,9 @@ set to `now()`; `updated_at` advances (rotates the events cache key).
 - `504` — `CalDAVTimeoutError`.
 - `429 Too Many Requests` — `CALDAV_CONNECT_RATE_LIMIT_PER_HOUR` budget
   exhausted;
-  `{"errors": {"detail": "Rate limit exceeded. Try again later."}}`.
+  `{"errors": {"detail": "Rate limit exceeded. Try again later."}}`. The
+  response carries a `Retry-After: 3600` header (worst-case wait in
+  seconds).
 - `500` — `Calendar service is misconfigured` (server-side
   encryption-key issue; ops-only). **Operator action**: confirm
   `CALDAV_ENCRYPTION_KEY` matches the value used when the
@@ -888,7 +890,8 @@ Verifies credentials with Habitica and upserts the per-user account row.
 Errors: `400` validation, `401` invalid credentials, `502` provider failure,
 `504` timeout, `429 Too Many Requests` when the
 `HABITICA_CONNECT_RATE_LIMIT_PER_HOUR` budget is exhausted;
-`{"errors": {"detail": "Rate limit exceeded. Try again later."}}`.
+`{"errors": {"detail": "Rate limit exceeded. Try again later."}}` (the
+response carries a `Retry-After: 3600` header, worst-case wait in seconds).
 Non-`2xx` responses use `{"errors": {"detail": "<message>"}}`.
 
 ### `DELETE /api/habitica/account/`
@@ -1164,7 +1167,9 @@ to `now()`; `updated_at` advances (rotates the tasks cache key).
 - `504` — `TodoistTimeoutError`.
 - `429 Too Many Requests` — `TODOIST_CONNECT_RATE_LIMIT_PER_HOUR` budget
   exhausted;
-  `{"errors": {"detail": "Rate limit exceeded. Try again later."}}`.
+  `{"errors": {"detail": "Rate limit exceeded. Try again later."}}`. The
+  response carries a `Retry-After: 3600` header (worst-case wait in
+  seconds).
 - `500` — `Todoist service is misconfigured. Contact the administrator.`
   (server-side encryption-key issue; ops-only). **Operator action**: see
   `.claude/rules/project.md` § "Todoist token rotation note".

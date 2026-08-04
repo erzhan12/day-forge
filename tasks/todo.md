@@ -169,6 +169,20 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
 
 ## Follow-ups (discovered during manual testing)
 
+### 0036 — `schedules.W001` system check for LocMem connect-rate-limit degradation
+
+- [ ] **Add a Django `Warning` system check (`schedules.W001`) that fires
+  when `CACHES['default']` is `LocMemCache`/`DummyCache`** (i.e. no
+  `REDIS_URL`), surfacing that the `*_CONNECT_RATE_LIMIT_PER_HOUR` budgets
+  degrade to per-worker counters (limit × workers effective). Mirrors the
+  existing `calendar_sync.W001` / `todoist_sync.W001` perf warnings but
+  with a brute-force-protection rationale. New `backend/schedules/checks.py`
+  + wire via `AppConfig.ready()` in `backend/schedules/apps.py` + a test.
+  Deferred from PR #126 cycle-4 (P3) — net-new file + app-config surface,
+  own follow-up. `Warning` not `Error`: AI may be disabled so no
+  `ai.E001`-style boot block applies (the plan deliberately chose
+  docs-only visibility here).
+
 ### 0036 — dedup the three `TestConnectRateLimit` classes
 
 - [ ] **Extract the three near-identical `TestConnectRateLimit` classes
