@@ -47,3 +47,40 @@ P1/P2 raised → SUCCESS on iteration 1. No code changed this round.
 
 SUCCESS — zero valid P1/P2, tests + lint green. P3s left for the user's
 call (all cosmetic / defense-in-depth, none block).
+
+## External review trail — 0036 follow-up (schedules.W002 + test dedup)
+
+Second change set on `feature/0036-followups`: (A) new `schedules.W002`
+system check warning on an ineffective connect-rate-limit cache backend;
+(B) dedup of the three `TestConnectRateLimit` classes into
+`backend/tests/_connect_rate_limit_contract.py`.
+
+**Engines:** codex (`gpt-5.6-sol`) + cursor, read-only, 2 iterations.
+
+**Iteration 1** — both NO P1/P2 on the logic. codex raised one **P2**:
+the W002 message ("limit × worker_count", "single-worker nil") was
+accurate only for LocMem — `DummyCache` disables the limiter entirely and
+`FileBasedCache` is shared-but-non-atomic. **Accepted & fixed**: reworded
+the message + docstring to describe all three distinct failure modes.
+Also fixed (P3): hint now names `PyMemcacheCache` too; W002 tests moved
+from a separate `test_schedules_checks.py` into the canonical
+`test_checks.py` (`TestConnectRateLimitCacheWarning`) and strengthened.
+
+**Iteration 2** — both NO P1/P2 on the logic. codex raised a **P2** that
+the strengthened tests still asserted only generic substrings.
+**Accepted & fixed**: the W002 test now asserts all three failure-mode
+keywords (`LocMemCache`/`DummyCache`+`disabled`/`FileBasedCache`+
+`non-atomic`) and both hint backends, so a regression to a flat summary or
+a dropped memcached hint fails. P3 docstring "non-shared" summary →
+"ineffective"; `tasks/todo.md` filename + backend-flattening corrected.
+
+**Declined (P3):** widening the three `.claude/rules/project.md` env-var
+entries with the full per-backend breakdown — those lines are
+intentionally concise and already name the ineffective set + point to
+`schedules.W002`, whose message carries the detail.
+
+**Stopped via convergence guard** after iter 2: both rounds converged on
+the same tiny surface (the one warning message's accuracy + locking it),
+never a logic defect. **Verification:** `test_checks.py` 21 passed; full
+backend suite 896 passed (pre-fix run); ruff clean on all touched files
+(3 pre-existing `ai/*` import-sort errors are unrelated and untouched).

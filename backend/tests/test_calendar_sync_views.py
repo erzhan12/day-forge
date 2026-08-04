@@ -16,8 +16,9 @@ from calendar_sync.models import CalDAVAccount
 from calendar_sync.schemas import NormalizedEvent
 from cryptography.fernet import Fernet
 from django.contrib.auth.models import User
-from django.core.cache import cache
 from django.test import Client
+
+from tests._connect_rate_limit_contract import ConnectRateLimitContract
 
 FERNET_KEY = Fernet.generate_key().decode()
 
@@ -243,86 +244,19 @@ class TestAccountPost:
         _assert_envelope(resp)
 
 
-class TestConnectRateLimit:
+class TestConnectRateLimit(ConnectRateLimitContract):
     URL = "/api/calendar/account/"
-
-    @staticmethod
-    def post(client, password="valid-password"):
-        return client.post(
-            TestConnectRateLimit.URL,
-            data={"apple_id": "alice@example.com", "password": password},
-            content_type="application/json",
-        )
-
-    def test_returns_429_once_connect_budget_exceeded(self, auth_client, settings):
-        settings.CALDAV_CONNECT_RATE_LIMIT_PER_HOUR = 2
-        with patch("calendar_sync.service.verify_credentials") as verify:
-            assert self.post(auth_client).status_code == 200
-            assert self.post(auth_client).status_code == 200
-            response = self.post(auth_client)
-
-        assert response.status_code == 429
-        assert "rate limit" in response.json()["errors"]["detail"].lower()
-        assert verify.call_count == 2
-
-    def test_429_short_circuits_before_verify_credentials(self, auth_client, settings):
-        settings.CALDAV_CONNECT_RATE_LIMIT_PER_HOUR = 1
-        with patch("calendar_sync.service.verify_credentials") as verify:
-            assert self.post(auth_client).status_code == 200
-            assert self.post(auth_client).status_code == 429
-
-        verify.assert_called_once_with(
-            "alice@example.com", "valid-password", "https://caldav.icloud.com/"
-        )
-
-    def test_counter_stored_under_expected_key(self, auth_client, user, settings):
-        settings.CALDAV_CONNECT_RATE_LIMIT_PER_HOUR = 3
-        key = f"connect_rl:caldav:{user.id}"
-        assert cache.get(key) is None
-        with patch("calendar_sync.service.verify_credentials"):
-            assert self.post(auth_client).status_code == 200
-            assert cache.get(key) == 1
-            assert self.post(auth_client).status_code == 200
-            assert cache.get(key) == 2
-
-    def test_failed_verify_still_consumes_token(self, auth_client, user, settings):
-        settings.CALDAV_CONNECT_RATE_LIMIT_PER_HOUR = 2
-        key = f"connect_rl:caldav:{user.id}"
-        with patch("calendar_sync.service.verify_credentials") as verify:
-            verify.side_effect = service.CalDAVAuthError("bad password")
-            assert self.post(auth_client).status_code == 401
-            assert self.post(auth_client).status_code == 401
-            assert cache.get(key) == 2
-            assert self.post(auth_client).status_code == 429
-
-        assert verify.call_count == 2
-
-    @pytest.mark.parametrize(
-        "body, content_type, status",
-        [
-            ({}, "application/json", 400),
-            (
-                {"apple_id": "alice@example.com", "password": "x" * 200_000},
-                "application/json",
-                413,
-            ),
-            ("{", "application/json", 400),
-        ],
+    SLUG = "caldav"
+    SETTINGS_ATTR = "CALDAV_CONNECT_RATE_LIMIT_PER_HOUR"
+    MOCK_TARGET = "calendar_sync.service.verify_credentials"
+    AUTH_ERROR = service.CalDAVAuthError
+    valid_body = {"apple_id": "alice@example.com", "password": "valid-password"}
+    oversized_body = {"apple_id": "alice@example.com", "password": "x" * 200_000}
+    EXPECTED_VERIFY_ARGS = (
+        "alice@example.com",
+        "valid-password",
+        "https://caldav.icloud.com/",
     )
-    def test_pre_validation_does_not_consume_token(
-        self, auth_client, user, body, content_type, status
-    ):
-        response = auth_client.post(self.URL, data=body, content_type=content_type)
-        assert response.status_code == status
-        assert cache.get(f"connect_rl:caldav:{user.id}") is None
-
-    def test_get_and_delete_not_rate_limited(self, auth_client, user, settings):
-        settings.CALDAV_CONNECT_RATE_LIMIT_PER_HOUR = 1
-        key = f"connect_rl:caldav:{user.id}"
-        for _ in range(3):
-            assert auth_client.get(self.URL).status_code == 200
-            assert auth_client.delete(self.URL).status_code == 200
-        assert cache.get(key) is None
 
 
 # ---- DELETE /api/calendar/account/ --------------------------------------

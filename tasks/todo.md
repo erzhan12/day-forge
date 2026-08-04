@@ -169,30 +169,32 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
 
 ## Follow-ups (discovered during manual testing)
 
-### 0036 — `schedules.W001` system check for LocMem connect-rate-limit degradation
+### 0036 — `schedules.W002` system check for LocMem connect-rate-limit degradation
 
-- [ ] **Add a Django `Warning` system check (`schedules.W001`) that fires
-  when `CACHES['default']` is `LocMemCache`/`DummyCache`** (i.e. no
-  `REDIS_URL`), surfacing that the `*_CONNECT_RATE_LIMIT_PER_HOUR` budgets
-  degrade to per-worker counters (limit × workers effective). Mirrors the
-  existing `calendar_sync.W001` / `todoist_sync.W001` perf warnings but
-  with a brute-force-protection rationale. New `backend/schedules/checks.py`
-  + wire via `AppConfig.ready()` in `backend/schedules/apps.py` + a test.
-  Deferred from PR #126 cycle-4 (P3) — net-new file + app-config surface,
-  own follow-up. `Warning` not `Error`: AI may be disabled so no
-  `ai.E001`-style boot block applies (the plan deliberately chose
-  docs-only visibility here).
+- [x] **Added a Django `Warning` system check (`schedules.W002`) that fires
+  when `CACHES['default']` is an ineffective backend (LocMem/FileBased/Dummy)
+  with `DEBUG=False`**, surfacing that the `*_CONNECT_RATE_LIMIT_PER_HOUR`
+  budgets are not enforced correctly — with distinct failure modes:
+  LocMem is per-process (budget ≈ limit × worker_count), Dummy disables
+  the limiter entirely (stores nothing), and FileBased is shared-on-host
+  but increments non-atomically (concurrent attempts can undercount).
+  Landed in `backend/schedules/checks.py` (`schedules.W001` was already
+  taken by the SQLite check — used `W002`); `schedules/apps.py` already
+  imported `checks` in `ready()`, no wiring change. No DB access / no
+  account gate (the limit always applies). Tested in
+  `backend/tests/test_checks.py` (`TestConnectRateLimitCacheWarning`).
+  `Warning` not `Error`: AI may be disabled so no `ai.E001`-style boot
+  block applies.
 
 ### 0036 — dedup the three `TestConnectRateLimit` classes
 
-- [ ] **Extract the three near-identical `TestConnectRateLimit` classes
-  (~80 lines ×3 in `test_calendar_sync_views.py` / `test_todoist_sync_views.py`
-  / `test_habitica_sync_views.py`) into a shared parametrized base.**
-  Parametrize over `(url, provider_slug, settings_attr, mock_target,
-  valid_body, auth_error_class)`. Non-blocking maintainability cleanup —
-  deferred from PR #126 review (claude-review cycle-3 P3, previously noted
-  in the feature's own review trail). Not done inline because it touches
-  three files and needs a design pass on the parametrize surface.
+- [x] **Extracted the three near-identical `TestConnectRateLimit` classes
+  into a shared `ConnectRateLimitContract` base** in
+  `backend/tests/_connect_rate_limit_contract.py` (underscore-prefixed so
+  pytest doesn't collect the base standalone). Each provider test file now
+  subclasses it, setting `URL / SLUG / SETTINGS_ATTR / MOCK_TARGET /
+  AUTH_ERROR / valid_body / oversized_body / EXPECTED_VERIFY_ARGS`.
+  Same assertions, same coverage; full suite green (896 passed).
 
 ### 0103 hardening — sibling `block_detail` has the same category-type 500
 

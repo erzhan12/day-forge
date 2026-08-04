@@ -2,12 +2,16 @@
 
 from unittest.mock import patch
 
+import pytest
 from ai.checks import (
     error_draft_capture_in_production,
     error_locmem_cache_with_ai_in_production,
 )
 from django.test import override_settings
-from schedules.checks import warn_sqlite_in_production
+from schedules.checks import (
+    warn_ineffective_cache_for_connect_rate_limits,
+    warn_sqlite_in_production,
+)
 
 LOCMEM = "django.core.cache.backends.locmem.LocMemCache"
 FILEBASED = "django.core.cache.backends.filebased.FileBasedCache"
@@ -188,3 +192,37 @@ class TestSqliteProductionWarning:
                 mock_connections.__getitem__.return_value.vendor = "postgresql"
                 warnings = warn_sqlite_in_production(app_configs=None)
         assert warnings == []
+
+
+class TestConnectRateLimitCacheWarning:
+    """schedules.W002: connect rate-limit counters on an ineffective cache
+    backend (feature 0036 follow-up). Fires DEBUG=False on LocMem/FileBased/
+    Dummy; silent on shared backends and in DEBUG."""
+
+    @pytest.mark.parametrize("backend", [LOCMEM, FILEBASED, DUMMY])
+    def test_w002_fires_on_each_ineffective_backend(self, backend):
+        with override_settings(DEBUG=False, CACHES={"default": {"BACKEND": backend}}):
+            warnings = warn_ineffective_cache_for_connect_rate_limits(None)
+        assert len(warnings) == 1
+        warning = warnings[0]
+        assert warning.id == "schedules.W002"
+        # Lock the operational guidance so a reworded-but-wrong message is
+        # caught: the msg must name the per-provider setting family AND the
+        # three distinct failure modes (a regression to a flat
+        # "all per-worker" summary drops the Dummy/FileBased nuance), and
+        # the hint must offer both shared/atomic backends.
+        assert "CONNECT_RATE_LIMIT_PER_HOUR" in warning.msg
+        assert "LocMemCache" in warning.msg
+        assert "DummyCache" in warning.msg and "disabled" in warning.msg
+        assert "FileBasedCache" in warning.msg and "non-atomic" in warning.msg
+        assert "RedisCache" in warning.hint
+        assert "PyMemcacheCache" in warning.hint
+
+    @pytest.mark.parametrize("backend", [REDIS, MEMCACHED])
+    def test_w002_silent_on_shared_backend(self, backend):
+        with override_settings(DEBUG=False, CACHES={"default": {"BACKEND": backend}}):
+            assert warn_ineffective_cache_for_connect_rate_limits(None) == []
+
+    def test_w002_silent_when_debug_true(self):
+        with override_settings(DEBUG=True, CACHES={"default": {"BACKEND": LOCMEM}}):
+            assert warn_ineffective_cache_for_connect_rate_limits(None) == []
