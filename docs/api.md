@@ -887,8 +887,8 @@ Verifies credentials with Habitica and upserts the per-user account row.
 
 Errors: `400` validation, `401` invalid credentials, `502` provider failure,
 `504` timeout, `429 Too Many Requests` when the
-`HABITICA_CONNECT_RATE_LIMIT_PER_HOUR` budget is exhausted
-(`{"errors": {"detail": "Rate limit exceeded. Try again later."}}`).
+`HABITICA_CONNECT_RATE_LIMIT_PER_HOUR` budget is exhausted;
+`{"errors": {"detail": "Rate limit exceeded. Try again later."}}`.
 Non-`2xx` responses use `{"errors": {"detail": "<message>"}}`.
 
 ### `DELETE /api/habitica/account/`
