@@ -257,7 +257,7 @@ class TestConnectRateLimit:
             ("{", "application/json", 400),
         ],
     )
-    def test_400_body_does_not_consume_token(
+    def test_pre_validation_does_not_consume_token(
         self, auth_client, user, body, content_type, status
     ):
         response = auth_client.post(self.URL, data=body, content_type=content_type)

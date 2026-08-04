@@ -40,10 +40,14 @@ def consume_rate_limit(key: str, limit: int) -> bool:
 
 def rate_limited_response() -> JsonResponse:
     """Return the standard JSON error envelope for an exhausted budget."""
-    return JsonResponse(
+    response = JsonResponse(
         {"errors": {"detail": "Rate limit exceeded. Try again later."}},
         status=429,
     )
+    # RFC 6585 §4: a 429 SHOULD advertise when to retry. The window is a
+    # fixed constant, so the worst-case wait is one full window.
+    response["Retry-After"] = str(CONNECT_RATE_LIMIT_WINDOW_SECONDS)
+    return response
 
 
 def connect_rate_limit_key(provider: str, user_id: int) -> str:
