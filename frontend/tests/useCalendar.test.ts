@@ -375,7 +375,8 @@ describe("useCalendar.fetchAccountStatus", () => {
 // `default`-branch status (500) makes statusToMessage return null, so
 // control falls through to the shared helper; `errors: {}` yields the
 // fallback. A 401/502 mock would assert statusToMessage instead and guard
-// nothing here.
+// nothing here. fetchEvents + refreshEvents share the _fetchEvents code path
+// (the one extractErrorMessage call), so testing fetchEvents covers both.
 describe("useCalendar fallback-literal guard", () => {
   beforeEach(() => requestJsonMock.mockReset())
 

@@ -448,7 +448,8 @@ describe("useGoogleCalendar.fetchAccountStatus", () => {
 // Fallback-literal guard (feature 0037): pin the exact fallback string. A
 // `default`-branch status (500) makes statusToMessage return null so
 // control falls through to the shared helper; `errors: {}` yields the
-// fallback.
+// fallback. fetchEvents + refreshEvents share the _fetchEvents code path
+// (the one extractErrorMessage call), so testing fetchEvents covers both.
 describe("useGoogleCalendar fallback-literal guard", () => {
   beforeEach(() => requestJsonMock.mockReset())
 

@@ -1,4 +1,4 @@
-// Only the first flattened value is examined — an empty first value falls through to fallback even if a later key holds a non-empty string.
+// First flattened value only; empty first value falls through to fallback.
 export function extractErrorMessage(
   errors: Record<string, string | string[]> | undefined,
   fallback: string,
