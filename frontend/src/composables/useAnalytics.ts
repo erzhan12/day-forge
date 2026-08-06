@@ -1,6 +1,7 @@
 import { ref } from "vue"
 import { router } from "@inertiajs/vue3"
 import { type ApiResult, requestJson } from "./useHttp"
+import { extractErrorMessage } from "../utils/errorMessage"
 
 // Module-level state — Analytics.vue is the sole consumer (single
 // instance per page). Mirrors useDraft.ts. If a second consumer ever
@@ -8,16 +9,6 @@ import { type ApiResult, requestJson } from "./useHttp"
 // leakage.
 const isMarkingReviewed = ref(false)
 const lastError = ref<string | null>(null)
-
-function extractErrorMessage(
-  errors: Record<string, string | string[]> | undefined,
-  fallback: string,
-): string {
-  if (!errors) return fallback
-  if (typeof errors.detail === "string") return errors.detail
-  const first = Object.values(errors).flat()[0]
-  return typeof first === "string" && first ? first : fallback
-}
 
 export function useAnalytics() {
   async function markReviewed(

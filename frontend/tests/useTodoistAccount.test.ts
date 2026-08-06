@@ -147,7 +147,9 @@ describe("useTodoistAccount commit tokens", () => {
   it("two connects resolving in reverse order: only the latest commits", async () => {
     const c1 = defer<{ ok: boolean; data?: object }>()
     const c2 = defer<{ ok: boolean; data?: object }>()
-    requestJsonMock.mockReturnValueOnce(c1.promise).mockReturnValueOnce(c2.promise)
+    requestJsonMock
+      .mockReturnValueOnce(c1.promise)
+      .mockReturnValueOnce(c2.promise)
 
     const account = useTodoistAccount()
     // Lock-bypass by directly invoking connect twice; the test simulates
@@ -159,17 +161,25 @@ describe("useTodoistAccount commit tokens", () => {
 
     c2.resolve({
       ok: true,
-      data: { ...STATUS_CONNECTED, last_verified_at: "2026-05-08T09:00:00+00:00" },
+      data: {
+        ...STATUS_CONNECTED,
+        last_verified_at: "2026-05-08T09:00:00+00:00",
+      },
     })
     c1.resolve({
       ok: true,
-      data: { ...STATUS_CONNECTED, last_verified_at: "2026-05-07T09:00:00+00:00" },
+      data: {
+        ...STATUS_CONNECTED,
+        last_verified_at: "2026-05-07T09:00:00+00:00",
+      },
     })
 
     await p2
     await p1
 
-    expect(account.state.status?.last_verified_at).toBe("2026-05-08T09:00:00+00:00")
+    expect(account.state.status?.last_verified_at).toBe(
+      "2026-05-08T09:00:00+00:00",
+    )
   })
 
   it("late read after committed write is dropped by writeCompletionTick", async () => {
@@ -187,7 +197,10 @@ describe("useTodoistAccount commit tokens", () => {
     // Resolve the WRITE first — it commits and bumps writeCompletionTick.
     writeDeferred.resolve({
       ok: true,
-      data: { ...STATUS_CONNECTED, last_verified_at: "2026-05-09T09:00:00+00:00" },
+      data: {
+        ...STATUS_CONNECTED,
+        last_verified_at: "2026-05-09T09:00:00+00:00",
+      },
     })
     await writePromise
 
@@ -198,7 +211,37 @@ describe("useTodoistAccount commit tokens", () => {
     })
     await readPromise
 
-    expect(account.state.status?.last_verified_at).toBe("2026-05-09T09:00:00+00:00")
+    expect(account.state.status?.last_verified_at).toBe(
+      "2026-05-09T09:00:00+00:00",
+    )
     expect(account.state.status?.connected).toBe(true)
+  })
+})
+
+// Fallback-literal guard (feature 0037): pin the exact fallback string at
+// BOTH call sites. Drive `errors: {}` so control reaches the shared helper.
+describe("useTodoistAccount fallback-literal guard", () => {
+  beforeEach(() => requestJsonMock.mockReset())
+
+  it("connect surfaces the exact fallback literal on an empty errors map", async () => {
+    requestJsonMock.mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      errors: {},
+    })
+    const account = useTodoistAccount()
+    await account.connect({ token: "some-token" })
+    expect(account.state.error).toBe("Account operation failed")
+  })
+
+  it("disconnect surfaces the exact fallback literal on an empty errors map", async () => {
+    requestJsonMock.mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      errors: {},
+    })
+    const account = useTodoistAccount()
+    await account.disconnect()
+    expect(account.state.error).toBe("Account operation failed")
   })
 })

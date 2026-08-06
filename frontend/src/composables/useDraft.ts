@@ -1,6 +1,7 @@
 import { ref } from "vue"
 import { router } from "@inertiajs/vue3"
 import { type ApiResult, requestJson } from "./useHttp"
+import { extractErrorMessage } from "../utils/errorMessage"
 
 interface DraftSubmitResult extends ApiResult {
   explanation?: string | null
@@ -19,15 +20,6 @@ const lastDraftError = ref<string | null>(null)
 // (date navigation during a slow LLM call) from unlocking edits mid-flight
 // and then stomping them when an earlier draft resolves.
 let latestRequestId = 0
-
-function extractErrorMessage(
-  errors: Record<string, string | string[]> | undefined,
-): string {
-  if (!errors) return "Draft generation failed"
-  if (typeof errors.detail === "string") return errors.detail
-  const first = Object.values(errors).flat()[0]
-  return typeof first === "string" && first ? first : "Draft generation failed"
-}
 
 function statusToMessage(status: number | undefined): string | null {
   switch (status) {
@@ -94,7 +86,8 @@ export function useDraft() {
     }
 
     lastDraftError.value =
-      statusToMessage(result.status) ?? extractErrorMessage(result.errors)
+      statusToMessage(result.status) ??
+      extractErrorMessage(result.errors, "Draft generation failed")
     return { ok: false, status: result.status, errors: result.errors }
   }
 

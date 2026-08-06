@@ -25,6 +25,7 @@ import { reactive, ref } from "vue"
 import type { HabiticaAccountStatus, HabiticaTask } from "../types/habitica"
 import { todayString } from "../utils/date"
 import { requestJson } from "./useHttp"
+import { extractErrorMessage } from "../utils/errorMessage"
 
 interface HabiticaState {
   tasks: HabiticaTask[]
@@ -80,7 +81,10 @@ export function useHabitica() {
   //     logic is unchanged.
   async function _fetchTasks(
     date: string,
-    { force = false, silent = false }: { force?: boolean; silent?: boolean } = {},
+    {
+      force = false,
+      silent = false,
+    }: { force?: boolean; silent?: boolean } = {},
   ): Promise<void> {
     tasksAbortController.value?.abort()
     const controller = new AbortController()
@@ -115,12 +119,9 @@ export function useHabitica() {
 
     let result
     try {
-      result = await requestJson(
-        tasksUrl,
-        "GET",
-        undefined,
-        { signal: controller.signal },
-      )
+      result = await requestJson(tasksUrl, "GET", undefined, {
+        signal: controller.signal,
+      })
     } catch (err) {
       // AbortError — swallow silently, do NOT touch state. The
       // superseding op owns `loading` / `error`.
@@ -169,7 +170,9 @@ export function useHabitica() {
       state.connected = true
     }
     state.statusKnown = true
-    state.error = statusToMessage(result.status) ?? extractErrorMessage(result.errors)
+    state.error =
+      statusToMessage(result.status) ??
+      extractErrorMessage(result.errors, "Habitica fetch failed")
   }
 
   // Initial / date-change load — shows the skeleton on first fetch.
@@ -223,7 +226,8 @@ export function useHabitica() {
       state.tasks = next
     }
     state.error =
-      statusToMessage(result.status) ?? extractErrorMessage(result.errors)
+      statusToMessage(result.status) ??
+      extractErrorMessage(result.errors, "Habitica fetch failed")
   }
 
   async function fetchAccountStatus(): Promise<void> {
@@ -235,12 +239,9 @@ export function useHabitica() {
 
     let result
     try {
-      result = await requestJson(
-        "/api/habitica/account/",
-        "GET",
-        undefined,
-        { signal: controller.signal },
-      )
+      result = await requestJson("/api/habitica/account/", "GET", undefined, {
+        signal: controller.signal,
+      })
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
         return
@@ -260,13 +261,4 @@ export function useHabitica() {
   }
 
   return { state, fetchTasks, refreshTasks, completeTask, fetchAccountStatus }
-}
-
-function extractErrorMessage(
-  errors: Record<string, string | string[]> | undefined,
-): string {
-  if (!errors) return "Habitica fetch failed"
-  if (typeof errors.detail === "string") return errors.detail
-  const first = Object.values(errors).flat()[0]
-  return typeof first === "string" && first ? first : "Habitica fetch failed"
 }

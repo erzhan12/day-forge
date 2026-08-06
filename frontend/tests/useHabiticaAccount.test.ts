@@ -85,7 +85,9 @@ describe("useHabiticaAccount serialisation lock", () => {
     // lock — without it the UI would be frozen for the rest of the session.
     const first = defer<unknown>()
     const second = defer<unknown>()
-    requestJson.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise)
+    requestJson
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise)
 
     const api = useHabiticaAccount()
     const firstCall = api.connect(CREDS)
@@ -102,7 +104,11 @@ describe("useHabiticaAccount serialisation lock", () => {
     expect(api._internals.accountOperationInFlight.value).toBeNull()
 
     // And the lock is genuinely usable again, not merely null-looking.
-    requestJson.mockResolvedValueOnce({ ok: true, status: 200, data: CONNECTED })
+    requestJson.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      data: CONNECTED,
+    })
     const after = await api.connect(CREDS)
     expect(after.ok).toBe(true)
   })
@@ -143,7 +149,11 @@ describe("useHabiticaAccount read/write ordering", () => {
   })
 
   it("commits a status read when no write intervened", async () => {
-    requestJson.mockResolvedValueOnce({ ok: true, status: 200, data: CONNECTED })
+    requestJson.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      data: CONNECTED,
+    })
     const api = useHabiticaAccount()
 
     await api.fetchAccountStatus()
@@ -154,7 +164,11 @@ describe("useHabiticaAccount read/write ordering", () => {
 
 describe("useHabiticaAccount disconnect", () => {
   it("clears connected status and releases the lock on success", async () => {
-    requestJson.mockResolvedValueOnce({ ok: true, status: 200, data: CONNECTED })
+    requestJson.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      data: CONNECTED,
+    })
     const api = useHabiticaAccount()
     await api.connect(CREDS)
     expect(api.state.status?.connected).toBe(true)
@@ -184,5 +198,25 @@ describe("useHabiticaAccount disconnect", () => {
 
     write.resolve({ ok: true, status: 200, data: CONNECTED })
     await inFlight
+  })
+})
+
+// Fallback-literal guard (feature 0037): pin the exact fallback string at
+// BOTH call sites. Drive `errors: {}` so control reaches the shared helper.
+describe("useHabiticaAccount fallback-literal guard", () => {
+  beforeEach(() => requestJson.mockReset())
+
+  it("connect surfaces the exact fallback literal on an empty errors map", async () => {
+    requestJson.mockResolvedValueOnce({ ok: false, status: 500, errors: {} })
+    const api = useHabiticaAccount()
+    await api.connect(CREDS)
+    expect(api.state.error).toBe("Account operation failed")
+  })
+
+  it("disconnect surfaces the exact fallback literal on an empty errors map", async () => {
+    requestJson.mockResolvedValueOnce({ ok: false, status: 500, errors: {} })
+    const api = useHabiticaAccount()
+    await api.disconnect()
+    expect(api.state.error).toBe("Account operation failed")
   })
 })

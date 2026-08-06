@@ -13,6 +13,7 @@ import {
   SCHEDULE_CHANGED_RETRY_MESSAGE,
 } from "../utils/aiScheduleConflict"
 import { type ApiResult, requestJson } from "./useHttp"
+import { extractErrorMessage } from "../utils/errorMessage"
 
 interface AISubmitResult extends ApiResult {
   explanation?: string | null
@@ -27,15 +28,6 @@ const isProcessing = ref(false)
 const lastError = ref<string | null>(null)
 const lastExplanation = ref<string | null>(null)
 const apiHealthy = ref(true)
-
-function extractErrorMessage(
-  errors: Record<string, string | string[]> | undefined,
-): string {
-  if (!errors) return "AI command failed"
-  if (typeof errors.detail === "string") return errors.detail
-  const first = Object.values(errors).flat()[0]
-  return typeof first === "string" && first ? first : "AI command failed"
-}
 
 export function useAI() {
   async function submitCommand(
@@ -83,7 +75,7 @@ export function useAI() {
     lastError.value =
       result.status === 503
         ? "AI is unavailable — manual editing still works."
-        : extractErrorMessage(result.errors)
+        : extractErrorMessage(result.errors, "AI command failed")
     return { ok: false, errors: result.errors }
   }
 

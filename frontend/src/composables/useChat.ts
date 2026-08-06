@@ -22,6 +22,7 @@ import {
 } from "../utils/aiScheduleConflict"
 import { scheduleChanged } from "../utils/scheduleDiff"
 import { type ApiResult, requestJson } from "./useHttp"
+import { extractErrorMessage } from "../utils/errorMessage"
 
 export interface ChatMessage {
   role: "user" | "assistant"
@@ -59,15 +60,6 @@ interface ChatApiResult extends ApiResult {
     ask?: string | null
     applied?: boolean
   }
-}
-
-function extractErrorMessage(
-  errors: Record<string, string | string[]> | undefined,
-): string {
-  if (!errors) return "AI chat failed"
-  if (typeof errors.detail === "string") return errors.detail
-  const first = Object.values(errors).flat()[0]
-  return typeof first === "string" && first ? first : "AI chat failed"
 }
 
 /**
@@ -254,7 +246,7 @@ export function useChat() {
     const errMessage =
       result.status === 503
         ? "AI is unavailable — manual editing still works."
-        : extractErrorMessage(result.errors)
+        : extractErrorMessage(result.errors, "AI chat failed")
     lastError.value = errMessage
     messages.value = [
       ...messages.value,

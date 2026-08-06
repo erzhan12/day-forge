@@ -52,14 +52,24 @@ describe("useCalendar.fetchEvents", () => {
   it("commits the most recent fetch (cross-date race)", async () => {
     const d1 = defer<{ ok: boolean; data?: object; status?: number }>()
     const d2 = defer<{ ok: boolean; data?: object; status?: number }>()
-    requestJsonMock.mockReturnValueOnce(d1.promise).mockReturnValueOnce(d2.promise)
+    requestJsonMock
+      .mockReturnValueOnce(d1.promise)
+      .mockReturnValueOnce(d2.promise)
 
     const calendar = useCalendar()
     const p1 = calendar.fetchEvents("2026-05-01")
     const p2 = calendar.fetchEvents("2026-05-02")
 
-    d2.resolve({ ok: true, status: 200, data: { events: [eventPayload("d2", "Day 2")] } })
-    d1.resolve({ ok: true, status: 200, data: { events: [eventPayload("d1", "Day 1")] } })
+    d2.resolve({
+      ok: true,
+      status: 200,
+      data: { events: [eventPayload("d2", "Day 2")] },
+    })
+    d1.resolve({
+      ok: true,
+      status: 200,
+      data: { events: [eventPayload("d1", "Day 1")] },
+    })
 
     await p2
     await p1
@@ -71,14 +81,24 @@ describe("useCalendar.fetchEvents", () => {
   it("commits the most recent fetch (same-date race)", async () => {
     const d1 = defer<{ ok: boolean; data?: object; status?: number }>()
     const d2 = defer<{ ok: boolean; data?: object; status?: number }>()
-    requestJsonMock.mockReturnValueOnce(d1.promise).mockReturnValueOnce(d2.promise)
+    requestJsonMock
+      .mockReturnValueOnce(d1.promise)
+      .mockReturnValueOnce(d2.promise)
 
     const calendar = useCalendar()
     const p1 = calendar.fetchEvents("2026-05-07")
     const p2 = calendar.fetchEvents("2026-05-07")
 
-    d2.resolve({ ok: true, status: 200, data: { events: [eventPayload("second", "Second")] } })
-    d1.resolve({ ok: true, status: 200, data: { events: [eventPayload("first", "First")] } })
+    d2.resolve({
+      ok: true,
+      status: 200,
+      data: { events: [eventPayload("second", "Second")] },
+    })
+    d1.resolve({
+      ok: true,
+      status: 200,
+      data: { events: [eventPayload("first", "First")] },
+    })
 
     await p2
     await p1
@@ -192,7 +212,9 @@ describe("useCalendar.refreshEvents", () => {
   it("shares the dual commit guard with fetchEvents (a superseded refresh is dropped)", async () => {
     const d1 = defer<{ ok: boolean; data?: object; status?: number }>()
     const d2 = defer<{ ok: boolean; data?: object; status?: number }>()
-    requestJsonMock.mockReturnValueOnce(d1.promise).mockReturnValueOnce(d2.promise)
+    requestJsonMock
+      .mockReturnValueOnce(d1.promise)
+      .mockReturnValueOnce(d2.promise)
 
     const calendar = useCalendar()
     const p1 = calendar.refreshEvents("2026-05-01")
@@ -219,7 +241,9 @@ describe("useCalendar.refreshEvents", () => {
   it("aborts an in-flight fetchEvents when refreshEvents supersedes it", async () => {
     const d1 = defer<{ ok: boolean; data?: object; status?: number }>()
     const d2 = defer<{ ok: boolean; data?: object; status?: number }>()
-    requestJsonMock.mockReturnValueOnce(d1.promise).mockReturnValueOnce(d2.promise)
+    requestJsonMock
+      .mockReturnValueOnce(d1.promise)
+      .mockReturnValueOnce(d2.promise)
 
     const calendar = useCalendar()
     const p1 = calendar.fetchEvents("2026-05-07")
@@ -275,9 +299,21 @@ describe("useCalendar.refreshEvents", () => {
     await calendar.fetchEvents("2026-05-07")
     expect(calendar.state.events[0].title).toBe("Day A")
 
-    const dLoad = defer<{ ok: boolean; data?: object; status?: number; errors?: object }>()
-    const dRefresh = defer<{ ok: boolean; data?: object; status?: number; errors?: object }>()
-    requestJsonMock.mockReturnValueOnce(dLoad.promise).mockReturnValueOnce(dRefresh.promise)
+    const dLoad = defer<{
+      ok: boolean
+      data?: object
+      status?: number
+      errors?: object
+    }>()
+    const dRefresh = defer<{
+      ok: boolean
+      data?: object
+      status?: number
+      errors?: object
+    }>()
+    requestJsonMock
+      .mockReturnValueOnce(dLoad.promise)
+      .mockReturnValueOnce(dRefresh.promise)
 
     const pLoad = calendar.fetchEvents("2026-05-08")
     expect(calendar.state.loading).toBe(true)
@@ -332,5 +368,25 @@ describe("useCalendar.fetchAccountStatus", () => {
 
     expect(calendar.state.connected).toBe(true)
     expect(calendar.state.events).toEqual([])
+  })
+})
+
+// Fallback-literal guard (feature 0037): pin the exact fallback string. A
+// `default`-branch status (500) makes statusToMessage return null, so
+// control falls through to the shared helper; `errors: {}` yields the
+// fallback. A 401/502 mock would assert statusToMessage instead and guard
+// nothing here.
+describe("useCalendar fallback-literal guard", () => {
+  beforeEach(() => requestJsonMock.mockReset())
+
+  it("fetchEvents surfaces the exact fallback literal on an empty errors map", async () => {
+    requestJsonMock.mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      errors: {},
+    })
+    const calendar = useCalendar()
+    await calendar.fetchEvents("2026-05-07")
+    expect(calendar.state.error).toBe("Calendar fetch failed")
   })
 })

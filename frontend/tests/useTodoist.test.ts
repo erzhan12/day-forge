@@ -32,7 +32,12 @@ vi.mock("../src/composables/useHttp", () => ({
 
 import { useTodoist } from "../src/composables/useTodoist"
 
-function taskPayload(id: string, title: string, priority = 1, ui_priority = "P4") {
+function taskPayload(
+  id: string,
+  title: string,
+  priority = 1,
+  ui_priority = "P4",
+) {
   return {
     id,
     title,
@@ -88,14 +93,24 @@ describe("useTodoist.fetchTasks", () => {
   it("commits the most recent fetch (cross-date race)", async () => {
     const d1 = defer<{ ok: boolean; data?: object; status?: number }>()
     const d2 = defer<{ ok: boolean; data?: object; status?: number }>()
-    requestJsonMock.mockReturnValueOnce(d1.promise).mockReturnValueOnce(d2.promise)
+    requestJsonMock
+      .mockReturnValueOnce(d1.promise)
+      .mockReturnValueOnce(d2.promise)
 
     const todoist = useTodoist()
     const p1 = todoist.fetchTasks("2026-05-01")
     const p2 = todoist.fetchTasks("2026-05-02")
 
-    d2.resolve({ ok: true, status: 200, data: { tasks: [taskPayload("d2", "Day 2")] } })
-    d1.resolve({ ok: true, status: 200, data: { tasks: [taskPayload("d1", "Day 1")] } })
+    d2.resolve({
+      ok: true,
+      status: 200,
+      data: { tasks: [taskPayload("d2", "Day 2")] },
+    })
+    d1.resolve({
+      ok: true,
+      status: 200,
+      data: { tasks: [taskPayload("d1", "Day 1")] },
+    })
 
     await p2
     await p1
@@ -109,14 +124,24 @@ describe("useTodoist.fetchTasks", () => {
   it("drops the stale same-date fetch (same-date / stale-seq race)", async () => {
     const d1 = defer<{ ok: boolean; data?: object; status?: number }>()
     const d2 = defer<{ ok: boolean; data?: object; status?: number }>()
-    requestJsonMock.mockReturnValueOnce(d1.promise).mockReturnValueOnce(d2.promise)
+    requestJsonMock
+      .mockReturnValueOnce(d1.promise)
+      .mockReturnValueOnce(d2.promise)
 
     const todoist = useTodoist()
     const p1 = todoist.fetchTasks("2026-05-07")
     const p2 = todoist.fetchTasks("2026-05-07")
 
-    d2.resolve({ ok: true, status: 200, data: { tasks: [taskPayload("second", "Second")] } })
-    d1.resolve({ ok: true, status: 200, data: { tasks: [taskPayload("first", "First")] } })
+    d2.resolve({
+      ok: true,
+      status: 200,
+      data: { tasks: [taskPayload("second", "Second")] },
+    })
+    d1.resolve({
+      ok: true,
+      status: 200,
+      data: { tasks: [taskPayload("first", "First")] },
+    })
 
     await p2
     await p1
@@ -158,7 +183,9 @@ describe("useTodoist.fetchTasks", () => {
     requestJsonMock.mockResolvedValueOnce({
       ok: false,
       status: 500,
-      errors: { detail: "Todoist service is misconfigured. Contact the administrator." },
+      errors: {
+        detail: "Todoist service is misconfigured. Contact the administrator.",
+      },
     })
     const todoist = useTodoist()
     await todoist.fetchTasks("2026-05-07")
@@ -209,7 +236,9 @@ describe("useTodoist.fetchTasks", () => {
     await todoist.fetchTasks("2026-05-07")
     expect(todoist.state.connected).toBe(false)
     expect(todoist.state.statusKnown).toBe(true)
-    expect(todoist.state.error).toBe("Network error. Please check your connection.")
+    expect(todoist.state.error).toBe(
+      "Network error. Please check your connection.",
+    )
   })
 
   it("network failure does NOT revert an already-connected session", async () => {
@@ -225,7 +254,9 @@ describe("useTodoist.fetchTasks", () => {
     await todoist.fetchTasks("2026-05-08")
     expect(todoist.state.connected).toBe(true)
     expect(todoist.state.statusKnown).toBe(true)
-    expect(todoist.state.error).toBe("Network error. Please check your connection.")
+    expect(todoist.state.error).toBe(
+      "Network error. Please check your connection.",
+    )
   })
 
   it("first-load 400 (malformed date) does NOT elevate connected", async () => {
@@ -271,15 +302,26 @@ describe("useTodoist.fetchTasks", () => {
     // The stale (first) fetch resolves with an error AFTER a newer fetch has
     // already committed an ok result. The stale error must be dropped by the
     // dual commit guard — neither connected nor statusKnown reverts.
-    const d1 = defer<{ ok: boolean; data?: object; status?: number; errors?: object }>()
+    const d1 = defer<{
+      ok: boolean
+      data?: object
+      status?: number
+      errors?: object
+    }>()
     const d2 = defer<{ ok: boolean; data?: object; status?: number }>()
-    requestJsonMock.mockReturnValueOnce(d1.promise).mockReturnValueOnce(d2.promise)
+    requestJsonMock
+      .mockReturnValueOnce(d1.promise)
+      .mockReturnValueOnce(d2.promise)
 
     const todoist = useTodoist()
     const p1 = todoist.fetchTasks("2026-05-01")
     const p2 = todoist.fetchTasks("2026-05-02")
 
-    d2.resolve({ ok: true, status: 200, data: { tasks: [taskPayload("d2", "Day 2")] } })
+    d2.resolve({
+      ok: true,
+      status: 200,
+      data: { tasks: [taskPayload("d2", "Day 2")] },
+    })
     await p2
     // Newer fetch already committed.
     expect(todoist.state.connected).toBe(true)
@@ -287,7 +329,11 @@ describe("useTodoist.fetchTasks", () => {
 
     // Stale fetch resolves late with a 503 — must be dropped (no flip to
     // connected=false, no error).
-    d1.resolve({ ok: false, status: 503, errors: { detail: "No Todoist account configured" } })
+    d1.resolve({
+      ok: false,
+      status: 503,
+      errors: { detail: "No Todoist account configured" },
+    })
     await p1
 
     expect(todoist.state.connected).toBe(true)
@@ -397,7 +443,9 @@ describe("useTodoist.completeTask", () => {
     await todoist.completeTask("A")
 
     expect(todoist.state.tasks.map((t) => t.id)).toEqual(["A", "B"])
-    expect(todoist.state.error).toBe("Network error. Please check your connection.")
+    expect(todoist.state.error).toBe(
+      "Network error. Please check your connection.",
+    )
   })
 
   it("failure after a concurrent refresh does not clobber the refreshed list (P1 race)", async () => {
@@ -412,7 +460,11 @@ describe("useTodoist.completeTask", () => {
     // A concurrent refreshTasks commit lands → [B, C].
     todoist.state.tasks = [taskPayload("B", "B"), taskPayload("C", "C")]
     // Complete POST then fails.
-    dComplete.resolve({ ok: false, status: 502, errors: { detail: "bad gateway" } })
+    dComplete.resolve({
+      ok: false,
+      status: 502,
+      errors: { detail: "bad gateway" },
+    })
     await p
 
     // A surgically re-inserted at its index, C preserved — NOT [A, B]
@@ -454,7 +506,11 @@ describe("useTodoist.refreshTasks", () => {
   it("appends refresh=1 and carry_overdue=1 for browser-local today", async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date(2026, 5, 18, 12, 0, 0))
-    requestJsonMock.mockResolvedValueOnce({ ok: true, status: 200, data: { tasks: [] } })
+    requestJsonMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      data: { tasks: [] },
+    })
     const todoist = useTodoist()
     await todoist.refreshTasks("2026-06-18")
 
@@ -465,7 +521,11 @@ describe("useTodoist.refreshTasks", () => {
   })
 
   it("appends only refresh=1 for a non-today date", async () => {
-    requestJsonMock.mockResolvedValueOnce({ ok: true, status: 200, data: { tasks: [] } })
+    requestJsonMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      data: { tasks: [] },
+    })
     const todoist = useTodoist()
     await todoist.refreshTasks("2025-02-12")
 
@@ -477,14 +537,24 @@ describe("useTodoist.refreshTasks", () => {
   it("shares the dual commit guard with fetchTasks (a superseded refresh is dropped)", async () => {
     const d1 = defer<{ ok: boolean; data?: object; status?: number }>()
     const d2 = defer<{ ok: boolean; data?: object; status?: number }>()
-    requestJsonMock.mockReturnValueOnce(d1.promise).mockReturnValueOnce(d2.promise)
+    requestJsonMock
+      .mockReturnValueOnce(d1.promise)
+      .mockReturnValueOnce(d2.promise)
 
     const todoist = useTodoist()
     const p1 = todoist.refreshTasks("2026-05-01")
     const p2 = todoist.fetchTasks("2026-05-02")
 
-    d2.resolve({ ok: true, status: 200, data: { tasks: [taskPayload("d2", "Day 2")] } })
-    d1.resolve({ ok: true, status: 200, data: { tasks: [taskPayload("d1", "Day 1")] } })
+    d2.resolve({
+      ok: true,
+      status: 200,
+      data: { tasks: [taskPayload("d2", "Day 2")] },
+    })
+    d1.resolve({
+      ok: true,
+      status: 200,
+      data: { tasks: [taskPayload("d1", "Day 1")] },
+    })
 
     await p2
     await p1
@@ -506,10 +576,45 @@ describe("useTodoist.refreshTasks", () => {
     expect(todoist.state.loading).toBe(false)
     expect(todoist.state.tasks).toHaveLength(2)
 
-    dRefresh.resolve({ ok: true, status: 200, data: { tasks: [taskPayload("C", "C")] } })
+    dRefresh.resolve({
+      ok: true,
+      status: 200,
+      data: { tasks: [taskPayload("C", "C")] },
+    })
     await p
 
     expect(todoist.state.loading).toBe(false)
     expect(todoist.state.tasks.map((t) => t.id)).toEqual(["C"])
+  })
+})
+
+// Fallback-literal guard (feature 0037): pin the exact fallback string at
+// BOTH call sites (_fetchTasks + completeTask). A `default`-branch status
+// (500) makes statusToMessage return null so control reaches the shared
+// helper; 500 also elevates `connected` (>= 401) so the error surfaces.
+describe("useTodoist fallback-literal guard", () => {
+  beforeEach(() => requestJsonMock.mockReset())
+
+  it("fetchTasks surfaces the exact fallback literal on an empty errors map", async () => {
+    requestJsonMock.mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      errors: {},
+    })
+    const todoist = useTodoist()
+    await todoist.fetchTasks("2026-05-07")
+    expect(todoist.state.error).toBe("Todoist fetch failed")
+  })
+
+  it("completeTask surfaces the exact fallback literal on an empty errors map", async () => {
+    const todoist = useTodoist()
+    todoist.state.tasks = [taskPayload("A", "A")]
+    requestJsonMock.mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      errors: {},
+    })
+    await todoist.completeTask("A")
+    expect(todoist.state.error).toBe("Todoist fetch failed")
   })
 })

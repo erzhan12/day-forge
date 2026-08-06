@@ -19,6 +19,7 @@
 import { reactive, ref } from "vue"
 import type { ApiResult } from "./useHttp"
 import { requestJson } from "./useHttp"
+import { extractErrorMessage } from "../utils/errorMessage"
 import type { TodoistAccountStatus } from "../types/todoist"
 
 interface AccountState {
@@ -73,12 +74,9 @@ export function useTodoistAccount() {
     try {
       let result
       try {
-        result = await requestJson(
-          "/api/todoist/account/",
-          "POST",
-          payload,
-          { signal: controller.signal },
-        )
+        result = await requestJson("/api/todoist/account/", "POST", payload, {
+          signal: controller.signal,
+        })
       } catch (err) {
         if (err instanceof DOMException && err.name === "AbortError") {
           // Aborted writes don't commit; do nothing to state.
@@ -101,7 +99,10 @@ export function useTodoistAccount() {
         state.status = result.data as unknown as TodoistAccountStatus
         state.error = null
       } else {
-        state.error = extractErrorMessage(result.errors)
+        state.error = extractErrorMessage(
+          result.errors,
+          "Account operation failed",
+        )
       }
       return result
     } finally {
@@ -148,7 +149,10 @@ export function useTodoistAccount() {
         state.status = result.data as unknown as TodoistAccountStatus
         state.error = null
       } else {
-        state.error = extractErrorMessage(result.errors)
+        state.error = extractErrorMessage(
+          result.errors,
+          "Account operation failed",
+        )
       }
       return result
     } finally {
@@ -171,12 +175,9 @@ export function useTodoistAccount() {
 
     let result
     try {
-      result = await requestJson(
-        "/api/todoist/account/",
-        "GET",
-        undefined,
-        { signal: controller.signal },
-      )
+      result = await requestJson("/api/todoist/account/", "GET", undefined, {
+        signal: controller.signal,
+      })
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
         return
@@ -211,13 +212,4 @@ export function useTodoistAccount() {
       writeCompletionTick,
     },
   }
-}
-
-function extractErrorMessage(
-  errors: Record<string, string | string[]> | undefined,
-): string {
-  if (!errors) return "Account operation failed"
-  if (typeof errors.detail === "string") return errors.detail
-  const first = Object.values(errors).flat()[0]
-  return typeof first === "string" && first ? first : "Account operation failed"
 }

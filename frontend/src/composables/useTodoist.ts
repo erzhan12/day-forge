@@ -25,6 +25,7 @@ import { reactive, ref } from "vue"
 import type { TodoistAccountStatus, TodoistTask } from "../types/todoist"
 import { todayString } from "../utils/date"
 import { requestJson } from "./useHttp"
+import { extractErrorMessage } from "../utils/errorMessage"
 
 interface TodoistState {
   tasks: TodoistTask[]
@@ -80,7 +81,10 @@ export function useTodoist() {
   //     logic is unchanged.
   async function _fetchTasks(
     date: string,
-    { force = false, silent = false }: { force?: boolean; silent?: boolean } = {},
+    {
+      force = false,
+      silent = false,
+    }: { force?: boolean; silent?: boolean } = {},
   ): Promise<void> {
     tasksAbortController.value?.abort()
     const controller = new AbortController()
@@ -110,12 +114,9 @@ export function useTodoist() {
 
     let result
     try {
-      result = await requestJson(
-        tasksUrl,
-        "GET",
-        undefined,
-        { signal: controller.signal },
-      )
+      result = await requestJson(tasksUrl, "GET", undefined, {
+        signal: controller.signal,
+      })
     } catch (err) {
       // AbortError — swallow silently, do NOT touch state. The
       // superseding op owns `loading` / `error`.
@@ -164,7 +165,9 @@ export function useTodoist() {
       state.connected = true
     }
     state.statusKnown = true
-    state.error = statusToMessage(result.status) ?? extractErrorMessage(result.errors)
+    state.error =
+      statusToMessage(result.status) ??
+      extractErrorMessage(result.errors, "Todoist fetch failed")
   }
 
   // Initial / date-change load — shows the skeleton on first fetch.
@@ -218,7 +221,8 @@ export function useTodoist() {
       state.tasks = next
     }
     state.error =
-      statusToMessage(result.status) ?? extractErrorMessage(result.errors)
+      statusToMessage(result.status) ??
+      extractErrorMessage(result.errors, "Todoist fetch failed")
   }
 
   async function fetchAccountStatus(): Promise<void> {
@@ -230,12 +234,9 @@ export function useTodoist() {
 
     let result
     try {
-      result = await requestJson(
-        "/api/todoist/account/",
-        "GET",
-        undefined,
-        { signal: controller.signal },
-      )
+      result = await requestJson("/api/todoist/account/", "GET", undefined, {
+        signal: controller.signal,
+      })
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
         return
@@ -255,13 +256,4 @@ export function useTodoist() {
   }
 
   return { state, fetchTasks, refreshTasks, completeTask, fetchAccountStatus }
-}
-
-function extractErrorMessage(
-  errors: Record<string, string | string[]> | undefined,
-): string {
-  if (!errors) return "Todoist fetch failed"
-  if (typeof errors.detail === "string") return errors.detail
-  const first = Object.values(errors).flat()[0]
-  return typeof first === "string" && first ? first : "Todoist fetch failed"
 }

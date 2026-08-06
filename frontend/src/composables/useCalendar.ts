@@ -12,6 +12,7 @@
 import { reactive, ref } from "vue"
 import type { CalDAVAccountStatus, NormalizedEvent } from "../types/calendar"
 import { requestJson } from "./useHttp"
+import { extractErrorMessage } from "../utils/errorMessage"
 
 interface CalendarState {
   events: NormalizedEvent[]
@@ -72,7 +73,10 @@ export function useCalendar() {
   //   day's events under the new date.
   async function _fetchEvents(
     date: string,
-    { force = false, silent = false }: { force?: boolean; silent?: boolean } = {},
+    {
+      force = false,
+      silent = false,
+    }: { force?: boolean; silent?: boolean } = {},
   ): Promise<void> {
     eventsAbortController.value?.abort()
     const controller = new AbortController()
@@ -98,12 +102,9 @@ export function useCalendar() {
 
     let result
     try {
-      result = await requestJson(
-        eventsUrl,
-        "GET",
-        undefined,
-        { signal: controller.signal },
-      )
+      result = await requestJson(eventsUrl, "GET", undefined, {
+        signal: controller.signal,
+      })
     } catch (err) {
       // AbortError — swallow silently, do NOT touch state. The
       // superseding op owns `loading` / `error`.
@@ -139,7 +140,8 @@ export function useCalendar() {
       state.events = []
     }
     const msg = statusToMessage(result.status)
-    state.error = msg ?? extractErrorMessage(result.errors)
+    state.error =
+      msg ?? extractErrorMessage(result.errors, "Calendar fetch failed")
   }
 
   // Initial / date-change load — shows the skeleton on first fetch.
@@ -162,12 +164,9 @@ export function useCalendar() {
 
     let result
     try {
-      result = await requestJson(
-        "/api/calendar/account/",
-        "GET",
-        undefined,
-        { signal: controller.signal },
-      )
+      result = await requestJson("/api/calendar/account/", "GET", undefined, {
+        signal: controller.signal,
+      })
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
         return
@@ -187,13 +186,4 @@ export function useCalendar() {
   }
 
   return { state, fetchEvents, refreshEvents, fetchAccountStatus }
-}
-
-function extractErrorMessage(
-  errors: Record<string, string | string[]> | undefined,
-): string {
-  if (!errors) return "Calendar fetch failed"
-  if (typeof errors.detail === "string") return errors.detail
-  const first = Object.values(errors).flat()[0]
-  return typeof first === "string" && first ? first : "Calendar fetch failed"
 }

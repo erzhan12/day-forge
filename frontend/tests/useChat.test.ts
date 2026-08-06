@@ -49,9 +49,12 @@ const BLOCK = {
 const snapshotBlocks = () => [{ ...BLOCK }]
 
 interface DeferredApiResult {
-  resolve: (
-    value: { ok: boolean; status?: number; data?: unknown; errors?: unknown },
-  ) => void
+  resolve: (value: {
+    ok: boolean
+    status?: number
+    data?: unknown
+    errors?: unknown
+  }) => void
   reject: (e: unknown) => void
   promise: Promise<unknown>
 }
@@ -91,7 +94,13 @@ describe("useChat", () => {
       ok: true,
       data: {
         blocks: [
-          { ...BLOCK, id: 2, title: "Standup", start_time: "10:00", end_time: "10:15" },
+          {
+            ...BLOCK,
+            id: 2,
+            title: "Standup",
+            start_time: "10:00",
+            end_time: "10:15",
+          },
         ],
         explanation: "Added",
         ask: null,
@@ -219,7 +228,10 @@ describe("useChat", () => {
     await chat.submitTurn("oops", snapshotBlocks, vi.fn())
 
     expect(chat.messages.value.length).toBe(2)
-    expect(chat.messages.value[0]).toMatchObject({ role: "user", content: "oops" })
+    expect(chat.messages.value[0]).toMatchObject({
+      role: "user",
+      content: "oops",
+    })
     expect(chat.messages.value[1]).toMatchObject({
       role: "assistant",
       content: "boom",
@@ -283,9 +295,7 @@ describe("useChat", () => {
       deferred.resolve({
         ok: true,
         data: {
-          blocks: [
-            { ...BLOCK, id: 99, title: "Late" },
-          ],
+          blocks: [{ ...BLOCK, id: 99, title: "Late" }],
           explanation: "Late",
           ask: null,
           applied: true,
@@ -351,7 +361,11 @@ describe("useChat", () => {
       requestJsonMock.mockReturnValue(deferred.promise)
       const pushUndo = vi.fn()
 
-      const inFlight = chat.submitTurn("authored on A", snapshotBlocks, pushUndo)
+      const inFlight = chat.submitTurn(
+        "authored on A",
+        snapshotBlocks,
+        pushUndo,
+      )
       chat.setActiveDate("2026-05-08")
 
       deferred.resolve({
@@ -465,5 +479,27 @@ describe("useChat", () => {
     await inFlightA
     expect(chat.isProcessing.value).toBe(false)
     expect(chat.messages.value.length).toBe(lengthBefore)
+  })
+})
+
+// Fallback-literal guard (feature 0037): pin the exact fallback string in
+// the `:` branch of the 503-ternary. A non-503 failure (500) with
+// `errors: {}` makes the ternary fall to the shared helper's fallback.
+describe("useChat fallback-literal guard", () => {
+  beforeEach(() => {
+    _resetChatStateForTests()
+    requestJsonMock.mockReset()
+  })
+
+  it("submitTurn surfaces the exact fallback literal on an empty errors map", async () => {
+    requestJsonMock.mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      errors: {},
+    })
+    const chat = useChat()
+    chat.setActiveDate("2026-05-07")
+    await chat.submitTurn("hi", snapshotBlocks, vi.fn())
+    expect(chat.lastError.value).toBe("AI chat failed")
   })
 })

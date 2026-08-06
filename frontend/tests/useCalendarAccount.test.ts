@@ -159,7 +159,9 @@ describe("useCalendarAccount commit tokens", () => {
   it("two connects resolving in reverse order: only the latest commits", async () => {
     const c1 = defer<{ ok: boolean; data?: object }>()
     const c2 = defer<{ ok: boolean; data?: object }>()
-    requestJsonMock.mockReturnValueOnce(c1.promise).mockReturnValueOnce(c2.promise)
+    requestJsonMock
+      .mockReturnValueOnce(c1.promise)
+      .mockReturnValueOnce(c2.promise)
 
     const account = useCalendarAccount()
     // Lock-bypass by directly invoking connect twice; the test simulates
@@ -215,5 +217,34 @@ describe("useCalendarAccount commit tokens", () => {
 
     expect(account.state.status?.apple_id).toBe("after-write@b.com")
     expect(account.state.status?.connected).toBe(true)
+  })
+})
+
+// Fallback-literal guard (feature 0037): pin the exact fallback string at
+// BOTH call sites so a swapped/typo literal from the extractErrorMessage
+// dedup is caught. Drive `errors: {}` so control reaches the shared helper.
+describe("useCalendarAccount fallback-literal guard", () => {
+  beforeEach(() => requestJsonMock.mockReset())
+
+  it("connect surfaces the exact fallback literal on an empty errors map", async () => {
+    requestJsonMock.mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      errors: {},
+    })
+    const account = useCalendarAccount()
+    await account.connect({ apple_id: "a@b.com", password: "x" })
+    expect(account.state.error).toBe("Account operation failed")
+  })
+
+  it("disconnect surfaces the exact fallback literal on an empty errors map", async () => {
+    requestJsonMock.mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      errors: {},
+    })
+    const account = useCalendarAccount()
+    await account.disconnect()
+    expect(account.state.error).toBe("Account operation failed")
   })
 })

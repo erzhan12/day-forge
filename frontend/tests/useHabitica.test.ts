@@ -158,7 +158,10 @@ describe("useHabitica completeTask", () => {
 
   it("leaves connection state untouched on completion failure", async () => {
     const { state, completeTask } = await seed(["1"])
-    const before = { connected: state.connected, statusKnown: state.statusKnown }
+    const before = {
+      connected: state.connected,
+      statusKnown: state.statusKnown,
+    }
     requestJson.mockResolvedValue({ ok: false, status: 502, errors: {} })
 
     await completeTask("1")
@@ -170,7 +173,11 @@ describe("useHabitica completeTask", () => {
 
 describe("useHabitica refreshTasks", () => {
   it("forces a cache bypass and does not flip the loading skeleton", async () => {
-    requestJson.mockResolvedValue({ ok: true, status: 200, data: { tasks: [] } })
+    requestJson.mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: { tasks: [] },
+    })
     const { state, refreshTasks } = useHabitica()
 
     const pending = refreshTasks(TODAY)
@@ -182,10 +189,35 @@ describe("useHabitica refreshTasks", () => {
   })
 
   it("fetchTasks does NOT force a cache bypass", async () => {
-    requestJson.mockResolvedValue({ ok: true, status: 200, data: { tasks: [] } })
+    requestJson.mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: { tasks: [] },
+    })
     const { fetchTasks } = useHabitica()
     await fetchTasks(TODAY)
 
     expect(requestJson.mock.calls[0][0]).not.toContain("refresh=1")
+  })
+})
+
+// Fallback-literal guard (feature 0037): pin the exact fallback string at
+// BOTH call sites (_fetchTasks + completeTask). A `default`-branch status
+// (500) makes statusToMessage return null so control reaches the shared
+// helper; 500 also elevates `connected` (>= 401) so the error surfaces.
+describe("useHabitica fallback-literal guard", () => {
+  it("fetchTasks surfaces the exact fallback literal on an empty errors map", async () => {
+    requestJson.mockResolvedValueOnce({ ok: false, status: 500, errors: {} })
+    const { state, fetchTasks } = useHabitica()
+    await fetchTasks(TODAY)
+    expect(state.error).toBe("Habitica fetch failed")
+  })
+
+  it("completeTask surfaces the exact fallback literal on an empty errors map", async () => {
+    const api = useHabitica()
+    api.state.tasks = [task("A")]
+    requestJson.mockResolvedValueOnce({ ok: false, status: 500, errors: {} })
+    await api.completeTask("A")
+    expect(api.state.error).toBe("Habitica fetch failed")
   })
 })

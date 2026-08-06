@@ -50,7 +50,11 @@ describe("useGoogleCalendar.fetchEvents", () => {
       data: {
         events: [eventPayload("g1@google", "Standup")],
         account_errors: [
-          { account_id: 2, email: "bad@gmail.com", error: "reconnect_required" },
+          {
+            account_id: 2,
+            email: "bad@gmail.com",
+            error: "reconnect_required",
+          },
         ],
       },
     })
@@ -142,13 +146,23 @@ describe("useGoogleCalendar.fetchEvents", () => {
   it("drops a stale interleaved fetch (commits the most recent date)", async () => {
     const d1 = defer<{ ok: boolean; data?: object; status?: number }>()
     const d2 = defer<{ ok: boolean; data?: object; status?: number }>()
-    requestJsonMock.mockReturnValueOnce(d1.promise).mockReturnValueOnce(d2.promise)
+    requestJsonMock
+      .mockReturnValueOnce(d1.promise)
+      .mockReturnValueOnce(d2.promise)
 
     const cal = useGoogleCalendar()
     const p1 = cal.fetchEvents("2026-05-01")
     const p2 = cal.fetchEvents("2026-05-02")
-    d2.resolve({ ok: true, status: 200, data: { events: [eventPayload("d2", "Day 2")] } })
-    d1.resolve({ ok: true, status: 200, data: { events: [eventPayload("d1", "Day 1")] } })
+    d2.resolve({
+      ok: true,
+      status: 200,
+      data: { events: [eventPayload("d2", "Day 2")] },
+    })
+    d1.resolve({
+      ok: true,
+      status: 200,
+      data: { events: [eventPayload("d1", "Day 1")] },
+    })
     await p2
     await p1
 
@@ -200,7 +214,9 @@ describe("useGoogleCalendar.refreshEvents", () => {
   it("shares the dual commit guard with fetchEvents (a superseded refresh is dropped)", async () => {
     const d1 = defer<{ ok: boolean; data?: object; status?: number }>()
     const d2 = defer<{ ok: boolean; data?: object; status?: number }>()
-    requestJsonMock.mockReturnValueOnce(d1.promise).mockReturnValueOnce(d2.promise)
+    requestJsonMock
+      .mockReturnValueOnce(d1.promise)
+      .mockReturnValueOnce(d2.promise)
 
     const cal = useGoogleCalendar()
     const p1 = cal.refreshEvents("2026-05-01")
@@ -227,7 +243,9 @@ describe("useGoogleCalendar.refreshEvents", () => {
   it("aborts an in-flight fetchEvents when refreshEvents supersedes it", async () => {
     const d1 = defer<{ ok: boolean; data?: object; status?: number }>()
     const d2 = defer<{ ok: boolean; data?: object; status?: number }>()
-    requestJsonMock.mockReturnValueOnce(d1.promise).mockReturnValueOnce(d2.promise)
+    requestJsonMock
+      .mockReturnValueOnce(d1.promise)
+      .mockReturnValueOnce(d2.promise)
 
     const cal = useGoogleCalendar()
     const p1 = cal.fetchEvents("2026-05-07")
@@ -257,7 +275,11 @@ describe("useGoogleCalendar.refreshEvents", () => {
       data: {
         events: [eventPayload("g1@google", "Standup")],
         account_errors: [
-          { account_id: 2, email: "bad@gmail.com", error: "reconnect_required" },
+          {
+            account_id: 2,
+            email: "bad@gmail.com",
+            error: "reconnect_required",
+          },
         ],
       },
     })
@@ -334,9 +356,21 @@ describe("useGoogleCalendar.refreshEvents", () => {
     await cal.fetchEvents("2026-05-07")
     expect(cal.state.events[0].title).toBe("Day A")
 
-    const dLoad = defer<{ ok: boolean; data?: object; status?: number; errors?: object }>()
-    const dRefresh = defer<{ ok: boolean; data?: object; status?: number; errors?: object }>()
-    requestJsonMock.mockReturnValueOnce(dLoad.promise).mockReturnValueOnce(dRefresh.promise)
+    const dLoad = defer<{
+      ok: boolean
+      data?: object
+      status?: number
+      errors?: object
+    }>()
+    const dRefresh = defer<{
+      ok: boolean
+      data?: object
+      status?: number
+      errors?: object
+    }>()
+    requestJsonMock
+      .mockReturnValueOnce(dLoad.promise)
+      .mockReturnValueOnce(dRefresh.promise)
 
     const pLoad = cal.fetchEvents("2026-05-08")
     expect(cal.state.loading).toBe(true)
@@ -389,7 +423,9 @@ describe("useGoogleCalendar.fetchAccountStatus", () => {
     requestJsonMock.mockResolvedValueOnce({
       ok: true,
       status: 200,
-      data: { accounts: [{ id: 1, email: "a@gmail.com", last_verified_at: null }] },
+      data: {
+        accounts: [{ id: 1, email: "a@gmail.com", last_verified_at: null }],
+      },
     })
     const cal = useGoogleCalendar()
     await cal.fetchAccountStatus()
@@ -406,5 +442,24 @@ describe("useGoogleCalendar.fetchAccountStatus", () => {
     const cal = useGoogleCalendar()
     await cal.fetchAccountStatus()
     expect(cal.state.connected).toBe(false)
+  })
+})
+
+// Fallback-literal guard (feature 0037): pin the exact fallback string. A
+// `default`-branch status (500) makes statusToMessage return null so
+// control falls through to the shared helper; `errors: {}` yields the
+// fallback.
+describe("useGoogleCalendar fallback-literal guard", () => {
+  beforeEach(() => requestJsonMock.mockReset())
+
+  it("fetchEvents surfaces the exact fallback literal on an empty errors map", async () => {
+    requestJsonMock.mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      errors: {},
+    })
+    const cal = useGoogleCalendar()
+    await cal.fetchEvents("2026-05-07")
+    expect(cal.state.error).toBe("Google Calendar fetch failed")
   })
 })

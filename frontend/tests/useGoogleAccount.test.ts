@@ -21,7 +21,11 @@ describe("useGoogleAccount", () => {
       data: {
         accounts: [
           { id: 1, email: "a@gmail.com", last_verified_at: null },
-          { id: 2, email: "b@gmail.com", last_verified_at: "2026-05-01T00:00:00Z" },
+          {
+            id: 2,
+            email: "b@gmail.com",
+            last_verified_at: "2026-05-01T00:00:00Z",
+          },
         ],
       },
     })
@@ -37,7 +41,9 @@ describe("useGoogleAccount", () => {
     requestJsonMock.mockResolvedValueOnce({
       ok: true,
       status: 200,
-      data: { accounts: [{ id: 2, email: "b@gmail.com", last_verified_at: null }] },
+      data: {
+        accounts: [{ id: 2, email: "b@gmail.com", last_verified_at: null }],
+      },
     })
     const acc = useGoogleAccount()
     const result = await acc.disconnect(1)
@@ -69,10 +75,36 @@ describe("useGoogleAccount", () => {
     const hrefSet = vi.fn()
     Object.defineProperty(window, "location", {
       configurable: true,
-      value: { ...orig, set href(v: string) { hrefSet(v) } },
+      value: {
+        ...orig,
+        set href(v: string) {
+          hrefSet(v)
+        },
+      },
     })
     acc.connect()
     expect(hrefSet).toHaveBeenCalledWith("/api/calendar/google/connect/")
-    Object.defineProperty(window, "location", { configurable: true, value: orig })
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: orig,
+    })
+  })
+})
+
+// Fallback-literal guard (feature 0037): pin the exact fallback string at
+// the sole call site (disconnect). Drive `errors: {}` so control reaches
+// the shared helper.
+describe("useGoogleAccount fallback-literal guard", () => {
+  beforeEach(() => requestJsonMock.mockReset())
+
+  it("disconnect surfaces the exact fallback literal on an empty errors map", async () => {
+    requestJsonMock.mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      errors: {},
+    })
+    const acc = useGoogleAccount()
+    await acc.disconnect(1)
+    expect(acc.state.error).toBe("Account operation failed")
   })
 })

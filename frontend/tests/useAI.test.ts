@@ -143,7 +143,9 @@ describe("useAI.submitCommand", () => {
       vi
         .fn()
         .mockResolvedValue(
-          errJson(409, { errors: { detail: "draft schedule already has blocks" } }),
+          errJson(409, {
+            errors: { detail: "draft schedule already has blocks" },
+          }),
         ),
     )
 
@@ -169,14 +171,35 @@ describe("useAI.submitCommand", () => {
   })
 
   it("reports network errors", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockRejectedValue(new TypeError("offline")),
-    )
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("offline")))
     const { submitCommand, lastError, apiHealthy } = useAI()
     const result = await submitCommand("2026-04-18", "hi")
     expect(result.ok).toBe(false)
     expect(lastError.value).toMatch(/network/i)
     expect(apiHealthy.value).toBe(false)
+  })
+})
+
+// Fallback-literal guard (feature 0037): pin the exact fallback string in
+// the `:` branch of the 503-ternary. A non-503 failure (500) whose body
+// carries an empty `errors` map falls through to the shared helper's
+// fallback. (requestJson maps a body with no `errors` key to a synthetic
+// `{ detail: "Server error (N)" }`, so the body must set `errors: {}`.)
+describe("useAI.submitCommand fallback-literal guard", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+    const { clearError, apiHealthy } = useAI()
+    clearError()
+    apiHealthy.value = true
+  })
+
+  it("surfaces the exact fallback literal on an empty errors map", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(errJson(500, { errors: {} })),
+    )
+    const { submitCommand, lastError } = useAI()
+    await submitCommand("2026-04-18", "hi")
+    expect(lastError.value).toBe("AI command failed")
   })
 })
