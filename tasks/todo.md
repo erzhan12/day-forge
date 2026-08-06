@@ -169,6 +169,26 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
 
 ## Follow-ups (discovered during manual testing)
 
+### 0037 — `extractErrorMessage` dedup: deferred P3 review nits (PR #128)
+
+- [ ] **Characterization tests for `useAnalytics.ts`'s two distinct fallback
+  literals.** `useAnalytics` was deliberately exempted from the migration
+  guards (its call sites were not edited), but unlike every other composable
+  its two literals differ — `"Could not mark this day reviewed."` (`:45`) and
+  `"Could not save notes."` (`:64`) — so a future swap between them is caught
+  by neither a guard test nor the fallback-preservation grep. Add two minimal
+  guard tests to `frontend/tests/useAnalytics.test.ts` (mock
+  `{ ok: false, status: 500, errors: {} }` on the `markReviewed` and
+  `saveNotes` paths, assert each exact literal), mirroring the pattern used in
+  the other 11 composable test files. Raised by `claude-review` on PR #128
+  (P3/TESTING) — genuine small gap, deferred to keep the review loop from
+  chasing cosmetics.
+- [ ] *(optional)* One-line comment above the `errors.detail` branch in
+  `frontend/src/utils/errorMessage.ts` documenting the empty-`detail`
+  short-circuit trade-off. Behaviour is already pinned by
+  `tests/errorMessage.test.ts`; skip unless a future reader trips on it.
+  Raised by `claude-review` on PR #128 (P3/QUALITY).
+
 ### 0036 — `schedules.W002` system check for LocMem connect-rate-limit degradation
 
 - [x] **Added a Django `Warning` system check (`schedules.W002`) that fires
