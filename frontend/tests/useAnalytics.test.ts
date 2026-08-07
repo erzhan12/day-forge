@@ -94,7 +94,7 @@ describe("useAnalytics", () => {
 
   // Fallback-literal guards (features 0037/0038): pin each method's exact
   // fallback because useAnalytics intentionally uses two distinct strings.
-  describe("useAnalytics fallback-literal guards", () => {
+  describe("fallback-literal guards", () => {
     it("markReviewed surfaces the exact fallback literal on an empty errors map", async () => {
       vi.stubGlobal(
         "fetch",
