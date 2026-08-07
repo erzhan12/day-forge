@@ -275,6 +275,18 @@ def test_schedule_seeder_remaining_audit_snapshots_and_unknown_mode(user, monkey
         "HAS_RAW True\n"
     )
 
+    # An unrecognised block-detail snapshot fails loud rather than emitting
+    # partial output; "draft"/"chat" (asserted above) still fall through.
+    _setenv(
+        monkeypatch,
+        SEED_MODE="snapshot",
+        SEED_USERNAME=user.username,
+        SEED_DATE="2027-05-05",
+        SEED_SNAPSHOT="bogus-snapshot",
+    )
+    with pytest.raises(RuntimeError, match="Unknown SEED_SNAPSHOT"):
+        seed_schedule.main()
+
     _setenv(monkeypatch, SEED_MODE="bogus-mode", SEED_USERNAME=user.username)
     with pytest.raises(RuntimeError, match="Unknown SEED_MODE"):
         seed_schedule.main()

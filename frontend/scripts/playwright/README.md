@@ -102,7 +102,9 @@ state controlled when measuring provider calls there.
 ## Harness layout and adding a scenario
 
 - `test-utils.mjs` owns login, failure styles, the GET server preflight,
-  CSRF POSTs, named waits, seeder invocation, and opt-in cleanup.
+  CSRF POSTs, named waits, seeder invocation, and opt-in cleanup. Shared helper
+  modules must be named `*-utils.mjs` — the `make e2e` glob skips that suffix so
+  helpers aren't executed as smoke scripts.
 - `backend/scripts/seed_*.py` contains importable, pytest-covered database
   setup. JavaScript passes values through `SEED_*` environment variables.
 - `backend/tests/test_seed_scripts.py` guards row shape, exact stdout markers,

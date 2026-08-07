@@ -70,6 +70,12 @@ def _print_audit(schedule: Schedule, snapshot: str) -> None:
                 "|",
                 block.title,
             )
+    elif snapshot not in {"draft", "chat"}:
+        # "draft" and "chat" deliberately emit no BLOCK-detail rows; anything
+        # else reaching here is an unrecognised snapshot — fail loud rather
+        # than emit partial output that trips a .mjs parser with a cryptic
+        # assertion (mirrors main()'s "Unknown SEED_MODE" guard).
+        raise RuntimeError(f"Unknown SEED_SNAPSHOT: {snapshot!r}")
 
     interaction = schedule.ai_interactions.order_by("-created_at").first()
     if interaction is None:

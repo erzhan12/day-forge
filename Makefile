@@ -80,9 +80,12 @@ check: lint typecheck test ## Lint + typecheck + test (run before pushing)
 # AI rate-limit counters. Some make real provider calls and consume tokens.
 e2e: ## Run all Playwright e2e smoke scripts serially (needs dev stack)
 	cd frontend && set -e; for script in scripts/playwright/*.mjs; do \
-		case "$$script" in *test-utils.mjs) continue ;; esac; \
+		case "$$script" in *-utils.mjs) continue ;; esac; \
 		node "$$script"; \
 	done
+# Convention: shared helper modules under scripts/playwright/ must be named
+# *-utils.mjs (e.g. test-utils.mjs) so this glob skips them instead of trying
+# to run them as smoke scripts. See scripts/playwright/README.md.
 
 e2e-chat: ## Run Playwright chat smoke scripts serially (real LLM calls; needs LLM_API_KEY)
 	cd frontend && set -e; for script in scripts/playwright/ai-chat-*.mjs; do node "$$script"; done
