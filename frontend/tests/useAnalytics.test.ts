@@ -104,6 +104,8 @@ describe("useAnalytics", () => {
       const result = await markReviewed("2026-04-18")
       expect(result.ok).toBe(false)
       expect(lastError.value).toBe("Could not mark this day reviewed.")
+      // Error path must not fire a schedule reload.
+      expect(vi.mocked(router.reload)).not.toHaveBeenCalled()
     })
 
     it("saveNotes surfaces the exact fallback literal on an empty errors map", async () => {
