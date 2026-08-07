@@ -169,6 +169,17 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
 
 ## Follow-ups (discovered during manual testing)
 
+### 0039 — hoist `_required` to `scripts/__init__.py` (PR #132 claude-review P3)
+
+- [ ] **Uniform missing-env-var diagnostics across seeders.** `seed_schedule.py`
+  uses a `_required(name)` helper that raises `RuntimeError(f"{name} is
+  required")`, but `seed_cleanup.py`, `seed_todoist.py`, and `seed_template.py`
+  read `os.environ["KEY"]` directly (bare `KeyError`). Move `_required` (and
+  likely `_json` / `_user`) into `backend/scripts/__init__.py` and import across
+  all four seeders so a missing `SEED_*` var is diagnosed identically. Deferred:
+  touches four files for a dev-tooling error-message consistency nit. Suggested
+  by `claude-review` on PR #132.
+
 ### 0039 — `postWithCsrf` dual return-shape (PR #132 claude-review P2)
 
 - [ ] **Make `postWithCsrf` fail consistently.** `postWithCsrf`

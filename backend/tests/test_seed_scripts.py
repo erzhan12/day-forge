@@ -293,6 +293,19 @@ def test_schedule_seeder_remaining_audit_snapshots_and_unknown_mode(user, monkey
 
 
 @pytest.mark.django_db
+def test_schedule_seeder_schedules_mode_input_guards(user, monkeypatch):
+    # Missing SEED_SCHEDULES_JSON fails via _required, not a bare TypeError.
+    _setenv(monkeypatch, SEED_MODE="schedules", SEED_USERNAME=user.username)
+    with pytest.raises(RuntimeError, match="SEED_SCHEDULES_JSON is required"):
+        seed_schedule.main()
+
+    # An empty spec list fails loud instead of an IndexError on schedules[-1].
+    monkeypatch.setenv("SEED_SCHEDULES_JSON", "[]")
+    with pytest.raises(RuntimeError, match="produced no schedules"):
+        seed_schedule.main()
+
+
+@pytest.mark.django_db
 def test_analytics_reviewed_seeder_recomputes_and_freezes(user, monkeypatch, capsys):
     blocks = [
         {

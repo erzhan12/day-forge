@@ -236,8 +236,10 @@ def main() -> None:
         )
         print("CREATED", created)
     elif mode == "schedules":
-        specs = _json("SEED_SCHEDULES_JSON")
+        specs = json.loads(_required("SEED_SCHEDULES_JSON"))
         schedules = [_upsert_schedule(user, spec) for spec in specs]
+        if not schedules:
+            raise RuntimeError("SEED_SCHEDULES_JSON produced no schedules")
         template = _json("SEED_TEMPLATE_JSON")
         if template is not None:
             Template.objects.update_or_create(
