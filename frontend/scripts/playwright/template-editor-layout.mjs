@@ -38,10 +38,9 @@ import { chromium } from "@playwright/test"
 import { mkdirSync } from "node:fs"
 import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
+import { BASE, login, preflight } from "./test-utils.mjs"
 
-const BASE = "http://localhost:5173"
-const USERNAME = "playwright"
-const PASSWORD = "playwright-pw-do-not-use-in-prod"
+await preflight()
 
 // All artefacts (screenshots) land in the same dir as the script.
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -65,16 +64,6 @@ const VIEWPORTS = [
 ]
 
 const browser = await chromium.launch({ headless: true })
-
-async function login(page) {
-  await page.goto(`${BASE}/accounts/login/`, { waitUntil: "networkidle" })
-  await page.fill("#username", USERNAME)
-  await page.fill("#password", PASSWORD)
-  await Promise.all([
-    page.waitForURL(/\/schedule\//),
-    page.click('button[type="submit"]'),
-  ])
-}
 
 async function openSettingsAndAddBlock(page) {
   await page.goto(`${BASE}/settings/`, { waitUntil: "networkidle" })

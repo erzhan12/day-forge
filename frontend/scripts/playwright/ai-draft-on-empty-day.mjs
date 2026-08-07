@@ -34,64 +34,46 @@
 // ⚠️  WARNING — LOCAL DEVELOPMENT ONLY.
 
 import { chromium } from "@playwright/test"
-import { execSync } from "node:child_process"
-import { resolve } from "node:path"
-
-const BASE = "http://localhost:5173"
-const USERNAME = "playwright"
-const PASSWORD = "playwright-pw-do-not-use-in-prod"
+import {
+  BASE,
+  DRAFT_RESPONSE_TIMEOUT_MS,
+  ELEMENT_TIMEOUT_MS,
+  USERNAME,
+  WAIT_FOR_DRAFT_OVERLAY_MS,
+  cleanupSchedules,
+  login,
+  makeFailAggregator,
+  preflight,
+  preflightUser,
+  seed,
+} from "./test-utils.mjs"
 
 const SCHEDULE_DATE = "2027-03-22" // Monday → weekday slot
-const SCHEDULE_DATE_PARTS = [2027, 3, 22]
-
-const REPO_ROOT = resolve(process.cwd(), "..")
+await preflight()
 
 console.log("→ Pre-flight: confirming playwright user exists…")
-try {
-  const preflight = execSync(
-    `uv run python backend/manage.py shell -c "
-from django.contrib.auth.models import User
-print('EXISTS', User.objects.filter(username='${USERNAME}').exists())
-"`,
-    { cwd: REPO_ROOT, encoding: "utf8" },
-  )
-  if (!preflight.includes("EXISTS True")) {
-    console.error("\n❌ playwright user is missing. Run:")
-    console.error("   uv run python backend/manage.py createsuperuser")
-    console.error(`   (use username '${USERNAME}' / password '${PASSWORD}')`)
-    process.exit(2)
-  }
-} catch (err) {
-  console.error("\n❌ Pre-flight shell failed:", err.message)
-  process.exit(2)
-}
+preflightUser()
 
 console.log("→ Seeding empty draft schedule + weekday Template…")
 try {
-  execSync(
-    `uv run python backend/manage.py shell -c "
-from schedules.models import Schedule, TimeBlock
-from templates_mgr.models import Template
-from django.contrib.auth.models import User
-import datetime
-u = User.objects.get(username='${USERNAME}')
-s, _ = Schedule.objects.update_or_create(
-    user=u, date=datetime.date(${SCHEDULE_DATE_PARTS.join(', ')}), defaults={'status': 'draft'}
-)
-TimeBlock.objects.filter(schedule=s).delete()
-Template.objects.update_or_create(
-    user=u, type='weekday',
-    defaults={'name': 'Playwright Weekday', 'blocks': [
-        {'title': 'Morning routine', 'start_time': '07:00', 'end_time': '07:30', 'category': 'health'},
-        {'title': 'Deep work', 'start_time': '09:00', 'end_time': '12:00', 'category': 'work'},
-        {'title': 'Lunch', 'start_time': '12:00', 'end_time': '13:00', 'category': 'personal'},
-        {'title': 'Afternoon work', 'start_time': '13:00', 'end_time': '17:00', 'category': 'work'},
-    ]},
-)
-print('seeded empty schedule', s.id, 'with weekday template')
-"`,
-    { stdio: "inherit", cwd: REPO_ROOT },
-  )
+  seed("seed_schedule", {
+    SEED_MODE: "schedules",
+    SEED_USERNAME: USERNAME,
+    SEED_SCHEDULES_JSON: JSON.stringify([
+      { date: SCHEDULE_DATE, status: "draft", blocks: [] },
+    ]),
+    SEED_TEMPLATE_JSON: JSON.stringify({
+      type: "weekday",
+      name: "Playwright Weekday",
+      blocks: [
+        { title: "Morning routine", start_time: "07:00", end_time: "07:30", category: "health" },
+        { title: "Deep work", start_time: "09:00", end_time: "12:00", category: "work" },
+        { title: "Lunch", start_time: "12:00", end_time: "13:00", category: "personal" },
+        { title: "Afternoon work", start_time: "13:00", end_time: "17:00", category: "work" },
+      ],
+    }),
+    SEED_MARKER: "seeded empty schedule {id} with weekday template",
+  })
 } catch (err) {
   console.error("\n❌ Seed failed. Is Django running?")
   console.error(err.message)
@@ -129,20 +111,11 @@ page.on("response", async (resp) => {
   }
 })
 
-const failures = []
-function fail(msg) {
-  failures.push(msg)
-}
+const { failures, fail } = makeFailAggregator()
 
 try {
   console.log("→ Logging in…")
-  await page.goto(`${BASE}/accounts/login/`, { waitUntil: "networkidle" })
-  await page.fill("#username", USERNAME)
-  await page.fill("#password", PASSWORD)
-  await Promise.all([
-    page.waitForURL(/\/schedule\//),
-    page.click('button[type="submit"]'),
-  ])
+  await login(page)
 
   console.log(`→ Opening /schedule/${SCHEDULE_DATE}/…`)
   await page.goto(`${BASE}/schedule/${SCHEDULE_DATE}/`, {
@@ -151,7 +124,7 @@ try {
 
   console.log("→ Waiting for .regen-btn to be visible and enabled…")
   const regenBtn = page.locator(".regen-btn")
-  await regenBtn.waitFor({ state: "visible", timeout: 5000 })
+  await regenBtn.waitFor({ state: "visible", timeout: ELEMENT_TIMEOUT_MS })
   const initiallyDisabled = await regenBtn.isDisabled()
   if (initiallyDisabled) {
     fail("regen-btn was disabled — template not configured or API unhealthy?")
@@ -161,12 +134,12 @@ try {
   await Promise.all([
     page.waitForResponse(
       (resp) => /\/api\/ai\/schedules\/[^/]+\/generate-draft\/$/.test(resp.url()),
-      { timeout: 60_000 }, // draft model is heavier; allow more time
+      { timeout: DRAFT_RESPONSE_TIMEOUT_MS }, // draft model is heavier; allow more time
     ),
     regenBtn.click(),
   ])
   // Give Inertia partial reload time to settle and the overlay to dismiss.
-  await page.waitForTimeout(1200)
+  await page.waitForTimeout(WAIT_FOR_DRAFT_OVERLAY_MS)
 
   console.log("→ Wire-level assertions…")
   if (draftCalls.length !== 1) {
@@ -206,23 +179,15 @@ try {
   }
 
   console.log("→ DB assertions…")
-  const dbStateOut = execSync(
-    `uv run python backend/manage.py shell -c "
-from schedules.models import Schedule, TimeBlock
-from ai.models import AIInteraction
-s = Schedule.objects.get(date='${SCHEDULE_DATE}', user__username='${USERNAME}')
-print('STATUS', s.status)
-print('BLOCKS', TimeBlock.objects.filter(schedule=s).count())
-r = AIInteraction.objects.filter(schedule=s).order_by('-created_at').first()
-if r is None:
-    print('NO_AI_ROW')
-else:
-    print('KIND', r.kind)
-    print('SUCCESS', r.success)
-    print('USER_COMMAND', r.user_command)
-    print('ACTIONS_LEN', len(r.actions_json))
-"`,
-    { cwd: REPO_ROOT, encoding: "utf8" },
+  const dbStateOut = seed(
+    "seed_schedule",
+    {
+      SEED_MODE: "snapshot",
+      SEED_USERNAME: USERNAME,
+      SEED_DATE: SCHEDULE_DATE,
+      SEED_SNAPSHOT: "draft",
+    },
+    { encoding: "utf8" },
   )
 
   const dbLines = dbStateOut.trim().split("\n").filter((l) => l.trim() !== "")
@@ -265,11 +230,8 @@ else:
     }
   }
 
-  // TODO: N+1 sanity for analytics_dailyreview — requires capturing
-  // Django SQL log mid-request. Skipped here to keep the script
-  // dependency-free; would need either DEBUG=True + SQL log capture
-  // or a separate connection-instrumented harness. The select_related
-  // is verified by unit tests instead.
+  // The history DailyReview eager-load is guarded by
+  // backend/tests/test_ai_views_draft_nplus1.py.
 
   console.log("\n=== Captured /generate-draft/ call ===")
   if (call) {
@@ -294,4 +256,5 @@ else:
   process.exitCode = 2
 } finally {
   await browser.close()
+  cleanupSchedules([SCHEDULE_DATE])
 }

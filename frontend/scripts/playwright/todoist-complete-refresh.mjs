@@ -25,17 +25,23 @@
 // Todoist account so each run starts clean.
 
 import { chromium } from "@playwright/test"
-import { execSync } from "node:child_process"
-import { resolve } from "node:path"
-
-const BASE = "http://localhost:5173"
-const USERNAME = "playwright"
-const PASSWORD = "playwright-pw-do-not-use-in-prod"
+import {
+  BASE,
+  PANEL_TIMEOUT_MS,
+  PASSWORD,
+  UI_RESPONSE_TIMEOUT_MS,
+  USERNAME,
+  WAIT_FOR_LATE_RESPONSE_SETTLE_MS,
+  failFast,
+  login,
+  preflight,
+  seed,
+} from "./test-utils.mjs"
 const API_TOKEN = process.env.TODOIST_API_TOKEN?.trim() || ""
 const TODOIST_BASE_URL = (
   process.env.TODOIST_BASE_URL?.trim() || "https://api.todoist.com/api/v1"
 ).replace(/\/$/, "")
-const REPO_ROOT = resolve(process.cwd(), "..")
+await preflight()
 
 // Browser-local "today" (matches the frontend `todayString()` so the
 // schedule URL date and the task's due date line up regardless of UTC drift).
@@ -43,17 +49,7 @@ const now = new Date()
 const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`
 const TASK_TITLE = `[DayForge E2E] complete ${new Date().toISOString()}`
 
-function fail(msg) {
-  // Throw (not process.exit) so the `finally` cleanup always runs.
-  throw new Error(msg)
-}
-
-function shellExec(script) {
-  execSync(`uv run python backend/manage.py shell -c "${script}"`, {
-    stdio: "inherit",
-    cwd: REPO_ROOT,
-  })
-}
+const fail = failFast
 
 async function todoistApi(method, path, body) {
   const resp = await fetch(`${TODOIST_BASE_URL}${path}`, {
@@ -74,16 +70,11 @@ if (!API_TOKEN) {
 
 console.log("→ Preflight: ensure playwright user exists + disconnect Todoist…")
 try {
-  shellExec(`
-from django.contrib.auth.models import User
-from todoist_sync.models import TodoistAccount
-u, created = User.objects.get_or_create(username='${USERNAME}')
-if created:
-    u.set_password('${PASSWORD}')
-    u.save()
-deleted, _ = TodoistAccount.objects.filter(user=u).delete()
-print('user created:', created, '| deleted todoist accounts:', deleted)
-`)
+  seed("seed_todoist", {
+    SEED_MODE: "reset-ensure",
+    SEED_USERNAME: USERNAME,
+    SEED_PASSWORD: PASSWORD,
+  })
 } catch (err) {
   console.error("\n❌ Preflight failed (is Django running? migrations applied?).")
   console.error(err.message)
@@ -118,14 +109,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } })
 
   console.log("→ Logging in…")
-  await page.goto(`${BASE}/accounts/login/`, { waitUntil: "networkidle" })
-  await page.waitForSelector("#username")
-  await page.fill("#username", USERNAME)
-  await page.fill("#password", PASSWORD)
-  await Promise.all([
-    page.waitForURL(/\/schedule\//),
-    page.click('button[type="submit"]'),
-  ])
+  await login(page, { waitForUsername: true })
 
   console.log("→ Settings: connect Todoist…")
   await page.goto(`${BASE}/settings/`, { waitUntil: "networkidle" })
@@ -142,7 +126,7 @@ try {
   console.log(`→ Schedule ${today}: wait for the panel…`)
   await page.goto(`${BASE}/schedule/${today}/`, { waitUntil: "networkidle" })
   const panel = page.locator('[aria-label="Todoist tasks"]')
-  await panel.waitFor({ state: "visible", timeout: 15000 })
+  await panel.waitFor({ state: "visible", timeout: PANEL_TIMEOUT_MS })
 
   // Ensure the sidebar is expanded (Refresh button + task list only render
   // when open). If collapsed, click the rail toggle to expand.
@@ -152,11 +136,11 @@ try {
     await page.locator('[data-testid="todoist-sidebar-toggle"]').first().click()
     refreshBtn = page.locator('[data-testid="todoist-sidebar-refresh"]')
   }
-  await refreshBtn.waitFor({ state: "visible", timeout: 10000 })
+  await refreshBtn.waitFor({ state: "visible", timeout: UI_RESPONSE_TIMEOUT_MS })
 
   const loading = page.locator(".todoist-loading")
   if (await loading.count()) {
-    await loading.waitFor({ state: "hidden", timeout: 15000 })
+    await loading.waitFor({ state: "hidden", timeout: PANEL_TIMEOUT_MS })
   }
   if (await page.locator(".todoist-error").count()) {
     fail(`Panel shows an error after connect: ${await page.locator(".todoist-error").innerText()}`)
@@ -166,7 +150,7 @@ try {
   const testRow = page.locator('[data-testid="todoist-task"]', {
     hasText: TASK_TITLE,
   })
-  await testRow.waitFor({ state: "visible", timeout: 15000 })
+  await testRow.waitFor({ state: "visible", timeout: PANEL_TIMEOUT_MS })
   console.log("   row present ✔")
 
   console.log("→ Complete the task (checkbox → POST /complete/)…")
@@ -179,7 +163,7 @@ try {
     page.waitForResponse(
       (r) =>
         r.url().includes("/complete/") && r.request().method() === "POST",
-      { timeout: 15000 },
+      { timeout: PANEL_TIMEOUT_MS },
     ),
     completeCheckbox.click(),
   ])
@@ -196,7 +180,7 @@ try {
         (el) => el.textContent.includes(title),
       ),
     TASK_TITLE,
-    { timeout: 10000 },
+    { timeout: UI_RESPONSE_TIMEOUT_MS },
   )
   if (await page.locator(".todoist-error").count()) {
     fail(`Error banner shown after a successful complete: ${await page.locator(".todoist-error").innerText()}`)
@@ -209,7 +193,7 @@ try {
       (r) =>
         r.url().includes("/api/todoist/tasks/") &&
         r.url().includes("refresh=1"),
-      { timeout: 15000 },
+      { timeout: PANEL_TIMEOUT_MS },
     ),
     refreshBtn.click(),
   ])
@@ -220,7 +204,7 @@ try {
 
   // Give the silent refetch a moment to commit, then confirm the completed
   // task did NOT come back and no skeleton/error is stuck.
-  await page.waitForTimeout(800)
+  await page.waitForTimeout(WAIT_FOR_LATE_RESPONSE_SETTLE_MS)
   if (await page.locator(".todoist-error").count()) {
     fail(`Error after refresh: ${await page.locator(".todoist-error").innerText()}`)
   }
@@ -251,13 +235,10 @@ try {
   await browser.close()
   // Cleanup 2: disconnect the playwright user's Todoist account.
   try {
-    shellExec(`
-from django.contrib.auth.models import User
-from todoist_sync.models import TodoistAccount
-u = User.objects.get(username='${USERNAME}')
-TodoistAccount.objects.filter(user=u).delete()
-print('disconnected playwright todoist account')
-`)
+    seed("seed_todoist", {
+      SEED_MODE: "disconnect",
+      SEED_USERNAME: USERNAME,
+    })
   } catch {
     /* best-effort */
   }

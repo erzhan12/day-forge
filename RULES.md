@@ -761,3 +761,26 @@ no Service Worker, no closed-tab alerts.
   5-minute multiple (`roundUpDuration` in `useDrag.ts`; AI bare-move in
   `_compute_move_resize_times`). Drag geometry must use the display-clamped
   span (`[06:00, 23:00)`), not raw block times.
+
+## Playwright smoke harness (feature 0039)
+
+- The 21 browser smoke scripts live in `frontend/scripts/playwright/` and share
+  `test-utils.mjs`. Every script calls its GET-based `preflight()` before DB
+  setup; a HEAD probe is invalid because Django's login view only permits GET
+  and POST. Reuse `login`, the appropriate failure helper, named wait constants,
+  `postWithCsrf`, and `seed` instead of copying them into a scenario.
+- Database setup belongs in importable `backend/scripts/seed_*.py` modules,
+  covered by `backend/tests/test_seed_scripts.py`. Invoke them only through
+  `seed()`, which runs `manage.py shell -c "import runpy;
+  runpy.run_path(..., run_name='__main__')"`. Pass scenario data as `SEED_*`
+  environment variables and spread `process.env`; never interpolate Python
+  source into a JavaScript shell string or feed a file to the interactive shell.
+- `make e2e` is the all-script entrypoint; `make e2e-chat`, `e2e-command`, and
+  `e2e-draft` are focused groups. Runs are serial because scripts share AI
+  rate-limit counters and some dates. Several make real provider calls; review
+  `frontend/scripts/playwright/README.md` before running them.
+- `--cleanup` is opt-in and default-off. Schedule-seeding scripts call
+  `cleanupSchedules()` from `finally`; without the flag, seeded rows remain for
+  post-mortem inspection. Scripts that seed no schedules have no cleanup call.
+  New scenarios must register every seeded date and avoid `process.exit()` after
+  browser launch, since it skips `finally`.

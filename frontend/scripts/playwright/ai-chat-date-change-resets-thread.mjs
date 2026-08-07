@@ -27,37 +27,36 @@
 // ⚠️  WARNING — LOCAL DEVELOPMENT ONLY.
 
 import { chromium } from "@playwright/test"
-import { execSync } from "node:child_process"
-import { resolve } from "node:path"
-
-const BASE = "http://localhost:5173"
-const USERNAME = "playwright"
-const PASSWORD = "playwright-pw-do-not-use-in-prod"
+import {
+  BASE,
+  CHAT_INPUT_TIMEOUT_MS,
+  RESPONSE_TIMEOUT_MS,
+  USERNAME,
+  WAIT_FOR_SHORT_SETTLE_MS,
+  WAIT_FOR_THREAD_SETTLE_MS,
+  cleanupSchedules,
+  login,
+  preflight,
+  seed,
+} from "./test-utils.mjs"
 
 // Two adjacent far-future dates. Day A → day B by clicking the
 // DateNavigator's "next" arrow exactly once.
 const DAY_A = "2026-09-22"
 const DAY_B = "2026-09-23"
 
-const REPO_ROOT = resolve(process.cwd(), "..")
+await preflight()
 
 console.log("→ Seeding empty draft schedules on both dates…")
 try {
-  execSync(
-    `uv run python backend/manage.py shell -c "
-from schedules.models import Schedule, TimeBlock
-from django.contrib.auth.models import User
-import datetime
-u = User.objects.get(username='${USERNAME}')
-for d in [datetime.date(2026, 9, 22), datetime.date(2026, 9, 23)]:
-    s, _ = Schedule.objects.update_or_create(
-        user=u, date=d, defaults={'status': 'draft'}
-    )
-    TimeBlock.objects.filter(schedule=s).delete()
-print('seeded both dates')
-"`,
-    { stdio: "inherit", cwd: REPO_ROOT },
-  )
+  seed("seed_schedule", {
+    SEED_MODE: "schedules",
+    SEED_USERNAME: USERNAME,
+    SEED_SCHEDULES_JSON: JSON.stringify(
+      [DAY_A, DAY_B].map((date) => ({ date, status: "draft", blocks: [] })),
+    ),
+    SEED_MARKER: "seeded both dates",
+  })
 } catch (err) {
   console.error("\n❌ Seed failed.")
   console.error(err.message)
@@ -97,27 +96,21 @@ page.on("response", async (resp) => {
 
 async function submitChatTurn(text) {
   const ta = page.locator('[data-testid="chat-input"]')
-  await ta.waitFor({ timeout: 3000 })
+  await ta.waitFor({ timeout: CHAT_INPUT_TIMEOUT_MS })
   await ta.fill(text)
   await Promise.all([
     page.waitForResponse(
       (resp) => /\/api\/ai\/schedules\/[^/]+\/chat\/$/.test(resp.url()),
-      { timeout: 25_000 },
+      { timeout: RESPONSE_TIMEOUT_MS },
     ),
     ta.press("Enter"),
   ])
-  await page.waitForTimeout(500)
+  await page.waitForTimeout(WAIT_FOR_THREAD_SETTLE_MS)
 }
 
 try {
   console.log("→ Logging in…")
-  await page.goto(`${BASE}/accounts/login/`, { waitUntil: "networkidle" })
-  await page.fill("#username", USERNAME)
-  await page.fill("#password", PASSWORD)
-  await Promise.all([
-    page.waitForURL(/\/schedule\//),
-    page.click('button[type="submit"]'),
-  ])
+  await login(page)
 
   console.log(`→ Opening /schedule/${DAY_A}/…`)
   await page.goto(`${BASE}/schedule/${DAY_A}/`, { waitUntil: "networkidle" })
@@ -157,7 +150,7 @@ try {
     page.locator(".right-controls button.nav-btn").click(),
   ])
   // Wait for Inertia to swap props + Vue to settle.
-  await page.waitForTimeout(300)
+  await page.waitForTimeout(WAIT_FOR_SHORT_SETTLE_MS)
 
   // Same-document guarantee: the marker we installed pre-navigation
   // must survive the navigation. If it's gone, the browser did a
@@ -265,4 +258,5 @@ try {
   process.exitCode = 2
 } finally {
   await browser.close()
+  cleanupSchedules([DAY_A, DAY_B])
 }

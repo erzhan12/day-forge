@@ -18,50 +18,33 @@
 // script is LLM-free after the Step-G removal.
 
 import { chromium } from "@playwright/test"
-import { execSync } from "node:child_process"
-import { resolve } from "node:path"
-
-const BASE = "http://localhost:5173"
-const USERNAME = "playwright"
-const PASSWORD = "playwright-pw-do-not-use-in-prod"
+import {
+  BASE,
+  ANALYTICS_BUTTON_TIMEOUT_MS,
+  PANEL_TIMEOUT_MS,
+  USERNAME,
+  cleanupSchedules,
+  failFast,
+  login,
+  preflight,
+  seed,
+} from "./test-utils.mjs"
 /** Past date (analytics is past-only vs local today). */
 const DATE = "2026-05-05"
 
-const REPO_ROOT = resolve(process.cwd(), "..")
+await preflight()
 
 console.log("→ Seeding reviewed schedule + 3 blocks via Django shell…")
 try {
-  execSync(
-    `uv run python backend/manage.py shell -c "
-from schedules.models import Schedule, TimeBlock
-from analytics.services import recompute_review_from_schedule
-from django.contrib.auth.models import User
-import datetime
-u = User.objects.get(username='${USERNAME}')
-d = datetime.date(2026, 5, 5)
-s, _ = Schedule.objects.update_or_create(
-    user=u, date=d, defaults={'status': 'active'}
-)
-TimeBlock.objects.filter(schedule=s).delete()
-TimeBlock.objects.create(
-    schedule=s, title='Alpha', start_time='09:00', end_time='10:00',
-    category='work', is_completed=False,
-)
-TimeBlock.objects.create(
-    schedule=s, title='Beta', start_time='10:00', end_time='11:00',
-    category='work', is_completed=True,
-)
-TimeBlock.objects.create(
-    schedule=s, title='Gamma', start_time='11:00', end_time='12:00',
-    category='work', is_completed=False,
-)
-recompute_review_from_schedule(s)
-s.status = 'reviewed'
-s.save(update_fields=['status'])
-print('seeded schedule', s.id, 'blocks', s.time_blocks.count())
-"`,
-    { stdio: "inherit", cwd: REPO_ROOT },
-  )
+  seed("seed_analytics_reviewed", {
+    SEED_USERNAME: USERNAME,
+    SEED_DATE: DATE,
+    SEED_BLOCKS_JSON: JSON.stringify([
+      { title: "Alpha", start_time: "09:00", end_time: "10:00", category: "work", is_completed: false },
+      { title: "Beta", start_time: "10:00", end_time: "11:00", category: "work", is_completed: true },
+      { title: "Gamma", start_time: "11:00", end_time: "12:00", category: "work", is_completed: false },
+    ]),
+  })
 } catch {
   console.error("\n❌ Seed failed (Django running? user playwright exists?)")
   process.exit(2)
@@ -71,20 +54,7 @@ const browser = await chromium.launch({ headless: true })
 const context = await browser.newContext({ viewport: { width: 1280, height: 900 } })
 const page = await context.newPage()
 
-function fail(msg) {
-  console.error(`\n❌ ${msg}`)
-  throw new Error(msg)
-}
-
-async function login() {
-  await page.goto(`${BASE}/accounts/login/`, { waitUntil: "networkidle" })
-  await page.fill("#username", USERNAME)
-  await page.fill("#password", PASSWORD)
-  await Promise.all([
-    page.waitForURL(/\/schedule\//),
-    page.click('button[type="submit"]'),
-  ])
-}
+const fail = failFast
 
 async function assertAnalyticsReviewed() {
   await page.goto(`${BASE}/analytics/${DATE}/`, { waitUntil: "networkidle" })
@@ -112,7 +82,7 @@ async function assertAnalyticsActive() {
 async function markReviewedFromPanel() {
   await page.goto(`${BASE}/analytics/${DATE}/`, { waitUntil: "networkidle" })
   const btn = page.locator(".mark-reviewed-btn")
-  await btn.waitFor({ state: "visible", timeout: 8000 })
+  await btn.waitFor({ state: "visible", timeout: ANALYTICS_BUTTON_TIMEOUT_MS })
   await Promise.all([
     page.waitForResponse(
       (r) =>
@@ -122,12 +92,12 @@ async function markReviewedFromPanel() {
     ),
     btn.click(),
   ])
-  await page.locator(".status-badge.status-reviewed").waitFor({ timeout: 15000 })
+  await page.locator(".status-badge.status-reviewed").waitFor({ timeout: PANEL_TIMEOUT_MS })
 }
 
 try {
   console.log("→ Login…")
-  await login()
+  await login(page)
 
   console.log("→ Step A: analytics shows Reviewed…")
   await assertAnalyticsReviewed()
@@ -223,4 +193,5 @@ try {
   process.exitCode = 2
 } finally {
   await browser.close()
+  cleanupSchedules([DATE])
 }

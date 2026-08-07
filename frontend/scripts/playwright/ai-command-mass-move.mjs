@@ -41,15 +41,20 @@
 // target schedule's blocks.
 
 import { chromium } from "@playwright/test"
-import { execSync } from "node:child_process"
-import { resolve } from "node:path"
-
-const BASE = "http://localhost:5173"
-const USERNAME = "playwright"
-const PASSWORD = "playwright-pw-do-not-use-in-prod"
+import {
+  BASE,
+  USERNAME,
+  WAIT_FOR_INERTIA_SETTLE_MS,
+  cleanupSchedules,
+  login,
+  makeFailAggregator,
+  postWithCsrf,
+  preflight,
+  preflightUser,
+  seed,
+} from "./test-utils.mjs"
 
 const SCHEDULE_DATE = "2027-01-22"
-const SCHEDULE_DATE_PARTS = [2027, 1, 22]
 const PROMPT = "move all blocks starting at or after 1pm one hour later"
 
 // Each seed is [title, start HH:MM, end HH:MM, category, should_move].
@@ -75,56 +80,30 @@ const EXPECTED_AFTER = SEED_BLOCKS.map(([title, s, e, cat, move]) => ({
   moved: move,
 }))
 
-const REPO_ROOT = resolve(process.cwd(), "..")
+await preflight()
 
 console.log("→ Pre-flight: confirming playwright user exists…")
-try {
-  const preflight = execSync(
-    `uv run python backend/manage.py shell -c "
-from django.contrib.auth.models import User
-print('EXISTS', User.objects.filter(username='${USERNAME}').exists())
-"`,
-    { cwd: REPO_ROOT, encoding: "utf8" },
-  )
-  if (!preflight.includes("EXISTS True")) {
-    console.error("\n❌ playwright user is missing. Run:")
-    console.error("   uv run python backend/manage.py createsuperuser")
-    console.error(`   (use username '${USERNAME}' / password '${PASSWORD}')`)
-    process.exit(2)
-  }
-} catch (err) {
-  console.error("\n❌ Pre-flight shell failed:", err.message)
-  process.exit(2)
-}
+preflightUser()
 
 console.log("→ Seeding schedule + 5 blocks via Django shell…")
 try {
-  const seedPython = `
-from schedules.models import Schedule, TimeBlock
-from django.contrib.auth.models import User
-import datetime
-u = User.objects.get(username='${USERNAME}')
-s, _ = Schedule.objects.update_or_create(
-    user=u, date=datetime.date(${SCHEDULE_DATE_PARTS.join(', ')}),
-    defaults={'status': 'active'},
-)
-TimeBlock.objects.filter(schedule=s).delete()
-seeds = ${JSON.stringify(SEED_BLOCKS.map(([t, s, e, c]) => [t, s, e, c]))}
-for title, start, end, cat in seeds:
-    sh, sm = map(int, start.split(':'))
-    eh, em = map(int, end.split(':'))
-    TimeBlock.objects.create(
-        schedule=s, title=title,
-        start_time=datetime.time(sh, sm),
-        end_time=datetime.time(eh, em),
-        category=cat,
-    )
-print('seeded', s.id, 'with', TimeBlock.objects.filter(schedule=s).count(), 'blocks')
-`
-  execSync(
-    `uv run python backend/manage.py shell -c "${seedPython.replace(/"/g, '\\"')}"`,
-    { stdio: "inherit", cwd: REPO_ROOT },
-  )
+  seed("seed_schedule", {
+    SEED_MODE: "schedules",
+    SEED_USERNAME: USERNAME,
+    SEED_SCHEDULES_JSON: JSON.stringify([
+      {
+        date: SCHEDULE_DATE,
+        status: "active",
+        blocks: SEED_BLOCKS.map(([title, start_time, end_time, category]) => ({
+          title,
+          start_time,
+          end_time,
+          category,
+        })),
+      },
+    ]),
+    SEED_MARKER: `seeded {id} with ${SEED_BLOCKS.length} blocks`,
+  })
 } catch (err) {
   console.error("\n❌ Seed failed. Is Django running?")
   console.error(err.message)
@@ -162,20 +141,11 @@ page.on("response", async (resp) => {
   }
 })
 
-const failures = []
-function fail(msg) {
-  failures.push(msg)
-}
+const { failures, fail } = makeFailAggregator()
 
 try {
   console.log("→ Logging in…")
-  await page.goto(`${BASE}/accounts/login/`, { waitUntil: "networkidle" })
-  await page.fill("#username", USERNAME)
-  await page.fill("#password", PASSWORD)
-  await Promise.all([
-    page.waitForURL(/\/schedule\//),
-    page.click('button[type="submit"]'),
-  ])
+  await login(page)
 
   console.log(`→ Opening /schedule/${SCHEDULE_DATE}/…`)
   await page.goto(`${BASE}/schedule/${SCHEDULE_DATE}/`, {
@@ -183,30 +153,12 @@ try {
   })
 
   console.log(`→ Direct-POST /command/ with prompt: ${JSON.stringify(PROMPT)}`)
-  const postResult = await page.evaluate(
-    async ({ url, prompt }) => {
-      const match = document.cookie.match(/XSRF-TOKEN=([^;]+)/)
-      const csrf = match ? decodeURIComponent(match[1]) : ""
-      if (!csrf) {
-        return { error: "no XSRF-TOKEN cookie present" }
-      }
-      const r = await fetch(url, {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "content-type": "application/json",
-          "x-xsrf-token": csrf,
-        },
-        body: JSON.stringify({ command: prompt }),
-      })
-      return { status: r.status, body: await r.text() }
-    },
-    {
-      url: `${BASE}/api/ai/schedules/${SCHEDULE_DATE}/command/`,
-      prompt: PROMPT,
-    },
+  const postResult = await postWithCsrf(
+    page,
+    `${BASE}/api/ai/schedules/${SCHEDULE_DATE}/command/`,
+    { command: PROMPT },
   )
-  await page.waitForTimeout(400)
+  await page.waitForTimeout(WAIT_FOR_INERTIA_SETTLE_MS)
 
   console.log("→ Wire-level assertions…")
   if (postResult.error) {
@@ -245,27 +197,15 @@ try {
   }
 
   console.log("→ DB assertions…")
-  const dbStateOut = execSync(
-    `uv run python backend/manage.py shell -c "
-from schedules.models import Schedule, TimeBlock
-from ai.models import AIInteraction
-s = Schedule.objects.get(date='${SCHEDULE_DATE}', user__username='${USERNAME}')
-print('STATUS', s.status)
-print('BLOCKS', TimeBlock.objects.filter(schedule=s).count())
-for b in TimeBlock.objects.filter(schedule=s).order_by('start_time'):
-    print('BLOCK', b.start_time.strftime('%H:%M'), b.end_time.strftime('%H:%M'), b.category, '|', b.title)
-r = AIInteraction.objects.filter(schedule=s).order_by('-created_at').first()
-if r is None:
-    print('NO_AI_ROW')
-else:
-    print('KIND', r.kind)
-    print('SUCCESS', r.success)
-    print('ACTIONS_LEN', len(r.actions_json))
-    move_count = sum(1 for a in r.actions_json if a.get('type') == 'move')
-    print('MOVE_COUNT', move_count)
-    print('USER_COMMAND', r.user_command)
-"`,
-    { cwd: REPO_ROOT, encoding: "utf8" },
+  const dbStateOut = seed(
+    "seed_schedule",
+    {
+      SEED_MODE: "snapshot",
+      SEED_USERNAME: USERNAME,
+      SEED_DATE: SCHEDULE_DATE,
+      SEED_SNAPSHOT: "moves",
+    },
+    { encoding: "utf8" },
   )
 
   const dbLines = dbStateOut.trim().split("\n").filter((l) => l.trim() !== "")
@@ -355,4 +295,5 @@ else:
   process.exitCode = 2
 } finally {
   await browser.close()
+  cleanupSchedules([SCHEDULE_DATE])
 }

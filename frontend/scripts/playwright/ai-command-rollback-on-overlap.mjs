@@ -36,65 +36,51 @@
 // ⚠️  WARNING — LOCAL DEVELOPMENT ONLY.
 
 import { chromium } from "@playwright/test"
-import { execSync } from "node:child_process"
-import { resolve } from "node:path"
-
-const BASE = "http://localhost:5173"
-const USERNAME = "playwright"
-const PASSWORD = "playwright-pw-do-not-use-in-prod"
+import {
+  BASE,
+  USERNAME,
+  WAIT_FOR_INERTIA_SETTLE_MS,
+  cleanupSchedules,
+  login,
+  makeFailAggregator,
+  postWithCsrf,
+  preflight,
+  preflightUser,
+  seed,
+} from "./test-utils.mjs"
 
 const SCHEDULE_DATE = "2027-02-18"
-const SCHEDULE_DATE_PARTS = [2027, 2, 18]
 // Very directive prompt — leaves the LLM almost no room to reinterpret
 // the time. The existing block is 14:00–15:00, so any add in 14:00–15:00
 // must overlap.
 const PROMPT = "Add a 30-minute work block titled 'Review' from 14:30 to 15:00."
 
-const REPO_ROOT = resolve(process.cwd(), "..")
+await preflight()
 
 console.log("→ Pre-flight: confirming playwright user exists…")
-try {
-  const preflight = execSync(
-    `uv run python backend/manage.py shell -c "
-from django.contrib.auth.models import User
-print('EXISTS', User.objects.filter(username='${USERNAME}').exists())
-"`,
-    { cwd: REPO_ROOT, encoding: "utf8" },
-  )
-  if (!preflight.includes("EXISTS True")) {
-    console.error("\n❌ playwright user is missing. Run:")
-    console.error("   uv run python backend/manage.py createsuperuser")
-    console.error(`   (use username '${USERNAME}' / password '${PASSWORD}')`)
-    process.exit(2)
-  }
-} catch (err) {
-  console.error("\n❌ Pre-flight shell failed:", err.message)
-  process.exit(2)
-}
+preflightUser()
 
 console.log("→ Seeding draft schedule with ONE existing 14:00–15:00 block…")
 try {
-  execSync(
-    `uv run python backend/manage.py shell -c "
-from schedules.models import Schedule, TimeBlock
-from django.contrib.auth.models import User
-import datetime
-u = User.objects.get(username='${USERNAME}')
-s, _ = Schedule.objects.update_or_create(
-    user=u, date=datetime.date(${SCHEDULE_DATE_PARTS.join(', ')}), defaults={'status': 'draft'}
-)
-TimeBlock.objects.filter(schedule=s).delete()
-TimeBlock.objects.create(
-    schedule=s,
-    title='Existing meeting',
-    start_time=datetime.time(14, 0),
-    end_time=datetime.time(15, 0),
-    category='work',
-)
-print('seeded one-block schedule', s.id)
-"`,
-    { stdio: "inherit", cwd: REPO_ROOT },
-  )
+  seed("seed_schedule", {
+    SEED_MODE: "schedules",
+    SEED_USERNAME: USERNAME,
+    SEED_SCHEDULES_JSON: JSON.stringify([
+      {
+        date: SCHEDULE_DATE,
+        status: "draft",
+        blocks: [
+          {
+            title: "Existing meeting",
+            start_time: "14:00",
+            end_time: "15:00",
+            category: "work",
+          },
+        ],
+      },
+    ]),
+    SEED_MARKER: "seeded one-block schedule {id}",
+  })
 } catch (err) {
   console.error("\n❌ Seed failed. Is Django running?")
   console.error(err.message)
@@ -132,20 +118,11 @@ page.on("response", async (resp) => {
   }
 })
 
-const failures = []
-function fail(msg) {
-  failures.push(msg)
-}
+const { failures, fail } = makeFailAggregator()
 
 try {
   console.log("→ Logging in…")
-  await page.goto(`${BASE}/accounts/login/`, { waitUntil: "networkidle" })
-  await page.fill("#username", USERNAME)
-  await page.fill("#password", PASSWORD)
-  await Promise.all([
-    page.waitForURL(/\/schedule\//),
-    page.click('button[type="submit"]'),
-  ])
+  await login(page)
 
   console.log(`→ Opening /schedule/${SCHEDULE_DATE}/…`)
   await page.goto(`${BASE}/schedule/${SCHEDULE_DATE}/`, {
@@ -153,28 +130,12 @@ try {
   })
 
   console.log("→ Direct-POST /command/ with overlapping prompt…")
-  const postResult = await page.evaluate(
-    async ({ url, prompt }) => {
-      const match = document.cookie.match(/XSRF-TOKEN=([^;]+)/)
-      const csrf = match ? decodeURIComponent(match[1]) : ""
-      if (!csrf) return { error: "no XSRF-TOKEN cookie present" }
-      const r = await fetch(url, {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "content-type": "application/json",
-          "x-xsrf-token": csrf,
-        },
-        body: JSON.stringify({ command: prompt }),
-      })
-      return { status: r.status, body: await r.text() }
-    },
-    {
-      url: `${BASE}/api/ai/schedules/${SCHEDULE_DATE}/command/`,
-      prompt: PROMPT,
-    },
+  const postResult = await postWithCsrf(
+    page,
+    `${BASE}/api/ai/schedules/${SCHEDULE_DATE}/command/`,
+    { command: PROMPT },
   )
-  await page.waitForTimeout(400)
+  await page.waitForTimeout(WAIT_FOR_INERTIA_SETTLE_MS)
 
   console.log("→ Wire-level assertions…")
   if (postResult.error) {
@@ -231,24 +192,15 @@ try {
   }
 
   console.log("→ DB assertions (rollback verification)…")
-  const dbStateOut = execSync(
-    `uv run python backend/manage.py shell -c "
-from schedules.models import Schedule, TimeBlock
-from ai.models import AIInteraction
-s = Schedule.objects.get(date='${SCHEDULE_DATE}', user__username='${USERNAME}')
-print('STATUS', s.status)
-print('BLOCKS', TimeBlock.objects.filter(schedule=s).count())
-for b in TimeBlock.objects.filter(schedule=s).order_by('start_time'):
-    print('BLOCK', b.title, b.start_time, b.end_time)
-r = AIInteraction.objects.filter(schedule=s).order_by('-created_at').first()
-if r is None:
-    print('NO_AI_ROW')
-else:
-    print('KIND', r.kind)
-    print('SUCCESS', r.success)
-    print('ACTIONS_LEN', len(r.actions_json))
-"`,
-    { cwd: REPO_ROOT, encoding: "utf8" },
+  const dbStateOut = seed(
+    "seed_schedule",
+    {
+      SEED_MODE: "snapshot",
+      SEED_USERNAME: USERNAME,
+      SEED_DATE: SCHEDULE_DATE,
+      SEED_SNAPSHOT: "overlap",
+    },
+    { encoding: "utf8" },
   )
 
   const dbLines = dbStateOut.trim().split("\n").filter((l) => l.trim() !== "")
@@ -319,4 +271,5 @@ else:
   process.exitCode = 2
 } finally {
   await browser.close()
+  cleanupSchedules([SCHEDULE_DATE])
 }

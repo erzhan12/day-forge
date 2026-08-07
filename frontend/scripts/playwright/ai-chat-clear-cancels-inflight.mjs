@@ -41,36 +41,36 @@
 // schedule's blocks.
 
 import { chromium } from "@playwright/test"
-import { execSync } from "node:child_process"
-import { resolve } from "node:path"
-
-const BASE = "http://localhost:5173"
-const USERNAME = "playwright"
-const PASSWORD = "playwright-pw-do-not-use-in-prod"
+import {
+  BASE,
+  PANEL_TIMEOUT_MS,
+  USERNAME,
+  WAIT_FOR_INFLIGHT_RENDER_MS,
+  WAIT_FOR_LATE_RESPONSE_SETTLE_MS,
+  WAIT_FOR_PATCH_MS,
+  cleanupSchedules,
+  login,
+  makeFailAggregator,
+  preflight,
+  seed,
+} from "./test-utils.mjs"
 
 // Distinct date so concurrent runs don't stomp other scripts' seeds.
 const SCHEDULE_DATE = "2026-09-26"
-const SCHEDULE_DATE_PARTS = [2026, 9, 26]
 const DELAY_MS = 6000
 
-const REPO_ROOT = resolve(process.cwd(), "..")
+await preflight()
 
 console.log("→ Seeding empty draft schedule…")
 try {
-  execSync(
-    `uv run python backend/manage.py shell -c "
-from schedules.models import Schedule, TimeBlock
-from django.contrib.auth.models import User
-import datetime
-u = User.objects.get(username='${USERNAME}')
-s, _ = Schedule.objects.update_or_create(
-    user=u, date=datetime.date(${SCHEDULE_DATE_PARTS.join(', ')}), defaults={'status': 'draft'}
-)
-TimeBlock.objects.filter(schedule=s).delete()
-print('seeded empty schedule', s.id)
-"`,
-    { stdio: "inherit", cwd: REPO_ROOT },
-  )
+  seed("seed_schedule", {
+    SEED_MODE: "schedules",
+    SEED_USERNAME: USERNAME,
+    SEED_SCHEDULES_JSON: JSON.stringify([
+      { date: SCHEDULE_DATE, status: "draft", blocks: [] },
+    ]),
+    SEED_MARKER: "seeded empty schedule {id}",
+  })
 } catch (err) {
   console.error("\n❌ Seed failed.")
   console.error(err.message)
@@ -81,8 +81,7 @@ const browser = await chromium.launch({ headless: true })
 const context = await browser.newContext({ viewport: { width: 1280, height: 800 } })
 const page = await context.newPage()
 
-const failures = []
-const fail = (msg) => failures.push(msg)
+const { failures, fail } = makeFailAggregator()
 
 // State for route handlers — flipped between phases.
 let routeMode = "delay-passthrough" // or "delay-fulfill-500" or "off"
@@ -114,13 +113,7 @@ page.on("response", (resp) => {
 
 try {
   console.log("→ Logging in…")
-  await page.goto(`${BASE}/accounts/login/`, { waitUntil: "networkidle" })
-  await page.fill("#username", USERNAME)
-  await page.fill("#password", PASSWORD)
-  await Promise.all([
-    page.waitForURL(/\/schedule\//),
-    page.click('button[type="submit"]'),
-  ])
+  await login(page)
 
   console.log(`→ Opening /schedule/${SCHEDULE_DATE}/…`)
   await page.goto(`${BASE}/schedule/${SCHEDULE_DATE}/`, { waitUntil: "networkidle" })
@@ -139,7 +132,7 @@ try {
   await inputEl.press("Enter")
 
   // Wait briefly for the user bubble + spinner to appear.
-  await page.waitForTimeout(600)
+  await page.waitForTimeout(WAIT_FOR_INFLIGHT_RENDER_MS)
 
   // Clear button must be visible AND not disabled. This is the
   // regression target — pre-fix it was greyed out by `inputDisabled`.
@@ -172,10 +165,10 @@ try {
   await page.waitForFunction(
     (n) => window.performance.getEntriesByType("resource").filter((e) => /\/api\/ai\/schedules\/[^/]+\/chat\/$/.test(e.name)).length > n,
     beforeWaitCount,
-    { timeout: 15_000 },
+    { timeout: PANEL_TIMEOUT_MS },
   ).catch(() => {})
   // Give Vue a moment to (NOT) react.
-  await page.waitForTimeout(800)
+  await page.waitForTimeout(WAIT_FOR_LATE_RESPONSE_SETTLE_MS)
 
   const bubblesPostResponseP1 = await thread.locator(".bubble").count().catch(() => 0)
   if (bubblesPostResponseP1 !== 0) {
@@ -190,7 +183,7 @@ try {
   routeMode = "delay-fulfill-500"
   await inputEl.fill("add a coffee at 09:00")
   await inputEl.press("Enter")
-  await page.waitForTimeout(600)
+  await page.waitForTimeout(WAIT_FOR_INFLIGHT_RENDER_MS)
 
   if (await clearBtn.isDisabled()) {
     fail("phase 2: clear button disabled while error-path request in flight")
@@ -206,7 +199,7 @@ try {
   }
 
   console.log("  …waiting for the delayed 500 to land and be dropped…")
-  await page.waitForTimeout(DELAY_MS + 1500)
+  await page.waitForTimeout(DELAY_MS + WAIT_FOR_PATCH_MS)
 
   const bubblesPostResponseP2 = await thread.locator(".bubble").count().catch(() => 0)
   if (bubblesPostResponseP2 !== 0) {
@@ -237,4 +230,5 @@ try {
   process.exitCode = 2
 } finally {
   await browser.close()
+  cleanupSchedules([SCHEDULE_DATE])
 }

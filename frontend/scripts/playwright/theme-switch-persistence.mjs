@@ -20,33 +20,24 @@
 // preferences row.
 
 import { chromium } from "@playwright/test"
-import { execSync } from "node:child_process"
-import { resolve } from "node:path"
+import {
+  BASE,
+  ELEMENT_TIMEOUT_MS,
+  PASSWORD,
+  USERNAME,
+  login,
+  preflight,
+  seed,
+} from "./test-utils.mjs"
 
-const BASE = "http://localhost:5173"
-const USERNAME = "playwright"
-const PASSWORD = "playwright-pw-do-not-use-in-prod"
-
-const REPO_ROOT = resolve(process.cwd(), "..")
-
-function shellExec(script) {
-  execSync(`uv run python backend/manage.py shell -c "${script}"`, {
-    stdio: "inherit",
-    cwd: REPO_ROOT,
-  })
-}
+await preflight()
 
 console.log("→ Preflight: resetting playwright user's theme to classic…")
 try {
-  shellExec(`
-from templates_mgr.models import UserPreferences
-from django.contrib.auth.models import User
-u = User.objects.get(username='${USERNAME}')
-prefs, _ = UserPreferences.objects.get_or_create(user=u, defaults={'theme': 'classic'})
-prefs.theme = 'classic'
-prefs.save(update_fields=['theme'])
-print('reset theme to classic for', u.username)
-`)
+  seed("seed_prefs", {
+    SEED_MODE: "preflight",
+    SEED_USERNAME: USERNAME,
+  })
 } catch (err) {
   console.error("\n❌ Preflight reset failed.")
   console.error(err.message)
@@ -61,13 +52,11 @@ try {
 
   // -- Step 1: log in -----------------------------------------------------
   console.log("→ Logging in…")
-  await page.goto(`${BASE}/accounts/login/`)
-  await page.fill('input[name="username"]', USERNAME)
-  await page.fill('input[name="password"]', PASSWORD)
-  await Promise.all([
-    page.waitForURL(/\/schedule\//),
-    page.click('button[type="submit"]'),
-  ])
+  await login(page, {
+    usernameSelector: 'input[name="username"]',
+    passwordSelector: 'input[name="password"]',
+    waitUntil: null,
+  })
 
   // -- Step 2: visit Settings, assert Classic checked ---------------------
   console.log("→ Visiting Settings, expecting Classic checked…")
@@ -95,7 +84,7 @@ try {
   await page.waitForFunction(
     () => document.documentElement.dataset.theme === "strategic",
     null,
-    { timeout: 5000 },
+    { timeout: ELEMENT_TIMEOUT_MS },
   )
 
   // -- Step 4: reload, confirm strategic is still applied -----------------
@@ -194,13 +183,10 @@ try {
   // Postflight (courtesy): reset preference back to classic so manual
   // testers start fresh after the script runs.
   try {
-    shellExec(`
-from templates_mgr.models import UserPreferences
-from django.contrib.auth.models import User
-u = User.objects.get(username='${USERNAME}')
-UserPreferences.objects.filter(user=u).update(theme='classic')
-print('postflight: theme reset to classic')
-`)
+    seed("seed_prefs", {
+      SEED_MODE: "postflight",
+      SEED_USERNAME: USERNAME,
+    })
   } catch (_) {
     // Non-fatal — the test result is already determined.
   }

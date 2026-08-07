@@ -9,7 +9,6 @@ import hashlib
 import json
 
 import pytest
-from asgiref.sync import sync_to_async
 from ai.models import AIInteraction
 from ai.service import (
     AIChatResult,
@@ -19,6 +18,7 @@ from ai.service import (
     AITimeoutError,
     AIUnavailableError,
 )
+from asgiref.sync import sync_to_async
 from django.contrib.auth.models import User
 from django.core.cache import cache
 from schedules.models import Schedule, TimeBlock

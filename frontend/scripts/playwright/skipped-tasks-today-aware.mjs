@@ -20,27 +20,19 @@
 //   node scripts/playwright/skipped-tasks-today-aware.mjs
 
 import { chromium } from "@playwright/test"
-import { execSync } from "node:child_process"
-import { resolve } from "node:path"
+import {
+  BASE,
+  ELEMENT_TIMEOUT_MS,
+  USERNAME,
+  cleanupSchedules,
+  djangoToday,
+  failFast,
+  login,
+  preflight,
+  seed,
+} from "./test-utils.mjs"
 
-const BASE = "http://localhost:5173"
-const USERNAME = "playwright"
-const PASSWORD = "playwright-pw-do-not-use-in-prod"
-
-const REPO_ROOT = resolve(process.cwd(), "..")
-
-// Read Django's notion of "today" so the test doesn't rot on the
-// calendar. The shell preamble line ("X objects imported automatically...")
-// is filtered out by matching the ISO date on its own line.
-function djangoToday() {
-  const out = execSync(
-    `uv run python backend/manage.py shell -c "from django.utils import timezone; print(timezone.localdate().isoformat())"`,
-    { cwd: REPO_ROOT },
-  ).toString()
-  const match = out.match(/^\d{4}-\d{2}-\d{2}$/m)
-  if (!match) throw new Error(`could not parse Django date from:\n${out}`)
-  return match[0]
-}
+await preflight()
 
 function daysBefore(isoDate, n) {
   const d = new Date(isoDate + "T00:00:00Z")
@@ -54,37 +46,37 @@ const PAST_CLEAN = daysBefore(TODAY, 8)
 
 console.log(`-> Seeding 3 schedules (today=${TODAY}, mixed=${PAST_MIXED}, clean=${PAST_CLEAN}) via Django shell...`)
 try {
-  execSync(
-    `uv run python backend/manage.py shell -c "
-from schedules.models import Schedule, TimeBlock
-from django.contrib.auth.models import User
-import datetime as dt
-u = User.objects.get(username='${USERNAME}')
-today_d = dt.date.fromisoformat('${TODAY}')
-mixed_d = dt.date.fromisoformat('${PAST_MIXED}')
-clean_d = dt.date.fromisoformat('${PAST_CLEAN}')
-
-# Today: past-uncompleted, past-completed (control), future-uncompleted
-today, _ = Schedule.objects.update_or_create(user=u, date=today_d, defaults={'status':'active'})
-today.time_blocks.all().delete()
-TimeBlock.objects.create(schedule=today, title='Morning standup',  start_time='08:00', end_time='09:00', category='work',     is_completed=False, sort_order=0)
-TimeBlock.objects.create(schedule=today, title='Coffee',           start_time='10:00', end_time='10:30', category='personal', is_completed=True,  sort_order=1)
-TimeBlock.objects.create(schedule=today, title='Afternoon focus',  start_time='14:00', end_time='15:00', category='work',     is_completed=False, sort_order=2)
-
-# Past mixed: 2 blocks, 1 uncompleted ('Email')
-mixed, _ = Schedule.objects.update_or_create(user=u, date=mixed_d, defaults={'status':'active'})
-mixed.time_blocks.all().delete()
-TimeBlock.objects.create(schedule=mixed, title='Standup', start_time='09:00', end_time='09:30', category='work', is_completed=True, sort_order=0)
-TimeBlock.objects.create(schedule=mixed, title='Email',   start_time='10:00', end_time='10:30', category='work', is_completed=False, sort_order=1)
-
-# Past clean: 1 block fully completed - Skipped section MUST be hidden
-clean, _ = Schedule.objects.update_or_create(user=u, date=clean_d, defaults={'status':'active'})
-clean.time_blocks.all().delete()
-TimeBlock.objects.create(schedule=clean, title='Workout', start_time='09:00', end_time='10:00', category='health', is_completed=True, sort_order=0)
-print('seeded today/past-mixed/past-clean')
-"`,
-    { stdio: "inherit", cwd: REPO_ROOT },
-  )
+  seed("seed_schedule", {
+    SEED_MODE: "schedules",
+    SEED_USERNAME: USERNAME,
+    SEED_SCHEDULES_JSON: JSON.stringify([
+      {
+        date: TODAY,
+        status: "active",
+        blocks: [
+          { title: "Morning standup", start_time: "08:00", end_time: "09:00", category: "work", is_completed: false, sort_order: 0 },
+          { title: "Coffee", start_time: "10:00", end_time: "10:30", category: "personal", is_completed: true, sort_order: 1 },
+          { title: "Afternoon focus", start_time: "14:00", end_time: "15:00", category: "work", is_completed: false, sort_order: 2 },
+        ],
+      },
+      {
+        date: PAST_MIXED,
+        status: "active",
+        blocks: [
+          { title: "Standup", start_time: "09:00", end_time: "09:30", category: "work", is_completed: true, sort_order: 0 },
+          { title: "Email", start_time: "10:00", end_time: "10:30", category: "work", is_completed: false, sort_order: 1 },
+        ],
+      },
+      {
+        date: PAST_CLEAN,
+        status: "active",
+        blocks: [
+          { title: "Workout", start_time: "09:00", end_time: "10:00", category: "health", is_completed: true, sort_order: 0 },
+        ],
+      },
+    ]),
+    SEED_MARKER: "seeded today/past-mixed/past-clean",
+  })
 } catch (err) {
   console.error("\nSeed failed (Django running? user 'playwright' exists?)")
   console.error(err.message)
@@ -101,20 +93,7 @@ const page = await context.newPage()
 // end but before the 14:00 block start.
 await page.clock.install({ time: new Date(`${TODAY}T11:30:00`) })
 
-function fail(msg) {
-  console.error(`\n FAIL ${msg}`)
-  throw new Error(msg)
-}
-
-async function login() {
-  await page.goto(`${BASE}/accounts/login/`, { waitUntil: "networkidle" })
-  await page.fill("#username", USERNAME)
-  await page.fill("#password", PASSWORD)
-  await Promise.all([
-    page.waitForURL(/\/schedule\//),
-    page.click('button[type="submit"]'),
-  ])
-}
+const fail = failFast
 
 async function getSkippedTitles() {
   const items = page.locator(".skipped-tasks .skipped-row .title")
@@ -132,7 +111,7 @@ async function isSkippedSectionVisible() {
 
 try {
   console.log(`-> Login (clock pinned to ${TODAY}T11:30 local)...`)
-  await login()
+  await login(page)
 
   // ── Inv A: today @ 11:30 — only past-window block in Skipped ──
   console.log(`-> Goto /analytics/${TODAY}/ at faked 11:30...`)
@@ -150,7 +129,7 @@ try {
   await page
     .locator(".skipped-tasks .skipped-row")
     .nth(1)
-    .waitFor({ state: "visible", timeout: 5000 })
+    .waitFor({ state: "visible", timeout: ELEMENT_TIMEOUT_MS })
   titles = await getSkippedTitles()
   console.log("   Skipped:", titles)
   if (
@@ -194,4 +173,5 @@ try {
   process.exitCode = 2
 } finally {
   await browser.close()
+  cleanupSchedules([TODAY, PAST_MIXED, PAST_CLEAN])
 }

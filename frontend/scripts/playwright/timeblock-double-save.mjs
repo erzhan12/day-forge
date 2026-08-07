@@ -28,41 +28,40 @@
 //       u.set_password('playwright-pw-do-not-use-in-prod'); u.save()"
 
 import { chromium } from "@playwright/test"
-import { execSync } from "node:child_process"
-import { resolve } from "node:path"
-
-const BASE = "http://localhost:5173"
-const USERNAME = "playwright"
-const PASSWORD = "playwright-pw-do-not-use-in-prod"
+import {
+  BASE,
+  ELEMENT_TIMEOUT_MS,
+  INPUT_TIMEOUT_MS,
+  USERNAME,
+  WAIT_FOR_PATCH_MS,
+  cleanupSchedules,
+  login,
+  preflight,
+  seed,
+} from "./test-utils.mjs"
 
 // A future date well outside any human use, deterministic for the test.
 const SCHEDULE_DATE = "2026-08-17"  // Monday
 const SEED_TITLE = "Original block"
 
-const REPO_ROOT = resolve(process.cwd(), "..")
+await preflight()
 
 // Pre-seed: ensure the playwright user has a Schedule on SCHEDULE_DATE
 // with exactly one TimeBlock named SEED_TITLE. Idempotent.
 console.log("→ Seeding test data via Django shell…")
 try {
-  execSync(
-    `uv run python backend/manage.py shell -c "
-from schedules.models import Schedule, TimeBlock
-from django.contrib.auth.models import User
-import datetime
-u = User.objects.get(username='${USERNAME}')
-s, _ = Schedule.objects.update_or_create(
-    user=u, date=datetime.date(2026, 8, 17), defaults={'status': 'active'}
-)
-TimeBlock.objects.filter(schedule=s).delete()
-TimeBlock.objects.create(
-    schedule=s, title='${SEED_TITLE}', start_time='09:00',
-    end_time='10:00', category='work',
-)
-print('seeded schedule', s.id)
-"`,
-    { stdio: "inherit", cwd: REPO_ROOT },
-  )
+  seed("seed_schedule", {
+    SEED_MODE: "schedules",
+    SEED_USERNAME: USERNAME,
+    SEED_SCHEDULES_JSON: JSON.stringify([
+      {
+        date: SCHEDULE_DATE,
+        status: "active",
+        blocks: [{ title: SEED_TITLE, start_time: "09:00", end_time: "10:00", category: "work" }],
+      },
+    ]),
+    SEED_MARKER: "seeded schedule {id}",
+  })
 } catch (err) {
   console.error("\n❌ Seed step failed. Common causes:")
   console.error(`  * Django not running (start with ``make run``)`)
@@ -97,13 +96,7 @@ page.on("request", (req) => {
 
 try {
   console.log("→ Logging in…")
-  await page.goto(`${BASE}/accounts/login/`, { waitUntil: "networkidle" })
-  await page.fill("#username", USERNAME)
-  await page.fill("#password", PASSWORD)
-  await Promise.all([
-    page.waitForURL(/\/schedule\//),
-    page.click('button[type="submit"]'),
-  ])
+  await login(page)
 
   console.log(`→ Opening /schedule/${SCHEDULE_DATE}/…`)
   await page.goto(`${BASE}/schedule/${SCHEDULE_DATE}/`, {
@@ -116,13 +109,13 @@ try {
     .locator(".title")
     .filter({ hasText: SEED_TITLE })
     .first()
-  await titleSpan.waitFor({ timeout: 5000 })
+  await titleSpan.waitFor({ timeout: ELEMENT_TIMEOUT_MS })
 
   console.log(`→ Clicking title to enter edit mode…`)
   await titleSpan.click()
 
   const titleInput = page.locator(".title-input").first()
-  await titleInput.waitFor({ timeout: 2000 })
+  await titleInput.waitFor({ timeout: INPUT_TIMEOUT_MS })
 
   // Clear cleanly: select all + type, then Enter.
   console.log(`→ Renaming and pressing Enter…`)
@@ -132,7 +125,7 @@ try {
   // Wait long enough for both PATCHes to fire if the bug is present.
   // The double-fire happens within milliseconds of the first; 1500ms is
   // generous headroom for the slowest dev machine.
-  await page.waitForTimeout(1500)
+  await page.waitForTimeout(WAIT_FOR_PATCH_MS)
 
   console.log(`\n=== Network capture ===`)
   console.log(`PATCH /api/blocks/<id>/ calls: ${patchCalls.length}`)
@@ -157,4 +150,5 @@ try {
   process.exitCode = 2
 } finally {
   await browser.close()
+  cleanupSchedules([SCHEDULE_DATE])
 }

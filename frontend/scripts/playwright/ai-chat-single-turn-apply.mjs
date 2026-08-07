@@ -50,38 +50,37 @@
 // target schedule's blocks.
 
 import { chromium } from "@playwright/test"
-import { execSync } from "node:child_process"
-import { resolve } from "node:path"
-
-const BASE = "http://localhost:5173"
-const USERNAME = "playwright"
-const PASSWORD = "playwright-pw-do-not-use-in-prod"
+import {
+  BASE,
+  CHAT_THREAD_TIMEOUT_MS,
+  RESPONSE_TIMEOUT_MS,
+  USERNAME,
+  WAIT_FOR_LATE_RESPONSE_SETTLE_MS,
+  cleanupSchedules,
+  login,
+  makeFailAggregator,
+  preflight,
+  seed,
+} from "./test-utils.mjs"
 
 // Test 1's setup section recommends 2026-09-25 (a date with no template
 // auto-draft). Distinct from the other chat scripts so concurrent runs
 // do not stomp on each other's seed.
 const SCHEDULE_DATE = "2026-09-25"
-const SCHEDULE_DATE_PARTS = [2026, 9, 25]
 const PROMPT = "add 30-minute focus block at 10:00"
 
-const REPO_ROOT = resolve(process.cwd(), "..")
+await preflight()
 
 console.log("→ Seeding empty draft schedule via Django shell…")
 try {
-  execSync(
-    `uv run python backend/manage.py shell -c "
-from schedules.models import Schedule, TimeBlock
-from django.contrib.auth.models import User
-import datetime
-u = User.objects.get(username='${USERNAME}')
-s, _ = Schedule.objects.update_or_create(
-    user=u, date=datetime.date(${SCHEDULE_DATE_PARTS.join(', ')}), defaults={'status': 'draft'}
-)
-TimeBlock.objects.filter(schedule=s).delete()
-print('seeded empty schedule', s.id)
-"`,
-    { stdio: "inherit", cwd: REPO_ROOT },
-  )
+  seed("seed_schedule", {
+    SEED_MODE: "schedules",
+    SEED_USERNAME: USERNAME,
+    SEED_SCHEDULES_JSON: JSON.stringify([
+      { date: SCHEDULE_DATE, status: "draft", blocks: [] },
+    ]),
+    SEED_MARKER: "seeded empty schedule {id}",
+  })
 } catch (err) {
   console.error("\n❌ Seed failed. Is Django running? Does the playwright user exist?")
   console.error(err.message)
@@ -119,20 +118,11 @@ page.on("response", async (resp) => {
   }
 })
 
-const failures = []
-function fail(msg) {
-  failures.push(msg)
-}
+const { failures, fail } = makeFailAggregator()
 
 try {
   console.log("→ Logging in…")
-  await page.goto(`${BASE}/accounts/login/`, { waitUntil: "networkidle" })
-  await page.fill("#username", USERNAME)
-  await page.fill("#password", PASSWORD)
-  await Promise.all([
-    page.waitForURL(/\/schedule\//),
-    page.click('button[type="submit"]'),
-  ])
+  await login(page)
 
   console.log(`→ Opening /schedule/${SCHEDULE_DATE}/…`)
   await page.goto(`${BASE}/schedule/${SCHEDULE_DATE}/`, {
@@ -188,12 +178,12 @@ try {
   await Promise.all([
     page.waitForResponse(
       (resp) => /\/api\/ai\/schedules\/[^/]+\/chat\/$/.test(resp.url()),
-      { timeout: 25_000 },
+      { timeout: RESPONSE_TIMEOUT_MS },
     ),
     inputEl.press("Enter"),
   ])
   // Allow Inertia partial reload + Vue thread state to settle.
-  await page.waitForTimeout(800)
+  await page.waitForTimeout(WAIT_FOR_LATE_RESPONSE_SETTLE_MS)
 
   // ── Wire-level assertions ────────────────────────────────────────────
   console.log("→ Wire-level assertions…")
@@ -260,7 +250,7 @@ try {
   // ── UI assertions after submit ───────────────────────────────────────
   console.log("→ Post-submit UI assertions…")
   const thread = page.locator('[data-testid="chat-thread"]')
-  await thread.waitFor({ timeout: 4000 }).catch(() => {})
+  await thread.waitFor({ timeout: CHAT_THREAD_TIMEOUT_MS }).catch(() => {})
   const bubbles = thread.locator(".bubble")
   const bubbleCount = await bubbles.count()
   if (bubbleCount < 2) {
@@ -282,32 +272,15 @@ try {
 
   // ── DB assertions ────────────────────────────────────────────────────
   console.log("→ DB assertions…")
-  const dbStateOut = execSync(
-    `uv run python backend/manage.py shell -c "
-import json
-from schedules.models import Schedule, TimeBlock
-from ai.models import AIInteraction
-s = Schedule.objects.get(date='${SCHEDULE_DATE}', user__username='${USERNAME}')
-print('STATUS', s.status)
-print('BLOCKS', TimeBlock.objects.filter(schedule=s).count())
-r = AIInteraction.objects.filter(schedule=s).order_by('-created_at').first()
-if r is None:
-    print('NO_AI_ROW')
-else:
-    print('KIND', r.kind)
-    print('SUCCESS', r.success)
-    print('ACTIONS_LEN', len(r.actions_json))
-    print('USER_COMMAND', r.user_command)
-    try:
-        payload = json.loads(r.ai_response)
-        print('AI_RESPONSE_KEYS', sorted(payload.keys()))
-        print('TURN_COUNT', payload.get('turn_count'))
-        print('HASH_PREFIX', (payload.get('transcript_sha256') or '')[:12])
-        print('HAS_RAW', isinstance(payload.get('raw'), str) and len(payload['raw']) > 0)
-    except Exception as e:
-        print('AI_RESPONSE_PARSE_ERROR', repr(e))
-"`,
-    { cwd: REPO_ROOT, encoding: "utf8" },
+  const dbStateOut = seed(
+    "seed_schedule",
+    {
+      SEED_MODE: "snapshot",
+      SEED_USERNAME: USERNAME,
+      SEED_DATE: SCHEDULE_DATE,
+      SEED_SNAPSHOT: "chat",
+    },
+    { encoding: "utf8" },
   )
 
   // Parse line-by-line.
@@ -384,4 +357,5 @@ else:
   process.exitCode = 2
 } finally {
   await browser.close()
+  cleanupSchedules([SCHEDULE_DATE])
 }

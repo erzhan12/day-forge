@@ -386,15 +386,15 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
 
 ### Playwright e2e tooling
 
-- [ ] **Makefile target for the playwright scripts.** Right now each
+- [x] **Makefile target for the playwright scripts.** Right now each
   is invoked via `cd frontend && node scripts/playwright/<name>.mjs`.
   At ≥4 scripts the friction is real. Add a `make e2e` (or
   `e2e:layout` / `e2e:race` / `e2e:isolation`) so scripts are
   discoverable from `make help` and the invocation is one keystroke.
   Suggested by `claude-review` on PR #13.
 
-- [ ] **`frontend/scripts/playwright/README.md`.** As of PR #27 we
-  have 10 e2e scripts (6 chat + 2 command + 2 draft); deferred earlier
+- [x] **`frontend/scripts/playwright/README.md`.** The harness now has
+  21 e2e scripts; documentation was deferred earlier
   as "premature for 2". Add a short README documenting: prereqs
   (Django + Vite + ``playwright`` test user creation snippet), how to
   run individual scripts, expected cost/duration per script (some make
@@ -403,13 +403,13 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
   Makefile follow-up above. Suggested by `claude-review` on PR #11,
   PR #13, and PR #27.
 
-- [ ] **Extract magic numbers in playwright scripts.** `await page.waitForTimeout(1500)`,
+- [x] **Extract magic numbers in playwright scripts.** `await page.waitForTimeout(1500)`,
   the 30-iteration login wait loops, etc. Pull out as named
   `WAIT_FOR_PATCH_MS` / `LOGIN_POLL_MAX_TRIES` / etc. Trivial
   readability cleanup. Suggested by `claude-review` on PR #13 and
-  PR #27 (more urgent now that 10 scripts share inconsistent values).
+  PR #27 (more urgent now that 21 scripts share inconsistent values).
 
-- [ ] **N+1 regression test for draft history.** `ai-draft-on-empty-day.mjs`
+- [x] **N+1 regression test for draft history.** `ai-draft-on-empty-day.mjs`
   has a `// TODO: N+1 sanity` comment because capturing Django SQL
   during a request from a Playwright harness needs either DEBUG=True
   + SQL log capture or a connection-instrumented harness. Cover this
@@ -419,7 +419,7 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
   N+1 fix was PR #15 (`select_related("daily_review")` in the draft
   history query). Suggested by `claude-review` on PR #27.
 
-- [ ] **Cleanup test data in `finally` for playwright scripts.** Currently
+- [x] **Cleanup test data in `finally` for playwright scripts.** Currently
   scripts seed via `update_or_create` (idempotent across re-runs) and
   leave the data in place. `claude-review` on PR #14 suggested deleting
   the seeded schedules in the `finally` block to prevent state pollution.
@@ -428,15 +428,15 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
   add cleanup but gate behind `--cleanup` flag, default off. Suggested
   by `claude-review` on PR #14.
 
-- [ ] **Pre-flight server-reachable check at the top of every playwright
+- [x] **Pre-flight server-reachable check at the top of every playwright
   script.** Currently a script with Django/Vite down fails late with a
-  cryptic ECONNREFUSED. A `fetch(BASE/accounts/login/, { method: 'HEAD' })`
+  cryptic ECONNREFUSED. A `fetch(BASE/accounts/login/, { method: 'GET' })`
   + clear "start them with `make run` / `make frontend-dev`" message at
   the top would shave debugging time for new contributors. Pairs with
   the test-utils.mjs follow-up below — same one-shared-helper file.
   Suggested by `claude-review` on PR #14.
 
-- [ ] **`frontend/scripts/playwright/test-utils.mjs` shared helpers.**
+- [x] **`frontend/scripts/playwright/test-utils.mjs` shared helpers.**
   `login()`, `fail()`, the seed `execSync` boilerplate, the server
   pre-flight check are duplicated across 5+ scripts. Factor into one
   helpers module so each script is just its scenario logic. Touches
@@ -444,7 +444,7 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
   by `claude-review` on PR #13 and PR #14, plus my own
   `/review-fix-loop-staged` review of PR #14.
 
-- [ ] **Extract Django shell seeds to standalone scripts.** Each
+- [x] **Extract Django shell seeds to standalone scripts.** Each
   playwright script currently embeds its seed via a multi-line
   `execSync(... uv run python backend/manage.py shell -c "...")`
   template literal. Pull these out into `backend/scripts/seed-*.py`
@@ -474,16 +474,19 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
   feature 0007 because it touches files unrelated to the chat surface
   and adds no behavioural change. Suggested by `claude-review` on PR #15.
 
-- [ ] **`assertNumQueries` test for `select_related("daily_review")` in
+- [x] **`assertNumQueries` test for `select_related("daily_review")` in
   `ai_generate_draft`.** PR #15 added the `select_related` as a
   drive-by N+1 fix; the optimisation isn't covered by an explicit
-  query-count test. Future regression risk: someone removes the
-  `select_related` and tests still pass because the prompt builder's
-  N+1 access doesn't break correctness. Add a test that seeds N past
-  schedules each with a `DailyReview`, calls the draft endpoint with
-  `run_draft` stubbed, and asserts `assertNumQueries(<expected>)`.
-  Out of scope for feature 0007 because it tests a Phase-6 codepath.
-  Suggested by `claude-review` on PR #15 iter 6.
+  query-count test. Done in feature 0039 as a **two-layer** test
+  (`backend/tests/test_ai_views_draft_nplus1.py`): the async-view layer
+  proves the endpoint stays at one `analytics_dailyreview` query (and
+  that removing `select_related` regresses via `SynchronousOnlyOperation`,
+  since `run_draft` dereferences `past.daily_review` synchronously — a
+  500, not a silent N+1), and a sync prompt-builder layer proves the
+  lazy=N vs eager=1 query counts directly. The originally-suggested
+  `run_draft`-stub approach was rejected because stubbing `run_draft`
+  bypasses the very N+1 access path. Suggested by `claude-review` on
+  PR #15 iter 6.
 
 - [ ] **PR #16 — defensive-runtime suggestions rejected as
   false-positives.** Five P2/P3 findings from `claude-review` on PR #16

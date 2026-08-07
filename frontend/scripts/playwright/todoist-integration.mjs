@@ -18,36 +18,27 @@
 // Todoist account so each run starts clean.
 
 import { chromium } from "@playwright/test"
-import { execSync } from "node:child_process"
-import { resolve } from "node:path"
-
-const BASE = "http://localhost:5173"
-const USERNAME = "playwright"
-const PASSWORD = "playwright-pw-do-not-use-in-prod"
+import {
+  BASE,
+  PANEL_TIMEOUT_MS,
+  USERNAME,
+  WAIT_FOR_THREAD_SETTLE_MS,
+  failFast,
+  login,
+  preflight,
+  seed,
+} from "./test-utils.mjs"
 const API_TOKEN = process.env.TODOIST_API_TOKEN?.trim() || ""
-const REPO_ROOT = resolve(process.cwd(), "..")
 
-function fail(msg) {
-  console.error(`\n❌ ${msg}`)
-  process.exit(1)
-}
-
-function shellExec(script) {
-  execSync(`uv run python backend/manage.py shell -c "${script}"`, {
-    stdio: "inherit",
-    cwd: REPO_ROOT,
-  })
-}
+await preflight()
+const fail = failFast
 
 console.log("→ Preflight: disconnect playwright user's Todoist account…")
 try {
-  shellExec(`
-from django.contrib.auth.models import User
-from todoist_sync.models import TodoistAccount
-u = User.objects.get(username='${USERNAME}')
-deleted, _ = TodoistAccount.objects.filter(user=u).delete()
-print('deleted todoist accounts:', deleted)
-`)
+  seed("seed_todoist", {
+    SEED_MODE: "reset-strict",
+    SEED_USERNAME: USERNAME,
+  })
 } catch (err) {
   console.error("\n❌ Preflight failed (is Django running? migrations applied?).")
   console.error(err.message)
@@ -82,14 +73,7 @@ try {
   const page = await browser.newPage()
 
   console.log("→ Logging in…")
-  await page.goto(`${BASE}/accounts/login/`, { waitUntil: "networkidle" })
-  await page.waitForSelector("#username")
-  await page.fill("#username", USERNAME)
-  await page.fill("#password", PASSWORD)
-  await Promise.all([
-    page.waitForURL(/\/schedule\//),
-    page.click('button[type="submit"]'),
-  ])
+  await login(page, { waitForUsername: true })
 
   console.log("→ Schedule: panel hidden when disconnected…")
   await page.goto(`${BASE}/schedule/${today}/`, { waitUntil: "networkidle" })
@@ -110,7 +94,7 @@ try {
   console.log(`→ Schedule: panel visible after connect (${today})…`)
   await page.goto(`${BASE}/schedule/${today}/`, { waitUntil: "networkidle" })
   const panel = page.locator('[aria-label="Todoist tasks"]')
-  await panel.waitFor({ state: "visible", timeout: 15000 })
+  await panel.waitFor({ state: "visible", timeout: PANEL_TIMEOUT_MS })
 
   const errorBanner = page.locator(".todoist-error")
   if (await errorBanner.count()) {
@@ -120,7 +104,7 @@ try {
 
   const loading = page.locator(".todoist-loading")
   if (await loading.count()) {
-    await loading.waitFor({ state: "hidden", timeout: 15000 })
+    await loading.waitFor({ state: "hidden", timeout: PANEL_TIMEOUT_MS })
   }
 
   const taskCount = await page.locator('[data-testid="todoist-task"]').count()
@@ -137,7 +121,7 @@ try {
 
   console.log("→ Schedule: panel hidden after disconnect…")
   await page.goto(`${BASE}/schedule/${today}/`, { waitUntil: "networkidle" })
-  await page.waitForTimeout(500)
+  await page.waitForTimeout(WAIT_FOR_THREAD_SETTLE_MS)
   if (await page.locator(".todoist-tasks").count()) {
     fail("Todoist panel still visible after disconnect")
   }

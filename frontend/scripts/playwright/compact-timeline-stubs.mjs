@@ -10,12 +10,17 @@
 // Pre-reqs: Django :8006, Vite :5173, playwright user. No LLM key.
 
 import { chromium } from "@playwright/test"
-import { execSync } from "node:child_process"
-import { resolve } from "node:path"
-
-const BASE = "http://localhost:5173"
-const USERNAME = "playwright"
-const PASSWORD = "playwright-pw-do-not-use-in-prod"
+import {
+  BASE,
+  ELEMENT_TIMEOUT_MS,
+  UI_RESPONSE_TIMEOUT_MS,
+  USERNAME,
+  cleanupSchedules,
+  failFast,
+  login,
+  preflight,
+  seed,
+} from "./test-utils.mjs"
 const SCHEDULE_DATE = "2027-03-15"
 const STUB_HEIGHT_PX = 60 // STUB_MINUTES(30) × PX_PER_MINUTE(2)
 // Slot-height asserts allow ±4px: the rendered slot includes GapSlot border
@@ -23,52 +28,39 @@ const STUB_HEIGHT_PX = 60 // STUB_MINUTES(30) × PX_PER_MINUTE(2)
 // rounding of getBoundingClientRect — so the measured height lands a few px off
 // the exact STUB_HEIGHT_PX without indicating a layout regression.
 const STUB_HEIGHT_TOLERANCE_PX = 4
-const REPO_ROOT = resolve(process.cwd(), "..")
-
-function fail(msg) {
-  console.error(`\n❌ ${msg}`)
-  process.exit(1)
-}
+await preflight()
+const fail = failFast
 
 console.log("→ Seeding 09:00–18:00 schedule…")
-execSync(
-  `uv run python backend/manage.py shell -c "
-from datetime import date
-from django.contrib.auth.models import User
-from schedules.models import Schedule, TimeBlock
-u = User.objects.get(username='${USERNAME}')
-d = date.fromisoformat('${SCHEDULE_DATE}')
-s, _ = Schedule.objects.get_or_create(user=u, date=d, defaults={'status': 'active'})
-s.status = 'active'
-s.save(update_fields=['status'])
-TimeBlock.objects.filter(schedule=s).delete()
-TimeBlock.objects.create(schedule=s, title='Morning focus', start_time='09:00', end_time='12:00', category='work', sort_order=0)
-TimeBlock.objects.create(schedule=s, title='Afternoon work', start_time='13:00', end_time='18:00', category='work', sort_order=10)
-print('seeded', s.id)
-"`,
-  { cwd: REPO_ROOT, stdio: "inherit" },
-)
+seed("seed_schedule", {
+  SEED_MODE: "schedules",
+  SEED_USERNAME: USERNAME,
+  SEED_SCHEDULES_JSON: JSON.stringify([
+    {
+      date: SCHEDULE_DATE,
+      status: "active",
+      blocks: [
+        { title: "Morning focus", start_time: "09:00", end_time: "12:00", category: "work", sort_order: 0 },
+        { title: "Afternoon work", start_time: "13:00", end_time: "18:00", category: "work", sort_order: 10 },
+      ],
+    },
+  ]),
+  SEED_MARKER: "seeded {id}",
+})
 
 const browser = await chromium.launch({ headless: true })
 try {
   const page = await browser.newPage()
 
   console.log("→ Logging in…")
-  await page.goto(`${BASE}/accounts/login/`, { waitUntil: "networkidle" })
-  await page.waitForSelector("#username")
-  await page.fill("#username", USERNAME)
-  await page.fill("#password", PASSWORD)
-  await Promise.all([
-    page.waitForURL(/\/schedule\//),
-    page.click('button[type="submit"]'),
-  ])
+  await login(page, { waitForUsername: true })
 
   console.log(`→ Opening /schedule/${SCHEDULE_DATE}/…`)
   await page.goto(`${BASE}/schedule/${SCHEDULE_DATE}/`, {
     waitUntil: "networkidle",
   })
 
-  await page.waitForSelector(".gap-slot", { timeout: 10000 })
+  await page.waitForSelector(".gap-slot", { timeout: UI_RESPONSE_TIMEOUT_MS })
 
   const gapInfo = await page.evaluate(() => {
     const slots = [...document.querySelectorAll(".schedule-slot")]
@@ -121,7 +113,7 @@ try {
 
   console.log("→ Clicking leading stub to verify full-range prefill…")
   await page.locator(".gap-slot.compact").first().click()
-  await page.waitForSelector(".add-form input[type='time']", { timeout: 5000 })
+  await page.waitForSelector(".add-form input[type='time']", { timeout: ELEMENT_TIMEOUT_MS })
 
   const prefill = await page.evaluate(() => {
     const times = [...document.querySelectorAll(".add-form input[type='time']")]
@@ -139,4 +131,5 @@ try {
   console.log("\n✅ Compact timeline stubs look correct.")
 } finally {
   await browser.close()
+  cleanupSchedules([SCHEDULE_DATE])
 }

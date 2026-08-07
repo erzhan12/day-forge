@@ -33,23 +33,24 @@ End-to-end browser smoke testing requires the **full dev stack** running
 http://localhost:5173/, log in (`createsuperuser` first if no account),
 and exercise the feature in the actual browser.
 
-The 6 chat-flow Playwright scripts at `frontend/scripts/playwright/
-ai-chat-*.mjs` cover `POST /api/ai/schedules/<date>/chat/` but make real
-LLM calls — they need `LLM_API_KEY` set and burn provider tokens.
+The 21 Playwright scripts at `frontend/scripts/playwright/*.mjs` cover AI chat,
+command, draft, analytics, timeline, templates, themes, and Todoist flows.
+See that directory's `README.md` for prerequisites and the per-script provider
+call table. Several AI scenarios make real LLM calls and burn provider tokens;
+the `ai-draft-409-on-non-empty.mjs` endpoint short-circuits before the LLM.
+After a schedule-mutation refactor, run the relevant scripts instead of doing
+an ad hoc browser smoke pass.
 
-The 4 follow-up scripts at `frontend/scripts/playwright/ai-command-*.mjs`
-and `ai-draft-*.mjs` cover `POST /api/ai/schedules/<date>/command/` and
-`POST /api/ai/schedules/<date>/generate-draft/` end-to-end (real LLM
-calls; the `ai-draft-409-on-non-empty.mjs` script short-circuits
-server-side and makes no LLM call). They also require `LLM_API_KEY`.
-After any schedule-mutation refactor, run the relevant scripts instead
-of doing a manual browser smoke pass.
-
-Run the `ai-*.mjs` scripts **serially**, not in parallel — they share
+Run the scripts **serially**, not in parallel — they share
 the `playwright` user's `ai_cmd_rl` / `ai_draft_rl` rate-limit
 counters, and concurrent runs would race the counter and produce a
 false failure in `ai-draft-409-on-non-empty.mjs`'s "no consumption"
 assertion.
+
+From the repository root, use `make e2e` for all scenarios or
+`make e2e-chat`, `make e2e-command`, and `make e2e-draft` for focused groups.
+Pass `--cleanup` to an individual Node script only when its seeded schedules
+should be deleted after the run; cleanup defaults off for post-mortem debugging.
 
 For the no-autoreload variant of the Django server (useful when stepping
 through with a debugger or doing manual smoke testing where you don't

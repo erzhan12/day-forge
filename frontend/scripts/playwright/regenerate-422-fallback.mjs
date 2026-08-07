@@ -20,45 +20,38 @@
 // timeblock-double-save.mjs / template-editor-layout.mjs).
 
 import { chromium } from "@playwright/test"
-import { execSync } from "node:child_process"
-import { resolve } from "node:path"
-
-const BASE = "http://localhost:5173"
-const USERNAME = "playwright"
-const PASSWORD = "playwright-pw-do-not-use-in-prod"
+import {
+  BASE,
+  UI_RESPONSE_TIMEOUT_MS,
+  USERNAME,
+  WAIT_FOR_AUTO_DRAFT_MS,
+  WAIT_FOR_UI_TICK_MS,
+  cleanupSchedules,
+  login,
+  preflight,
+  seed,
+} from "./test-utils.mjs"
 
 // Two future dates: the first is for the stale-prop scenario, the
 // second is for the recovery check (so the recovery path doesn't run
 // against the same Schedule that just experienced a 422).
 const STALE_DATE = "2026-09-21"   // Monday
 const RECOVERY_DATE = "2026-09-28" // Monday
-
-const REPO_ROOT = resolve(process.cwd(), "..")
-
-function shell(cmd) {
-  return execSync(`uv run python backend/manage.py shell -c "${cmd}"`, {
-    encoding: "utf8",
-    cwd: REPO_ROOT,
-  })
+const TEMPLATE = {
+  type: "weekday",
+  name: "A weekday",
+  blocks: [{ title: "Deep work", start_time: "09:00", end_time: "12:00", category: "work" }],
 }
 
+await preflight()
+
 console.log("→ Setup: ensure playwright user has 'A weekday' template + empty draft schedules…")
-shell(`
-from django.contrib.auth.models import User
-from templates_mgr.models import Template
-from schedules.models import Schedule, TimeBlock
-import datetime
-u = User.objects.get(username='${USERNAME}')
-Template.objects.filter(user=u).delete()
-Template.objects.create(
-    user=u, type='weekday', name='A weekday',
-    blocks=[{'title': 'Deep work', 'start_time': '09:00', 'end_time': '12:00', 'category': 'work'}],
-)
-for d in (datetime.date(2026, 9, 21), datetime.date(2026, 9, 28)):
-    s, _ = Schedule.objects.update_or_create(user=u, date=d, defaults={'status': 'draft'})
-    TimeBlock.objects.filter(schedule=s).delete()
-print('seeded')
-`)
+seed("seed_template", {
+  SEED_MODE: "template_seed_initial",
+  SEED_USERNAME: USERNAME,
+  SEED_TEMPLATE_JSON: JSON.stringify(TEMPLATE),
+  SEED_DATES_JSON: JSON.stringify([STALE_DATE, RECOVERY_DATE]),
+})
 
 const browser = await chromium.launch({ headless: true })
 const context = await browser.newContext({
@@ -84,13 +77,7 @@ function check(label, ok, detail = "") {
 try {
   // Login
   console.log("→ Logging in…")
-  await page.goto(`${BASE}/accounts/login/`, { waitUntil: "networkidle" })
-  await page.fill("#username", USERNAME)
-  await page.fill("#password", PASSWORD)
-  await Promise.all([
-    page.waitForURL(/\/schedule\//),
-    page.click('button[type="submit"]'),
-  ])
+  await login(page)
 
   // ────────────────────────────────────────────────────────────────
   // Contract 1: Regenerate pill enabled on a fresh draft schedule
@@ -110,13 +97,11 @@ try {
   // ``has_template_for_type=true`` prop in memory).
   // ────────────────────────────────────────────────────────────────
   console.log(`\n→ Simulating template deletion (without reloading the schedule page)…`)
-  shell(`
-from django.contrib.auth.models import User
-from templates_mgr.models import Template
-u = User.objects.get(username='${USERNAME}')
-Template.objects.filter(user=u, type='weekday').delete()
-print('deleted')
-`)
+  seed("seed_template", {
+    SEED_MODE: "template_delete",
+    SEED_USERNAME: USERNAME,
+    SEED_TEMPLATE_JSON: JSON.stringify(TEMPLATE),
+  })
 
   // ────────────────────────────────────────────────────────────────
   // Contract 2: clicking Regenerate now → 422 + friendly inline error
@@ -130,12 +115,12 @@ print('deleted')
   await Promise.all([
     page.waitForResponse(
       (resp) => /\/api\/ai\/schedules\/[^/]+\/generate-draft\/$/.test(resp.url()),
-      { timeout: 10_000 },
+      { timeout: UI_RESPONSE_TIMEOUT_MS },
     ),
     regenBtn.click(),
   ])
   // Vue render tick for ``.draft-error`` to attach.
-  await page.waitForTimeout(200)
+  await page.waitForTimeout(WAIT_FOR_UI_TICK_MS)
 
   const lastCall = aiCalls[aiCalls.length - 1]
   check(
@@ -177,7 +162,7 @@ print('deleted')
     )
     // And clicking it should expand the form (proves manual flow works)
     await addBlockTrigger.click()
-    await page.waitForTimeout(200)
+    await page.waitForTimeout(WAIT_FOR_UI_TICK_MS)
     const titleInput = page.locator(".add-form .title-input").first()
     check(
       "Clicking + Add block expands the form (title input visible)",
@@ -189,33 +174,26 @@ print('deleted')
   // Contract 4: re-create template + visit fresh date → button enabled
   // ────────────────────────────────────────────────────────────────
   console.log(`\n→ [4/4] Re-create template, visit a fresh date — expect Regenerate enabled`)
-  shell(`
-from django.contrib.auth.models import User
-from templates_mgr.models import Template
-u = User.objects.get(username='${USERNAME}')
-Template.objects.create(
-    user=u, type='weekday', name='A weekday',
-    blocks=[{'title': 'Deep work', 'start_time': '09:00', 'end_time': '12:00', 'category': 'work'}],
-)
-print('re-created')
-`)
+  seed("seed_template", {
+    SEED_MODE: "template_create",
+    SEED_USERNAME: USERNAME,
+    SEED_TEMPLATE_JSON: JSON.stringify(TEMPLATE),
+  })
 
   await page.goto(`${BASE}/schedule/${RECOVERY_DATE}/`, { waitUntil: "networkidle" })
   // Wait for any auto-draft kicker to settle. This date might trigger
   // auto_draft_pending=true (created Schedule row → first visit). We
   // don't want to get caught in that — clear blocks if so.
-  await page.waitForTimeout(2000)
+  await page.waitForTimeout(WAIT_FOR_AUTO_DRAFT_MS)
   // Force back to empty-draft state for a clean Regenerate-button check
-  shell(`
-from django.contrib.auth.models import User
-from schedules.models import Schedule, TimeBlock
-import datetime
-u = User.objects.get(username='${USERNAME}')
-s = Schedule.objects.get(user=u, date=datetime.date(2026, 9, 28))
-TimeBlock.objects.filter(schedule=s).delete()
-s.status = 'draft'
-s.save(update_fields=['status'])
-`)
+  seed("seed_schedule", {
+    SEED_MODE: "schedules",
+    SEED_USERNAME: USERNAME,
+    SEED_SCHEDULES_JSON: JSON.stringify([
+      { date: RECOVERY_DATE, status: "draft", blocks: [] },
+    ]),
+    SEED_MARKER: "reset recovery schedule {id}",
+  })
   await page.goto(`${BASE}/schedule/${RECOVERY_DATE}/`, { waitUntil: "networkidle" })
 
   const regenBtn2 = page.locator(".regenerate-btn, button:has-text('Regenerate'), [class*='regenerate']").first()
@@ -239,4 +217,5 @@ s.save(update_fields=['status'])
   process.exitCode = 2
 } finally {
   await browser.close()
+  cleanupSchedules([STALE_DATE, RECOVERY_DATE])
 }

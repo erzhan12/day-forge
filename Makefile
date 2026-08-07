@@ -2,11 +2,12 @@
 
 .PHONY: help install dev run run-manual frontend-dev frontend-install frontend-build \
         lint lint-fix format typecheck test test-backend test-frontend check \
+        e2e e2e-chat e2e-command e2e-draft \
         migrate makemigrations seed superuser shell \
         docker docker-build docker-down clean
 
 help: ## List available targets
-	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z0-9_-]+:.*?## / {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 install: frontend-install ## Install backend and frontend dependencies
 	uv sync
@@ -74,6 +75,25 @@ test-frontend: ## Run frontend tests
 	cd frontend && npm test
 
 check: lint typecheck test ## Lint + typecheck + test (run before pushing)
+
+# These smoke scripts run serially because they share the playwright user's
+# AI rate-limit counters. Some make real provider calls and consume tokens.
+e2e: ## Run all Playwright e2e smoke scripts serially (needs dev stack)
+	cd frontend && set -e; for script in scripts/playwright/*.mjs; do \
+		case "$$script" in *test-utils.mjs) continue ;; esac; \
+		node "$$script"; \
+	done
+
+e2e-chat: ## Run Playwright chat smoke scripts serially (real LLM calls)
+	cd frontend && set -e; for script in scripts/playwright/ai-chat-*.mjs; do node "$$script"; done
+
+e2e-command: ## Run Playwright command smoke scripts serially (real LLM calls)
+	cd frontend && set -e; for script in scripts/playwright/ai-command-*.mjs; do node "$$script"; done
+
+e2e-draft: ## Run Playwright draft smoke scripts serially (real LLM calls)
+	cd frontend && set -e; for script in scripts/playwright/ai-draft-*.mjs \
+		scripts/playwright/draft-prompt-history-suffix.mjs \
+		scripts/playwright/regenerate-422-fallback.mjs; do node "$$script"; done
 
 # ─── Docker ───────────────────────────────────────────────────────────────
 

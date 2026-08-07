@@ -37,90 +37,81 @@
 // ⚠️  WARNING — LOCAL DEVELOPMENT ONLY.
 
 import { chromium } from "@playwright/test"
-import { execSync } from "node:child_process"
-import { resolve } from "node:path"
-
-const BASE = "http://localhost:5173"
-const USERNAME = "playwright"
-const PASSWORD = "playwright-pw-do-not-use-in-prod"
+import {
+  BASE,
+  USERNAME,
+  WAIT_FOR_SHORT_SETTLE_MS,
+  cleanupSchedules,
+  djangoToday,
+  login,
+  makeFailAggregator,
+  postWithCsrf,
+  preflight,
+  preflightUser,
+  seed,
+} from "./test-utils.mjs"
 
 const SCHEDULE_DATE = "2027-03-29" // Monday → weekday slot
-const SCHEDULE_DATE_PARTS = [2027, 3, 29]
 const EXPECTED_DETAIL = "Schedule already has blocks; delete them before regenerating."
 
-const REPO_ROOT = resolve(process.cwd(), "..")
+await preflight()
+const LOGIN_DATE = djangoToday()
+const cleanupDates = [SCHEDULE_DATE]
 
 console.log("→ Pre-flight: confirming playwright user exists…")
-try {
-  const preflight = execSync(
-    `uv run python backend/manage.py shell -c "
-from django.contrib.auth.models import User
-print('EXISTS', User.objects.filter(username='${USERNAME}').exists())
-"`,
-    { cwd: REPO_ROOT, encoding: "utf8" },
-  )
-  if (!preflight.includes("EXISTS True")) {
-    console.error("\n❌ playwright user is missing. Run:")
-    console.error("   uv run python backend/manage.py createsuperuser")
-    console.error(`   (use username '${USERNAME}' / password '${PASSWORD}')`)
-    process.exit(2)
-  }
-} catch (err) {
-  console.error("\n❌ Pre-flight shell failed:", err.message)
-  process.exit(2)
-}
+preflightUser()
 
 console.log("→ Seeding non-empty schedule + weekday Template…")
 try {
-  execSync(
-    `uv run python backend/manage.py shell -c "
-from schedules.models import Schedule, TimeBlock
-from templates_mgr.models import Template
-from django.contrib.auth.models import User
-import datetime
-u = User.objects.get(username='${USERNAME}')
-s, _ = Schedule.objects.update_or_create(
-    user=u, date=datetime.date(${SCHEDULE_DATE_PARTS.join(', ')}), defaults={'status': 'draft'}
-)
-TimeBlock.objects.filter(schedule=s).delete()
-TimeBlock.objects.create(
-    schedule=s, title='Existing block',
-    start_time=datetime.time(9, 0), end_time=datetime.time(10, 0),
-    category='work',
-)
-Template.objects.update_or_create(
-    user=u, type='weekday',
-    defaults={'name': 'Playwright Weekday', 'blocks': [
-        {'title': 'Deep work', 'start_time': '09:00', 'end_time': '12:00', 'category': 'work'},
-    ]},
-)
-print('seeded non-empty schedule', s.id, 'with weekday template')
-"`,
-    { stdio: "inherit", cwd: REPO_ROOT },
-  )
+  seed("seed_schedule", {
+    SEED_MODE: "schedules",
+    SEED_USERNAME: USERNAME,
+    SEED_SCHEDULES_JSON: JSON.stringify([
+      {
+        date: SCHEDULE_DATE,
+        status: "draft",
+        blocks: [{ title: "Existing block", start_time: "09:00", end_time: "10:00", category: "work" }],
+      },
+    ]),
+    SEED_TEMPLATE_JSON: JSON.stringify({
+      type: "weekday",
+      name: "Playwright Weekday",
+      blocks: [{ title: "Deep work", start_time: "09:00", end_time: "12:00", category: "work" }],
+    }),
+    SEED_MARKER: "seeded non-empty schedule {id} with weekday template",
+  })
 } catch (err) {
   console.error("\n❌ Seed failed. Is Django running?")
   console.error(err.message)
   process.exit(2)
 }
 
+// Login redirects to today. Ensure that row already exists so the redirect
+// cannot independently auto-draft and consume the counter this test snapshots.
+const loginScheduleOut = seed(
+  "seed_schedule",
+  {
+    SEED_MODE: "ensure_exists",
+    SEED_USERNAME: USERNAME,
+    SEED_DATE: LOGIN_DATE,
+  },
+  { encoding: "utf8" },
+)
+if (loginScheduleOut.includes("CREATED True")) cleanupDates.push(LOGIN_DATE)
+
 // Snapshot counters BEFORE the request so we can assert no mutation.
 console.log("→ Snapshotting rate-limit + AIInteraction counters…")
 let counterBefore = ""
 try {
-  counterBefore = execSync(
-    `uv run python backend/manage.py shell -c "
-from django.core.cache import cache
-from django.contrib.auth.models import User
-from ai.models import AIInteraction
-from schedules.models import Schedule
-import datetime
-u = User.objects.get(username='${USERNAME}')
-s = Schedule.objects.get(user=u, date=datetime.date(${SCHEDULE_DATE_PARTS.join(', ')}))
-print('RATE_BEFORE', cache.get(f'ai_draft_rl:{u.id}', 0))
-print('AI_BEFORE', AIInteraction.objects.filter(schedule=s).count())
-"`,
-    { cwd: REPO_ROOT, encoding: "utf8" },
+  counterBefore = seed(
+    "seed_schedule",
+    {
+      SEED_MODE: "snapshot",
+      SEED_USERNAME: USERNAME,
+      SEED_DATE: SCHEDULE_DATE,
+      SEED_SNAPSHOT: "rate_before",
+    },
+    { encoding: "utf8" },
   )
 } catch (err) {
   console.error("\n❌ Snapshot shell failed:", err.message)
@@ -157,20 +148,11 @@ page.on("response", async (resp) => {
   }
 })
 
-const failures = []
-function fail(msg) {
-  failures.push(msg)
-}
+const { failures, fail } = makeFailAggregator()
 
 try {
   console.log("→ Logging in…")
-  await page.goto(`${BASE}/accounts/login/`, { waitUntil: "networkidle" })
-  await page.fill("#username", USERNAME)
-  await page.fill("#password", PASSWORD)
-  await Promise.all([
-    page.waitForURL(/\/schedule\//),
-    page.click('button[type="submit"]'),
-  ])
+  await login(page)
 
   console.log(`→ Opening /schedule/${SCHEDULE_DATE}/…`)
   await page.goto(`${BASE}/schedule/${SCHEDULE_DATE}/`, {
@@ -189,25 +171,12 @@ try {
   }
 
   console.log("→ Direct-POST /generate-draft/ on non-empty schedule…")
-  const postResult = await page.evaluate(
-    async ({ url }) => {
-      const match = document.cookie.match(/XSRF-TOKEN=([^;]+)/)
-      const csrf = match ? decodeURIComponent(match[1]) : ""
-      if (!csrf) return { error: "no XSRF-TOKEN cookie present" }
-      const r = await fetch(url, {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "content-type": "application/json",
-          "x-xsrf-token": csrf,
-        },
-        body: "{}",
-      })
-      return { status: r.status, body: await r.text() }
-    },
-    { url: `${BASE}/api/ai/schedules/${SCHEDULE_DATE}/generate-draft/` },
+  const postResult = await postWithCsrf(
+    page,
+    `${BASE}/api/ai/schedules/${SCHEDULE_DATE}/generate-draft/`,
+    {},
   )
-  await page.waitForTimeout(300)
+  await page.waitForTimeout(WAIT_FOR_SHORT_SETTLE_MS)
 
   console.log("→ Wire-level assertions…")
   if (postResult.error) {
@@ -250,21 +219,15 @@ try {
   }
 
   console.log("→ DB + counter assertions (no mutation, no rate-limit consumption)…")
-  const afterOut = execSync(
-    `uv run python backend/manage.py shell -c "
-from django.core.cache import cache
-from django.contrib.auth.models import User
-from ai.models import AIInteraction
-from schedules.models import Schedule, TimeBlock
-import datetime
-u = User.objects.get(username='${USERNAME}')
-s = Schedule.objects.get(user=u, date=datetime.date(${SCHEDULE_DATE_PARTS.join(', ')}))
-print('RATE_AFTER', cache.get(f'ai_draft_rl:{u.id}', 0))
-print('AI_AFTER', AIInteraction.objects.filter(schedule=s).count())
-print('BLOCKS', TimeBlock.objects.filter(schedule=s).count())
-print('STATUS', s.status)
-"`,
-    { cwd: REPO_ROOT, encoding: "utf8" },
+  const afterOut = seed(
+    "seed_schedule",
+    {
+      SEED_MODE: "snapshot",
+      SEED_USERNAME: USERNAME,
+      SEED_DATE: SCHEDULE_DATE,
+      SEED_SNAPSHOT: "rate_after",
+    },
+    { encoding: "utf8" },
   )
 
   const afterMap = {}
@@ -319,4 +282,5 @@ print('STATUS', s.status)
   process.exitCode = 2
 } finally {
   await browser.close()
+  cleanupSchedules(cleanupDates)
 }

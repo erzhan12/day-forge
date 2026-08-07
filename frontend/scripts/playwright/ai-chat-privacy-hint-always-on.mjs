@@ -34,34 +34,33 @@
 // schedule's blocks.
 
 import { chromium } from "@playwright/test"
-import { execSync } from "node:child_process"
-import { resolve } from "node:path"
-
-const BASE = "http://localhost:5173"
-const USERNAME = "playwright"
-const PASSWORD = "playwright-pw-do-not-use-in-prod"
+import {
+  BASE,
+  CHAT_THREAD_TIMEOUT_MS,
+  UI_RESPONSE_TIMEOUT_MS,
+  USERNAME,
+  WAIT_FOR_THREAD_SETTLE_MS,
+  WAIT_FOR_UI_TICK_MS,
+  cleanupSchedules,
+  login,
+  makeFailAggregator,
+  preflight,
+  seed,
+} from "./test-utils.mjs"
 
 const SCHEDULE_DATE = "2026-09-27"
-const SCHEDULE_DATE_PARTS = [2026, 9, 27]
-
-const REPO_ROOT = resolve(process.cwd(), "..")
+await preflight()
 
 console.log("→ Seeding empty draft schedule…")
 try {
-  execSync(
-    `uv run python backend/manage.py shell -c "
-from schedules.models import Schedule, TimeBlock
-from django.contrib.auth.models import User
-import datetime
-u = User.objects.get(username='${USERNAME}')
-s, _ = Schedule.objects.update_or_create(
-    user=u, date=datetime.date(${SCHEDULE_DATE_PARTS.join(', ')}), defaults={'status': 'draft'}
-)
-TimeBlock.objects.filter(schedule=s).delete()
-print('seeded empty schedule', s.id)
-"`,
-    { stdio: "inherit", cwd: REPO_ROOT },
-  )
+  seed("seed_schedule", {
+    SEED_MODE: "schedules",
+    SEED_USERNAME: USERNAME,
+    SEED_SCHEDULES_JSON: JSON.stringify([
+      { date: SCHEDULE_DATE, status: "draft", blocks: [] },
+    ]),
+    SEED_MARKER: "seeded empty schedule {id}",
+  })
 } catch (err) {
   console.error("\n❌ Seed failed.")
   console.error(err.message)
@@ -72,8 +71,7 @@ const browser = await chromium.launch({ headless: true })
 const context = await browser.newContext({ viewport: { width: 1280, height: 800 } })
 const page = await context.newPage()
 
-const failures = []
-const fail = (msg) => failures.push(msg)
+const { failures, fail } = makeFailAggregator()
 
 // Stub /chat/ with a successful envelope. The exact block content is
 // irrelevant for Test 6 — we only need the response to be 200 + valid
@@ -103,13 +101,7 @@ await page.route(/\/api\/ai\/schedules\/[^/]+\/chat\/$/, async (route) => {
 
 try {
   console.log("→ Logging in…")
-  await page.goto(`${BASE}/accounts/login/`, { waitUntil: "networkidle" })
-  await page.fill("#username", USERNAME)
-  await page.fill("#password", PASSWORD)
-  await Promise.all([
-    page.waitForURL(/\/schedule\//),
-    page.click('button[type="submit"]'),
-  ])
+  await login(page)
 
   console.log(`→ Opening /schedule/${SCHEDULE_DATE}/…`)
   await page.goto(`${BASE}/schedule/${SCHEDULE_DATE}/`, { waitUntil: "networkidle" })
@@ -162,16 +154,16 @@ try {
   await Promise.all([
     page.waitForResponse(
       (resp) => /\/api\/ai\/schedules\/[^/]+\/chat\/$/.test(resp.url()),
-      { timeout: 10_000 },
+      { timeout: UI_RESPONSE_TIMEOUT_MS },
     ),
     inputEl.press("Enter"),
   ])
-  await page.waitForTimeout(500)
+  await page.waitForTimeout(WAIT_FOR_THREAD_SETTLE_MS)
 
   if (!(await privacyHint.isVisible())) {
     fail("State B: privacy hint disappeared after sending a turn")
   }
-  await thread.waitFor({ timeout: 4000 }).catch(() => {})
+  await thread.waitFor({ timeout: CHAT_THREAD_TIMEOUT_MS }).catch(() => {})
   const bubblesB = await thread.locator(".bubble").count().catch(() => 0)
   if (bubblesB < 2) {
     fail(`State B: expected ≥2 bubbles after turn, got ${bubblesB}`)
@@ -193,7 +185,7 @@ try {
   // ─── State C: click clear ───────────────────────────────────────────
   console.log("→ State C: click clear…")
   await clearBtn.click()
-  await page.waitForTimeout(200)
+  await page.waitForTimeout(WAIT_FOR_UI_TICK_MS)
   if (!(await privacyHint.isVisible())) {
     fail("State C: privacy hint disappeared after clear")
   }
@@ -233,4 +225,5 @@ try {
   process.exitCode = 2
 } finally {
   await browser.close()
+  cleanupSchedules([SCHEDULE_DATE])
 }

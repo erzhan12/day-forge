@@ -33,38 +33,36 @@
 // ⚠️  LOCAL DEVELOPMENT ONLY. Seeds truncate target schedules' blocks.
 
 import { chromium } from "@playwright/test"
-import { execSync } from "node:child_process"
-import { resolve } from "node:path"
-
-const BASE = "http://localhost:5173"
-const USERNAME = "playwright"
-const PASSWORD = "playwright-pw-do-not-use-in-prod"
+import {
+  BASE,
+  ELEMENT_TIMEOUT_MS,
+  USERNAME,
+  WAIT_FOR_INERTIA_SETTLE_MS,
+  WAIT_FOR_INFLIGHT_RENDER_MS,
+  cleanupSchedules,
+  login,
+  makeFailAggregator,
+  preflight,
+  seed,
+} from "./test-utils.mjs"
 
 const DAY_A = "2026-09-29"
 const DAY_B = "2026-09-30"
-const DAY_A_PARTS = [2026, 9, 29]
-const DAY_B_PARTS = [2026, 9, 30]
-
 const DELAY_A_MS = 8000
 const DELAY_B_MS = 2000
 
-const REPO_ROOT = resolve(process.cwd(), "..")
+await preflight()
 
 console.log("→ Seeding empty draft schedules on both days…")
 try {
-  execSync(
-    `uv run python backend/manage.py shell -c "
-from schedules.models import Schedule, TimeBlock
-from django.contrib.auth.models import User
-import datetime
-u = User.objects.get(username='${USERNAME}')
-for d in (datetime.date(${DAY_A_PARTS.join(', ')}), datetime.date(${DAY_B_PARTS.join(', ')})):
-    s, _ = Schedule.objects.update_or_create(user=u, date=d, defaults={'status': 'draft'})
-    TimeBlock.objects.filter(schedule=s).delete()
-print('seeded both dates')
-"`,
-    { stdio: "inherit", cwd: REPO_ROOT },
-  )
+  seed("seed_schedule", {
+    SEED_MODE: "schedules",
+    SEED_USERNAME: USERNAME,
+    SEED_SCHEDULES_JSON: JSON.stringify(
+      [DAY_A, DAY_B].map((date) => ({ date, status: "draft", blocks: [] })),
+    ),
+    SEED_MARKER: "seeded both dates",
+  })
 } catch (err) {
   console.error("\n❌ Seed failed.")
   console.error(err.message)
@@ -75,8 +73,7 @@ const browser = await chromium.launch({ headless: true })
 const context = await browser.newContext({ viewport: { width: 1280, height: 800 } })
 const page = await context.newPage()
 
-const failures = []
-const fail = (msg) => failures.push(msg)
+const { failures, fail } = makeFailAggregator()
 
 const responsesSeen = []
 page.on("response", (resp) => {
@@ -110,13 +107,7 @@ await page.route(/\/api\/ai\/schedules\/[^/]+\/chat\/$/, async (route) => {
 
 try {
   console.log("→ Logging in…")
-  await page.goto(`${BASE}/accounts/login/`, { waitUntil: "networkidle" })
-  await page.fill("#username", USERNAME)
-  await page.fill("#password", PASSWORD)
-  await Promise.all([
-    page.waitForURL(/\/schedule\//),
-    page.click('button[type="submit"]'),
-  ])
+  await login(page)
 
   console.log(`→ Opening /schedule/${DAY_A}/…`)
   await page.goto(`${BASE}/schedule/${DAY_A}/`, { waitUntil: "networkidle" })
@@ -131,7 +122,7 @@ try {
   const tA = Date.now()
   await inputEl.fill("add a 30-minute focus block at 10:00")
   await inputEl.press("Enter")
-  await page.waitForTimeout(400)
+  await page.waitForTimeout(WAIT_FOR_INERTIA_SETTLE_MS)
 
   const bubblesA = await thread.locator(".bubble").count().catch(() => 0)
   if (bubblesA !== 1) {
@@ -145,8 +136,8 @@ try {
   console.log("→ Phase 2: navigate to day B before A resolves…")
   await nextDayBtn.click()
   // Wait for URL to flip.
-  await page.waitForURL(new RegExp(`/schedule/${DAY_B}/`), { timeout: 5000 })
-  await page.waitForTimeout(400)
+  await page.waitForURL(new RegExp(`/schedule/${DAY_B}/`), { timeout: ELEMENT_TIMEOUT_MS })
+  await page.waitForTimeout(WAIT_FOR_INERTIA_SETTLE_MS)
 
   const bubblesAfterNav = await thread.locator(".bubble").count().catch(() => 0)
   if (bubblesAfterNav !== 0) {
@@ -164,7 +155,7 @@ try {
   const tB = Date.now()
   await inputEl.fill("add a coffee break at 11:00")
   await inputEl.press("Enter")
-  await page.waitForTimeout(400)
+  await page.waitForTimeout(WAIT_FOR_INERTIA_SETTLE_MS)
 
   const bubblesB1 = await thread.locator(".bubble").count().catch(() => 0)
   if (bubblesB1 !== 1) {
@@ -177,7 +168,7 @@ try {
   // ─── Phase 4: wait for B to resolve ─────────────────────────────────
   console.log("→ Phase 4: waiting for B to resolve…")
   // B started at tB, delay is 2000ms — wait 2.5s for safety.
-  await page.waitForTimeout(DELAY_B_MS + 600)
+  await page.waitForTimeout(DELAY_B_MS + WAIT_FOR_INFLIGHT_RENDER_MS)
 
   const bubblesPostB = await thread.locator(".bubble").count().catch(() => 0)
   if (bubblesPostB !== 2) {
@@ -244,4 +235,5 @@ try {
   process.exitCode = 2
 } finally {
   await browser.close()
+  cleanupSchedules([DAY_A, DAY_B])
 }

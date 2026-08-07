@@ -41,35 +41,34 @@
 // target schedule's blocks.
 
 import { chromium } from "@playwright/test"
-import { execSync } from "node:child_process"
-import { resolve } from "node:path"
-
-const BASE = "http://localhost:5173"
-const USERNAME = "playwright"
-const PASSWORD = "playwright-pw-do-not-use-in-prod"
+import {
+  BASE,
+  CHAT_INPUT_TIMEOUT_MS,
+  RESPONSE_TIMEOUT_MS,
+  USERNAME,
+  WAIT_FOR_THREAD_SETTLE_MS,
+  cleanupSchedules,
+  login,
+  preflight,
+  seed,
+} from "./test-utils.mjs"
 
 // Far-future, deterministic, distinct from other scripts so concurrent
 // runs do not stomp on each other's seed.
 const SCHEDULE_DATE = "2026-09-21"
 
-const REPO_ROOT = resolve(process.cwd(), "..")
+await preflight()
 
 console.log("→ Seeding empty draft schedule via Django shell…")
 try {
-  execSync(
-    `uv run python backend/manage.py shell -c "
-from schedules.models import Schedule, TimeBlock
-from django.contrib.auth.models import User
-import datetime
-u = User.objects.get(username='${USERNAME}')
-s, _ = Schedule.objects.update_or_create(
-    user=u, date=datetime.date(2026, 9, 21), defaults={'status': 'draft'}
-)
-TimeBlock.objects.filter(schedule=s).delete()
-print('seeded empty schedule', s.id)
-"`,
-    { stdio: "inherit", cwd: REPO_ROOT },
-  )
+  seed("seed_schedule", {
+    SEED_MODE: "schedules",
+    SEED_USERNAME: USERNAME,
+    SEED_SCHEDULES_JSON: JSON.stringify([
+      { date: SCHEDULE_DATE, status: "draft", blocks: [] },
+    ]),
+    SEED_MARKER: "seeded empty schedule {id}",
+  })
 } catch (err) {
   console.error("\n❌ Seed failed. Is Django running? Does the playwright user exist?")
   console.error(err.message)
@@ -109,30 +108,24 @@ page.on("response", async (resp) => {
 
 async function submitChatTurn(text) {
   const ta = page.locator('[data-testid="chat-input"]')
-  await ta.waitFor({ timeout: 3000 })
+  await ta.waitFor({ timeout: CHAT_INPUT_TIMEOUT_MS })
   await ta.fill(text)
   // Enter sends; Shift+Enter inserts a newline (verified by unit tests
   // in tests/CommandBar.test.ts).
   await Promise.all([
     page.waitForResponse(
       (resp) => /\/api\/ai\/schedules\/[^/]+\/chat\/$/.test(resp.url()),
-      { timeout: 25_000 },
+      { timeout: RESPONSE_TIMEOUT_MS },
     ),
     ta.press("Enter"),
   ])
   // Allow the partial reload + Vue state to settle.
-  await page.waitForTimeout(500)
+  await page.waitForTimeout(WAIT_FOR_THREAD_SETTLE_MS)
 }
 
 try {
   console.log("→ Logging in…")
-  await page.goto(`${BASE}/accounts/login/`, { waitUntil: "networkidle" })
-  await page.fill("#username", USERNAME)
-  await page.fill("#password", PASSWORD)
-  await Promise.all([
-    page.waitForURL(/\/schedule\//),
-    page.click('button[type="submit"]'),
-  ])
+  await login(page)
 
   console.log(`→ Opening /schedule/${SCHEDULE_DATE}/…`)
   await page.goto(`${BASE}/schedule/${SCHEDULE_DATE}/`, {
@@ -146,16 +139,15 @@ try {
   await submitChatTurn("в 14:00 на час, рабочая")
 
   // Pull the post-state from the DB.
-  const dbStateOut = execSync(
-    `uv run python backend/manage.py shell -c "
-from schedules.models import Schedule, TimeBlock
-s = Schedule.objects.get(date='${SCHEDULE_DATE}', user__username='${USERNAME}')
-blocks = list(TimeBlock.objects.filter(schedule=s).values('title', 'start_time', 'end_time'))
-print('STATUS', s.status)
-for b in blocks:
-    print('BLOCK', b['title'], b['start_time'], b['end_time'])
-"`,
-    { cwd: REPO_ROOT, encoding: "utf8" },
+  const dbStateOut = seed(
+    "seed_schedule",
+    {
+      SEED_MODE: "snapshot",
+      SEED_USERNAME: USERNAME,
+      SEED_DATE: SCHEDULE_DATE,
+      SEED_SNAPSHOT: "chat_titles",
+    },
+    { encoding: "utf8" },
   )
 
   console.log("\n=== Captured chat calls ===")
@@ -342,4 +334,5 @@ for b in blocks:
   process.exitCode = 2
 } finally {
   await browser.close()
+  cleanupSchedules([SCHEDULE_DATE])
 }
