@@ -183,7 +183,7 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
   the other 11 composable test files. Raised by `claude-review` on PR #128
   (P3/TESTING) — genuine small gap, deferred to keep the review loop from
   chasing cosmetics.
-- [ ] *(optional)* One-line comment above the `errors.detail` branch in
+- [x] *(optional)* One-line comment above the `errors.detail` branch in
   `frontend/src/utils/errorMessage.ts` documenting the empty-`detail`
   short-circuit trade-off. Behaviour is already pinned by
   `tests/errorMessage.test.ts`; skip unless a future reader trips on it.
