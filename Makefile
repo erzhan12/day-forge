@@ -84,17 +84,17 @@ e2e: ## Run all Playwright e2e smoke scripts serially (needs dev stack)
 		node "$$script"; \
 	done
 
-e2e-chat: ## Run Playwright chat smoke scripts serially (real LLM calls)
+e2e-chat: ## Run Playwright chat smoke scripts serially (real LLM calls; needs LLM_API_KEY)
 	cd frontend && set -e; for script in scripts/playwright/ai-chat-*.mjs; do node "$$script"; done
 
-e2e-command: ## Run Playwright command smoke scripts serially (real LLM calls)
+e2e-command: ## Run Playwright command smoke scripts serially (real LLM calls; needs LLM_API_KEY)
 	cd frontend && set -e; for script in scripts/playwright/ai-command-*.mjs; do node "$$script"; done
 
 # draft-prompt-history-suffix.mjs and regenerate-422-fallback.mjs are listed
 # explicitly: they exercise draft flows but their names don't match the
 # ai-draft-* glob. A new draft scenario with a non-matching name must be added
 # here too, or it silently drops out of `make e2e-draft`.
-e2e-draft: ## Run Playwright draft smoke scripts serially (real LLM calls)
+e2e-draft: ## Run Playwright draft smoke scripts serially (real LLM calls; needs LLM_API_KEY)
 	cd frontend && set -e; for script in scripts/playwright/ai-draft-*.mjs \
 		scripts/playwright/draft-prompt-history-suffix.mjs \
 		scripts/playwright/regenerate-422-fallback.mjs; do node "$$script"; done
