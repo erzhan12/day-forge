@@ -91,4 +91,30 @@ describe("useAnalytics", () => {
     expect(options.method).toBe("PATCH")
     expect(JSON.parse(options.body)).toEqual({ notes: "x" })
   })
+
+  // Fallback-literal guards (features 0037/0038): pin each method's exact
+  // fallback because useAnalytics intentionally uses two distinct strings.
+  describe("useAnalytics fallback-literal guards", () => {
+    it("markReviewed surfaces the exact fallback literal on an empty errors map", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(errJson(500, { errors: {} })),
+      )
+      const { markReviewed, lastError } = useAnalytics()
+      const result = await markReviewed("2026-04-18")
+      expect(result.ok).toBe(false)
+      expect(lastError.value).toBe("Could not mark this day reviewed.")
+    })
+
+    it("saveNotes surfaces the exact fallback literal on an empty errors map", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(errJson(500, { errors: {} })),
+      )
+      const { saveNotes, lastError } = useAnalytics()
+      const result = await saveNotes(7, "x")
+      expect(result.ok).toBe(false)
+      expect(lastError.value).toBe("Could not save notes.")
+    })
+  })
 })

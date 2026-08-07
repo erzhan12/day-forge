@@ -171,7 +171,7 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
 
 ### 0037 — `extractErrorMessage` dedup: deferred P3 review nits (PR #128)
 
-- [ ] **Characterization tests for `useAnalytics.ts`'s two distinct fallback
+- [x] **Characterization tests for `useAnalytics.ts`'s two distinct fallback
   literals.** `useAnalytics` was deliberately exempted from the migration
   guards (its call sites were not edited), but unlike every other composable
   its two literals differ — `"Could not mark this day reviewed."` (`:45`) and
