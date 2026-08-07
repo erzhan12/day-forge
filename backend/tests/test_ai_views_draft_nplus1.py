@@ -131,5 +131,9 @@ def test_prompt_builder_proves_daily_review_nplus1_and_eager_load_fix(
         )
         build_draft_user_message(schedule, draft_template, eager_history, [], now)
 
-    assert _daily_review_query_count(lazy_ctx) == 3
+    # One lazy daily_review query per history row iterated; the eager
+    # select_related collapses them to one. Couple the expected lazy count
+    # to the actual history size so growing the fixture can't silently
+    # weaken the assertion.
+    assert _daily_review_query_count(lazy_ctx) == len(lazy_history)
     assert _daily_review_query_count(eager_ctx) == 1

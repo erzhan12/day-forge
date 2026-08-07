@@ -200,6 +200,87 @@ def test_schedule_seeder_audit_snapshot_contracts(user, monkeypatch, capsys):
 
 
 @pytest.mark.django_db
+def test_schedule_seeder_remaining_audit_snapshots_and_unknown_mode(user, monkeypatch, capsys):
+    schedule = Schedule.objects.create(user=user, date="2027-05-05", status="active")
+    TimeBlock.objects.create(
+        schedule=schedule,
+        title="Focus",
+        start_time="09:00",
+        end_time="10:00",
+        category="work",
+    )
+    AIInteraction.objects.create(
+        schedule=schedule,
+        kind="chat",
+        success=True,
+        actions_json=[{"type": "add"}],
+        user_command="hello",
+        ai_response=json.dumps(
+            {
+                "turn_count": 2,
+                "transcript_sha256": "abcdef0123456789",
+                "raw": "txt",
+            }
+        ),
+    )
+
+    def _run(snapshot: str) -> str:
+        _setenv(
+            monkeypatch,
+            SEED_MODE="snapshot",
+            SEED_USERNAME=user.username,
+            SEED_DATE="2027-05-05",
+            SEED_SNAPSHOT=snapshot,
+        )
+        seed_schedule.main()
+        return capsys.readouterr().out
+
+    assert _run("titles") == (
+        "STATUS active\n"
+        "BLOCKS 1\n"
+        "BLOCK Focus 09:00:00 10:00:00\n"
+        "KIND chat\n"
+        "SUCCESS True\n"
+        "ACTIONS_LEN 1\n"
+        "USER_COMMAND hello\n"
+    )
+    # `overlap` intentionally omits USER_COMMAND (the mass-move/overlap parsers
+    # don't read it).
+    assert _run("overlap") == (
+        "STATUS active\n"
+        "BLOCKS 1\n"
+        "BLOCK Focus 09:00:00 10:00:00\n"
+        "KIND chat\n"
+        "SUCCESS True\n"
+        "ACTIONS_LEN 1\n"
+    )
+    assert _run("draft") == (
+        "STATUS active\n"
+        "BLOCKS 1\n"
+        "KIND chat\n"
+        "SUCCESS True\n"
+        "ACTIONS_LEN 1\n"
+        "USER_COMMAND hello\n"
+    )
+    assert _run("chat") == (
+        "STATUS active\n"
+        "BLOCKS 1\n"
+        "KIND chat\n"
+        "SUCCESS True\n"
+        "ACTIONS_LEN 1\n"
+        "USER_COMMAND hello\n"
+        "AI_RESPONSE_KEYS ['raw', 'transcript_sha256', 'turn_count']\n"
+        "TURN_COUNT 2\n"
+        "HASH_PREFIX abcdef012345\n"
+        "HAS_RAW True\n"
+    )
+
+    _setenv(monkeypatch, SEED_MODE="bogus-mode", SEED_USERNAME=user.username)
+    with pytest.raises(RuntimeError, match="Unknown SEED_MODE"):
+        seed_schedule.main()
+
+
+@pytest.mark.django_db
 def test_analytics_reviewed_seeder_recomputes_and_freezes(user, monkeypatch, capsys):
     blocks = [
         {

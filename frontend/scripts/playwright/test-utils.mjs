@@ -1,10 +1,13 @@
 import { execSync } from "node:child_process"
-import { resolve } from "node:path"
+import { dirname, resolve } from "node:path"
+import { fileURLToPath } from "node:url"
 
 export const BASE = "http://localhost:5173"
 export const USERNAME = "playwright"
 export const PASSWORD = "playwright-pw-do-not-use-in-prod"
-export const REPO_ROOT = resolve(process.cwd(), "..")
+// Anchor on this file's location (frontend/scripts/playwright/test-utils.mjs)
+// so REPO_ROOT is correct no matter the cwd a script is invoked from.
+export const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..")
 
 export const WAIT_FOR_UI_TICK_MS = 200
 export const WAIT_FOR_SHORT_SETTLE_MS = 300

@@ -169,6 +169,23 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
 
 ## Follow-ups (discovered during manual testing)
 
+### 0039 — `postWithCsrf` dual return-shape (PR #132 claude-review P2)
+
+- [ ] **Make `postWithCsrf` fail consistently.** `postWithCsrf`
+  (`frontend/scripts/playwright/test-utils.mjs`) returns `{ error }` on the
+  missing-XSRF-cookie precondition but `{ status, body }` on success, while
+  every other helper in the file `throw`s on error. A caller that destructures
+  `const { status } = await postWithCsrf(...)` without checking `.error` would
+  read `status === undefined` with no exception. Deferred (not merge-blocking):
+  converting to `throw` is a contract change touching all four call sites
+  (`ai-command-add-block`, `ai-command-mass-move`, `ai-command-rollback-on-overlap`,
+  `ai-draft-409-on-non-empty` — two of which have `if (postResult.error)` guards
+  to remove) for a precondition that effectively never fires (login always sets
+  the cookie). Do it as its own small PR: switch the early return to
+  `throw new Error(...)`, drop the now-dead `.error` guards, and let each
+  script's existing `try/catch` set `exitCode = 2`. Suggested by `claude-review`
+  on PR #132.
+
 ### 0037 — `extractErrorMessage` dedup: deferred P3 review nits (PR #128)
 
 - [x] **Characterization tests for `useAnalytics.ts`'s two distinct fallback

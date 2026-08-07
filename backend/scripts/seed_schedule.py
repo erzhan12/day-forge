@@ -77,16 +77,12 @@ def _print_audit(schedule: Schedule, snapshot: str) -> None:
         return
     print("KIND", interaction.kind)
     print("SUCCESS", interaction.success)
-    if snapshot == "draft":
-        print("USER_COMMAND", interaction.user_command)
-        print("ACTIONS_LEN", len(interaction.actions_json))
-    else:
-        print("ACTIONS_LEN", len(interaction.actions_json))
+    print("ACTIONS_LEN", len(interaction.actions_json))
     if snapshot == "moves":
         move_count = sum(action.get("type") == "move" for action in interaction.actions_json)
         print("MOVE_COUNT", move_count)
         print("USER_COMMAND", interaction.user_command)
-    elif snapshot not in {"draft", "overlap"}:
+    elif snapshot != "overlap":
         print("USER_COMMAND", interaction.user_command)
     if snapshot == "chat":
         try:
