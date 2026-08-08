@@ -482,16 +482,24 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
   follow-up — the test-utils module would expose a single `seed()`
   helper that shells out to the new scripts.
 
-- [ ] **Manual QA gate for feature 0007 chat dock before any production
-  use.** PR #15 ships PR A of the multi-turn chat panel; the smoke
-  checklist in the PR description is unticked. Three items: (1) ambiguous
-  chat command in dev → assistant `ask` lands in the dock thread, (2)
-  navigate via DateNavigator's next-day arrow → thread resets and a
-  follow-up does NOT mutate the new day, (3) optional E2E (real LLM,
-  cost): `node frontend/scripts/playwright/ai-chat-clarifying-question.mjs`
-  + `ai-chat-date-change-resets-thread.mjs`. Plus the iOS Safari
-  autogrow-textarea check from `docs/features/0007_PLAN.md` open note 3.
+- [x] **Manual QA gate for feature 0007 chat dock before any production
+  use.** PR #15 ships PR A of the multi-turn chat panel. Items (1)–(3)
+  VERIFIED 2026-08-08 via the two Playwright chat scripts against the live
+  dev stack (real LLM calls): (1) ✅ ambiguous "запланируй встречу" returned
+  `ask` + `blocks:null` into the dock thread, follow-up resolved → block
+  created (`ai-chat-clarifying-question.mjs` PASS); (2) ✅ DateNavigator
+  next-day = same-document Inertia nav, day-B thread reset to 0 bubbles,
+  turn 2 posted only the new message (no day-A transcript, no cross-day
+  mutation) (`ai-chat-date-change-resets-thread.mjs` PASS). REMAINING
+  (real-device only, not automatable): the iOS Safari autogrow-textarea
+  check from `docs/features/0007_PLAN.md` open note 3 — see follow-up below.
   Suggested by `claude-review` on PR #15.
+
+- [ ] **0007-followup: iOS Safari autogrow-textarea check (real device).**
+  The chat input autogrow could not be verified in the automated QA gate
+  (headless Chromium ≠ iOS Safari). Verify on a real iPhone that the chat
+  textarea grows/shrinks correctly and doesn't clip or trigger the mobile
+  zoom-on-focus. Per `docs/features/0007_PLAN.md` open note 3.
 
 - [ ] **Type hints on internal helpers in `backend/ai/views.py`.**
   `_consume_rate_limit`, `_log_interaction`, `_mark_success`,
