@@ -501,7 +501,10 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
   textarea grows/shrinks correctly and doesn't clip or trigger the mobile
   zoom-on-focus. Per `docs/features/0007_PLAN.md` open note 3.
 
-- [ ] **Type hints on internal helpers in `backend/ai/views.py`.**
+- [x] **Type hints on internal helpers in `backend/ai/views.py`.** Done
+  2026-08-08 — annotated all ~22 helpers' missing param/return types from
+  their real call sites (scoped to `ai/views.py` only; no type checker
+  introduced). ruff clean, ai view tests green, no behaviour change.
   `_consume_rate_limit`, `_log_interaction`, `_mark_success`,
   `_validation_error_detail`, `_check_*`, `_apply_*`, etc. lack full
   type annotations. Add them in a discrete refactor PR (or pair with
