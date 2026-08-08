@@ -33,7 +33,7 @@ agent (`--mode ask`), run in parallel against `git diff HEAD` in the
 - `docs/api.md` — corrected the two guarded endpoints' `category`
   error-doc rows (`create_block`, `block_detail`); `restore_blocks` row
   left as-is pending issue #121 (P3 #1, refined on PR #120 review).
-- `tasks/todo.md` — marked the 0103 follow-up done, linked issue #119.
+- `tasks/todo.md` — marked the 0042 (issue #103) follow-up done, linked issue #119.
 
 ### Verification (post-fix)
 

@@ -1,4 +1,4 @@
-# Feature 0103 — Code Review Trail
+# Feature 0042 — Code Review Trail (issue #103)
 
 Fix issue #103: `create_block` 500s on malformed JSON field types. Type
 guards mirror `create_block_from_event` (oversized-body 413, non-object
