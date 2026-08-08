@@ -60,27 +60,6 @@ const SCHEDULE_DATE = "2026-09-21"
 await preflight()
 
 let browser
-let context
-let page
-const chatCalls = []
-
-async function submitChatTurn(text) {
-  const ta = page.locator('[data-testid="chat-input"]')
-  await ta.waitFor({ timeout: CHAT_INPUT_TIMEOUT_MS })
-  await ta.fill(text)
-  // Enter sends; Shift+Enter inserts a newline (verified by unit tests
-  // in tests/CommandBar.test.ts).
-  await Promise.all([
-    page.waitForResponse(
-      (resp) => /\/api\/ai\/schedules\/[^/]+\/chat\/$/.test(resp.url()),
-      { timeout: RESPONSE_TIMEOUT_MS },
-    ),
-    ta.press("Enter"),
-  ])
-  // Allow the partial reload + Vue state to settle.
-  await page.waitForTimeout(WAIT_FOR_THREAD_SETTLE_MS)
-}
-
 try {
   console.log("→ Seeding empty draft schedule via Django shell…")
   seed("seed_schedule", {
@@ -93,10 +72,28 @@ try {
   })
 
   browser = await chromium.launch({ headless: true })
-  context = await browser.newContext({
+  const context = await browser.newContext({
     viewport: { width: 1280, height: 800 },
   })
-  page = await context.newPage()
+  const page = await context.newPage()
+  const chatCalls = []
+
+  async function submitChatTurn(text) {
+    const ta = page.locator('[data-testid="chat-input"]')
+    await ta.waitFor({ timeout: CHAT_INPUT_TIMEOUT_MS })
+    await ta.fill(text)
+    // Enter sends; Shift+Enter inserts a newline (verified by unit tests
+    // in tests/CommandBar.test.ts).
+    await Promise.all([
+      page.waitForResponse(
+        (resp) => /\/api\/ai\/schedules\/[^/]+\/chat\/$/.test(resp.url()),
+        { timeout: RESPONSE_TIMEOUT_MS },
+      ),
+      ta.press("Enter"),
+    ])
+    // Allow the partial reload + Vue state to settle.
+    await page.waitForTimeout(WAIT_FOR_THREAD_SETTLE_MS)
+  }
 
   page.on("response", async (resp) => {
     const url = resp.url()

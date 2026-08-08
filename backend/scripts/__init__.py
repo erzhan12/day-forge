@@ -7,6 +7,7 @@ than each module raising its own bare ``KeyError``.
 
 import json
 import os
+from typing import Any
 
 from django.contrib.auth.models import User
 
@@ -18,7 +19,7 @@ def _required(name: str) -> str:
     return value
 
 
-def _json(name: str, default: object = None) -> object:
+def _json(name: str, default: Any = None) -> Any:
     value = os.environ.get(name)
     return default if value is None else json.loads(value)
 
