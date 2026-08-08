@@ -1,14 +1,13 @@
 """Reset theme preferences before or after the persistence smoke test."""
 
-import os
-
-from django.contrib.auth.models import User
 from templates_mgr.models import UserPreferences
+
+from scripts import _required, _user
 
 
 def main() -> None:
-    mode = os.environ["SEED_MODE"]
-    user = User.objects.get(username=os.environ["SEED_USERNAME"])
+    mode = _required("SEED_MODE")
+    user = _user()
     if mode == "preflight":
         preferences, _ = UserPreferences.objects.get_or_create(
             user=user, defaults={"theme": UserPreferences.Theme.CLASSIC}

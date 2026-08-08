@@ -1,27 +1,26 @@
 """Reset the Playwright user's Todoist connection without storing a token."""
 
-import os
-
 from django.contrib.auth.models import User
 from todoist_sync.models import TodoistAccount
 
+from scripts import _required, _user
+
 
 def main() -> None:
-    mode = os.environ["SEED_MODE"]
-    username = os.environ["SEED_USERNAME"]
+    mode = _required("SEED_MODE")
     if mode == "reset-ensure":
-        user, created = User.objects.get_or_create(username=username)
+        user, created = User.objects.get_or_create(username=_required("SEED_USERNAME"))
         if created:
-            user.set_password(os.environ["SEED_PASSWORD"])
+            user.set_password(_required("SEED_PASSWORD"))
             user.save()
         deleted, _ = TodoistAccount.objects.filter(user=user).delete()
         print("user created:", created, "| deleted todoist accounts:", deleted)
     elif mode == "reset-strict":
-        user = User.objects.get(username=username)
+        user = _user()
         deleted, _ = TodoistAccount.objects.filter(user=user).delete()
         print("deleted todoist accounts:", deleted)
     elif mode == "disconnect":
-        user = User.objects.get(username=username)
+        user = _user()
         TodoistAccount.objects.filter(user=user).delete()
         print("disconnected playwright todoist account")
     else:

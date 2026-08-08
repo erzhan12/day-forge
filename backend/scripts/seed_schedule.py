@@ -17,21 +17,7 @@ from django.utils import timezone
 from schedules.models import Schedule, TimeBlock
 from templates_mgr.models import Template
 
-
-def _required(name: str) -> str:
-    value = os.environ.get(name)
-    if value is None:
-        raise RuntimeError(f"{name} is required")
-    return value
-
-
-def _json(name: str, default=None):
-    value = os.environ.get(name)
-    return default if value is None else json.loads(value)
-
-
-def _user() -> User:
-    return User.objects.get(username=_required("SEED_USERNAME"))
+from scripts import _json, _required, _user
 
 
 def _replace_blocks(schedule: Schedule, blocks: list[dict]) -> None:
