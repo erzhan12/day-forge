@@ -9,6 +9,7 @@ import functools
 import hashlib
 import json
 import logging
+from collections.abc import Callable
 
 from asgiref.sync import sync_to_async
 from django.conf import settings
@@ -33,6 +34,7 @@ from templates_mgr.models import Rule, Template
 
 from ai.models import AIInteraction
 from ai.mutation_planner import (
+    MutationDiff,
     PlanError,
     compute_apply_context_fingerprint,
     plan_mutations,
@@ -44,6 +46,9 @@ from ai.mutation_planner import (
 )
 from ai.prompts import DAY_END, DAY_START
 from ai.service import (
+    AIChatResult,
+    AICommandResult,
+    AIDraftResult,
     AIError,
     AIInvalidInputError,
     AIParseError,
@@ -78,7 +83,7 @@ _MAX_COMMAND_LOG_LEN = 2_000
 _RATE_LIMIT_WINDOW_SECONDS = 3600
 
 
-async def _load_active_rules(user) -> list[Rule]:
+async def _load_active_rules(user: User) -> list[Rule]:
     """Load the user's active rules, ordered by ``-priority``.
 
     Shared by ``ai_command``, ``ai_chat``, and ``ai_generate_draft`` so
@@ -158,7 +163,7 @@ def _rate_limited_response() -> JsonResponse:
     )
 
 
-def _rate_limit_per_user(view_func):
+def _rate_limit_per_user(view_func: Callable) -> Callable:
     """Fixed-window per-user rate limit decorator for the command endpoint.
 
     **Async-only** (feature 0009): the wrapper is ``async def`` and
@@ -193,10 +198,10 @@ def _rate_limit_per_user(view_func):
 
 
 async def _log_interaction(
-    schedule,
+    schedule: Schedule,
     command: str,
     response_text: str,
-    actions: list,
+    actions: list[dict],
     kind: str = AIInteraction.Kind.COMMAND,
 ) -> AIInteraction | None:
     """Best-effort persistence of one AI interaction. Never raises.
@@ -263,7 +268,7 @@ class _Rollback(Exception):
         self.response = response
 
 
-def _action_error(action_index: int, detail, status: int = 400) -> JsonResponse:
+def _action_error(action_index: int, detail: str | dict, status: int = 400) -> JsonResponse:
     return JsonResponse(
         {"errors": {"action_index": action_index, "detail": detail}},
         status=status,
@@ -282,7 +287,11 @@ def _validation_error_detail(e: ValidationError) -> dict:
     return getattr(e, "message_dict", None) or {"detail": str(e)}
 
 
-def _check_day_window(action_index: int, start=None, end=None) -> JsonResponse | None:
+def _check_day_window(
+    action_index: int,
+    start: datetime.time | None = None,
+    end: datetime.time | None = None,
+) -> JsonResponse | None:
     """Reject times outside the ``[DAY_START, DAY_END]`` working-day window.
 
     Mirrors the frontend guard in ``useDrag.ts`` and the constraint the
@@ -306,7 +315,7 @@ def _check_day_window(action_index: int, start=None, end=None) -> JsonResponse |
     return None
 
 
-def _check_granularity(action_index: int, *times) -> JsonResponse | None:
+def _check_granularity(action_index: int, *times: datetime.time) -> JsonResponse | None:
     """Run the 5-minute granularity validator and map ``ValidationError`` to
     the action-index error envelope."""
     try:
@@ -318,7 +327,11 @@ def _check_granularity(action_index: int, *times) -> JsonResponse | None:
 
 
 def _check_no_overlap(
-    blocks_by_id, start, end, exclude_id, action_index: int
+    blocks_by_id: dict[int, TimeBlock],
+    start: datetime.time,
+    end: datetime.time,
+    exclude_id: int | None,
+    action_index: int,
 ) -> JsonResponse | None:
     """Reject the action if its ``[start, end)`` window overlaps any block
     in ``blocks_by_id`` other than ``exclude_id`` (pass ``None`` to scan
@@ -332,7 +345,10 @@ def _check_no_overlap(
 
 
 def _apply_add(
-    schedule, blocks_by_id, action, action_index: int
+    schedule: Schedule,
+    blocks_by_id: dict[int, TimeBlock],
+    action: dict,
+    action_index: int,
 ) -> JsonResponse | None:
     title = action["title"].strip()
     # ``category`` is required by ``schemas.validate_action_shape``; the
@@ -375,7 +391,11 @@ def _apply_add(
 
 
 def _apply_remove(
-    schedule, blocks_by_id, action, action_index: int, block
+    schedule: Schedule,
+    blocks_by_id: dict[int, TimeBlock],
+    action: dict,
+    action_index: int,
+    block: TimeBlock,
 ) -> JsonResponse | None:
     block.delete()
     blocks_by_id.pop(block.id, None)
@@ -383,7 +403,11 @@ def _apply_remove(
 
 
 def _apply_move_or_resize(
-    schedule, blocks_by_id, action, action_index: int, block
+    schedule: Schedule,
+    blocks_by_id: dict[int, TimeBlock],
+    action: dict,
+    action_index: int,
+    block: TimeBlock,
 ) -> JsonResponse | None:
     new_start, new_end, wrapped = _compute_move_resize_times(action, block)
     if wrapped:
@@ -440,7 +464,10 @@ def _apply_move_or_resize(
 
 
 def _apply_existing_block_action(
-    schedule, blocks_by_id, action, action_index: int
+    schedule: Schedule,
+    blocks_by_id: dict[int, TimeBlock],
+    action: dict,
+    action_index: int,
 ) -> JsonResponse | None:
     """Dispatcher for move / remove / resize — all need an existing block."""
     task_id = action["task_id"]
@@ -472,7 +499,10 @@ _ACTION_DISPATCH = {
 
 
 def _apply_action(
-    schedule, blocks_by_id, action, action_index: int
+    schedule: Schedule,
+    blocks_by_id: dict[int, TimeBlock],
+    action: dict,
+    action_index: int,
 ) -> JsonResponse | None:
     """Apply one AI action; return ``None`` on success or a 400 response.
 
@@ -499,7 +529,9 @@ def _apply_action(
 # ---------------------------------------------------------------------------
 
 
-def _persist_mutation_diff(schedule, locked_blocks, diff) -> None:
+def _persist_mutation_diff(
+    schedule: Schedule, locked_blocks: list[TimeBlock], diff: MutationDiff
+) -> None:
     """Apply a planner ``MutationDiff`` under the existing row lock.
 
     Deletes → updates → creates, each group sorted deterministically.
@@ -550,8 +582,8 @@ def _persist_mutation_diff(schedule, locked_blocks, diff) -> None:
 
 
 def _apply_actions_sync(
-    schedule,
-    result,
+    schedule: Schedule,
+    result: AICommandResult | AIChatResult,
     *,
     expected_fingerprint: str,
     interaction_id: int | None = None,
@@ -609,7 +641,7 @@ def _apply_actions_sync(
         locked_schedule.mark_active_on_edit()
 
 
-def _apply_draft_sync(schedule, result) -> None:
+def _apply_draft_sync(schedule: Schedule, result: AIDraftResult) -> None:
     """Apply the AIDraftResult; re-check schedule emptiness under the lock."""
     with transaction.atomic():
         # Lock the SCHEDULE row, not the empty ``TimeBlock`` queryset —
@@ -951,7 +983,7 @@ async def ai_generate_draft(request, date):
 # ---------------------------------------------------------------------------
 
 
-def _validate_chat_messages(messages) -> str | None:
+def _validate_chat_messages(messages: list[dict]) -> str | None:
     """Return an error string if ``messages`` is malformed, else ``None``.
 
     Validation order matters: this runs BEFORE ``Schedule.get_or_create``
@@ -1004,7 +1036,7 @@ def _validate_chat_messages(messages) -> str | None:
     return None
 
 
-def _transcript_sha256(messages) -> str:
+def _transcript_sha256(messages: list[dict]) -> str:
     """Stable hash of the client-supplied transcript for audit rows.
 
     Uses ``sort_keys=True`` and ``ensure_ascii=False`` so the hash is
@@ -1017,7 +1049,9 @@ def _transcript_sha256(messages) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-def _build_chat_audit_response(messages, raw_or_str: str, error_class: str | None) -> str:
+def _build_chat_audit_response(
+    messages: list[dict], raw_or_str: str, error_class: str | None
+) -> str:
     """Build the JSON-encoded ``ai_response`` payload for a chat audit row.
 
     Same shape for success and failure rows; ``error_class`` is ``None``
@@ -1035,7 +1069,9 @@ def _build_chat_audit_response(messages, raw_or_str: str, error_class: str | Non
     return json.dumps(payload, ensure_ascii=False)
 
 
-async def _log_chat_failure(schedule, last_user_msg: str, messages, exc) -> None:
+async def _log_chat_failure(
+    schedule: Schedule, last_user_msg: str, messages: list[dict], exc: Exception
+) -> None:
     """Persist the failure-row variant of the chat audit envelope."""
     raw = getattr(exc, "raw_response_text", "") or str(exc)
     payload = _build_chat_audit_response(
