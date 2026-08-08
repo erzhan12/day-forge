@@ -437,6 +437,10 @@ def test_migrated_seeders_raise_runtimeerror_on_missing_required_env(monkeypatch
     monkeypatch.delenv("SEED_USERNAME", raising=False)
     monkeypatch.delenv("SEED_MODE", raising=False)
 
+    # seed_schedule is the original home of _required and now re-imports it;
+    # guard that the re-import path still raises correctly.
+    with pytest.raises(RuntimeError, match="SEED_MODE is required"):
+        seed_schedule.main()
     with pytest.raises(RuntimeError, match="SEED_USERNAME is required"):
         seed_cleanup.main()
     with pytest.raises(RuntimeError, match="SEED_USERNAME is required"):

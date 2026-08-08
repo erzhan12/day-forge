@@ -46,23 +46,7 @@ const PAST_CLEAN = daysBefore(TODAY, 8)
 
 const fail = failFast
 
-async function getSkippedTitles() {
-  const items = page.locator(".skipped-tasks .skipped-row .title")
-  const n = await items.count()
-  const out = []
-  for (let i = 0; i < n; i++) {
-    out.push((await items.nth(i).textContent())?.trim())
-  }
-  return out
-}
-
-async function isSkippedSectionVisible() {
-  return (await page.locator(".skipped-tasks").count()) > 0
-}
-
 let browser
-let context
-let page
 try {
   console.log(`-> Seeding 3 schedules (today=${TODAY}, mixed=${PAST_MIXED}, clean=${PAST_CLEAN}) via Django shell...`)
   seed("seed_schedule", {
@@ -98,8 +82,22 @@ try {
   })
 
   browser = await chromium.launch({ headless: true })
-  context = await browser.newContext({ viewport: { width: 1280, height: 900 } })
-  page = await context.newPage()
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } })
+  const page = await context.newPage()
+
+  async function getSkippedTitles() {
+    const items = page.locator(".skipped-tasks .skipped-row .title")
+    const n = await items.count()
+    const out = []
+    for (let i = 0; i < n; i++) {
+      out.push((await items.nth(i).textContent())?.trim())
+    }
+    return out
+  }
+
+  async function isSkippedSectionVisible() {
+    return (await page.locator(".skipped-tasks").count()) > 0
+  }
 
   // Install fake clock BEFORE any navigation so Date.now() / new Date() in
   // SkippedTasks.vue (both the "today vs past" classifier and the

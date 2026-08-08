@@ -18,7 +18,7 @@ def _required(name: str) -> str:
     return value
 
 
-def _json(name: str, default=None):
+def _json(name: str, default: object = None) -> object:
     value = os.environ.get(name)
     return default if value is None else json.loads(value)
 
