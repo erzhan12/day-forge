@@ -413,7 +413,17 @@ def test_todoist_seeder_preserves_strict_ensure_and_disconnect_markers(user, mon
     ensured = User.objects.get(username=ensured_name)
     assert ensured.check_password("pw-test")
 
-    monkeypatch.setenv("SEED_MODE", "disconnect")
+    # Re-running reset-ensure for an existing user skips set_password (created=False).
+    seed_todoist.main()
+    assert capsys.readouterr().out == ("user created: False | deleted todoist accounts: 0\n")
+
+    # First-ever creation without SEED_PASSWORD fails loud via _required.
+    _setenv(monkeypatch, SEED_USERNAME="playwright-nopw", SEED_MODE="reset-ensure")
+    monkeypatch.delenv("SEED_PASSWORD", raising=False)
+    with pytest.raises(RuntimeError, match="SEED_PASSWORD is required"):
+        seed_todoist.main()
+
+    _setenv(monkeypatch, SEED_USERNAME=ensured_name, SEED_MODE="disconnect")
     seed_todoist.main()
     assert capsys.readouterr().out == ("disconnected playwright todoist account\n")
     assert not TodoistAccount.objects.filter(user=ensured).exists()
