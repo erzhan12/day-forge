@@ -61,8 +61,11 @@ const cleanupDates = [SCHEDULE_DATE]
 console.log("→ Pre-flight: confirming playwright user exists…")
 preflightUser()
 
-console.log("→ Seeding non-empty schedule + weekday Template…")
+const { failures, fail } = makeFailAggregator()
+
+let browser
 try {
+  console.log("→ Seeding non-empty schedule + weekday Template…")
   seed("seed_schedule", {
     SEED_MODE: "schedules",
     SEED_USERNAME: USERNAME,
@@ -80,30 +83,23 @@ try {
     }),
     SEED_MARKER: "seeded non-empty schedule {id} with weekday template",
   })
-} catch (err) {
-  console.error("\n❌ Seed failed. Is Django running?")
-  console.error(err.message)
-  process.exit(2)
-}
 
-// Login redirects to today. Ensure that row already exists so the redirect
-// cannot independently auto-draft and consume the counter this test snapshots.
-const loginScheduleOut = seed(
-  "seed_schedule",
-  {
-    SEED_MODE: "ensure_exists",
-    SEED_USERNAME: USERNAME,
-    SEED_DATE: LOGIN_DATE,
-  },
-  { encoding: "utf8" },
-)
-if (loginScheduleOut.includes("CREATED True")) cleanupDates.push(LOGIN_DATE)
+  // Login redirects to today. Ensure that row already exists so the redirect
+  // cannot independently auto-draft and consume the counter this test snapshots.
+  const loginScheduleOut = seed(
+    "seed_schedule",
+    {
+      SEED_MODE: "ensure_exists",
+      SEED_USERNAME: USERNAME,
+      SEED_DATE: LOGIN_DATE,
+    },
+    { encoding: "utf8" },
+  )
+  if (loginScheduleOut.includes("CREATED True")) cleanupDates.push(LOGIN_DATE)
 
-// Snapshot counters BEFORE the request so we can assert no mutation.
-console.log("→ Snapshotting rate-limit + AIInteraction counters…")
-let counterBefore = ""
-try {
-  counterBefore = seed(
+  // Snapshot counters BEFORE the request so we can assert no mutation.
+  console.log("→ Snapshotting rate-limit + AIInteraction counters…")
+  const counterBefore = seed(
     "seed_schedule",
     {
       SEED_MODE: "snapshot",
@@ -113,44 +109,37 @@ try {
     },
     { encoding: "utf8" },
   )
-} catch (err) {
-  console.error("\n❌ Snapshot shell failed:", err.message)
-  process.exit(2)
-}
 
-const beforeMap = {}
-for (const line of counterBefore.trim().split("\n")) {
-  const idx = line.indexOf(" ")
-  if (idx !== -1) beforeMap[line.slice(0, idx)] = line.slice(idx + 1)
-}
-
-const browser = await chromium.launch({ headless: true })
-const context = await browser.newContext({
-  viewport: { width: 1280, height: 800 },
-})
-const page = await context.newPage()
-
-const draftCalls = []
-page.on("response", async (resp) => {
-  const url = resp.url()
-  if (/\/api\/ai\/schedules\/[^/]+\/generate-draft\/$/.test(url)) {
-    let bodyText = ""
-    try {
-      bodyText = await resp.text()
-    } catch {
-      bodyText = "(could not read body)"
-    }
-    draftCalls.push({
-      url,
-      status: resp.status(),
-      responseBody: bodyText,
-    })
+  const beforeMap = {}
+  for (const line of counterBefore.trim().split("\n")) {
+    const idx = line.indexOf(" ")
+    if (idx !== -1) beforeMap[line.slice(0, idx)] = line.slice(idx + 1)
   }
-})
 
-const { failures, fail } = makeFailAggregator()
+  browser = await chromium.launch({ headless: true })
+  const context = await browser.newContext({
+    viewport: { width: 1280, height: 800 },
+  })
+  const page = await context.newPage()
 
-try {
+  const draftCalls = []
+  page.on("response", async (resp) => {
+    const url = resp.url()
+    if (/\/api\/ai\/schedules\/[^/]+\/generate-draft\/$/.test(url)) {
+      let bodyText = ""
+      try {
+        bodyText = await resp.text()
+      } catch {
+        bodyText = "(could not read body)"
+      }
+      draftCalls.push({
+        url,
+        status: resp.status(),
+        responseBody: bodyText,
+      })
+    }
+  })
+
   console.log("→ Logging in…")
   await login(page)
 
@@ -278,6 +267,6 @@ try {
   console.error(err)
   process.exitCode = 2
 } finally {
-  await browser.close()
+  await browser?.close()
   cleanupSchedules(cleanupDates)
 }

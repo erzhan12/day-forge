@@ -31,25 +31,26 @@ const STUB_HEIGHT_TOLERANCE_PX = 4
 await preflight()
 const fail = failFast
 
-console.log("→ Seeding 09:00–18:00 schedule…")
-seed("seed_schedule", {
-  SEED_MODE: "schedules",
-  SEED_USERNAME: USERNAME,
-  SEED_SCHEDULES_JSON: JSON.stringify([
-    {
-      date: SCHEDULE_DATE,
-      status: "active",
-      blocks: [
-        { title: "Morning focus", start_time: "09:00", end_time: "12:00", category: "work", sort_order: 0 },
-        { title: "Afternoon work", start_time: "13:00", end_time: "18:00", category: "work", sort_order: 10 },
-      ],
-    },
-  ]),
-  SEED_MARKER: "seeded {id}",
-})
-
-const browser = await chromium.launch({ headless: true })
+let browser
 try {
+  console.log("→ Seeding 09:00–18:00 schedule…")
+  seed("seed_schedule", {
+    SEED_MODE: "schedules",
+    SEED_USERNAME: USERNAME,
+    SEED_SCHEDULES_JSON: JSON.stringify([
+      {
+        date: SCHEDULE_DATE,
+        status: "active",
+        blocks: [
+          { title: "Morning focus", start_time: "09:00", end_time: "12:00", category: "work", sort_order: 0 },
+          { title: "Afternoon work", start_time: "13:00", end_time: "18:00", category: "work", sort_order: 10 },
+        ],
+      },
+    ]),
+    SEED_MARKER: "seeded {id}",
+  })
+
+  browser = await chromium.launch({ headless: true })
   const page = await browser.newPage()
 
   console.log("→ Logging in…")
@@ -130,6 +131,6 @@ try {
 
   console.log("\n✅ Compact timeline stubs look correct.")
 } finally {
-  await browser.close()
+  await browser?.close()
   cleanupSchedules([SCHEDULE_DATE])
 }

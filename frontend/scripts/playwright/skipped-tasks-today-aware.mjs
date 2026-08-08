@@ -44,8 +44,27 @@ const TODAY = djangoToday()
 const PAST_MIXED = daysBefore(TODAY, 6)
 const PAST_CLEAN = daysBefore(TODAY, 8)
 
-console.log(`-> Seeding 3 schedules (today=${TODAY}, mixed=${PAST_MIXED}, clean=${PAST_CLEAN}) via Django shell...`)
+const fail = failFast
+
+async function getSkippedTitles() {
+  const items = page.locator(".skipped-tasks .skipped-row .title")
+  const n = await items.count()
+  const out = []
+  for (let i = 0; i < n; i++) {
+    out.push((await items.nth(i).textContent())?.trim())
+  }
+  return out
+}
+
+async function isSkippedSectionVisible() {
+  return (await page.locator(".skipped-tasks").count()) > 0
+}
+
+let browser
+let context
+let page
 try {
+  console.log(`-> Seeding 3 schedules (today=${TODAY}, mixed=${PAST_MIXED}, clean=${PAST_CLEAN}) via Django shell...`)
   seed("seed_schedule", {
     SEED_MODE: "schedules",
     SEED_USERNAME: USERNAME,
@@ -77,39 +96,17 @@ try {
     ]),
     SEED_MARKER: "seeded today/past-mixed/past-clean",
   })
-} catch (err) {
-  console.error("\nSeed failed (Django running? user 'playwright' exists?)")
-  console.error(err.message)
-  process.exit(2)
-}
 
-const browser = await chromium.launch({ headless: true })
-const context = await browser.newContext({ viewport: { width: 1280, height: 900 } })
-const page = await context.newPage()
+  browser = await chromium.launch({ headless: true })
+  context = await browser.newContext({ viewport: { width: 1280, height: 900 } })
+  page = await context.newPage()
 
-// Install fake clock BEFORE any navigation so Date.now() / new Date() in
-// SkippedTasks.vue (both the "today vs past" classifier and the
-// HH:MM filter) are pinned. Start at 11:30 local — past the 09:00 block
-// end but before the 14:00 block start.
-await page.clock.install({ time: new Date(`${TODAY}T11:30:00`) })
+  // Install fake clock BEFORE any navigation so Date.now() / new Date() in
+  // SkippedTasks.vue (both the "today vs past" classifier and the
+  // HH:MM filter) are pinned. Start at 11:30 local — past the 09:00 block
+  // end but before the 14:00 block start.
+  await page.clock.install({ time: new Date(`${TODAY}T11:30:00`) })
 
-const fail = failFast
-
-async function getSkippedTitles() {
-  const items = page.locator(".skipped-tasks .skipped-row .title")
-  const n = await items.count()
-  const out = []
-  for (let i = 0; i < n; i++) {
-    out.push((await items.nth(i).textContent())?.trim())
-  }
-  return out
-}
-
-async function isSkippedSectionVisible() {
-  return (await page.locator(".skipped-tasks").count()) > 0
-}
-
-try {
   console.log(`-> Login (clock pinned to ${TODAY}T11:30 local)...`)
   await login(page)
 
@@ -172,6 +169,6 @@ try {
   console.error(err)
   process.exitCode = 2
 } finally {
-  await browser.close()
+  await browser?.close()
   cleanupSchedules([TODAY, PAST_MIXED, PAST_CLEAN])
 }

@@ -60,8 +60,11 @@ await preflight()
 console.log("→ Pre-flight: confirming playwright user exists…")
 preflightUser()
 
-console.log("→ Seeding draft schedule with ONE existing 14:00–15:00 block…")
+const { failures, fail } = makeFailAggregator()
+
+let browser
 try {
+  console.log("→ Seeding draft schedule with ONE existing 14:00–15:00 block…")
   seed("seed_schedule", {
     SEED_MODE: "schedules",
     SEED_USERNAME: USERNAME,
@@ -81,46 +84,38 @@ try {
     ]),
     SEED_MARKER: "seeded one-block schedule {id}",
   })
-} catch (err) {
-  console.error("\n❌ Seed failed. Is Django running?")
-  console.error(err.message)
-  process.exit(2)
-}
 
-const browser = await chromium.launch({ headless: true })
-const context = await browser.newContext({
-  viewport: { width: 1280, height: 800 },
-})
-const page = await context.newPage()
+  browser = await chromium.launch({ headless: true })
+  const context = await browser.newContext({
+    viewport: { width: 1280, height: 800 },
+  })
+  const page = await context.newPage()
 
-const commandCalls = []
-page.on("response", async (resp) => {
-  const url = resp.url()
-  if (/\/api\/ai\/schedules\/[^/]+\/command\/$/.test(url)) {
-    let bodyText = ""
-    try {
-      bodyText = await resp.text()
-    } catch {
-      bodyText = "(could not read body)"
+  const commandCalls = []
+  page.on("response", async (resp) => {
+    const url = resp.url()
+    if (/\/api\/ai\/schedules\/[^/]+\/command\/$/.test(url)) {
+      let bodyText = ""
+      try {
+        bodyText = await resp.text()
+      } catch {
+        bodyText = "(could not read body)"
+      }
+      let requestBody = ""
+      try {
+        requestBody = resp.request().postData() || ""
+      } catch {
+        requestBody = "(could not read request body)"
+      }
+      commandCalls.push({
+        url,
+        status: resp.status(),
+        requestBody,
+        responseBody: bodyText,
+      })
     }
-    let requestBody = ""
-    try {
-      requestBody = resp.request().postData() || ""
-    } catch {
-      requestBody = "(could not read request body)"
-    }
-    commandCalls.push({
-      url,
-      status: resp.status(),
-      requestBody,
-      responseBody: bodyText,
-    })
-  }
-})
+  })
 
-const { failures, fail } = makeFailAggregator()
-
-try {
   console.log("→ Logging in…")
   await login(page)
 
@@ -267,6 +262,6 @@ try {
   console.error(err)
   process.exitCode = 2
 } finally {
-  await browser.close()
+  await browser?.close()
   cleanupSchedules([SCHEDULE_DATE])
 }

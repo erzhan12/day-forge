@@ -34,8 +34,11 @@ const DATE = "2026-05-05"
 
 await preflight()
 
-console.log("→ Seeding reviewed schedule + 3 blocks via Django shell…")
+const fail = failFast
+
+let browser
 try {
+  console.log("→ Seeding reviewed schedule + 3 blocks via Django shell…")
   seed("seed_analytics_reviewed", {
     SEED_USERNAME: USERNAME,
     SEED_DATE: DATE,
@@ -45,57 +48,50 @@ try {
       { title: "Gamma", start_time: "11:00", end_time: "12:00", category: "work", is_completed: false },
     ]),
   })
-} catch {
-  console.error("\n❌ Seed failed (Django running? user playwright exists?)")
-  process.exit(2)
-}
 
-const browser = await chromium.launch({ headless: true })
-const context = await browser.newContext({ viewport: { width: 1280, height: 900 } })
-const page = await context.newPage()
+  browser = await chromium.launch({ headless: true })
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } })
+  const page = await context.newPage()
 
-const fail = failFast
-
-async function assertAnalyticsReviewed() {
-  await page.goto(`${BASE}/analytics/${DATE}/`, { waitUntil: "networkidle" })
-  const reviewed = page.locator(".status-badge.status-reviewed")
-  if ((await reviewed.count()) !== 1) fail("expected Reviewed badge on analytics")
-  if ((await page.locator(".mark-reviewed-btn").count()) !== 0) {
-    fail("Mark reviewed should be hidden when already reviewed")
+  async function assertAnalyticsReviewed() {
+    await page.goto(`${BASE}/analytics/${DATE}/`, { waitUntil: "networkidle" })
+    const reviewed = page.locator(".status-badge.status-reviewed")
+    if ((await reviewed.count()) !== 1) fail("expected Reviewed badge on analytics")
+    if ((await page.locator(".mark-reviewed-btn").count()) !== 0) {
+      fail("Mark reviewed should be hidden when already reviewed")
+    }
   }
-}
 
-async function assertScheduleNoAnalyticsBadge() {
-  if ((await page.locator(".status-badge").count()) !== 0) {
-    fail("schedule view should not show analytics status-badge")
+  async function assertScheduleNoAnalyticsBadge() {
+    if ((await page.locator(".status-badge").count()) !== 0) {
+      fail("schedule view should not show analytics status-badge")
+    }
   }
-}
 
-async function assertAnalyticsActive() {
-  await page.goto(`${BASE}/analytics/${DATE}/`, { waitUntil: "networkidle" })
-  const active = page.locator(".status-badge.status-active")
-  if ((await active.count()) !== 1) fail("expected Active badge after unfreeze")
-  const btn = page.locator(".mark-reviewed-btn")
-  if ((await btn.count()) !== 1) fail("expected Mark reviewed when active")
-}
+  async function assertAnalyticsActive() {
+    await page.goto(`${BASE}/analytics/${DATE}/`, { waitUntil: "networkidle" })
+    const active = page.locator(".status-badge.status-active")
+    if ((await active.count()) !== 1) fail("expected Active badge after unfreeze")
+    const btn = page.locator(".mark-reviewed-btn")
+    if ((await btn.count()) !== 1) fail("expected Mark reviewed when active")
+  }
 
-async function markReviewedFromPanel() {
-  await page.goto(`${BASE}/analytics/${DATE}/`, { waitUntil: "networkidle" })
-  const btn = page.locator(".mark-reviewed-btn")
-  await btn.waitFor({ state: "visible", timeout: ANALYTICS_BUTTON_TIMEOUT_MS })
-  await Promise.all([
-    page.waitForResponse(
-      (r) =>
-        r.url().includes(`/api/analytics/schedules/${DATE}/mark-reviewed/`) &&
-        r.request().method() === "POST" &&
-        r.status() === 200,
-    ),
-    btn.click(),
-  ])
-  await page.locator(".status-badge.status-reviewed").waitFor({ timeout: PANEL_TIMEOUT_MS })
-}
+  async function markReviewedFromPanel() {
+    await page.goto(`${BASE}/analytics/${DATE}/`, { waitUntil: "networkidle" })
+    const btn = page.locator(".mark-reviewed-btn")
+    await btn.waitFor({ state: "visible", timeout: ANALYTICS_BUTTON_TIMEOUT_MS })
+    await Promise.all([
+      page.waitForResponse(
+        (r) =>
+          r.url().includes(`/api/analytics/schedules/${DATE}/mark-reviewed/`) &&
+          r.request().method() === "POST" &&
+          r.status() === 200,
+      ),
+      btn.click(),
+    ])
+    await page.locator(".status-badge.status-reviewed").waitFor({ timeout: PANEL_TIMEOUT_MS })
+  }
 
-try {
   console.log("→ Login…")
   await login(page)
 
@@ -192,6 +188,6 @@ try {
   console.error(err)
   process.exitCode = 2
 } finally {
-  await browser.close()
+  await browser?.close()
   cleanupSchedules([DATE])
 }

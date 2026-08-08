@@ -45,36 +45,37 @@ const TEMPLATE = {
 
 await preflight()
 
-console.log("→ Setup: ensure playwright user has 'A weekday' template + empty draft schedules…")
-seed("seed_template", {
-  SEED_MODE: "template_seed_initial",
-  SEED_USERNAME: USERNAME,
-  SEED_TEMPLATE_JSON: JSON.stringify(TEMPLATE),
-  SEED_DATES_JSON: JSON.stringify([STALE_DATE, RECOVERY_DATE]),
-})
-
-const browser = await chromium.launch({ headless: true })
-const context = await browser.newContext({
-  viewport: { width: 1280, height: 800 },
-})
-const page = await context.newPage()
-
-const aiCalls = []
-page.on("response", async (resp) => {
-  if (/\/api\/ai\/schedules\/[^/]+\/generate-draft\/$/.test(resp.url())) {
-    let body = ""
-    try { body = await resp.text() } catch {}
-    aiCalls.push({ url: resp.url(), status: resp.status(), body })
-  }
-})
-
 const failures = []
 function check(label, ok, detail = "") {
   console.log(`  ${ok ? "✅" : "❌"} ${label}${detail ? " — " + detail : ""}`)
   if (!ok) failures.push(label)
 }
 
+let browser
 try {
+  console.log("→ Setup: ensure playwright user has 'A weekday' template + empty draft schedules…")
+  seed("seed_template", {
+    SEED_MODE: "template_seed_initial",
+    SEED_USERNAME: USERNAME,
+    SEED_TEMPLATE_JSON: JSON.stringify(TEMPLATE),
+    SEED_DATES_JSON: JSON.stringify([STALE_DATE, RECOVERY_DATE]),
+  })
+
+  browser = await chromium.launch({ headless: true })
+  const context = await browser.newContext({
+    viewport: { width: 1280, height: 800 },
+  })
+  const page = await context.newPage()
+
+  const aiCalls = []
+  page.on("response", async (resp) => {
+    if (/\/api\/ai\/schedules\/[^/]+\/generate-draft\/$/.test(resp.url())) {
+      let body = ""
+      try { body = await resp.text() } catch {}
+      aiCalls.push({ url: resp.url(), status: resp.status(), body })
+    }
+  })
+
   // Login
   console.log("→ Logging in…")
   await login(page)
@@ -216,6 +217,6 @@ try {
   console.error(err)
   process.exitCode = 2
 } finally {
-  await browser.close()
+  await browser?.close()
   cleanupSchedules([STALE_DATE, RECOVERY_DATE])
 }

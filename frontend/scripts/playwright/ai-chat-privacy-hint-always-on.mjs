@@ -51,8 +51,11 @@ import {
 const SCHEDULE_DATE = "2026-09-27"
 await preflight()
 
-console.log("→ Seeding empty draft schedule…")
+const { failures, fail } = makeFailAggregator()
+
+let browser
 try {
+  console.log("→ Seeding empty draft schedule…")
   seed("seed_schedule", {
     SEED_MODE: "schedules",
     SEED_USERNAME: USERNAME,
@@ -61,45 +64,37 @@ try {
     ]),
     SEED_MARKER: "seeded empty schedule {id}",
   })
-} catch (err) {
-  console.error("\n❌ Seed failed.")
-  console.error(err.message)
-  process.exit(2)
-}
 
-const browser = await chromium.launch({ headless: true })
-const context = await browser.newContext({ viewport: { width: 1280, height: 800 } })
-const page = await context.newPage()
+  browser = await chromium.launch({ headless: true })
+  const context = await browser.newContext({ viewport: { width: 1280, height: 800 } })
+  const page = await context.newPage()
 
-const { failures, fail } = makeFailAggregator()
-
-// Stub /chat/ with a successful envelope. The exact block content is
-// irrelevant for Test 6 — we only need the response to be 200 + valid
-// JSON so `useChat` appends the assistant bubble and the thread renders.
-await page.route(/\/api\/ai\/schedules\/[^/]+\/chat\/$/, async (route) => {
-  return route.fulfill({
-    status: 200,
-    contentType: "application/json",
-    body: JSON.stringify({
-      blocks: [
-        {
-          id: 9999,
-          title: "stub block",
-          start_time: "10:00",
-          end_time: "10:30",
-          category: "other",
-          is_completed: false,
-          sort_order: 0,
-        },
-      ],
-      explanation: "stub assistant reply for test 6",
-      ask: null,
-      applied: true,
-    }),
+  // Stub /chat/ with a successful envelope. The exact block content is
+  // irrelevant for Test 6 — we only need the response to be 200 + valid
+  // JSON so `useChat` appends the assistant bubble and the thread renders.
+  await page.route(/\/api\/ai\/schedules\/[^/]+\/chat\/$/, async (route) => {
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        blocks: [
+          {
+            id: 9999,
+            title: "stub block",
+            start_time: "10:00",
+            end_time: "10:30",
+            category: "other",
+            is_completed: false,
+            sort_order: 0,
+          },
+        ],
+        explanation: "stub assistant reply for test 6",
+        ask: null,
+        applied: true,
+      }),
+    })
   })
-})
 
-try {
   console.log("→ Logging in…")
   await login(page)
 
@@ -224,6 +219,6 @@ try {
   console.error(err)
   process.exitCode = 2
 } finally {
-  await browser.close()
+  await browser?.close()
   cleanupSchedules([SCHEDULE_DATE])
 }

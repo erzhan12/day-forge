@@ -53,8 +53,13 @@ const DELAY_B_MS = 2000
 
 await preflight()
 
-console.log("→ Seeding empty draft schedules on both days…")
+const { failures, fail } = makeFailAggregator()
+
+const responsesSeen = []
+
+let browser
 try {
+  console.log("→ Seeding empty draft schedules on both days…")
   seed("seed_schedule", {
     SEED_MODE: "schedules",
     SEED_USERNAME: USERNAME,
@@ -63,49 +68,40 @@ try {
     ),
     SEED_MARKER: "seeded both dates",
   })
-} catch (err) {
-  console.error("\n❌ Seed failed.")
-  console.error(err.message)
-  process.exit(2)
-}
 
-const browser = await chromium.launch({ headless: true })
-const context = await browser.newContext({ viewport: { width: 1280, height: 800 } })
-const page = await context.newPage()
+  browser = await chromium.launch({ headless: true })
+  const context = await browser.newContext({ viewport: { width: 1280, height: 800 } })
+  const page = await context.newPage()
 
-const { failures, fail } = makeFailAggregator()
-
-const responsesSeen = []
-page.on("response", (resp) => {
-  const m = resp.url().match(/\/api\/ai\/schedules\/([^/]+)\/chat\/$/)
-  if (m) {
-    responsesSeen.push({ date: m[1], status: resp.status(), at: Date.now() })
-  }
-})
-
-// Stub both /chat/ endpoints with date-specific delays.
-await page.route(/\/api\/ai\/schedules\/[^/]+\/chat\/$/, async (route) => {
-  const m = route.request().url().match(/\/api\/ai\/schedules\/([^/]+)\/chat\/$/)
-  const date = m?.[1]
-  const isDayA = date === DAY_A
-  const delay = isDayA ? DELAY_A_MS : DELAY_B_MS
-  const block = isDayA
-    ? { id: 7777, title: "day-A focus block", start_time: "10:00", end_time: "10:30", category: "other", is_completed: false, sort_order: 0 }
-    : { id: 8888, title: "day-B coffee break", start_time: "11:00", end_time: "11:15", category: "personal", is_completed: false, sort_order: 0 }
-  await new Promise((r) => setTimeout(r, delay))
-  await route.fulfill({
-    status: 200,
-    contentType: "application/json",
-    body: JSON.stringify({
-      blocks: [block],
-      explanation: `stub for ${date}`,
-      ask: null,
-      applied: true,
-    }),
+  page.on("response", (resp) => {
+    const m = resp.url().match(/\/api\/ai\/schedules\/([^/]+)\/chat\/$/)
+    if (m) {
+      responsesSeen.push({ date: m[1], status: resp.status(), at: Date.now() })
+    }
   })
-})
 
-try {
+  // Stub both /chat/ endpoints with date-specific delays.
+  await page.route(/\/api\/ai\/schedules\/[^/]+\/chat\/$/, async (route) => {
+    const m = route.request().url().match(/\/api\/ai\/schedules\/([^/]+)\/chat\/$/)
+    const date = m?.[1]
+    const isDayA = date === DAY_A
+    const delay = isDayA ? DELAY_A_MS : DELAY_B_MS
+    const block = isDayA
+      ? { id: 7777, title: "day-A focus block", start_time: "10:00", end_time: "10:30", category: "other", is_completed: false, sort_order: 0 }
+      : { id: 8888, title: "day-B coffee break", start_time: "11:00", end_time: "11:15", category: "personal", is_completed: false, sort_order: 0 }
+    await new Promise((r) => setTimeout(r, delay))
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        blocks: [block],
+        explanation: `stub for ${date}`,
+        ask: null,
+        applied: true,
+      }),
+    })
+  })
+
   console.log("→ Logging in…")
   await login(page)
 
@@ -234,6 +230,6 @@ try {
   console.error(err)
   process.exitCode = 2
 } finally {
-  await browser.close()
+  await browser?.close()
   cleanupSchedules([DAY_A, DAY_B])
 }

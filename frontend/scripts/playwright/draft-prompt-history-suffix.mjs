@@ -76,12 +76,13 @@ const TARGET_DATE = nextWeekday(TODAY, 3)
 const HIST_WITH_REVIEW = daysBefore(TODAY, 1)
 const HIST_NO_REVIEW = daysBefore(TODAY, 2)
 
-if (existsSync(CAPTURE_PATH)) unlinkSync(CAPTURE_PATH)
-
-console.log(
-  `-> Seeding weekday template + history (with-review=${HIST_WITH_REVIEW}, no-review=${HIST_NO_REVIEW}) and clearing target=${TARGET_DATE}...`,
-)
+let browser
 try {
+  if (existsSync(CAPTURE_PATH)) unlinkSync(CAPTURE_PATH)
+
+  console.log(
+    `-> Seeding weekday template + history (with-review=${HIST_WITH_REVIEW}, no-review=${HIST_NO_REVIEW}) and clearing target=${TARGET_DATE}...`,
+  )
   seed("seed_schedule", {
     SEED_MODE: "history_suffix",
     SEED_USERNAME: USERNAME,
@@ -89,19 +90,13 @@ try {
     SEED_HISTORY_WITH_REVIEW: HIST_WITH_REVIEW,
     SEED_HISTORY_NO_REVIEW: HIST_NO_REVIEW,
   })
-} catch (err) {
-  console.error("\nSeed failed (Django running? user 'playwright' exists?)")
-  console.error(err.message)
-  process.exit(2)
-}
 
-const browser = await chromium.launch({ headless: true })
-const context = await browser.newContext({ viewport: { width: 1280, height: 900 } })
-const page = await context.newPage()
+  browser = await chromium.launch({ headless: true })
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } })
+  const page = await context.newPage()
 
-const fail = failFast
+  const fail = failFast
 
-try {
   console.log("-> Login...")
   await login(page)
 
@@ -179,6 +174,6 @@ try {
   console.error(err)
   process.exitCode = 2
 } finally {
-  await browser.close()
+  await browser?.close()
   cleanupSchedules([HIST_WITH_REVIEW, HIST_NO_REVIEW, TARGET_DATE])
 }

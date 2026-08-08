@@ -46,10 +46,11 @@ const SEED_TITLE = "Original block"
 
 await preflight()
 
-// Pre-seed: ensure the playwright user has a Schedule on SCHEDULE_DATE
-// with exactly one TimeBlock named SEED_TITLE. Idempotent.
-console.log("→ Seeding test data via Django shell…")
+let browser
 try {
+  // Pre-seed: ensure the playwright user has a Schedule on SCHEDULE_DATE
+  // with exactly one TimeBlock named SEED_TITLE. Idempotent.
+  console.log("→ Seeding test data via Django shell…")
   seed("seed_schedule", {
     SEED_MODE: "schedules",
     SEED_USERNAME: USERNAME,
@@ -62,39 +63,29 @@ try {
     ]),
     SEED_MARKER: "seeded schedule {id}",
   })
-} catch (err) {
-  console.error("\n❌ Seed step failed. Common causes:")
-  console.error(`  * Django not running (start with ``make run``)`)
-  console.error(
-    `  * Test user '${USERNAME}' does not exist — see WARNING in this file's header`,
-  )
-  console.error(`  * uv environment not activated (try \`uv sync\`)\n`)
-  process.exit(2)
-}
 
-const browser = await chromium.launch({ headless: true })
-const context = await browser.newContext({
-  viewport: { width: 1280, height: 800 },
-})
-const page = await context.newPage()
+  browser = await chromium.launch({ headless: true })
+  const context = await browser.newContext({
+    viewport: { width: 1280, height: 800 },
+  })
+  const page = await context.newPage()
 
-// Network spy: count PATCH /api/blocks/<id>/ calls and capture bodies
-// so we can show the duplicate when it fires.
-const patchCalls = []
-page.on("request", (req) => {
-  if (
-    req.method() === "PATCH" &&
-    /\/api\/blocks\/\d+\/$/.test(req.url())
-  ) {
-    patchCalls.push({
-      url: req.url(),
-      body: req.postData(),
-      timestamp: Date.now(),
-    })
-  }
-})
+  // Network spy: count PATCH /api/blocks/<id>/ calls and capture bodies
+  // so we can show the duplicate when it fires.
+  const patchCalls = []
+  page.on("request", (req) => {
+    if (
+      req.method() === "PATCH" &&
+      /\/api\/blocks\/\d+\/$/.test(req.url())
+    ) {
+      patchCalls.push({
+        url: req.url(),
+        body: req.postData(),
+        timestamp: Date.now(),
+      })
+    }
+  })
 
-try {
   console.log("→ Logging in…")
   await login(page)
 
@@ -149,6 +140,6 @@ try {
   console.error(err)
   process.exitCode = 2
 } finally {
-  await browser.close()
+  await browser?.close()
   cleanupSchedules([SCHEDULE_DATE])
 }

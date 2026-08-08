@@ -171,7 +171,7 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
 
 ### 0039 — hoist `_required` to `scripts/__init__.py` (PR #132 claude-review P3)
 
-- [ ] **Uniform missing-env-var diagnostics across seeders.** `seed_schedule.py`
+- [x] **Uniform missing-env-var diagnostics across seeders.** `seed_schedule.py`
   uses a `_required(name)` helper that raises `RuntimeError(f"{name} is
   required")`, but `seed_cleanup.py`, `seed_todoist.py`, and `seed_template.py`
   read `os.environ["KEY"]` directly (bare `KeyError`). Move `_required` (and
@@ -182,7 +182,7 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
 
 ### 0039 — `postWithCsrf` dual return-shape (PR #132 claude-review P2)
 
-- [ ] **Make `postWithCsrf` fail consistently.** `postWithCsrf`
+- [x] **Make `postWithCsrf` fail consistently.** `postWithCsrf`
   (`frontend/scripts/playwright/test-utils.mjs`) returns `{ error }` on the
   missing-XSRF-cookie precondition but `{ status, body }` on success, while
   every other helper in the file `throw`s on error. A caller that destructures

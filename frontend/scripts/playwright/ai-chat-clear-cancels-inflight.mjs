@@ -61,8 +61,17 @@ const DELAY_MS = 6000
 
 await preflight()
 
-console.log("→ Seeding empty draft schedule…")
+let browser
+
+const { failures, fail } = makeFailAggregator()
+
+// State for route handlers — flipped between phases.
+let routeMode = "delay-passthrough" // or "delay-fulfill-500" or "off"
+
+const responsesSeen = []
+
 try {
+  console.log("→ Seeding empty draft schedule…")
   seed("seed_schedule", {
     SEED_MODE: "schedules",
     SEED_USERNAME: USERNAME,
@@ -71,47 +80,35 @@ try {
     ]),
     SEED_MARKER: "seeded empty schedule {id}",
   })
-} catch (err) {
-  console.error("\n❌ Seed failed.")
-  console.error(err.message)
-  process.exit(2)
-}
 
-const browser = await chromium.launch({ headless: true })
-const context = await browser.newContext({ viewport: { width: 1280, height: 800 } })
-const page = await context.newPage()
+  browser = await chromium.launch({ headless: true })
+  const context = await browser.newContext({ viewport: { width: 1280, height: 800 } })
+  const page = await context.newPage()
 
-const { failures, fail } = makeFailAggregator()
-
-// State for route handlers — flipped between phases.
-let routeMode = "delay-passthrough" // or "delay-fulfill-500" or "off"
-
-await page.route(
-  /\/api\/ai\/schedules\/[^/]+\/chat\/$/,
-  async (route) => {
-    if (routeMode === "off") {
+  await page.route(
+    /\/api\/ai\/schedules\/[^/]+\/chat\/$/,
+    async (route) => {
+      if (routeMode === "off") {
+        return route.continue()
+      }
+      await new Promise((r) => setTimeout(r, DELAY_MS))
+      if (routeMode === "delay-fulfill-500") {
+        return route.fulfill({
+          status: 500,
+          contentType: "application/json",
+          body: JSON.stringify({ errors: { detail: "synthetic 500 for test 4" } }),
+        })
+      }
       return route.continue()
-    }
-    await new Promise((r) => setTimeout(r, DELAY_MS))
-    if (routeMode === "delay-fulfill-500") {
-      return route.fulfill({
-        status: 500,
-        contentType: "application/json",
-        body: JSON.stringify({ errors: { detail: "synthetic 500 for test 4" } }),
-      })
-    }
-    return route.continue()
-  },
-)
+    },
+  )
 
-const responsesSeen = []
-page.on("response", (resp) => {
-  if (/\/api\/ai\/schedules\/[^/]+\/chat\/$/.test(resp.url())) {
-    responsesSeen.push({ status: resp.status(), at: Date.now() })
-  }
-})
+  page.on("response", (resp) => {
+    if (/\/api\/ai\/schedules\/[^/]+\/chat\/$/.test(resp.url())) {
+      responsesSeen.push({ status: resp.status(), at: Date.now() })
+    }
+  })
 
-try {
   console.log("→ Logging in…")
   await login(page)
 
@@ -229,6 +226,6 @@ try {
   console.error(err)
   process.exitCode = 2
 } finally {
-  await browser.close()
+  await browser?.close()
   cleanupSchedules([SCHEDULE_DATE])
 }

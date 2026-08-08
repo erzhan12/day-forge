@@ -59,52 +59,10 @@ const SCHEDULE_DATE = "2026-09-21"
 
 await preflight()
 
-console.log("→ Seeding empty draft schedule via Django shell…")
-try {
-  seed("seed_schedule", {
-    SEED_MODE: "schedules",
-    SEED_USERNAME: USERNAME,
-    SEED_SCHEDULES_JSON: JSON.stringify([
-      { date: SCHEDULE_DATE, status: "draft", blocks: [] },
-    ]),
-    SEED_MARKER: "seeded empty schedule {id}",
-  })
-} catch (err) {
-  console.error("\n❌ Seed failed. Is Django running? Does the playwright user exist?")
-  console.error(err.message)
-  process.exit(2)
-}
-
-const browser = await chromium.launch({ headless: true })
-const context = await browser.newContext({
-  viewport: { width: 1280, height: 800 },
-})
-const page = await context.newPage()
-
+let browser
+let context
+let page
 const chatCalls = []
-page.on("response", async (resp) => {
-  const url = resp.url()
-  if (/\/api\/ai\/schedules\/[^/]+\/chat\/$/.test(url)) {
-    let bodyText = ""
-    try {
-      bodyText = await resp.text()
-    } catch {
-      bodyText = "(could not read body)"
-    }
-    let requestBody = ""
-    try {
-      requestBody = resp.request().postData() || ""
-    } catch {
-      requestBody = "(could not read request body)"
-    }
-    chatCalls.push({
-      url,
-      status: resp.status(),
-      requestBody,
-      responseBody: bodyText,
-    })
-  }
-})
 
 async function submitChatTurn(text) {
   const ta = page.locator('[data-testid="chat-input"]')
@@ -124,6 +82,46 @@ async function submitChatTurn(text) {
 }
 
 try {
+  console.log("→ Seeding empty draft schedule via Django shell…")
+  seed("seed_schedule", {
+    SEED_MODE: "schedules",
+    SEED_USERNAME: USERNAME,
+    SEED_SCHEDULES_JSON: JSON.stringify([
+      { date: SCHEDULE_DATE, status: "draft", blocks: [] },
+    ]),
+    SEED_MARKER: "seeded empty schedule {id}",
+  })
+
+  browser = await chromium.launch({ headless: true })
+  context = await browser.newContext({
+    viewport: { width: 1280, height: 800 },
+  })
+  page = await context.newPage()
+
+  page.on("response", async (resp) => {
+    const url = resp.url()
+    if (/\/api\/ai\/schedules\/[^/]+\/chat\/$/.test(url)) {
+      let bodyText = ""
+      try {
+        bodyText = await resp.text()
+      } catch {
+        bodyText = "(could not read body)"
+      }
+      let requestBody = ""
+      try {
+        requestBody = resp.request().postData() || ""
+      } catch {
+        requestBody = "(could not read request body)"
+      }
+      chatCalls.push({
+        url,
+        status: resp.status(),
+        requestBody,
+        responseBody: bodyText,
+      })
+    }
+  })
+
   console.log("→ Logging in…")
   await login(page)
 
@@ -333,6 +331,6 @@ try {
   console.error(err)
   process.exitCode = 2
 } finally {
-  await browser.close()
+  await browser?.close()
   cleanupSchedules([SCHEDULE_DATE])
 }
