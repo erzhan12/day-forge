@@ -101,7 +101,11 @@ export async function postWithCsrf(page, url, body) {
     async ({ requestUrl, requestBody }) => {
       const match = document.cookie.match(/XSRF-TOKEN=([^;]+)/)
       const csrf = match ? decodeURIComponent(match[1]) : ""
-      if (!csrf) return { error: "no XSRF-TOKEN cookie present" }
+      // Throw (rather than return an {error} shape) so a missing cookie fails
+      // like every other error path here — the page.evaluate promise rejects
+      // and the caller's try/catch sets a non-zero exit. Keeps the return
+      // shape uniformly { status, body }.
+      if (!csrf) throw new Error("no XSRF-TOKEN cookie present")
       const response = await fetch(requestUrl, {
         method: "POST",
         credentials: "include",

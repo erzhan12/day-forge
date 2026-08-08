@@ -133,9 +133,6 @@ try {
   await page.waitForTimeout(WAIT_FOR_INERTIA_SETTLE_MS)
 
   console.log("→ Wire-level assertions…")
-  if (postResult.error) {
-    fail(`fetch precondition error: ${postResult.error}`)
-  }
   if (postResult.body && postResult.body.includes("SynchronousOnlyOperation")) {
     fail(
       "ASYNC REGRESSION: response body contains 'SynchronousOnlyOperation' — " +
