@@ -10,6 +10,7 @@ import hashlib
 import json
 import logging
 from collections.abc import Awaitable, Callable
+from typing import Any
 
 from asgiref.sync import sync_to_async
 from django.conf import settings
@@ -181,7 +182,7 @@ def _rate_limit_per_user(
     invalid-date does not burn the 10/hr draft or 60/hr chat budgets.
     """
     @functools.wraps(view_func)
-    async def wrapper(request, *args, **kwargs):
+    async def wrapper(request, *args, **kwargs) -> JsonResponse:
         # Resolve the authenticated user via the async ORM path. The
         # decorator wrapper executes BEFORE the view body, so it must own
         # the first ``await request.auser()`` — the lazy ``request.user``
@@ -349,7 +350,7 @@ def _check_no_overlap(
 def _apply_add(
     schedule: Schedule,
     blocks_by_id: dict[int, TimeBlock],
-    action: dict,
+    action: dict[str, Any],
     action_index: int,
 ) -> JsonResponse | None:
     title = action["title"].strip()
@@ -395,7 +396,7 @@ def _apply_add(
 def _apply_remove(
     schedule: Schedule,
     blocks_by_id: dict[int, TimeBlock],
-    action: dict,
+    action: dict[str, Any],
     action_index: int,
     block: TimeBlock,
 ) -> JsonResponse | None:
@@ -407,7 +408,7 @@ def _apply_remove(
 def _apply_move_or_resize(
     schedule: Schedule,
     blocks_by_id: dict[int, TimeBlock],
-    action: dict,
+    action: dict[str, Any],
     action_index: int,
     block: TimeBlock,
 ) -> JsonResponse | None:
@@ -468,7 +469,7 @@ def _apply_move_or_resize(
 def _apply_existing_block_action(
     schedule: Schedule,
     blocks_by_id: dict[int, TimeBlock],
-    action: dict,
+    action: dict[str, Any],
     action_index: int,
 ) -> JsonResponse | None:
     """Dispatcher for move / remove / resize — all need an existing block."""
@@ -503,7 +504,7 @@ _ACTION_DISPATCH = {
 def _apply_action(
     schedule: Schedule,
     blocks_by_id: dict[int, TimeBlock],
-    action: dict,
+    action: dict[str, Any],
     action_index: int,
 ) -> JsonResponse | None:
     """Apply one AI action; return ``None`` on success or a 400 response.
