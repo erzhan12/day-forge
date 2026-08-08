@@ -430,6 +430,26 @@ def test_todoist_seeder_preserves_strict_ensure_and_disconnect_markers(user, mon
 
 
 @pytest.mark.django_db
+def test_migrated_seeders_raise_runtimeerror_on_missing_required_env(monkeypatch):
+    # The _required hoist must keep every seeder failing with a diagnosable
+    # RuntimeError (naming the variable) rather than a bare KeyError when a
+    # required SEED_* var is absent. Guards the whole point of the hoist.
+    monkeypatch.delenv("SEED_USERNAME", raising=False)
+    monkeypatch.delenv("SEED_MODE", raising=False)
+
+    with pytest.raises(RuntimeError, match="SEED_USERNAME is required"):
+        seed_cleanup.main()
+    with pytest.raises(RuntimeError, match="SEED_USERNAME is required"):
+        seed_analytics_reviewed.main()
+    with pytest.raises(RuntimeError, match="SEED_MODE is required"):
+        seed_prefs.main()
+    with pytest.raises(RuntimeError, match="SEED_MODE is required"):
+        seed_template.main()
+    with pytest.raises(RuntimeError, match="SEED_MODE is required"):
+        seed_todoist.main()
+
+
+@pytest.mark.django_db
 def test_cleanup_seeder_deletes_only_requested_dates(user, monkeypatch, capsys):
     kept = Schedule.objects.create(user=user, date=datetime.date(2027, 1, 2))
     removed = Schedule.objects.create(user=user, date=datetime.date(2027, 1, 1))
