@@ -9,7 +9,7 @@ import functools
 import hashlib
 import json
 import logging
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 
 from asgiref.sync import sync_to_async
 from django.conf import settings
@@ -163,7 +163,9 @@ def _rate_limited_response() -> JsonResponse:
     )
 
 
-def _rate_limit_per_user(view_func: Callable) -> Callable:
+def _rate_limit_per_user(
+    view_func: Callable[..., Awaitable[JsonResponse]],
+) -> Callable[..., Awaitable[JsonResponse]]:
     """Fixed-window per-user rate limit decorator for the command endpoint.
 
     **Async-only** (feature 0009): the wrapper is ``async def`` and
@@ -983,7 +985,7 @@ async def ai_generate_draft(request, date):
 # ---------------------------------------------------------------------------
 
 
-def _validate_chat_messages(messages: list[dict]) -> str | None:
+def _validate_chat_messages(messages: object) -> str | None:
     """Return an error string if ``messages`` is malformed, else ``None``.
 
     Validation order matters: this runs BEFORE ``Schedule.get_or_create``
