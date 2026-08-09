@@ -380,7 +380,7 @@ class TestParseErrorLogging:
 
 class TestAddOverlapRejection:
     @pytest.mark.django_db
-    def test_add_rejected_when_overlapping_existing_block_rolls_back_and_leaves_draft(
+    def test_add_rejected_when_overlapping_existing_block_rolls_back_and_preserves_status(
         self, auth_client, today_schedule, monkeypatch
     ):
         seeded_block = TimeBlock.objects.create(
@@ -390,6 +390,12 @@ class TestAddOverlapRejection:
             end_time="10:00",
             category="work",
         )
+        # Seed REVIEWED (not the default DRAFT) so the "status unchanged"
+        # assertion is discriminating: a successful apply would call
+        # mark_active_on_edit() and flip reviewed -> active, so status
+        # staying REVIEWED proves the rejected apply never reached that line.
+        today_schedule.status = Schedule.Status.REVIEWED
+        today_schedule.save(update_fields=["status"])
         _patch_run(
             monkeypatch,
             AICommandResult(
@@ -417,7 +423,7 @@ class TestAddOverlapRejection:
         interaction = AIInteraction.objects.get(schedule=today_schedule)
         assert interaction.success is False
         today_schedule.refresh_from_db()
-        assert today_schedule.status == Schedule.Status.DRAFT
+        assert today_schedule.status == Schedule.Status.REVIEWED
 
 
 class TestGranularity:

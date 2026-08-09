@@ -581,8 +581,8 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
   bump that affects exception propagation) or if a future bug actually
   shows the implicit tests missing something.
   Backend coverage now lives in `test_rollback_propagates_across_sync_to_async`,
-  `test_add_rejected_when_overlapping_existing_block_rolls_back_and_leaves_draft`,
-  and `test_chat_overlap_rolls_back_and_leaves_draft`, unblocking the separate
+  `test_add_rejected_when_overlapping_existing_block_rolls_back_and_preserves_status`,
+  and `test_chat_overlap_rolls_back_and_preserves_status`, unblocking the separate
   `/command/` endpoint, `.mjs` scripts, and `useAI.ts` removal task.
 
 - [ ] **CalDAV: drop-counter / metrics for malformed VEVENT skips.**
