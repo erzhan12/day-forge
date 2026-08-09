@@ -77,6 +77,12 @@ class TestRollbackPropagation:
                 interaction_id=None,
             )
 
+        # Narrow scope: this pins exception propagation across the asgiref
+        # boundary only. The stale-fingerprint branch raises before any DB
+        # write, so this does NOT exercise transaction.atomic() rollback of
+        # actual writes — that is covered via the full view path by
+        # test_mid_batch_failure_rolls_back and
+        # test_persist_validation_error_rolls_back_with_action_index.
         with pytest.raises(ai.views._Rollback) as excinfo:
             async_to_sync(_run)()
 
