@@ -564,7 +564,7 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
   API surface. Run the full `pytest backend/tests/` + `cd frontend &&
   npm test` and a chat-script smoke before merging.
 
-- [ ] **Explicit regression test for `_Rollback` propagation across
+- [x] **Explicit regression test for `_Rollback` propagation across
   `sync_to_async`.** PR #22 `claude-review` iter-2 P2 [TESTING] flagged
   this. Currently the `_Rollback` exception path through
   `await sync_to_async(_apply_actions_sync, thread_sensitive=True)(...)`
@@ -580,6 +580,10 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
   regression. Pin if the contract ever changes (e.g., asgiref version
   bump that affects exception propagation) or if a future bug actually
   shows the implicit tests missing something.
+  Backend coverage now lives in `test_rollback_propagates_across_sync_to_async`,
+  `test_add_rejected_when_overlapping_existing_block_rolls_back_and_leaves_draft`,
+  and `test_chat_overlap_rolls_back_and_leaves_draft`, unblocking the separate
+  `/command/` endpoint, `.mjs` scripts, and `useAI.ts` removal task.
 
 - [ ] **CalDAV: drop-counter / metrics for malformed VEVENT skips.**
   PR #30 `claude-review` iter-1 P1 [QUALITY] flagged

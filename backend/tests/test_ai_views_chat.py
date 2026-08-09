@@ -565,6 +565,51 @@ class TestChatBatchMutationExecutor:
     """Shared ``_apply_actions_sync`` path through ``/chat/``."""
 
     @pytest.mark.django_db
+    def test_chat_overlap_rolls_back_and_leaves_draft(
+        self, auth_client, today_schedule, monkeypatch
+    ):
+        seeded_block = TimeBlock.objects.create(
+            schedule=today_schedule,
+            title="Deep work",
+            start_time="09:00",
+            end_time="10:00",
+            category="work",
+        )
+        _patch_run_chat(
+            monkeypatch,
+            AIChatResult(
+                raw_response_text="{}",
+                parsed_actions=[
+                    {
+                        "type": "add",
+                        "title": "Standup",
+                        "start_time": "09:30",
+                        "end_time": "10:30",
+                        "category": "work",
+                    }
+                ],
+                explanation="Added",
+                ask=None,
+            ),
+        )
+
+        resp = _post(
+            auth_client,
+            {"messages": [_user_turn("add standup at 09:30")]},
+        )
+
+        assert resp.status_code == 400
+        errors = resp.json()["errors"]
+        assert errors["action_index"] == 0
+        assert "overlap" in errors["detail"]
+        surviving_blocks = list(TimeBlock.objects.filter(schedule=today_schedule))
+        assert [block.pk for block in surviving_blocks] == [seeded_block.pk]
+        interaction = AIInteraction.objects.get(schedule=today_schedule)
+        assert interaction.success is False
+        today_schedule.refresh_from_db()
+        assert today_schedule.status == Schedule.Status.DRAFT
+
+    @pytest.mark.django_db
     def test_chat_apply_uses_shared_planner(
         self, auth_client, today_schedule, monkeypatch
     ):

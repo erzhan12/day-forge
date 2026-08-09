@@ -6,6 +6,7 @@ for real.
 """
 import json
 
+import ai.views
 import pytest
 from ai.models import AIInteraction
 from ai.service import (
@@ -15,7 +16,7 @@ from ai.service import (
     AITimeoutError,
     AIUnavailableError,
 )
-from asgiref.sync import sync_to_async
+from asgiref.sync import async_to_sync, sync_to_async
 from django.contrib.auth.models import User
 from schedules.models import Schedule, TimeBlock
 from templates_mgr.models import Rule
@@ -45,6 +46,44 @@ def _patch_run(monkeypatch, behaviour):
         return behaviour
 
     monkeypatch.setattr("ai.views.run_command", _run)
+
+
+class TestRollbackPropagation:
+    @pytest.mark.django_db
+    def test_rollback_propagates_across_sync_to_async(self, user):
+        schedule = Schedule.objects.create(user=user, date="2026-04-18")
+        result = AICommandResult(
+            raw_response_text="{}",
+            parsed_actions=[
+                {
+                    "type": "add",
+                    "title": "Standup",
+                    "start_time": "09:00",
+                    "end_time": "09:30",
+                    "category": "work",
+                }
+            ],
+            explanation="x",
+        )
+
+        async def _run():
+            return await sync_to_async(
+                ai.views._apply_actions_sync,
+                thread_sensitive=True,
+            )(
+                schedule,
+                result,
+                expected_fingerprint="stale-garbage",
+                interaction_id=None,
+            )
+
+        with pytest.raises(ai.views._Rollback) as excinfo:
+            async_to_sync(_run)()
+
+        assert excinfo.value.response.status_code == 409
+        assert json.loads(excinfo.value.response.content) == {
+            "errors": {"detail": "schedule_changed"}
+        }
 
 
 class TestRouting:
@@ -341,10 +380,10 @@ class TestParseErrorLogging:
 
 class TestAddOverlapRejection:
     @pytest.mark.django_db
-    def test_add_rejected_when_overlapping_existing_block(
+    def test_add_rejected_when_overlapping_existing_block_rolls_back_and_leaves_draft(
         self, auth_client, today_schedule, monkeypatch
     ):
-        TimeBlock.objects.create(
+        seeded_block = TimeBlock.objects.create(
             schedule=today_schedule,
             title="Deep work",
             start_time="09:00",
@@ -371,8 +410,14 @@ class TestAddOverlapRejection:
         assert resp.status_code == 400
         body = resp.json()
         assert body["errors"]["action_index"] == 0
+        assert "overlap" in body["errors"]["detail"]
         # Existing block unchanged; new block not created.
-        assert TimeBlock.objects.filter(schedule=today_schedule).count() == 1
+        surviving_blocks = list(TimeBlock.objects.filter(schedule=today_schedule))
+        assert [block.pk for block in surviving_blocks] == [seeded_block.pk]
+        interaction = AIInteraction.objects.get(schedule=today_schedule)
+        assert interaction.success is False
+        today_schedule.refresh_from_db()
+        assert today_schedule.status == Schedule.Status.DRAFT
 
 
 class TestGranularity:
