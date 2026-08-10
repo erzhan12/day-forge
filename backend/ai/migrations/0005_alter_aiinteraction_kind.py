@@ -2,6 +2,17 @@
 
 from django.db import migrations, models
 
+# Feature 0044 (remove /command/): adds Kind.CHAT and flips the going-forward
+# default from COMMAND to CHAT. NOTE — historical data gap (intentionally NOT
+# back-filled): between feature 0007 (chat introduced) and this migration,
+# ``_log_interaction`` defaulted to ``kind='command'``, so pre-migration CHAT
+# rows are stored as ``kind='command'`` and are indistinguishable from genuine
+# rows written by the real (pre-0007) /command/ endpoint — the model records no
+# originating-view discriminator, so a blanket ``command -> chat`` RunPython
+# would wrongly relabel real command rows. Operators auditing chat history must
+# therefore treat pre-0044 ``kind='command'`` rows as "command-or-chat", and
+# ``kind='chat'`` as chat-only-from-0044-onward.
+
 
 class Migration(migrations.Migration):
 

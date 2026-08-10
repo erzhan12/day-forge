@@ -15,6 +15,7 @@ from ai.service import (
     AIUnavailableError,
 )
 from django.contrib.auth.models import User
+from django.core.cache import cache
 from schedules.models import Schedule, TimeBlock
 from templates_mgr.models import Rule, Template
 
@@ -107,6 +108,19 @@ class TestHappyPath:
         log = AIInteraction.objects.get(schedule=schedule)
         assert log.kind == AIInteraction.Kind.DRAFT
         assert log.success is True
+
+    def test_draft_bucket_independent_of_chat_bucket(
+        self, auth_client, user, template, monkeypatch
+    ):
+        # A draft call increments ONLY ai_draft_rl, never the chat bucket —
+        # guards against the two key literals being swapped in
+        # ai_generate_draft. Reverse direction of
+        # test_ai_views_chat.py::test_chat_bucket_independent_of_draft_bucket.
+        _patch_run(monkeypatch, _ok_result())
+        resp = _post(auth_client)
+        assert resp.status_code == 200
+        assert cache.get(f"ai_draft_rl:{user.id}") == 1
+        assert cache.get(f"ai_chat_rl:{user.id}") in (None, 0)
 
 
 @pytest.mark.django_db

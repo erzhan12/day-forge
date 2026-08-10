@@ -95,6 +95,10 @@ class AIParseError(AIError):
         self.raw_response_text = raw_response_text
 
 
+# Retained for test_ai_apply.py (constructs it to drive _apply_actions_sync);
+# no production caller since /command/ + run_command were removed (feature 0044).
+# Do not delete in an "unused export" sweep without also migrating that test —
+# tracked for collapse-into-AIChatResult in tasks/todo.md.
 @dataclass
 class AICommandResult:
     raw_response_text: str
