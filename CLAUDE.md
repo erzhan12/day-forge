@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Day Forge is an AI-powered daily schedule assistant. Django 5.x backend with SQLite, Python 3.14, managed with uv. Vue 3 + Inertia.js frontend served via Vite.
 
-> ✅  **Scale blocker resolved for the `dayforge.habitreward.org` deploy (feature 0016)** — it runs **uvicorn ASGI** (`--workers 1`), so the `async def` AI endpoints (command, draft, chat) serve concurrently off one event loop. The historical WSGI/sync-gunicorn blocker (feature 0009) only applies to other sync-runner deploys. Read **Production Deployment** below before exposing a *sync-runner* deploy to concurrent load; for the 0016 deploy see `deployment/` + `docs/features/0016_deploy_PLAN.md`.
+> ✅  **Scale blocker resolved for the `dayforge.habitreward.org` deploy (feature 0016)** — it runs **uvicorn ASGI** (`--workers 1`), so the `async def` AI endpoints (draft, chat) serve concurrently off one event loop. The historical WSGI/sync-gunicorn blocker (feature 0009) only applies to other sync-runner deploys. Read **Production Deployment** below before exposing a *sync-runner* deploy to concurrent load; for the 0016 deploy see `deployment/` + `docs/features/0016_deploy_PLAN.md`.
 
 See `.claude/rules/` for detailed instructions. Review `tasks/lessons.md` at session start.
 

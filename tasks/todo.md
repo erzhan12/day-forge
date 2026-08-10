@@ -169,6 +169,22 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
 
 ## Follow-ups (discovered during manual testing)
 
+### 0044 — collapse `AICommandResult` into `AIChatResult` (PR #138 claude-review P2)
+
+- [ ] **Remove the now-vestigial `AICommandResult` dataclass.** After feature
+  0044 deleted `run_command`, `AICommandResult` (`backend/ai/service.py`) is no
+  longer produced by any code path — it survives only as a member of the
+  `_apply_actions_sync` `result: AICommandResult | AIChatResult` type union, as
+  the object the relocated `test_ai_apply.py::TestRollbackPropagation`
+  constructs, and in the `AIChatResult`/`AIDraftResult` docstrings that describe
+  themselves "relative to `AICommandResult`". claude-review (PR #138) suggests
+  narrowing the union to `AIChatResult`, switching the rollback test to build an
+  `AIChatResult(ask=None, …)` (same `parsed_actions` field `_apply_actions_sync`
+  reads), then deleting the dataclass + its imports in `service.py`/`views.py`
+  and scrubbing the two sibling docstrings. Deferred from the removal PR because
+  the 0044 plan explicitly KEPT `AICommandResult` and this is a multi-file design
+  cleanup better done as its own small change. Non-blocking (harmless dataclass).
+
 ### 0039 — hoist `_required` to `scripts/__init__.py` (PR #132 claude-review P3)
 
 - [x] **Uniform missing-env-var diagnostics across seeders.** `seed_schedule.py`

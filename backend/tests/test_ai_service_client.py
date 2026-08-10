@@ -47,4 +47,9 @@ class TestClientPerLoop:
 
         with pytest.raises(AIProviderError) as exc:
             async_to_sync(probe)()
+        # Security invariant: client init raises `from None` so the original
+        # exception (whose message/locals can hold the LLM_API_KEY) is NOT
+        # chained onto __cause__ and cannot leak into Sentry/logs. If a future
+        # change drops `from None`, this assertion fails — flagging a reopened
+        # API-key leak path.
         assert exc.value.__cause__ is None

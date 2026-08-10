@@ -124,7 +124,7 @@ cd frontend && npm test
 End-to-end Playwright scripts live in [frontend/scripts/playwright/](frontend/scripts/playwright/):
 
 - `ai-chat-*.mjs` — multi-turn chat flows
-- `ai-command-*.mjs` / `ai-draft-*.mjs` — command + draft endpoints
+- `ai-draft-*.mjs` — draft endpoint
 
 These hit the real LLM provider, require `LLM_API_KEY`, and **must be run serially** — they share rate-limit counters and concurrent runs will race them. The exception is `ai-draft-409-on-non-empty.mjs`, which short-circuits server-side and makes no LLM call.
 

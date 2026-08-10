@@ -33,8 +33,8 @@ End-to-end browser smoke testing requires the **full dev stack** running
 http://localhost:5173/, log in (`createsuperuser` first if no account),
 and exercise the feature in the actual browser.
 
-The 21 Playwright scripts at `frontend/scripts/playwright/*.mjs` cover AI chat,
-command, draft, analytics, timeline, templates, themes, and Todoist flows.
+The 18 Playwright scripts at `frontend/scripts/playwright/*.mjs` cover AI chat,
+draft, analytics, timeline, templates, themes, and Todoist flows.
 See that directory's `README.md` for prerequisites and the per-script provider
 call table. Several AI scenarios make real LLM calls and burn provider tokens;
 the `ai-draft-409-on-non-empty.mjs` endpoint short-circuits before the LLM.

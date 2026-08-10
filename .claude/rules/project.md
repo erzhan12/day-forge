@@ -16,7 +16,7 @@ These are non-obvious conventions that can't be inferred from code alone.
 - `LLM_BASE_URL` — OpenAI-compatible base URL. Default `https://api.openai.com/v1`. Set to OpenRouter or a self-hosted proxy to swap providers.
 - `LLM_MODEL` — Model name passed to the chat-completions API. Default `gpt-4o-mini`.
 - `LLM_REQUEST_TIMEOUT` — Hard timeout for the LLM HTTP call in seconds. Default `15`. Prevents a hung provider from holding a worker.
-- `LLM_MAX_COMMAND_CHARS` — Cap on the user's command string before sending to the LLM. Default `500`.
+- `LLM_MAX_COMMAND_CHARS` — Default `500`. Since the `/command/` endpoint was removed (feature 0044) this no longer caps a direct per-request input; it now serves as the base multiplier for `LLM_CHAT_MAX_TOTAL_CHARS` (default `LLM_MAX_COMMAND_CHARS × 8`) and the per-chat-turn `content` length cap.
 - `LLM_DRAFT_MODEL` — Model used for draft generation (`POST /api/ai/schedules/<date>/generate-draft/`). Default `gpt-4o`. Heavier than `LLM_MODEL` because drafts shape a whole day from history (PRD §15.3).
 - `LLM_DRAFT_RATE_LIMIT_PER_HOUR` — Independent fixed-window counter (`ai_draft_rl`) for the draft endpoint. Default `10`. The same `REDIS_URL`-when-AI-enabled requirement is covered by `ai.E001`.
 - `LLM_HISTORY_DAYS` — Number of past schedules included in the draft context. Default `7` (PRD §6.2). Only schedules with `status` in `{active, reviewed}` are included — `draft`-status days are excluded so the AI doesn't train on its own unreviewed output.

@@ -1,4 +1,4 @@
-"""Validation helpers for AI command responses.
+"""Validation helpers for AI chat and draft responses.
 
 The LLM is called with ``response_format={"type": "json_object"}`` (not
 ``json_schema`` strict mode — see ``ai/service.py`` for the rationale:
@@ -112,8 +112,11 @@ def validate_action_shape(action, allowed_categories) -> list[str]:
 def validate_response_envelope(parsed) -> list[str]:
     """Sanity-check the top-level shape before inspecting individual actions.
 
-    The explanation cap is read from ``settings.LLM_MAX_EXPLANATION_CHARS``
-    so chat and one-shot share a single tunable.
+    Internal helper — after the ``/command/`` endpoint was removed (feature
+    0044) there is no user-facing one-shot path; this is now called only by
+    ``validate_chat_response_envelope`` (and shared with the draft validator).
+    The explanation cap is read from ``settings.LLM_MAX_EXPLANATION_CHARS`` so
+    every AI envelope shares a single tunable.
     """
     if not isinstance(parsed, dict):
         return ["response must be a JSON object"]

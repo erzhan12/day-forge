@@ -12,6 +12,14 @@ from schedules.models import Schedule
 
 
 class TestRollbackPropagation:
+    """Narrow scope: pins ONLY that ``_Rollback`` re-raises across the
+    ``sync_to_async`` / ``async_to_sync`` asgiref boundary (the stale-fingerprint
+    409 path, which raises before any DB write). Full ``transaction.atomic()``
+    rollback of real writes is covered via the view path by
+    ``test_ai_views_chat.py::test_mid_batch_failure_rolls_back`` and
+    ``test_persist_validation_error_rolls_back_with_action_index``.
+    """
+
     @pytest.mark.django_db
     def test_rollback_propagates_across_sync_to_async(self, user):
         schedule = Schedule.objects.create(user=user, date="2026-04-18")
@@ -78,5 +86,9 @@ class TestRateLimitCounter:
             user_id, key_prefix, 10
         )
 
+        # ``_expire_info`` is a LocMemCache-private test seam (valid only because
+        # conftest._pin_test_cache_backend pins CACHES['default'] to LocMemCache
+        # for the suite); it breaks on any other backend. Mirrors the note in
+        # test_ratelimit.py:42-45.
         ttl_remaining = cache._expire_info[key] - time.time()
         assert ttl_remaining > 1800

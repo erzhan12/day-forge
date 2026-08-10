@@ -445,6 +445,30 @@ class TestRateLimit:
         # writes no AIInteraction row (only the first OK call logged one).
         assert AIInteraction.objects.count() == 1
 
+    @pytest.mark.django_db
+    def test_chat_bucket_independent_of_draft_bucket(
+        self, user, auth_client, monkeypatch, settings
+    ):
+        # A chat call must increment ONLY ai_chat_rl, never the draft bucket —
+        # guards against the two literal key strings ("ai_chat_rl" /
+        # "ai_draft_rl") being swapped in views.py (a swap would leave chat
+        # unmetered and burn the wrong counter). Migrated from the deleted
+        # command↔draft cross-bucket isolation test.
+        settings.LLM_CHAT_RATE_LIMIT_PER_HOUR = 5
+        _patch_run_chat(
+            monkeypatch,
+            AIChatResult(
+                raw_response_text="{}",
+                parsed_actions=[],
+                explanation="",
+                ask=None,
+            ),
+        )
+        resp = _post(auth_client, {"messages": [_user_turn("hi")]})
+        assert resp.status_code == 200
+        assert cache.get(f"ai_chat_rl:{user.id}") == 1
+        assert cache.get(f"ai_draft_rl:{user.id}") in (None, 0)
+
 
 class TestAuditEnvelope:
     @pytest.mark.django_db
