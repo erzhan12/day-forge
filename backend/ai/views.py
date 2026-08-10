@@ -161,7 +161,7 @@ async def _log_interaction(
     command: str,
     response_text: str,
     actions: list[dict],
-    kind: str = AIInteraction.Kind.COMMAND,
+    kind: str = AIInteraction.Kind.CHAT,
 ) -> AIInteraction | None:
     """Best-effort persistence of one AI interaction. Never raises.
 
@@ -890,7 +890,9 @@ async def _log_chat_failure(
     payload = _build_chat_audit_response(
         messages, raw, error_class=type(exc).__name__
     )
-    await _log_interaction(schedule, last_user_msg, payload, [])
+    await _log_interaction(
+        schedule, last_user_msg, payload, [], kind=AIInteraction.Kind.CHAT
+    )
 
 
 @login_required
@@ -995,7 +997,11 @@ async def ai_chat(request, date):
         messages, result.raw_response_text, error_class=None
     )
     interaction = await _log_interaction(
-        schedule, last_user_msg, audit_response, result.parsed_actions
+        schedule,
+        last_user_msg,
+        audit_response,
+        result.parsed_actions,
+        kind=AIInteraction.Kind.CHAT,
     )
 
     # Clarifying-question turn — no mutations, no schedule status flip.

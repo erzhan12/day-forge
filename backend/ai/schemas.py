@@ -114,7 +114,8 @@ def validate_response_envelope(parsed) -> list[str]:
 
     Internal helper — after the ``/command/`` endpoint was removed (feature
     0044) there is no user-facing one-shot path; this is now called only by
-    ``validate_chat_response_envelope`` (and shared with the draft validator).
+    ``validate_draft_response``. ``validate_chat_response_envelope``
+    re-implements the same checks inline to accommodate the extra ``ask`` field.
     The explanation cap is read from ``settings.LLM_MAX_EXPLANATION_CHARS`` so
     every AI envelope shares a single tunable.
     """
@@ -151,7 +152,7 @@ def validate_chat_response_envelope(parsed) -> list[str]:
 
     Caps on ``ask`` and ``explanation`` length live in
     ``settings.LLM_CHAT_MAX_ASK_CHARS`` / ``LLM_MAX_EXPLANATION_CHARS``
-    (the latter is shared with the one-shot envelope so both endpoints
+    (the latter is shared with the draft envelope so all AI endpoints
     stay aligned).
     """
     if not isinstance(parsed, dict):

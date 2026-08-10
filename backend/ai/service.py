@@ -106,7 +106,7 @@ class AICommandResult:
 class AIChatResult:
     """Result envelope for ``run_chat`` (feature 0007).
 
-    Carries the same provider raw text + parsed actions as the one-shot
+    Carries the same provider raw text + parsed actions as
     ``AICommandResult`` plus an optional ``ask`` clarifying-question
     string. Exactly one of ``parsed_actions`` (non-empty) or ``ask``
     (non-null) is set, OR both are empty/null for a chit-chat turn.

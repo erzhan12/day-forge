@@ -488,6 +488,9 @@ class TestAuditEnvelope:
         resp = _post(auth_client, {"messages": messages})
         assert resp.status_code == 200
         row = AIInteraction.objects.get(schedule=today_schedule)
+        # Chat audit rows must be labeled kind="chat", not the old default
+        # "command" (feature 0044: /command/ removed, AIInteraction.Kind.CHAT added).
+        assert row.kind == AIInteraction.Kind.CHAT
         payload = json.loads(row.ai_response)
         expected = hashlib.sha256(
             json.dumps(messages, sort_keys=True, ensure_ascii=False).encode(
