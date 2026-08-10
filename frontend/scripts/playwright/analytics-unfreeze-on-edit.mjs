@@ -5,7 +5,7 @@
 // reviewed.
 //
 // AI-triggered unfreeze (mark_active_on_edit via apply_actions) used to
-// live as "Step G" here against the Phase-4 /command/ endpoint. That
+// live as "Step G" here against the retired Phase-4 one-shot endpoint. That
 // path was removed when the chat rewrite (feature 0007) replaced the
 // single-shot CommandBar UI; the AI-edit invariant is now covered by
 // ai-chat-single-turn-apply.mjs against the current /chat/ surface.
@@ -173,9 +173,9 @@ try {
   await assertAnalyticsActive()
   await markReviewedFromPanel()
 
-  // Step G (Phase-4 AI command bar one-shot via /command/) was removed:
+  // Step G (Phase-4 AI command bar one-shot) was removed:
   // after feature 0007 the CommandBar surface submits to /api/ai/.../chat/
-  // (multi-turn) instead of /command/ (single-shot), so the original probe
+  // (multi-turn), so the original probe
   // here would hang waiting for a response that never matches. The
   // mark_active_on_edit invariant for AI-triggered edits is covered
   // separately by ai-chat-single-turn-apply.mjs, which exercises the

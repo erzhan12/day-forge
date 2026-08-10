@@ -253,7 +253,7 @@ def mark_reviewed(request, date):
         # empty) child TimeBlock queryset would acquire zero locks under
         # PostgreSQL — see RULES.md "Locking an empty child queryset
         # locks nothing". This serialises every potential writer for
-        # this schedule (block_detail, mark_reviewed, ai_command, etc.)
+        # this schedule (block_detail, mark_reviewed, AI chat, etc.)
         # behind one queue.
         locked = (
             Schedule.objects.select_for_update()

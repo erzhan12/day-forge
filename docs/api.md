@@ -265,68 +265,11 @@ All-or-nothing: if any block is invalid, no changes are applied.
 
 ---
 
-### `POST /api/ai/schedules/{date}/command/` (DEPRECATED)
-
-> ⚠️ **DEPRECATED.** As of feature 0007 (PR #15) the `CommandBar` UI no longer routes here — it submits to the multi-turn `POST /api/ai/schedules/{date}/chat/` endpoint. This endpoint remains registered and unit-tested for backward compatibility with any external callers, but has no production frontend caller. Scheduled for removal — see `tasks/todo.md` § Follow-ups ("Remove the orphan `/api/ai/schedules/<date>/command/` endpoint and the `useAI` composable"). For new integrations use the `/chat/` endpoint documented below.
-
-Translate a natural-language command (English or Russian) into schedule mutations via the configured LLM, apply them atomically, and return the updated block list. Every call is logged to `AIInteraction`, success or failure — PRD §6.5.
-
-Active server-side Rules (the rows the user maintains via `/api/rules/`) are injected into the LLM prompt context so the model can fill omitted defaults (duration, gap, start time) instead of asking for clarification. Behavioral note only — no request/response contract change.
-
-Requires `LLM_API_KEY` to be set. When unset, every call returns `503` so the frontend can show a degraded-mode indicator; manual editing is unaffected.
-
-**Path params**
-
-| Name | Type | Notes |
-|------|------|-------|
-| `date` | string | `YYYY-MM-DD`. Schedule is created if missing. |
-
-**Request body**
-
-| Field | Type | Required | Notes |
-|-------|------|----------|-------|
-| `command` | string | yes | Up to `LLM_MAX_COMMAND_CHARS` (default 500) after trim. |
-
-**Success — `200 OK`**
-
-```json
-{
-  "blocks": [
-    { "id": 42, "title": "Standup", "start_time": "10:00", "end_time": "10:15", "category": "work", "is_completed": false, "sort_order": 0 }
-  ],
-  "explanation": "Added standup at 10:00 for 15 minutes."
-}
-```
-
-`blocks` is the full schedule after the AI's actions were applied. `explanation` is a short human-readable summary produced by the model (same language as the user's command).
-
-**Errors**
-
-| Status | `errors` key | Meaning |
-|--------|--------------|---------|
-| `400` | `command` / `date` / `body` | Request shape / command type invalid. |
-| `400` | `action_index` + `detail` | AI action failed validation (overlap, bad time, unknown block ID). All prior actions in the batch are rolled back. |
-| `403` | `detail` | CSRF token missing/invalid. |
-| `409` | `detail` | `schedule_changed` — the schedule or active Rules changed after this request captured its apply-context fingerprint (see below). No mutations applied. |
-| `413` | `body` | Request body exceeds 100 KB. |
-| `429` | `detail` | Per-user rate limit (`LLM_RATE_LIMIT_PER_HOUR`, default 100/hr) exceeded. No `AIInteraction` row is written for rejected calls. |
-| `502` | `detail` | LLM provider returned an error, or response failed JSON / schema validation. |
-| `503` | `detail` | `LLM_API_KEY` is not configured. |
-| `504` | `detail` | LLM provider timed out (>`LLM_REQUEST_TIMEOUT` seconds). |
-
-Atomicity: mid-batch validation failure rolls back all DB mutations. The `AIInteraction` row for the request is written *before* mutations are applied, so failed requests still leave a log entry with `actions_json` reflecting the AI's intent.
-
-A successful command flips `Schedule.status` from `draft` to `active` **only when** at least one action was applied. A 200 with `actions: []` (LLM ambiguity / out-of-window guard) leaves the status untouched, mirroring the no-undo-registration contract.
-
-**Concurrent-edit guard (feature 0030):** before the LLM call the view snapshots the schedule blocks and active Rules and computes an apply-context fingerprint. After the LLM returns, `_apply_actions_sync` locks `User → Schedule → TimeBlock` rows, re-reads active Rules, and compares fingerprints. A mismatch returns `409 {"errors": {"detail": "schedule_changed"}}` with no DB mutations and `AIInteraction.success` left false. The guard runs only when `parsed_actions` is non-empty — a no-op turn (`actions: []`) skips apply entirely and cannot 409. This is **not** the same as `generate-draft`'s unrelated `409` ("Schedule already has blocks; delete them before regenerating."). Clients that receive `schedule_changed` must refresh their local schedule state (e.g. `router.reload({ only: ["blocks", "schedule"] })`) and let the user retry explicitly; the server never auto-retries.
-
----
-
 ### `POST /api/ai/schedules/{date}/chat/`
 
-Multi-turn natural-language assistant for the command bar (feature 0007). Each request carries the full client-side transcript; the server validates it, calls the LLM once for the latest user turn, and either applies schedule mutations, asks a clarifying question, or returns chit-chat with no mutations. Active server-side Rules are injected into the trusted schedule-context message via the shared `ai.views._load_active_rules` helper (same as command/draft). Every call is logged to `AIInteraction`.
+Multi-turn natural-language assistant for the command bar (feature 0007). Each request carries the full client-side transcript; the server validates it, calls the LLM once for the latest user turn, and either applies schedule mutations, asks a clarifying question, or returns chit-chat with no mutations. Active server-side Rules are injected into the trusted schedule-context message via the shared `ai.views._load_active_rules` helper (same as draft). Every call is logged to `AIInteraction`.
 
-**Privacy:** the full client-supplied `messages[]` transcript is re-sent to the LLM provider on every turn — a strictly larger provider-egress surface than the one-shot command endpoint. Users should clear the thread (or reload the page) before discussing anything sensitive.
+**Privacy:** the full client-supplied `messages[]` transcript is re-sent to the LLM provider on every turn. Users should clear the thread (or reload the page) before discussing anything sensitive.
 
 Requires `LLM_API_KEY` to be set. When unset, every call returns `503` so the frontend can show a degraded-mode indicator; manual editing is unaffected.
 
@@ -394,9 +337,9 @@ Empty `parsed_actions` with `ask: null`. No mutations; status unchanged.
 | `400` | `messages` / `date` / `body` | Transcript shape invalid, path date bad, or body not a JSON object. |
 | `400` | `action_index` + `detail` | AI action failed validation at apply time (overlap, bad time, unknown block ID). Entire batch rolled back. |
 | `403` | `detail` | CSRF token missing/invalid. |
-| `409` | `detail` | `schedule_changed` — same concurrent-edit guard as command (feature 0030); only when `parsed_actions` is non-empty. |
+| `409` | `detail` | `schedule_changed` — the concurrent-edit fingerprint guard (feature 0030); only when `parsed_actions` is non-empty. |
 | `413` | `body` | Request body exceeds 100 KB. |
-| `429` | `detail` | Per-user chat rate limit (`LLM_CHAT_RATE_LIMIT_PER_HOUR`, default 60/hr) exceeded. Counter is independent from the command and draft buckets. Validation failures do not consume the budget. |
+| `429` | `detail` | Per-user chat rate limit (`LLM_CHAT_RATE_LIMIT_PER_HOUR`, default 60/hr) exceeded. Counter is independent from the draft bucket. Validation failures do not consume the budget. |
 | `502` | `detail` | LLM provider returned an error, or response failed JSON / schema validation. |
 | `503` | `detail` | `LLM_API_KEY` is not configured. |
 | `504` | `detail` | LLM provider timed out (>`LLM_REQUEST_TIMEOUT` seconds). |
@@ -405,7 +348,7 @@ Atomicity: mid-batch validation failure rolls back all DB mutations. The `AIInte
 
 A successful apply flips `Schedule.status` from `draft` to `active` **only when** at least one action was applied. Clarifying-question, chit-chat, and empty-action turns leave status untouched.
 
-**Concurrent-edit guard:** identical to command — fingerprint captured before the LLM call, re-checked under lock at apply time. Mismatch → `409 {"errors": {"detail": "schedule_changed"}}`. Unrelated to `generate-draft`'s empty-schedule `409`. Clients must refresh schedule state and retry explicitly; the server never auto-retries.
+**Concurrent-edit guard:** fingerprint captured before the LLM call, re-checked under lock at apply time. Mismatch → `409 {"errors": {"detail": "schedule_changed"}}`. Unrelated to `generate-draft`'s empty-schedule `409`. Clients must refresh schedule state and retry explicitly; the server never auto-retries.
 
 ---
 
@@ -415,8 +358,8 @@ Generate a fresh draft schedule for an empty day from the user's
 weekday/weekend template, the last `LLM_HISTORY_DAYS` (default 7) days of
 history (excluding `draft`-status schedules), and active rules. Active
 Rules are injected into the LLM prompt context via the same shared
-`_format_rules_section` formatter the command and chat endpoints use,
-so the three endpoints can't drift on rule rendering. The LLM fills the
+`_format_rules_section` formatter the draft and chat endpoints use,
+so both endpoints can't drift on rule rendering. The LLM fills the
 day with `add` actions only — no `task_id`s exist on an empty schedule.
 The draft does **not** flip `Schedule.status`; the badge stays `draft`
 until the user makes a real edit.
@@ -449,7 +392,7 @@ until the user makes a real edit.
 | `409` | `detail` | Schedule already has blocks; delete them before regenerating. |
 | `413` | `body` | Request body exceeds 100 KB. |
 | `422` | `detail` | No template configured for this day's slot type. |
-| `429` | `detail` | Draft rate limit (`LLM_DRAFT_RATE_LIMIT_PER_HOUR`, default 10/hr) exceeded. Counter is independent from the command-bar counter. |
+| `429` | `detail` | Draft rate limit (`LLM_DRAFT_RATE_LIMIT_PER_HOUR`, default 10/hr) exceeded. Counter is independent from the chat bucket. |
 | `502` | `detail` | LLM provider returned an error, or response failed JSON / schema validation. |
 | `503` | `detail` | `LLM_API_KEY` is not configured. |
 | `504` | `detail` | LLM provider timed out. |

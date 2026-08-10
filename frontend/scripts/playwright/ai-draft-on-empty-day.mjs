@@ -25,7 +25,7 @@
 //   node scripts/playwright/ai-draft-on-empty-day.mjs
 //
 // Concurrency: run this script SERIALLY with the other ai-*.mjs scripts.
-// They share the `playwright` user and the `ai_cmd_rl` / `ai_draft_rl`
+// They share the `playwright` user and the chat / draft rate-limit
 // rate-limit counters, so parallel execution will race on the counters
 // and may produce false failures in the 409 script's "no consumption"
 // assertion. Different seed dates prevent DB conflicts; the shared
@@ -200,7 +200,7 @@ try {
     fail(
       `NON-PROMOTION REGRESSION: schedule.status expected to stay "draft" ` +
         `after a successful draft generation (drafts NEVER promote to ` +
-        `active — only /command/ does, gated on non-empty actions), got ` +
+        `active — only a user edit or chat apply does), got ` +
         `${JSON.stringify(dbMap.STATUS)}.`,
     )
   }

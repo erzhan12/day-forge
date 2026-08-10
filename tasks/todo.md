@@ -6,18 +6,18 @@
 
 - [x] Add `openai` dep + `LLM_*` settings
 - [x] `backend/ai/schemas.py` — action validators
-- [x] `backend/ai/prompts.py` — SYSTEM_PROMPT + user message builder
-- [x] `backend/ai/service.py` — `run_command()` + error taxonomy
-- [x] `backend/ai/views.py` — `ai_command` view
-- [x] Register URL `api/ai/schedules/<date>/command/`
+- [x] `backend/ai/prompts.py` — original one-shot prompt + user message builder
+- [x] `backend/ai/service.py` — original one-shot service + error taxonomy
+- [x] `backend/ai/views.py` — original one-shot view
+- [x] Register the original one-shot URL
 - [x] Backend tests (service + view)
-- [x] `frontend/src/composables/useAI.ts`
+- [x] Original frontend AI composable
 - [x] `frontend/src/components/CommandBar.vue`
 - [x] Wire CommandBar into `Schedule.vue`; extend `UndoAction["type"]`
-- [x] Frontend tests (`useAI`, `CommandBar`)
+- [x] Frontend tests (AI composable, `CommandBar`)
 - [x] Document endpoint in `docs/api.md` + env vars in `.claude/rules/project.md`
 - [x] Manual end-to-end test with a real `LLM_API_KEY` (English + Russian commands)
-  - Phase-4 single-shot `/command/` endpoint is no longer wired to the UI after the
+  - The Phase-4 single-shot endpoint is no longer wired to the UI after the
     feature-0007 chat rewrite; the equivalent behavior is covered by the chat surface.
     Validated end-to-end with real LLM on 2026-05-15 via
     `ai-chat-single-turn-apply.mjs` (EN: "add 30-minute focus block at 10:00" →
@@ -41,7 +41,7 @@
 - [x] `ai/service.py`: `run_draft`, `AIDraftResult`
 - [x] `ai/views.py`: `ai_generate_draft` view + `_rate_limit_drafts_per_user` decorator
 - [x] `_log_interaction(kind=...)`; new code paths log `kind="draft"`
-- [x] `Schedule.mark_active_if_draft()` + wire into `create_block`, `block_detail`, `reorder_blocks`, `ai_command` (only when `len(parsed_actions) > 0`)
+- [x] `Schedule.mark_active_if_draft()` + wire into `create_block`, `block_detail`, `reorder_blocks`, and AI apply (only when `len(parsed_actions) > 0`)
 - [x] `restore_blocks` does NOT flip status (verified by tests)
 - [x] `templates_mgr.api`: REST CRUD for templates + rules, per-user scoped
 - [x] `templates_mgr.views.settings_view` Inertia page
@@ -57,7 +57,7 @@
 - [x] `frontend/src/components/DraftBadge.vue`
 - [x] `frontend/src/components/RegenerateDraftButton.vue` (disabled state when `!hasTemplate`)
 - [x] `frontend/src/composables/useTemplates.ts`, `useRules.ts`, `useDraft.ts`
-- [x] `useAI`/`useSchedule`/`useUndo` reload props → `["blocks", "schedule"]`
+- [x] AI/schedule/undo composables reload props → `["blocks", "schedule"]`
 - [x] `useDrag.startDrag`: honor `isDisabled` callback
 - [x] `GapSlot`: honor `disabled` prop
 - [x] `Schedule.vue`: auto-draft watcher, undo for `"draft"` type, spinner overlay, inline error
@@ -120,7 +120,7 @@
 - [x] Manual end-to-end test with a real `LLM_API_KEY`
   - Validated 2026-05-15 via `analytics-unfreeze-on-edit.mjs` (steps A-F: unfreeze on
     drag / inline-edit / delete / restore + status-flow invariants all hold; Step G
-    targeted the Phase-4 `/command/` endpoint via `waitForResponse(...'/command/')`,
+    targeted the retired Phase-4 single-shot endpoint,
     but `CommandBar.vue` now submits to `/chat/` after feature 0007 (PR #15) so the
     response matcher never fired and the script timed out — superseded by
     `ai-chat-single-turn-apply.mjs` which exercises the same `mark_active_on_edit`
@@ -547,29 +547,17 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
   no-op branch. Rejected per the iteration loop's P0/P1-only-deep-
   triage rule (skill docs § Step 6/7).
 
-- [ ] **Remove the orphan `/api/ai/schedules/<date>/command/` endpoint
-  and the `useAI` composable.** After feature 0007 (PR #15) `CommandBar.vue`
-  routes through `useChat → /chat/`. The `/command/` view in
-  `backend/ai/views.py` and `frontend/src/composables/useAI.ts` still
-  exist; `useAI` is partially imported by
-  `frontend/src/components/RegenerateDraftButton.vue` but only for the
-  module-level shared state (`isProcessing`, `apiHealthy`), not for
-  `submit()`. Touch points to delete cleanly: (a) backend view +
-  URL route + dedicated tests, (b) `useAI.ts` whole file plus the
-  `useAI()` import in `RegenerateDraftButton.vue` (refactor the spinner
-  state to a shared module, or fold it into `useDraft.ts`), (c) any
-  stragglers in `docs/api.md`. Filed in response to PR #20 `claude-review`
-  P2 [QUALITY] finding — out of scope for the e2e-script cleanup PR
-  because it crosses the backend/frontend boundary and changes a public
-  API surface. Run the full `pytest backend/tests/` + `cd frontend &&
-  npm test` and a chat-script smoke before merging.
+- [x] **Remove the orphan one-shot AI endpoint and frontend composable.**
+  Completed in feature 0044 after migrating shared apply-path coverage to
+  the surviving chat and endpoint-independent suites.
 
 - [x] **Explicit regression test for `_Rollback` propagation across
   `sync_to_async`.** PR #22 `claude-review` iter-2 P2 [TESTING] flagged
   this. Currently the `_Rollback` exception path through
   `await sync_to_async(_apply_actions_sync, thread_sensitive=True)(...)`
   is covered *implicitly* by `test_mid_batch_failure_rolls_back` in
-  `test_ai_views.py` and the analogous draft / chat tests — each
+  `test_ai_views_chat.py` (migrated from the deleted `test_ai_views.py` in
+  feature 0044) and the analogous draft / chat tests — each
   asserts a 400 / 409 response after an action error mid-batch, which
   can only land if the exception crossed the thread boundary cleanly.
   An explicit test (e.g. unit-level: call `_apply_actions_sync` from
@@ -583,7 +571,7 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
   Backend coverage now lives in `test_rollback_propagates_across_sync_to_async`,
   `test_add_rejected_when_overlapping_existing_block_rolls_back_and_preserves_status`,
   and `test_chat_overlap_rolls_back_and_preserves_status`, unblocking the separate
-  `/command/` endpoint, `.mjs` scripts, and `useAI.ts` removal task.
+  retired endpoint, `.mjs` scripts, and composable removal task.
 
 - [ ] **CalDAV: drop-counter / metrics for malformed VEVENT skips.**
   PR #30 `claude-review` iter-1 P1 [QUALITY] flagged
@@ -688,7 +676,7 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
   itself), and `POST /api/calendar/account/` has the same absence — so this
   is a pre-existing pattern, not introduced by 0020. If added, do it
   symmetrically for both providers (a shared `connect_rl:<user_id>` fixed
-  window mirroring `ai_cmd_rl`, env `*_CONNECT_RATE_LIMIT_PER_HOUR`,
+  window using a dedicated `connect_rl` key, env `*_CONNECT_RATE_LIMIT_PER_HOUR`,
   documented in `.claude/rules/project.md`, returning 429).
 
 - [ ] **De-duplicate `extractErrorMessage` across composables.** Identical

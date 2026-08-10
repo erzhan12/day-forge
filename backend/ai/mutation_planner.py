@@ -1,4 +1,4 @@
-"""Pure final-state mutation planner for AI command/chat apply (feature 0030).
+"""Pure final-state mutation planner for AI chat apply (feature 0030).
 
 Snapshot in, ``MutationPlan`` or ``PlanError`` out — no ORM writes.
 """
@@ -307,7 +307,7 @@ def compute_apply_context_fingerprint(
     hash payload stays single-sourced with the apply-path snapshot helpers.
 
     Call-site modes:
-    - Views (``ai_command`` / ``ai_chat``): ORM ``schedule`` + ORM ``blocks`` +
+    - View (``ai_chat``): ORM ``schedule`` + ORM ``blocks`` +
       Rule rows → ``snapshot_from_blocks`` then ``snapshot_apply_context``.
     - Unit tests: ``BlockSnapshot`` list with ``schedule_id`` /
       ``schedule_date`` kwargs (no ORM schedule).

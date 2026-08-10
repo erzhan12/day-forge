@@ -41,12 +41,11 @@ Run every script, or an AI group, from the repository root:
 ```sh
 make e2e
 make e2e-chat
-make e2e-command
 make e2e-draft
 ```
 
-Always run them serially. The AI scripts share the user's `ai_cmd_rl` and
-`ai_draft_rl` counters, the 409 scenario asserts those counters do not change,
+Always run them serially. The AI scripts share the user's draft and chat
+rate-limit counters, the 409 scenario asserts those counters do not change,
 and some seed dates collide (`ai-chat-clarifying-question` and
 `regenerate-422-fallback` both use 2026-09-21). Each script resets its own
 scenario safely when run in sequence; parallel runs can corrupt one another.
@@ -76,9 +75,6 @@ than a currency estimate because the configured model can change.
 | `ai-chat-privacy-hint-always-on` | 0 | 5–15s; route is stubbed |
 | `ai-chat-single-turn-apply` | 1 | 15–45s |
 | `ai-chat-token-race` | 0 | 10–20s; both routes are stubbed |
-| `ai-command-add-block` | 1 | 15–45s |
-| `ai-command-mass-move` | 1 | 15–45s |
-| `ai-command-rollback-on-overlap` | 1 | 15–45s |
 | `ai-draft-409-on-non-empty` | 0 | 5–20s; pre-seeds today's row to suppress login auto-draft |
 | `ai-draft-on-empty-day` | 1 draft | 30–90s |
 | `analytics-unfreeze-on-edit` | 0 | 15–40s |

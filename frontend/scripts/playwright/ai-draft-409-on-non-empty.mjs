@@ -27,7 +27,7 @@
 //   node scripts/playwright/ai-draft-409-on-non-empty.mjs
 //
 // Concurrency: run this script SERIALLY with the other ai-*.mjs scripts.
-// They share the `playwright` user and the `ai_cmd_rl` / `ai_draft_rl`
+// They share the `playwright` user and the chat / draft rate-limit
 // rate-limit counters, so parallel execution will race on the counters
 // and may produce false failures in this script's "no consumption"
 // assertion (the before/after snapshot would catch a concurrent

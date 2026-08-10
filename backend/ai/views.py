@@ -1,15 +1,8 @@
-"""AI command endpoint: `POST /api/ai/schedules/<date>/command/`.
-
-Translates a natural-language command into schedule mutations via the
-OpenAI-compatible service in ``ai/service.py``, validates and applies each
-action atomically, and logs every interaction (success or failure).
-"""
+"""AI draft and chat endpoints with atomic schedule mutation helpers."""
 import datetime
-import functools
 import hashlib
 import json
 import logging
-from collections.abc import Awaitable, Callable
 from typing import Any
 
 from asgiref.sync import sync_to_async
@@ -57,7 +50,6 @@ from ai.service import (
     AITimeoutError,
     AIUnavailableError,
     run_chat,
-    run_command,
     run_draft,
 )
 
@@ -87,8 +79,8 @@ _RATE_LIMIT_WINDOW_SECONDS = 3600
 async def _load_active_rules(user: User) -> list[Rule]:
     """Load the user's active rules, ordered by ``-priority``.
 
-    Shared by ``ai_command``, ``ai_chat``, and ``ai_generate_draft`` so
-    all three AI endpoints inject the same rule set into their prompt
+    Shared by ``ai_chat`` and ``ai_generate_draft`` so both AI endpoints
+    inject the same rule set into their prompt
     context. Active/user-owned filtering lives here; the prompt builders
     just render whatever they're handed.
 
@@ -162,42 +154,6 @@ def _rate_limited_response() -> JsonResponse:
         {"errors": {"detail": "Rate limit exceeded. Try again later."}},
         status=429,
     )
-
-
-def _rate_limit_per_user(
-    view_func: Callable[..., Awaitable[JsonResponse]],
-) -> Callable[..., Awaitable[JsonResponse]]:
-    """Fixed-window per-user rate limit decorator for the command endpoint.
-
-    **Async-only** (feature 0009): the wrapper is ``async def`` and
-    ``await``s both ``_consume_rate_limit`` and ``view_func``. Applying
-    this decorator to a sync view will cause the wrapper's
-    ``await view_func(...)`` to raise ``TypeError: object JsonResponse
-    can't be used in 'await' expression`` on the first request.
-    ``ai_command`` is the only call site and is itself ``async def``.
-
-    Used by ``ai_command``. The draft and chat endpoints do **not** use
-    a decorator — their rate limits are consumed inline after
-    precondition checks pass, so a 422 / 409 / oversized-body /
-    invalid-date does not burn the 10/hr draft or 60/hr chat budgets.
-    """
-    @functools.wraps(view_func)
-    async def wrapper(request, *args, **kwargs) -> JsonResponse:
-        # Resolve the authenticated user via the async ORM path. The
-        # decorator wrapper executes BEFORE the view body, so it must own
-        # the first ``await request.auser()`` — the lazy ``request.user``
-        # proxy would otherwise trigger ``SynchronousOnlyOperation`` in
-        # an async context. Django caches the resolved user on
-        # ``request._acached_user``, so the view body's own
-        # ``await request.auser()`` is an ``hasattr`` short-circuit, not
-        # a second DB hit.
-        user = await request.auser()
-        if not await _consume_rate_limit(
-            user.id, "ai_cmd_rl", settings.LLM_RATE_LIMIT_PER_HOUR
-        ):
-            return _rate_limited_response()
-        return await view_func(request, *args, **kwargs)
-    return wrapper
 
 
 async def _log_interaction(
@@ -593,8 +549,7 @@ def _apply_actions_sync(
 ) -> None:
     """Apply parsed actions under one atomic+select_for_update lock.
 
-    Used by both ``ai_command`` and ``ai_chat`` (the command-style apply
-    path). ``_apply_draft_sync`` stays separate because the draft path
+    Used by ``ai_chat``. ``_apply_draft_sync`` stays separate because the draft path
     locks the parent ``Schedule`` row and re-checks emptiness — different
     semantics that don't merge cleanly.
     """
@@ -671,151 +626,6 @@ def _apply_draft_sync(schedule: Schedule, result: AIDraftResult) -> None:
             err = _apply_add(schedule, blocks_by_id, action, idx)
             if err is not None:
                 raise _Rollback(err)
-
-
-@login_required
-@require_http_methods(["POST"])
-@_rate_limit_per_user
-async def ai_command(request, date):
-    oversized = reject_oversized_body(request)
-    if oversized is not None:
-        return oversized
-
-    try:
-        parsed_date = datetime.date.fromisoformat(date)
-    except ValueError:
-        return JsonResponse({"errors": {"date": "Invalid date format."}}, status=400)
-
-    try:
-        data = json.loads(request.body)
-    except json.JSONDecodeError:
-        return JsonResponse({"errors": {"body": "Invalid JSON."}}, status=400)
-
-    # Non-object JSON roots (``[]``, ``"x"``, ``123``, ``null``) parse
-    # fine but break ``data.get(...)`` with AttributeError → 500. Reject
-    # them as 400 here so the contract from the planning doc holds:
-    # any malformed body returns 4xx, never 5xx.
-    if not isinstance(data, dict):
-        return JsonResponse(
-            {"errors": {"body": "Request body must be a JSON object."}}, status=400
-        )
-
-    command = data.get("command")
-    if not isinstance(command, str):
-        return JsonResponse({"errors": {"command": "command must be a string."}}, status=400)
-
-    # ``await request.auser()`` is cached on ``request._acached_user`` by
-    # Django's auth middleware; the decorator wrapper resolved it once
-    # already so this call is an ``hasattr`` short-circuit, not a second
-    # DB hit. ``request.user`` (the lazy proxy) cannot be touched from
-    # an async context without raising ``SynchronousOnlyOperation``.
-    user = await request.auser()
-    schedule, _ = await Schedule.objects.aget_or_create(user=user, date=parsed_date)
-    now = timezone.localtime()
-
-    # Run the LLM call OUTSIDE any transaction — a 15s network call should
-    # never hold a DB connection or row locks. The mutation step below
-    # re-fetches under ``select_for_update`` and re-validates each action
-    # against the locked state, so concurrent edits (delete/insert
-    # between the LLM call and the apply step) surface cleanly as 400
-    # "block not found" or "overlap" errors.
-    current_blocks = [
-        b
-        async for b in TimeBlock.objects.filter(schedule=schedule).order_by(
-            "start_time", "sort_order"
-        )
-    ]
-    rules = await _load_active_rules(user)
-    expected_fingerprint = compute_apply_context_fingerprint(
-        schedule=schedule,
-        blocks=current_blocks,
-        rules=rules,
-    )
-    # Async view: the await on the LLM client yields the event loop while
-    # the network call is in flight. Under WSGI/sync gunicorn this still
-    # runs in Django's thread-pool executor (no concurrency win); under
-    # an ASGI runner (Phase 7) the worker is freed during the await. See
-    # docs/features/0009_async_ai_views_PLAN.md § D5.
-    try:
-        result = await run_command(command, schedule, current_blocks, rules, now)
-    except AIError as e:
-        raw = getattr(e, "raw_response_text", "") or str(e)
-        await _log_interaction(schedule, command, raw, [])
-        # Walk MRO so a future subclass (e.g. ``AIRateLimitError``) resolves
-        # to its parent's status instead of raising ``KeyError``. If a new
-        # AIError subclass is ever added with no mapped parent, fall back to
-        # 500 and log loudly — that's a programming error we want visible.
-        status = next(
-            (s for cls, s in _AI_ERROR_STATUS.items() if isinstance(e, cls)),
-            None,
-        )
-        if status is None:
-            logger.error(
-                "Unmapped AIError subclass %s — add to _AI_ERROR_STATUS",
-                type(e).__name__,
-            )
-            status = 500
-        return JsonResponse({"errors": {"detail": str(e)}}, status=status)
-
-    # Intent log BEFORE applying actions. Persisted outside the mutation
-    # atomic so it survives a mid-batch rollback — PRD §6.5 requires every
-    # interaction to be logged. Row starts pessimistic (``success=False``)
-    # and is flipped to True post-apply via ``_mark_success``.
-    interaction = await _log_interaction(
-        schedule, command, result.raw_response_text, result.parsed_actions
-    )
-
-    if not result.parsed_actions:
-        await _mark_success(interaction)
-        result_blocks = [
-            b
-            async for b in TimeBlock.objects.filter(schedule=schedule).order_by(
-                "start_time", "sort_order"
-            )
-        ]
-        return JsonResponse(
-            {
-                "blocks": [block_to_dict(b) for b in result_blocks],
-                "explanation": result.explanation,
-            }
-        )
-
-    try:
-        await sync_to_async(_apply_actions_sync, thread_sensitive=True)(
-            schedule,
-            result,
-            expected_fingerprint=expected_fingerprint,
-            interaction_id=interaction.id if interaction else None,
-        )
-    except _Rollback as rb:
-        logger.warning(
-            "AI action apply failed (user=%s, schedule=%s, actions=%s)",
-            user.id,
-            schedule.id,
-            len(result.parsed_actions),
-        )
-        return rb.response
-
-    await _mark_success(interaction)
-
-    result_blocks = [
-        b
-        async for b in TimeBlock.objects.filter(schedule=schedule).order_by(
-            "start_time", "sort_order"
-        )
-    ]
-    logger.info(
-        "AI command applied (user=%s, schedule=%s, actions=%s)",
-        user.id,
-        schedule.id,
-        len(result.parsed_actions),
-    )
-    return JsonResponse(
-        {
-            "blocks": [block_to_dict(b) for b in result_blocks],
-            "explanation": result.explanation,
-        }
-    )
 
 
 @login_required
@@ -1212,8 +1022,8 @@ async def ai_chat(request, date):
             }
         )
 
-    # Apply path: same select_for_update + per-action dispatcher as
-    # ai_command. Re-fetches under the lock so a concurrent edit between
+    # Apply path uses the shared select_for_update + per-action dispatcher.
+    # It re-fetches under the lock so a concurrent edit between
     # the LLM call and the apply surfaces as a clean per-action error.
     try:
         await sync_to_async(_apply_actions_sync, thread_sensitive=True)(

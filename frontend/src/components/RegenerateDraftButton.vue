@@ -12,9 +12,8 @@ const emit = defineEmits<{
   (e: "click"): void
 }>()
 
-// Chat (not the deprecated useAI command composable) owns in-flight AI
-// state after feature 0007 — gating on useAI.isProcessing would let
-// Regenerate race an active chat apply on an empty draft day.
+// Chat owns in-flight AI state after feature 0007. Gating on separate state
+// would let Regenerate race an active chat apply on an empty draft day.
 const { isProcessing, apiHealthy } = useChat()
 const { isGeneratingDraft } = useDraft()
 

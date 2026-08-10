@@ -1,7 +1,7 @@
 """Unit tests for ``service.run_draft``.
 
 Monkeypatches the OpenAI client so no network call is made. The draft
-flavour shares its exception taxonomy with ``run_command`` — covered there
+flavour shares its exception taxonomy with chat — covered there
 — so this file focuses on the *differences*: model selection, the
 ``add``-only validator, and the AIUnavailableError gate.
 """

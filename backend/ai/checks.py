@@ -29,9 +29,8 @@ def error_locmem_cache_with_ai_in_production(app_configs, **kwargs):
     """Block startup when the AI rate-limit counters live in a cache
     backend that can't enforce a correct cross-worker limit.
 
-    All three AI rate-limit buckets — ``ai_cmd_rl`` (one-shot command,
-    ``LLM_RATE_LIMIT_PER_HOUR``), ``ai_draft_rl`` (auto/manual draft,
-    ``LLM_DRAFT_RATE_LIMIT_PER_HOUR``), and ``ai_chat_rl`` (multi-turn
+    Both AI rate-limit buckets — ``ai_draft_rl`` (auto/manual draft,
+    ``LLM_DRAFT_RATE_LIMIT_PER_HOUR``) and ``ai_chat_rl`` (multi-turn
     chat, ``LLM_CHAT_RATE_LIMIT_PER_HOUR``) — share ``CACHES['default']``
     via ``ai.views._consume_rate_limit``. An ineffective backend
     (``LocMemCache`` / ``DummyCache`` are per-process; ``FileBasedCache``
@@ -57,7 +56,7 @@ def error_locmem_cache_with_ai_in_production(app_configs, **kwargs):
     if backend in _INEFFECTIVE_CACHE_BACKENDS:
         errors.append(
             Error(
-                "AI rate limiters (ai_cmd_rl / ai_draft_rl / ai_chat_rl) "
+                "AI rate limiters (ai_draft_rl / ai_chat_rl) "
                 f"are configured with an ineffective cache backend ({backend}) "
                 "while LLM_API_KEY is set. LocMemCache and DummyCache are "
                 "per-process; FileBasedCache has no atomic cross-worker incr. "
@@ -66,7 +65,7 @@ def error_locmem_cache_with_ai_in_production(app_configs, **kwargs):
                 hint=(
                     "Point CACHES['default']['BACKEND'] at a shared, atomic "
                     "cache (django.core.cache.backends.redis.RedisCache via "
-                    "REDIS_URL, or PyMemcacheCache) so all three counters are "
+                    "REDIS_URL, or PyMemcacheCache) so both counters are "
                     "global and atomic across workers."
                 ),
                 id="ai.E001",

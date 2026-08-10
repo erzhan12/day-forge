@@ -4,7 +4,6 @@ Patches ``ai.views.run_draft`` so no network call is made; the view's DB
 interactions and the apply path are exercised for real.
 """
 import datetime
-import json
 
 import pytest
 from ai.models import AIInteraction
@@ -318,126 +317,11 @@ class TestRateLimitDoesNotFireOnPreconditionFailure:
         assert self._draft_count(user.id) == 1
 
 
-@pytest.mark.django_db
-class TestRateLimit:
-    def test_separate_counter_from_command(
-        self, auth_client, user, template, monkeypatch, settings
-    ):
-        settings.LLM_DRAFT_RATE_LIMIT_PER_HOUR = 2
-        settings.LLM_RATE_LIMIT_PER_HOUR = 100
-        _patch_run(monkeypatch, _ok_result())
-
-        # Two successes — but the first one creates blocks, so subsequent
-        # calls should hit 409. We need to delete blocks between calls
-        # to actually reach the rate-limit boundary. Simpler: monkeypatch
-        # the run_draft to *raise* AIUnavailableError so no blocks get
-        # created and the apply path is skipped, which lets us bump the
-        # counter in a clean loop.
-        _patch_run(monkeypatch, AIUnavailableError("disabled"))
-
-        for i in range(2):
-            resp = _post(auth_client)
-            assert resp.status_code == 503, f"call {i}: {resp.status_code}"
-
-        # Third call exceeds the budget.
-        resp = _post(auth_client)
-        assert resp.status_code == 429
-
-    def test_command_counter_unaffected_by_draft(
-        self, auth_client, user, template, monkeypatch, settings
-    ):
-        settings.LLM_DRAFT_RATE_LIMIT_PER_HOUR = 1
-        settings.LLM_RATE_LIMIT_PER_HOUR = 5
-        _patch_run(monkeypatch, AIUnavailableError("disabled"))
-
-        # Burn the draft budget.
-        _post(auth_client)
-        resp = _post(auth_client)
-        assert resp.status_code == 429
-
-        # Command bar should still be available — patching ai_command's
-        # path is overkill here; we just confirm the rate-limit decorator
-        # uses different keys by checking ai_command's first call doesn't
-        # 429. Bypass the LLM by leaving LLM_API_KEY empty.
-        settings.LLM_API_KEY = ""
-        resp = auth_client.post(
-            "/api/ai/schedules/2026-05-04/command/",
-            json.dumps({"command": "hi"}),
-            content_type="application/json",
-        )
-        assert resp.status_code == 503  # AIUnavailableError, NOT 429
-
-
-@pytest.mark.django_db
-class TestStatusFlow:
-    def test_ai_command_with_empty_actions_does_not_flip_status(
-        self, auth_client, user, monkeypatch
-    ):
-        # ``ai_command`` with actions=[] is a successful no-op per
-        # RULES.md. Status must stay ``draft``.
-        from ai.service import AICommandResult
-
-        schedule = Schedule.objects.create(
-            user=user, date=datetime.date(2026, 5, 4)
-        )
-
-        async def _run(*args, **kwargs):
-            return AICommandResult(
-                raw_response_text="{}",
-                parsed_actions=[],
-                explanation="nothing to do",
-            )
-
-        monkeypatch.setattr("ai.views.run_command", _run)
-        resp = auth_client.post(
-            "/api/ai/schedules/2026-05-04/command/",
-            json.dumps({"command": "hi"}),
-            content_type="application/json",
-        )
-        assert resp.status_code == 200
-        schedule.refresh_from_db()
-        assert schedule.status == Schedule.Status.DRAFT
-
-    def test_ai_command_with_actions_flips_status(
-        self, auth_client, user, monkeypatch
-    ):
-        from ai.service import AICommandResult
-
-        schedule = Schedule.objects.create(
-            user=user, date=datetime.date(2026, 5, 4)
-        )
-
-        async def _run(*args, **kwargs):
-            return AICommandResult(
-                raw_response_text="{}",
-                parsed_actions=[
-                    {
-                        "type": "add",
-                        "title": "Standup",
-                        "start_time": "10:00",
-                        "end_time": "10:15",
-                        "category": "work",
-                    }
-                ],
-                explanation="added",
-            )
-
-        monkeypatch.setattr("ai.views.run_command", _run)
-        resp = auth_client.post(
-            "/api/ai/schedules/2026-05-04/command/",
-            json.dumps({"command": "add standup"}),
-            content_type="application/json",
-        )
-        assert resp.status_code == 200
-        schedule.refresh_from_db()
-        assert schedule.status == Schedule.Status.ACTIVE
-
-
 class TestActiveRulesWiring:
     """Feature 0012: ``ai_generate_draft`` must pass only the
     authenticated user's ACTIVE rules to ``run_draft``, ordered by
-    ``-priority``. Same shape as the command and chat view assertions so
-    the three endpoints can't drift on the rule-loading contract — the
+    ``-priority``. Same shape as the chat view assertion so the two
+    endpoints can't drift on the rule-loading contract — the
     refactor moved the inline query into the shared
     ``_load_active_rules`` helper, and this test pins the invariant for
     the draft side.

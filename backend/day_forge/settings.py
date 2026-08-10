@@ -130,8 +130,8 @@ LOGIN_URL = "/accounts/login/"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# Cache / rate-limit backend. The three AI rate-limit buckets
-# (``ai_cmd_rl`` / ``ai_draft_rl`` / ``ai_chat_rl``, see
+# Cache / rate-limit backend. The two AI rate-limit buckets
+# (``ai_draft_rl`` / ``ai_chat_rl``, see
 # ``ai.views._consume_rate_limit``) and the ``caldav_events:*`` keys both
 # live in ``CACHES['default']``. Production-shaped deploys point
 # ``REDIS_URL`` at a shared Redis so the counters are atomic (Redis
@@ -153,7 +153,7 @@ if REDIS_URL:
             "BACKEND": "django.core.cache.backends.redis.RedisCache",
             "LOCATION": REDIS_URL,
             # Namespace keys so a Redis shared with another app doesn't
-            # collide on ``ai_cmd_rl:*`` / ``caldav_events:*`` /
+            # collide on ``caldav_events:*`` /
             # ``todoist_tasks:*``.
             "KEY_PREFIX": "dayforge",
         }
@@ -171,14 +171,13 @@ LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "https://api.openai.com/v1")
 LLM_MODEL = os.environ.get("LLM_MODEL", "gpt-4o-mini")
 LLM_REQUEST_TIMEOUT = float(os.environ.get("LLM_REQUEST_TIMEOUT", "15"))
 LLM_MAX_COMMAND_CHARS = int(os.environ.get("LLM_MAX_COMMAND_CHARS", "500"))
-LLM_RATE_LIMIT_PER_HOUR = int(os.environ.get("LLM_RATE_LIMIT_PER_HOUR", "100"))
 # Heavier model used for draft generation (PRD §15.3). Defaults to gpt-4o
 # (~5-10x cost of LLM_MODEL) since drafts shape a whole day from history
 # and benefit from the larger context window.
 LLM_DRAFT_MODEL = os.environ.get("LLM_DRAFT_MODEL", "gpt-4o")
 # Independent fixed-window counter for the draft endpoint. Drafts are
 # billed against a separate budget so a misbehaving auto-trigger loop
-# can't drain the command budget too. Default 10/hr is well above realistic
+# can't drain the chat budget too. Default 10/hr is well above realistic
 # usage (one auto + one or two manual regenerates per day).
 LLM_DRAFT_RATE_LIMIT_PER_HOUR = int(
     os.environ.get("LLM_DRAFT_RATE_LIMIT_PER_HOUR", "10")
@@ -193,8 +192,8 @@ LLM_HISTORY_DAYS = int(os.environ.get("LLM_HISTORY_DAYS", "7"))
 # never write the prompt to disk.
 LLM_DRAFT_CAPTURE_PROMPT_PATH = os.environ.get("LLM_DRAFT_CAPTURE_PROMPT_PATH", "")
 
-# Chat (feature 0007). Independent rate-limit bucket from the one-shot
-# command endpoint — same shared-cache requirement enforced by ai.E001.
+# Chat (feature 0007) uses a rate-limit bucket independent from drafts,
+# with the same shared-cache requirement enforced by ai.E001.
 # A "task" typically takes 3-5 chat turns, so the budget is set such that
 # ~12 distinct tasks/hour fit comfortably without leaving accidental
 # headroom for runaway loops.
@@ -218,9 +217,7 @@ LLM_CHAT_MAX_TOTAL_CHARS = int(
 # overflow.
 LLM_CHAT_MAX_ASK_CHARS = int(os.environ.get("LLM_CHAT_MAX_ASK_CHARS", "300"))
 # Cap on the LLM's ``explanation`` field — applies to BOTH the chat envelope
-# (feature 0007) and the legacy one-shot ``validate_response_envelope``. A
-# unified cap keeps the two surfaces consistent (the chat plan called this
-# out as "apply the same cap to the existing one-shot for consistency"). The
+# (feature 0007) and the shared action-envelope validator. The
 # default 300 is intentionally tighter than the previous hardcoded 500 in
 # ``schemas.py``; the system prompt asks for a one-sentence explanation, so
 # anything beyond 300 is already a deviation from the requested format.
@@ -234,7 +231,7 @@ LLM_MAX_EXPLANATION_CHARS = int(
 # rejects every request, a transcript char cap of zero that 400s every
 # message). Mirrors the ``ANALYTICS_STREAK_*`` precedent below.
 # Scope: only the settings introduced in feature 0007. Pre-existing LLM
-# settings (``LLM_RATE_LIMIT_PER_HOUR``, ``LLM_HISTORY_DAYS``,
+# settings (``LLM_HISTORY_DAYS``,
 # ``LLM_REQUEST_TIMEOUT``, etc.) are intentionally NOT validated here —
 # they have shipped without validation since Phase 4 and tightening them
 # in this PR would be scope creep that could break tolerated deploy

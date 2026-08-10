@@ -8,7 +8,7 @@ This is a living document — update it as new patterns emerge.
 - Never commit `.env` files. `.gitignore` excludes `.env` and `.env.*`, with `!.env.example` carved out so a sanitized template can be committed.
 - Secrets belong in env vars, not code or fixtures. See `backend/day_forge/settings.py` and the env var list in `CLAUDE.md` (`LLM_API_KEY`, `DJANGO_SECRET_KEY`, etc.).
 - Before committing, sanity-check with `git ls-files | grep -E '(^|/)\.env'` — should return nothing except `.env.example` if one exists.
-- User commands sent to `POST /api/ai/schedules/<date>/command/` are logged verbatim to `AIInteraction` (capped at 2 KB). Treat this table as sensitive; don't paste real secrets into the command bar while testing.
+- User chat turns are logged verbatim to `AIInteraction` (capped at 2 KB). Treat this table as sensitive; don't paste real secrets into the command bar while testing.
 
 ## CI: frontend prod-audit gate (feature 0102)
 
@@ -20,7 +20,7 @@ This is a living document — update it as new patterns emerge.
 - `ExternalTasksSidebar` is the single left task rail. It renders one static section per connected source, emits source-specific retry/complete events, and has one global silent Refresh button. Do not route a Habitica task through Todoist handlers.
 - `useExternalSourcePoll` is source-agnostic: while `externalPollActive` (task rail open with a connected task source, and/or a visible connected calendar panel), it fans out to each connected source's silent refresh (`refreshTasks` / `refreshEvents`). It is controlled by `EXTERNAL_TASKS_POLL_INTERVAL_SECONDS` (`0` disables).
 - Habitica API gotchas: list dailies with `type=dailys`; send `x-client: {HABITICA_CLIENT_ID}-DayForge`; fetch dailies only for client-today/overdue-carry scope and only keep `isDue` tasks. Habitica undated todos show today only, and overdue todos carry to client today. Sidebar order follows the pre-sorted `GET .../tasks/user?type=…` array (Habitica applies `tasksOrder` server-side; task JSON has no `position` field) — Day Forge stores that index as an internal sort key (dailies block, then todos block), not due date or title.
-- External task text from Todoist/Habitica is display-only and must not be added to draft/command/chat prompts.
+- External task text from Todoist/Habitica is display-only and must not be added to draft/chat prompts.
 
 ## Dev Server Restart Modes
 
@@ -33,8 +33,8 @@ This is a living document — update it as new patterns emerge.
 
 ## AI Undo Registration
 
-- A `200 OK` from the AI command endpoint does **not** always mean the schedule changed. The LLM may return `actions: []` with an explanation (e.g. "outside working hours") — this is a successful interaction with zero mutations.
-- Undo must be registered only when `result.data.blocks` actually differs from the pre-submit snapshot. The comparison lives in `_scheduleChanged()` in `frontend/src/components/CommandBar.vue`.
+- A `200 OK` from the AI chat endpoint does **not** always mean the schedule changed. The LLM may return `actions: []` with an explanation (e.g. "outside working hours") or a clarifying `ask` — a successful interaction with zero mutations.
+- Undo must be registered only when the applied blocks actually differ from the pre-submit snapshot. The comparison lives in `scheduleDiff.scheduleChanged` used by `frontend/src/composables/useChat.ts`.
 - When `data.blocks` is missing from the response, treat as no change (do not push undo) — this is the safe default.
 - `UndoAction.silent?: boolean` (issue #54) controls **only** the toast, not the stack. `pushUndo` gates `showToast` behind `!action.silent` but always pushes — so Cmd+Z still works for silent actions. Obvious edits (manual add/edit/toggle/delete/drag, AI chat apply in `useChat.ts`) pass `silent: true`; generate-draft in `Schedule.vue` still shows a toast. `performUndo`'s own toasts ("Undone: …", errors, "Nothing to undo.") call `showToast` directly, never `pushUndo`, so they are independent of `silent`.
 
@@ -59,11 +59,11 @@ draft  ──user edits any block──▶  active  ──Mark reviewed click─
                                        (mark_active_on_edit)
 ```
 
-- `Schedule.status` flips `draft → active` AND `reviewed → active` on every forward-mutating endpoint: `create_block`, `block_detail` PATCH, `block_detail` DELETE, `reorder_blocks`, and `ai_command` (only when `len(parsed_actions) > 0`). The single helper for both directions is `Schedule.mark_active_on_edit()` in `backend/schedules/models.py` (replaces the Phase-5 `mark_active_if_draft`).
+- `Schedule.status` flips `draft → active` AND `reviewed → active` on every forward-mutating endpoint: `create_block`, `block_detail` PATCH, `block_detail` DELETE, `reorder_blocks`, and AI chat apply (only when `len(parsed_actions) > 0`). The single helper for both directions is `Schedule.mark_active_on_edit()` in `backend/schedules/models.py` (replaces the Phase-5 `mark_active_if_draft`).
 - `Schedule.mark_reviewed_if_active()` flips `active → reviewed` (forward direction). Refuses on `draft` — a never-edited day cannot be reviewed (analytics would be meaningless on auto-draft data the user never touched).
 - `restore_blocks` (the undo target) does **not** flip status. Calling it with the previous block list shouldn't pretend the user just made a fresh edit. Concretely: undoing a freshly auto-generated draft (`restore_blocks([])`) leaves `status="draft"`, so the regenerate button reappears.
 - `ai_generate_draft` does **not** flip status. The badge stays "Draft" until the user actually edits.
-- `ai_command` returning `actions: []` is a successful no-op (RULES.md / undo gating already documented this). Status flipping must follow the same gate, otherwise an LLM responding with "I don't understand" silently promotes a draft to active.
+- AI chat returning `actions: []` is a successful no-op. Status flipping must follow the same gate, otherwise a no-op LLM response silently promotes a draft to active.
 
 ### `mark_active_on_edit` MUST use a DB-conditional UPDATE, not a Python `self.status` check
 
@@ -126,16 +126,16 @@ The frontend refreshes `currentHHMM` on a 1-minute interval (matches `Schedule.v
 - All API queries are scoped by `request.user`. Cross-user PK access returns **404 (not 403)** to avoid id enumeration — same convention as `block_detail`.
 - POST/PUT to `/api/templates/` wrap saves in `transaction.atomic()` and catch `IntegrityError` → `409`. Without the catch the unique-constraint failure becomes a 500 and leaves the transaction in a broken state for any follow-up queries.
 
-## Active Rules injection across all three AI endpoints
+## Active Rules injection across both AI endpoints
 
-- The command bar (`POST /api/ai/schedules/<date>/command/`), chat (`POST /api/ai/schedules/<date>/chat/`), and draft generator (`POST /api/ai/schedules/<date>/generate-draft/`) all inject the user's active Rules into their server-built prompt context so the model can fill omitted defaults (duration, gap, start time) instead of asking a clarifying question.
-- Active/user-owned filtering stays at the **view/query layer**, in the shared `ai.views._load_active_rules(user)` helper. Prompt builders (`build_user_message`, `build_chat_user_message`, `build_draft_user_message`) just render whatever rules they're handed via the shared `_format_rules_section` formatter — they do not query the DB and do not re-filter. Drift between the three endpoints means a bug in one of them, not in the prompt layer.
+- Chat (`POST /api/ai/schedules/<date>/chat/`) and the draft generator (`POST /api/ai/schedules/<date>/generate-draft/`) both inject the user's active Rules into their server-built prompt context so the model can fill omitted defaults (duration, gap, start time) instead of asking a clarifying question.
+- Active/user-owned filtering stays at the **view/query layer**, in the shared `ai.views._load_active_rules(user)` helper. Prompt builders (`build_chat_user_message`, `build_draft_user_message`) just render whatever rules they're handed via the shared `_format_rules_section` formatter — they do not query the DB and do not re-filter. Drift between the two endpoints means a bug in one of them, not in the prompt layer.
 - Caller orders rules by `-priority` before passing them in; the formatter preserves caller order, so a future "filter inactive at the prompt layer" refactor would silently break the priority-desc invariant.
 - Chat-specific: rules render into the **trusted** schedule-context message (the first user-role message), not the untrusted prior-transcript flatten. A tampered client must not be able to impersonate or shadow the user's defaults — see `backend/ai/service.py:run_chat`.
 
 ## AI batch mutations (feature 0030, issue #38)
 
-- Command and chat apply route through a pure **final-state planner** (`backend/ai/mutation_planner.py`): the LLM's action batch is normalized into a target schedule, validated holistically, then diffed. Move order no longer matters.
+- Chat apply routes through a pure **final-state planner** (`backend/ai/mutation_planner.py`): the LLM's action batch is normalized into a target schedule, validated holistically, then diffed. Move order no longer matters.
 - Before the LLM call, views capture an **apply-context fingerprint** (prompt-visible block fields + active Rules). `_apply_actions_sync` locks **User → Schedule → TimeBlock** rows, re-reads Rules, and compares fingerprints; mismatch → `409 {"errors": {"detail": "schedule_changed"}}`, no mutations, `AIInteraction.success` stays false. Skipped when `parsed_actions` is empty. Unrelated to draft's empty-schedule `409`. Clients refresh schedule state and retry explicitly — the server never auto-retries.
 - Rule POST/PATCH/DELETE take the same **User-first** lock so a Rule edit cannot slip between fingerprint capture and AI apply.
 
@@ -147,7 +147,7 @@ The frontend refreshes `currentHHMM` on a 1-minute interval (matches `Schedule.v
 
 ## Rate-limit consumption order
 
-- `ai_command` accepts the rate-limit-as-decorator pattern because its only pre-LLM precondition is request shape. For `ai_generate_draft`, common pre-LLM rejections (422 no template, 409 non-empty schedule, 413 oversized body, 400 invalid date) **must not** consume the small (default 10/hr) draft budget — a stale page or a misconfigured account would otherwise exhaust the budget without any LLM call.
+- For `ai_generate_draft`, common pre-LLM rejections (422 no template, 409 non-empty schedule, 413 oversized body, 400 invalid date) **must not** consume the small (default 10/hr) draft budget — a stale page or a misconfigured account would otherwise exhaust the budget without any LLM call. Chat likewise consumes its counter only after request validation.
 - Pattern: drop the decorator, increment the counter inline via `_consume_rate_limit(...)` after every precondition guard and before the LLM call. Provider failures (502/503/504) do still consume the budget — they represent a real LLM call attempt and unlimited retries on a flapping provider would bypass the limit.
 
 ## Rate-limit increment: sync `cache.incr`, not async `aincr` (feature 0015)
@@ -164,7 +164,7 @@ The frontend refreshes `currentHHMM` on a 1-minute interval (matches `Schedule.v
 
 ## Inertia partial reload props
 
-- Every mutation now needs `router.reload({ only: ["blocks", "schedule"] })`. Reloading only `blocks` would leave `schedule.status` stale and the badge / regenerate button out of sync. Affected files: `useAI.ts`, `useSchedule.ts` (which `useUndo` and `useDrag` go through), `useDraft.ts`.
+- Every mutation now needs `router.reload({ only: ["blocks", "schedule"] })`. Reloading only `blocks` would leave `schedule.status` stale and the badge / regenerate button out of sync. Affected files: `useChat.ts`, `useSchedule.ts` (which `useUndo` and `useDrag` go through), `useDraft.ts`.
 - `auto_draft_pending` is its own Inertia prop, NOT part of `schedule`. Partial reloads of `["blocks", "schedule"]` do not refresh it. The frontend keeps its own `attemptedAutoDraftDates` set per component instance to prevent refire.
 
 ## PR review iteration loop (AI-driven changes)
@@ -775,8 +775,8 @@ no Service Worker, no closed-tab alerts.
   runpy.run_path(..., run_name='__main__')"`. Pass scenario data as `SEED_*`
   environment variables and spread `process.env`; never interpolate Python
   source into a JavaScript shell string or feed a file to the interactive shell.
-- `make e2e` is the all-script entrypoint; `make e2e-chat`, `e2e-command`, and
-  `e2e-draft` are focused groups. Runs are serial because scripts share AI
+- `make e2e` is the all-script entrypoint; `make e2e-chat` and `e2e-draft` are
+  focused groups. Runs are serial because scripts share AI
   rate-limit counters and some dates. Several make real provider calls; review
   `frontend/scripts/playwright/README.md` before running them.
 - `--cleanup` is opt-in and default-off. Schedule-seeding scripts call

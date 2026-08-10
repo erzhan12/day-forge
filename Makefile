@@ -2,7 +2,7 @@
 
 .PHONY: help install dev run run-manual frontend-dev frontend-install frontend-build \
         lint lint-fix format typecheck test test-backend test-frontend check \
-        e2e e2e-chat e2e-command e2e-draft \
+        e2e e2e-chat e2e-draft \
         migrate makemigrations seed superuser shell \
         docker docker-build docker-down clean
 
@@ -89,9 +89,6 @@ e2e: ## Run all Playwright e2e smoke scripts serially (needs dev stack)
 
 e2e-chat: ## Run Playwright chat smoke scripts serially (real LLM calls; needs LLM_API_KEY)
 	cd frontend && set -e; for script in scripts/playwright/ai-chat-*.mjs; do node "$$script"; done
-
-e2e-command: ## Run Playwright command smoke scripts serially (real LLM calls; needs LLM_API_KEY)
-	cd frontend && set -e; for script in scripts/playwright/ai-command-*.mjs; do node "$$script"; done
 
 # draft-prompt-history-suffix.mjs and regenerate-422-fallback.mjs are listed
 # explicitly: they exercise draft flows but their names don't match the

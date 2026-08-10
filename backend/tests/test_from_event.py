@@ -13,7 +13,7 @@ Covers:
 import json
 
 import pytest
-from ai.service import AICommandResult
+from ai.service import AIChatResult
 from calendar_sync.models import TravelRule
 from django.contrib.auth.models import User
 from schedules.models import Schedule, TimeBlock
@@ -338,7 +338,7 @@ class TestAIMoveResizeOffGrid:
     clamp-to-day times must not fail AI move/resize; the AI still cannot
     introduce *new* off-grid times."""
 
-    URL = "/api/ai/schedules/2026-04-18/command/"
+    URL = "/api/ai/schedules/2026-04-18/chat/"
 
     @pytest.fixture
     def ai_schedule(self, user):
@@ -346,17 +346,21 @@ class TestAIMoveResizeOffGrid:
 
     def _patch_run(self, monkeypatch, actions):
         async def _run(*args, **kwargs):
-            return AICommandResult(
+            return AIChatResult(
                 raw_response_text="{}",
                 parsed_actions=actions,
                 explanation="ok",
+                ask=None,
             )
 
-        monkeypatch.setattr("ai.views.run_command", _run)
+        monkeypatch.setattr("ai.views.run_chat", _run)
 
     def _post(self, client, command="do it"):
         return client.post(
-            self.URL, json.dumps({"command": command}),
+            self.URL,
+            json.dumps(
+                {"messages": [{"role": "user", "content": command}]}
+            ),
             content_type="application/json",
         )
 

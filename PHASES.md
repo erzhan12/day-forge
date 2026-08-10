@@ -165,12 +165,12 @@ backend/
 │   ├── service.py             # OpenAI client, prompt builder, response parser
 │   ├── prompts.py             # System prompt, context formatter
 │   ├── schemas.py             # Pydantic models for AI request/response
-│   └── views.py               # /api/ai/command/ endpoint
+│   └── views.py               # AI endpoints
 frontend/src/
 ├── components/
 │   └── CommandBar.vue         # Bottom command bar with input, spinner, status
 ├── composables/
-│   └── useAI.ts               # AI command submission, error handling
+│   └── useChat.ts             # AI chat submission, error handling
 ```
 
 ---

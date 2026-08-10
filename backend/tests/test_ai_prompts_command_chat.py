@@ -1,7 +1,6 @@
-"""Unit tests for the command + chat prompt builders (feature 0012).
+"""Unit tests for the shared rules formatter and chat prompt builder.
 
-Pure-function tests against ``build_user_message`` and
-``build_chat_user_message``. The prompt builders now render an
+The chat prompt builder renders an
 ``Active rules (priority desc):`` section so the model can fill omitted
 defaults from rules instead of asking for clarification.
 
@@ -18,7 +17,6 @@ from ai.prompts import (
     CHAT_TRANSCRIPT_HEADER,
     _format_rules_section,
     build_chat_user_message,
-    build_user_message,
 )
 
 
@@ -100,56 +98,6 @@ class TestFormatRulesSection:
         # The injected fake key must not appear as a real JSON key —
         # the whole payload sits inside one quoted string.
         assert section.count('"actions"') == 0 or '\\"actions\\"' in section
-
-
-class TestBuildUserMessage:
-    def test_includes_active_rules_section(self):
-        schedule = _schedule(datetime.date(2026, 5, 4))
-        now = datetime.datetime(2026, 5, 4, 9, 30)
-        msg = build_user_message(
-            schedule, [], now, "add standup", [_rule("25 min blocks by default")]
-        )
-        assert "Active rules (priority desc):" in msg
-        assert "25 min blocks by default" in msg
-
-    def test_multiple_rules_render_in_priority_order(self):
-        """The caller passes rules already ordered by ``-priority``; the
-        builder must preserve that order verbatim."""
-        schedule = _schedule(datetime.date(2026, 5, 4))
-        now = datetime.datetime(2026, 5, 4, 9, 30)
-        rules = [
-            _rule("HIGH priority rule"),
-            _rule("MID priority rule"),
-            _rule("LOW priority rule"),
-        ]
-        msg = build_user_message(schedule, [], now, "do stuff", rules)
-        assert (
-            msg.index("HIGH priority rule")
-            < msg.index("MID priority rule")
-            < msg.index("LOW priority rule")
-        )
-
-    def test_user_command_section_follows_rules_section(self):
-        """The model sees rules-as-defaults BEFORE the user command, so
-        defaults are in scope when the command is interpreted. Locks the
-        section order so a future refactor cannot silently flip it."""
-        schedule = _schedule(datetime.date(2026, 5, 4))
-        now = datetime.datetime(2026, 5, 4, 9, 30)
-        msg = build_user_message(
-            schedule, [], now, "add standup", [_rule("R1")]
-        )
-        assert "Active rules (priority desc):" in msg
-        assert "User command:" in msg
-        assert msg.index("Active rules") < msg.index("User command:")
-        # JSON-encoded command still present after the rules section.
-        assert '"add standup"' in msg
-        assert msg.index('"add standup"') > msg.index("Active rules")
-
-    def test_empty_rules_renders_no_active_rules_placeholder(self):
-        schedule = _schedule(datetime.date(2026, 5, 4))
-        now = datetime.datetime(2026, 5, 4, 9, 30)
-        msg = build_user_message(schedule, [], now, "hi", [])
-        assert "Active rules (priority desc):\n(no active rules)" in msg
 
 
 class TestBuildChatUserMessage:

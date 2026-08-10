@@ -3,7 +3,7 @@
 The badge contract: every forward-mutating endpoint flips ``draft →
 active`` on its first run (and ``reviewed → active`` on any edit to a
 reviewed day, post-Phase 6); ``restore_blocks`` (the undo target)
-explicitly does NOT flip status. ``ai_command`` is covered alongside the
+explicitly does NOT flip status. AI chat is covered alongside the
 draft tests; the rest live here.
 """
 import datetime

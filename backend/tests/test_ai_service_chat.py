@@ -14,12 +14,15 @@ import datetime
 import json
 from types import SimpleNamespace
 
+import openai
 import pytest
 from ai.prompts import CHAT_TRANSCRIPT_HEADER
 from ai.service import (
     AIChatResult,
     AIInvalidInputError,
     AIParseError,
+    AIProviderError,
+    AITimeoutError,
     AIUnavailableError,
 )
 from ai.service import (
@@ -243,12 +246,84 @@ class TestInputGuards:
             )
 
 
+class TestProviderErrors:
+    def test_timeout_maps_to_ai_timeout(self, patch_client, fake_schedule, now):
+        patch_client(openai.APITimeoutError(request=None))
+        with pytest.raises(AITimeoutError):
+            run_chat(
+                [{"role": "user", "content": "do thing"}],
+                fake_schedule,
+                [],
+                [],
+                now,
+            )
+
+    def test_api_error_maps_to_provider(self, patch_client, fake_schedule, now):
+        patch_client(openai.APIError("boom", request=None, body=None))
+        with pytest.raises(AIProviderError):
+            run_chat(
+                [{"role": "user", "content": "do thing"}],
+                fake_schedule,
+                [],
+                [],
+                now,
+            )
+
+    def test_unexpected_exception_maps_to_provider(
+        self, patch_client, fake_schedule, now
+    ):
+        patch_client(RuntimeError("network down"))
+        with pytest.raises(AIProviderError):
+            run_chat(
+                [{"role": "user", "content": "do thing"}],
+                fake_schedule,
+                [],
+                [],
+                now,
+            )
+
+
 class TestParsing:
     def test_invalid_json_raises_parse(self, patch_client, fake_schedule, now):
         patch_client("not-json")
-        with pytest.raises(AIParseError):
+        with pytest.raises(AIParseError) as exc:
             run_chat(
                 [{"role": "user", "content": "hi"}],
+                fake_schedule,
+                [],
+                [],
+                now,
+            )
+        assert exc.value.raw_response_text == "not-json"
+
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            {"explanation": "missing actions", "ask": None},
+            {
+                "actions": [{"type": "add", "title": "x"}],
+                "explanation": "missing times",
+                "ask": None,
+            },
+            {
+                "actions": [{"type": "move", "task_id": 1}],
+                "explanation": "no-op move",
+                "ask": None,
+            },
+            {
+                "actions": [{"type": "resize", "task_id": 1}],
+                "explanation": "no-op resize",
+                "ask": None,
+            },
+        ],
+    )
+    def test_rejects_invalid_command_action_envelopes(
+        self, patch_client, fake_schedule, now, payload
+    ):
+        patch_client(json.dumps(payload))
+        with pytest.raises(AIParseError):
+            run_chat(
+                [{"role": "user", "content": "do thing"}],
                 fake_schedule,
                 [],
                 [],
@@ -280,7 +355,7 @@ class TestParsing:
             "end_time": "19:00",
             "category": "personal",
         }
-        patch_client(_ok_response(actions=[action]))
+        completions = patch_client(_ok_response(actions=[action]))
         result = run_chat(
             [{"role": "user", "content": "add gym 18-19"}],
             fake_schedule,
@@ -290,6 +365,16 @@ class TestParsing:
         )
         assert result.ask is None
         assert result.parsed_actions == [action]
+        # Pin the real explanation extraction (view tests mock run_chat, so this
+        # is the only surviving place the service's parse-and-return path runs).
+        assert result.explanation == "ok"
+        call = completions.calls[0]
+        assert call["response_format"] == {"type": "json_object"}
+        assert [message["role"] for message in call["messages"]] == [
+            "system",
+            "user",
+            "user",
+        ]
 
     def test_rejects_ask_with_actions(
         self, patch_client, fake_schedule, now

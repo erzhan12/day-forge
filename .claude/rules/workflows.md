@@ -42,13 +42,13 @@ After a schedule-mutation refactor, run the relevant scripts instead of doing
 an ad hoc browser smoke pass.
 
 Run the scripts **serially**, not in parallel — they share
-the `playwright` user's `ai_cmd_rl` / `ai_draft_rl` rate-limit
+the `playwright` user's chat / draft rate-limit
 counters, and concurrent runs would race the counter and produce a
 false failure in `ai-draft-409-on-non-empty.mjs`'s "no consumption"
 assertion.
 
 From the repository root, use `make e2e` for all scenarios or
-`make e2e-chat`, `make e2e-command`, and `make e2e-draft` for focused groups.
+`make e2e-chat` and `make e2e-draft` for focused groups.
 Pass `--cleanup` to an individual Node script only when its seeded schedules
 should be deleted after the run; cleanup defaults off for post-mortem debugging.
 

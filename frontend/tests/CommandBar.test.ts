@@ -1,6 +1,6 @@
 // CommandBar tests after the feature-0007 rewrite. The component is now
 // the bottom-dock chat surface backed by `useChat`; the previous
-// single-shot `useAI` consumer has been retired.
+// the single-shot command consumer has been retired.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { mount, VueWrapper } from "@vue/test-utils"

@@ -8,7 +8,7 @@ interface DraftSubmitResult extends ApiResult {
 }
 
 // Module-level state — Schedule.vue is the sole consumer (single
-// instance per page). Mirrors useAI.ts. If a second consumer ever
+// instance per page). If a second consumer ever
 // appears, move state back into useDraft() to avoid cross-instance
 // leakage.
 const isGeneratingDraft = ref(false)

@@ -1,12 +1,10 @@
 """OpenAI-compatible async client wrapper for the AI endpoints.
 
-Three public entrypoints — all ``async def`` since feature 0009. All
-three accept ``rules`` (active user-defined Rules, ordered by priority
+Two public entrypoints — both ``async def`` since feature 0009. Both
+accept ``rules`` (active user-defined Rules, ordered by priority
 desc) so the model can fill omitted defaults from rules instead of
 asking for clarification:
 
-* ``run_command(user_command, schedule, blocks, rules, now)`` — one-shot
-  natural-language command. Backs ``POST /api/ai/schedules/<date>/command/``.
 * ``run_draft(schedule, template, history_schedules, rules, now)`` —
   whole-day draft generation. Backs ``POST /api/ai/schedules/<date>/generate-draft/``.
 * ``run_chat(messages, schedule, blocks, rules, now)`` — multi-turn chat
@@ -28,8 +26,8 @@ The original Phase 4 plan called for OpenAI Structured Outputs
 non-conforming responses at the provider, but the weaker ``json_object``
 mode is used so ``settings.LLM_BASE_URL`` can point at OpenRouter or
 self-hosted proxies that don't implement ``json_schema`` mode. The
-post-parse validators in ``ai/schemas.py`` (``validate_response_envelope``,
-``validate_chat_response_envelope``, ``validate_draft_response``,
+post-parse validators in ``ai/schemas.py`` (``validate_chat_response_envelope``,
+``validate_draft_response``,
 ``validate_action_shape``) close the safety gap — a malformed response
 raises ``AIParseError`` with the raw text preserved for the interaction
 log.
@@ -50,19 +48,16 @@ from django.conf import settings
 from openai import AsyncOpenAI
 
 from ai.prompts import (
-    SYSTEM_PROMPT,
     SYSTEM_PROMPT_CHAT,
     SYSTEM_PROMPT_DRAFT,
     build_chat_user_message,
     build_draft_user_message,
-    build_user_message,
     serialise_prior_turns,
 )
 from ai.schemas import (
     validate_action_shape,
     validate_chat_response_envelope,
     validate_draft_response,
-    validate_response_envelope,
 )
 
 logger = logging.getLogger(__name__)
@@ -162,8 +157,8 @@ def _get_client() -> AsyncOpenAI:
     """Return the ``AsyncOpenAI`` client bound to the current event loop.
 
     Constructed lazily on first use within each loop so tests can run
-    without ``LLM_API_KEY`` set and so the ``AIUnavailableError`` branch
-    in ``run_command`` fires before any client object is created.
+    without ``LLM_API_KEY`` set and so the ``AIUnavailableError`` branches
+    fire before any client object is created.
     Constructor itself does no I/O.
     """
     try:
@@ -194,97 +189,11 @@ def _get_client() -> AsyncOpenAI:
     return client
 
 
-async def run_command(
-    user_command: str, schedule, blocks, rules, now
-) -> AICommandResult:
-    """Call the LLM for one user command. See module docstring for errors.
-
-    ``rules`` is the iterable of active, user-owned ``Rule`` rows ordered
-    by ``-priority`` — fetched in the view layer (``_load_active_rules``)
-    and forwarded unchanged so the model can fill omitted defaults.
-    """
-    if not settings.LLM_API_KEY or not settings.LLM_API_KEY.strip():
-        raise AIUnavailableError("LLM_API_KEY is not configured")
-
-    if not isinstance(user_command, str):
-        raise AIInvalidInputError("command must be a string")
-    trimmed = user_command.strip()
-    if not trimmed:
-        raise AIInvalidInputError("command cannot be empty")
-    if len(trimmed) > settings.LLM_MAX_COMMAND_CHARS:
-        raise AIInvalidInputError(
-            f"command too long (max {settings.LLM_MAX_COMMAND_CHARS} chars)"
-        )
-
-    user_message = build_user_message(schedule, blocks, now, trimmed, rules)
-
-    client = _get_client()
-    try:
-        response = await client.chat.completions.create(
-            model=settings.LLM_MODEL,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_message},
-            ],
-            response_format={"type": "json_object"},
-            temperature=0,
-            timeout=settings.LLM_REQUEST_TIMEOUT,
-        )
-    except openai.APITimeoutError as e:
-        logger.warning("AI timeout: %s", e)
-        raise AITimeoutError("AI provider timed out") from e
-    except openai.APIError as e:
-        # Log the full provider error server-side; surface a generic message
-        # to the client so provider URLs / auth details / proxy info can't
-        # leak into the response envelope.
-        logger.warning("AI provider error: %s", e)
-        raise AIProviderError("AI service error") from e
-    except Exception as e:  # network / unexpected — log full traceback
-        logger.exception("AI unexpected error")
-        raise AIProviderError("AI service error") from e
-
-    raw = response.choices[0].message.content or ""
-
-    try:
-        parsed = json.loads(raw)
-    except json.JSONDecodeError as e:
-        raise AIParseError(f"AI returned invalid JSON: {e}", raw_response_text=raw) from e
-
-    envelope_errors = validate_response_envelope(parsed)
-    if envelope_errors:
-        raise AIParseError(
-            "AI response failed envelope validation: " + "; ".join(envelope_errors),
-            raw_response_text=raw,
-        )
-
-    # Per-action shape validation — second line of defence even though the
-    # system prompt spells out the schema. Category enum mirrors the model.
-    from schedules.models import TimeBlock  # local import: avoid app-load cycles
-
-    allowed_categories = {c.value for c in TimeBlock.Category}
-    per_action_errors = []
-    for idx, action in enumerate(parsed["actions"]):
-        errs = validate_action_shape(action, allowed_categories)
-        if errs:
-            per_action_errors.append(f"action[{idx}]: {', '.join(errs)}")
-    if per_action_errors:
-        raise AIParseError(
-            "AI response failed action validation: " + "; ".join(per_action_errors),
-            raw_response_text=raw,
-        )
-
-    return AICommandResult(
-        raw_response_text=raw,
-        parsed_actions=list(parsed["actions"]),
-        explanation=parsed.get("explanation", ""),
-    )
-
-
 async def run_draft(schedule, template, history_schedules, rules, now) -> AIDraftResult:
     """Call the LLM to generate a draft schedule.
 
-    Same exception taxonomy as ``run_command`` so the view can map errors
-    via the existing ``_AI_ERROR_STATUS`` table. Uses
+    Uses the shared exception taxonomy so the view can map errors via the
+    existing ``_AI_ERROR_STATUS`` table. Uses
     ``settings.LLM_DRAFT_MODEL`` (heavier than ``LLM_MODEL`` because drafts
     shape a whole day from history), and ``validate_draft_response`` which
     additionally rejects any non-``add`` action.

@@ -72,11 +72,6 @@ urlpatterns = [
     ),
     # API: AI
     path(
-        "api/ai/schedules/<str:date>/command/",
-        ai_views.ai_command,
-        name="ai_command",
-    ),
-    path(
         "api/ai/schedules/<str:date>/generate-draft/",
         ai_views.ai_generate_draft,
         name="ai_generate_draft",

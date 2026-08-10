@@ -78,7 +78,7 @@ def _pin_test_cache_backend():
 
 @pytest.fixture(autouse=True)
 def _clear_cache():
-    """The AI command endpoint uses the default cache for per-user rate
+    """The AI endpoints use the default cache for per-user rate
     limiting, and ``LocMemCache`` (pinned by ``_pin_test_cache_backend``)
     persists across tests in the same process. Clear before and after
     every test so rate-limit counters don't leak."""

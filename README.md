@@ -79,10 +79,9 @@ Day Forge reads configuration from environment variables. The most common ones:
 | `REDIS_URL` | Cache / rate-limit backend (`RedisCache`). **Required when `LLM_API_KEY` is set** (`ai.E001`); LocMem fallback otherwise. | — |
 | `LLM_API_KEY` | OpenAI-compatible API key. Empty ⇒ AI endpoints return 503 and the UI shows degraded mode. Manual editing still works. | — |
 | `LLM_BASE_URL` | OpenAI-compatible base URL | `https://api.openai.com/v1` |
-| `LLM_MODEL` | Model used by command + chat | `gpt-4o-mini` |
+| `LLM_MODEL` | Model used by chat | `gpt-4o-mini` |
 | `LLM_DRAFT_MODEL` | Model used by `generate-draft` | `gpt-4o` |
 | `LLM_REQUEST_TIMEOUT` | Hard timeout for LLM HTTP calls (seconds) | `15` |
-| `LLM_RATE_LIMIT_PER_HOUR` | Per-user limit on `/command/` | `100` |
 | `LLM_DRAFT_RATE_LIMIT_PER_HOUR` | Per-user limit on `/generate-draft/` | `10` |
 | `LLM_CHAT_RATE_LIMIT_PER_HOUR` | Per-user limit on `/chat/` | `60` |
 | `ANALYTICS_STREAK_THRESHOLD` | Daily completion ratio needed for streak credit | `0.8` |
@@ -164,5 +163,5 @@ docs/
 ## Privacy Notes
 
 - User commands and chat turns are logged to `AIInteraction` for audit (PRD §6.5). Avoid entering passwords or API keys in prompts.
-- The **chat endpoint re-sends the full prior client-supplied transcript to the LLM provider on every turn** — a strictly larger egress surface than one-shot command. Use the Clear-thread button (or reload the page) before discussing anything sensitive. Thread state is in-memory per tab; there is no server-side persistence.
+- The **chat endpoint re-sends the full prior client-supplied transcript to the LLM provider on every turn** — the egress surface grows each turn. Use the Clear-thread button (or reload the page) before discussing anything sensitive. Thread state is in-memory per tab; there is no server-side persistence.
 - Prior client turns are flattened into a single user-role message under an "Untrusted prior transcript" header — never forwarded as privileged `assistant` messages — so a tampered client cannot inject assistant pre-commitments. Regression-tested in `backend/tests/test_ai_service_chat.py`.

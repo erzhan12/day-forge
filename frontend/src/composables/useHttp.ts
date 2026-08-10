@@ -27,7 +27,7 @@ export interface ApiResult {
 }
 
 /**
- * Low-level request wrapper used by `useSchedule` and `useAI`.
+ * Low-level request wrapper used by schedule and chat composables.
  *
  * Handles CSRF, JSON (de)serialisation, and the common `{ok, data, errors}`
  * envelope. Always reads the body as text first and parses conditionally —

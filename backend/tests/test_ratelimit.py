@@ -40,7 +40,7 @@ def test_consume_rate_limit_preserves_window_ttl():
     cache_key = cache.make_key(key)
 
     # `_expire_info` is a LocMem-only private test seam (the unit suite
-    # pins CACHES to LocMem); mirrors test_ai_views.py::
+    # pins CACHES to LocMem); mirrors test_ai_apply.py::
     # test_increment_preserves_window_ttl. It reads the absolute expiry
     # deadline directly because LocMem exposes no public TTL accessor.
     assert consume_rate_limit(key, limit=2) is True
