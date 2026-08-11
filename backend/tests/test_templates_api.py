@@ -511,6 +511,25 @@ class TestRuleSwap:
 
         assert resp.status_code == 302
 
+    def test_user_lock_is_acquired(self, auth_client, user, monkeypatch):
+        from django.contrib.auth.models import User
+
+        high = Rule.objects.create(user=user, text="High", priority=1)
+        low = Rule.objects.create(user=user, text="Low", priority=0)
+        lock_calls: list[str] = []
+        original = User.objects.select_for_update
+
+        def spy(*args, **kwargs):
+            lock_calls.append("user_lock")
+            return original(*args, **kwargs)
+
+        monkeypatch.setattr(User.objects, "select_for_update", spy, raising=True)
+
+        resp = _post(auth_client, self.URL, {"a": high.id, "b": low.id})
+
+        assert resp.status_code == 200
+        assert lock_calls == ["user_lock"]
+
     def test_swap_two_rules_swaps_priority(self, auth_client, user):
         high = Rule.objects.create(user=user, text="High", priority=1)
         low = Rule.objects.create(user=user, text="Low", priority=0)
@@ -558,6 +577,13 @@ class TestRuleSwap:
         rule = Rule.objects.create(user=user, text="Mine", priority=1)
 
         resp = _post(auth_client, self.URL, {"a": "x", "b": rule.id})
+
+        assert resp.status_code == 400
+        assert "body" in resp.json()["errors"]
+
+    def test_non_dict_body_returns_400(self, auth_client):
+        # A JSON array body must hit the isinstance(data, dict) guard.
+        resp = _post(auth_client, self.URL, [1, 2])
 
         assert resp.status_code == 400
         assert "body" in resp.json()["errors"]

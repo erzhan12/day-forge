@@ -15,6 +15,7 @@ import datetime
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import Model
 from django.http import JsonResponse
 
 from schedules.models import TimeBlock
@@ -64,7 +65,7 @@ def is_plain_int(value) -> bool:
 
 
 def swap_ordering_field(
-    user: User, model: type, order_field: str, id_a: int, id_b: int
+    user: User, model: type[Model], order_field: str, id_a: int, id_b: int
 ) -> tuple | None:
     """Atomically exchange one ordering field on two user-owned rows.
 

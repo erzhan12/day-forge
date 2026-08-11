@@ -727,6 +727,18 @@ class TestTravelRuleSwap:
         assert "body" in resp.json()["errors"]
 
     @pytest.mark.django_db
+    def test_non_dict_body_returns_400(self, auth_client):
+        # A JSON array body must hit the isinstance(data, dict) guard.
+        resp = auth_client.post(
+            self.URL,
+            json.dumps([1, 2]),
+            content_type="application/json",
+        )
+
+        assert resp.status_code == 400
+        assert "body" in resp.json()["errors"]
+
+    @pytest.mark.django_db
     def test_swap_bool_id_returns_400(self, auth_client, user):
         # bool subclasses int; is_plain_int must reject it.
         rule = TravelRule.objects.create(user=user, keyword="Mine", order=0)

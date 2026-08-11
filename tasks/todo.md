@@ -169,6 +169,15 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
 
 ## Follow-ups (discovered during manual testing)
 
+### 0047 — move `TestTravelRuleSwap` to a dedicated test module (PR #143 claude-review P3)
+
+- [ ] **Relocate `TestTravelRuleSwap` out of `backend/tests/test_from_event.py`.**
+  The class is semantically unrelated to the "from event" subject of that file,
+  hurting discoverability. Move it to a dedicated `test_travel_rules.py` (or an
+  existing logical travel-rules test file) and update `docs/features/0047_REVIEW.md`
+  accordingly. Deferred as pure churn — the tests pass and are correct where they
+  are. Non-blocking P3 raised in PR #143 round-2 review.
+
 ### 0045 — collapse `AICommandResult` into `AIChatResult` (PR #138 claude-review P2)
 
 - [x] **Remove the now-vestigial `AICommandResult` dataclass.** After feature
