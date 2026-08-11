@@ -5,6 +5,7 @@ runs async views). Service calls are patched at ``views.service.*`` so no
 network or google-auth machinery runs.
 """
 
+import asyncio
 import datetime
 from datetime import timedelta
 from unittest.mock import MagicMock, patch
@@ -257,8 +258,6 @@ class TestEvents:
         assert data["account_errors"][0]["error"] == "unavailable"
 
     def test_mixed_cache_hit_and_per_account_auth_failure(self, auth_client, user):
-        import asyncio
-
         acc_cached = _make_account(user, google_account_id="s1", email="cached@gmail.com")
         _make_account(user, google_account_id="s2", email="bad@gmail.com")
         payload = [
@@ -305,8 +304,6 @@ class TestEvents:
         assert "misconfigured" in resp.json()["errors"]["detail"]
 
     def test_cache_hit_short_circuits(self, auth_client, user):
-        import asyncio
-
         acc = _make_account(user)
         payload = [
             {
@@ -332,8 +329,6 @@ class TestEvents:
     def test_refresh_bypasses_all_accounts_and_rewarms(self, auth_client, user):
         """``?refresh=1`` puts every connected account into the fetch path,
         even when one account has a pre-seeded cache entry, and re-warms."""
-        import asyncio
-
         acc_cached = _make_account(
             user, google_account_id="s1", email="cached@gmail.com"
         )
@@ -393,8 +388,6 @@ class TestEvents:
 
     def test_without_refresh_cached_account_not_refetched(self, auth_client, user):
         """Companion: without ``?refresh=1`` a cached account is NOT re-fetched."""
-        import asyncio
-
         acc_cached = _make_account(
             user, google_account_id="s1", email="cached@gmail.com"
         )
@@ -441,8 +434,6 @@ class TestEvents:
         """Only the exact string ``"1"`` bypasses; any other ``refresh``
         value keeps a cached account off the fetch path
         (``request.GET.get("refresh") == "1"``)."""
-        import asyncio
-
         acc_cached = _make_account(
             user, google_account_id="s1", email="cached@gmail.com"
         )

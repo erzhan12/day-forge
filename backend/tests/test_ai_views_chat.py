@@ -77,6 +77,7 @@ class TestValidation:
     def test_invalid_json_body(self, auth_client):
         resp = auth_client.post(URL, "{", content_type="application/json")
         assert resp.status_code == 400
+        assert resp.json() == {"errors": {"body": "Invalid JSON."}}
 
     @pytest.mark.django_db
     @pytest.mark.parametrize(
@@ -87,13 +88,14 @@ class TestValidation:
             "123",
             "null",
             "true",
+            "false",
         ],
     )
     def test_non_object_json_root_returns_400(self, auth_client, body):
         """Lock the contract that malformed bodies always return 4xx, never 5xx.
 
         Valid JSON with a non-dict root (``[]``, ``"x"``, ``123``,
-        ``null``, ``true``) parses cleanly via ``json.loads`` but would
+        ``null``, ``true``, ``false``) parses cleanly via ``json.loads`` but would
         crash on ``data.get("messages")`` with ``AttributeError`` → 500
         without the explicit ``isinstance(data, dict)`` guard added in
         ``backend/ai/views.py`` (the post-JSON-parse step). This test

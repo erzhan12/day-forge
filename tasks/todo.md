@@ -163,9 +163,9 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
 
 - [ ] **0013-followup: explicit `useNowMinutes` wiring assertion in `SkippedTasks.test.ts`.** Existing tests already exercise the composable via behaviour ("list grows when interval advances past block end") but never directly assert `SkippedTasks.vue` subscribes to `currentHHMM`. Adding a focused mock-and-verify test would harden against a future refactor that accidentally drops the `useNowMinutes` call. Deferred from claude-review on PR #36 — current coverage proven adequate by the existing suite passing across all the day-boundary scenarios in `useNowMinutes.test.ts`.
 
-- [ ] **0014-followup: add `"false"` to the `test_non_dict_json_body` parametrize list.** Plan §Fix listed five non-dict literals (`[]`, `"x"`, `123`, `null`, `true`); `"false"` hits the same guard branch but was deliberately omitted to mirror the plan exactly and to match `test_ai_views_chat.py::test_non_object_json_root_returns_400`'s five-case list. Suggested by claude-review on PR #39 as a P3 polish; apply if/when the chat counterpart is also broadened so the two surfaces stay in lockstep.
+- [x] **0014-followup: add `"false"` to the `test_non_dict_json_body` parametrize list.** Plan §Fix listed five non-dict literals (`[]`, `"x"`, `123`, `null`, `true`); `"false"` hits the same guard branch but was deliberately omitted to mirror the plan exactly and to match `test_ai_views_chat.py::test_non_object_json_root_returns_400`'s five-case list. Suggested by claude-review on PR #39 as a P3 polish; apply if/when the chat counterpart is also broadened so the two surfaces stay in lockstep. **Done (feature/0047):** added `"false"` to both `test_non_dict_json_body_rejected` (test_from_event.py) and `test_non_object_json_root_returns_400` (test_ai_views_chat.py) in lockstep + docstring update.
 
-- [ ] **0014-followup: strengthen `test_invalid_json_body` to assert the exact `"Invalid JSON."` body.** Pre-existing gap surfaced by claude-review on PR #39 — the sibling test for malformed-but-non-empty JSON asserts only `status_code == 400`, not the error envelope. The new `test_non_dict_json_body` is stricter (asserts exact `errors.body` string); aligning the older test would match that pattern. Trivial single-line change; deferred to keep PR #39 minimal and scope-pure.
+- [x] **0014-followup: strengthen `test_invalid_json_body` to assert the exact `"Invalid JSON."` body.** Pre-existing gap surfaced by claude-review on PR #39 — the sibling test for malformed-but-non-empty JSON asserts only `status_code == 400`, not the error envelope. The new `test_non_dict_json_body` is stricter (asserts exact `errors.body` string); aligning the older test would match that pattern. Trivial single-line change; deferred to keep PR #39 minimal and scope-pure. **Done (feature/0047):** now asserts `resp.json() == {"errors": {"body": "Invalid JSON."}}`.
 
 ## Follow-ups (discovered during manual testing)
 
@@ -284,12 +284,13 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
 
 ### 0031 poll — deferred PR #116 style nits
 
-- [ ] **Hoist `import asyncio` to module top in `backend/tests/test_gcal_sync_views.py`.**
+- [x] **Hoist `import asyncio` to module top in `backend/tests/test_gcal_sync_views.py`.**
   Two feature-0031 cache tests (`test_without_refresh_cached_account_not_refetched`,
   `test_non_one_refresh_value_does_not_bypass_cache`) import `asyncio` in-body,
   matching the pre-existing companion they were copied from. claude-review PR #116
   cycle-3 (#1, P2-style) suggested a top-level import for suite consistency —
   low-value sweep, deferred to avoid another review cycle mid-approval.
+  **Done (feature/0047):** single module-top `import asyncio`; removed all 5 in-body imports.
 
 ### External calendar
 

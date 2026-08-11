@@ -147,7 +147,7 @@ class TestCreateBlockFromEvent:
         assert resp.status_code == 400
 
     @pytest.mark.django_db
-    @pytest.mark.parametrize("raw_body", ["[]", '"x"', "123", "null", "true"])
+    @pytest.mark.parametrize("raw_body", ["[]", '"x"', "123", "null", "true", "false"])
     def test_non_dict_json_body_rejected(self, auth_client, schedule, raw_body):
         resp = auth_client.post(
             FROM_EVENT_URL, raw_body, content_type="application/json"
