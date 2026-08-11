@@ -249,6 +249,63 @@ class TestRulesCRUD:
             user=user, text="No meetings before 9"
         ).exists()
 
+    def test_create_without_priority_defaults_to_top(self, auth_client, user):
+        first_resp = _post(auth_client, "/api/rules/", {"text": "Rule A"})
+        assert first_resp.status_code == 201
+        assert first_resp.json()["priority"] == 0
+
+        second_resp = _post(auth_client, "/api/rules/", {"text": "Rule B"})
+        assert second_resp.status_code == 201
+
+        first = Rule.objects.get(user=user, text="Rule A")
+        assert second_resp.json()["priority"] > first.priority
+        listed = auth_client.get("/api/rules/").json()["rules"]
+        assert [rule["text"] for rule in listed] == ["Rule B", "Rule A"]
+
+    def test_create_compacts_priorities(self, auth_client, user):
+        Rule.objects.create(user=user, text="Priority five", priority=5)
+        Rule.objects.create(user=user, text="Priority nine", priority=9)
+
+        resp = _post(auth_client, "/api/rules/", {"text": "New top rule"})
+
+        assert resp.status_code == 201
+        assert resp.json()["priority"] == 2
+        listed = auth_client.get("/api/rules/").json()["rules"]
+        assert [rule["text"] for rule in listed] == [
+            "New top rule",
+            "Priority nine",
+            "Priority five",
+        ]
+        assert [rule["priority"] for rule in listed] == [2, 1, 0]
+
+    def test_compaction_does_not_touch_other_users_rules(self, auth_client, user):
+        # User-scoping is load-bearing: compaction must renumber only the
+        # requesting user's rules, never another user's rows.
+        other = User.objects.create_user(username="o_compact", password="x")
+        theirs = Rule.objects.create(user=other, text="Theirs", priority=42)
+
+        resp = _post(auth_client, "/api/rules/", {"text": "Mine"})
+
+        assert resp.status_code == 201
+        theirs.refresh_from_db()
+        assert theirs.priority == 42  # untouched by our compaction
+
+    def test_compaction_preserves_id_tiebreak_for_equal_priorities(
+        self, auth_client, user
+    ):
+        # Two rules share a priority; the canonical order_by("-priority", "id")
+        # tiebreak (lower id first) must survive compaction deterministically.
+        older = Rule.objects.create(user=user, text="Older", priority=3)
+        newer = Rule.objects.create(user=user, text="Newer", priority=3)
+        assert older.id < newer.id
+
+        resp = _post(auth_client, "/api/rules/", {"text": "Top"})
+
+        assert resp.status_code == 201
+        listed = auth_client.get("/api/rules/").json()["rules"]
+        assert [rule["text"] for rule in listed] == ["Top", "Older", "Newer"]
+        assert [rule["priority"] for rule in listed] == [2, 1, 0]
+
     def test_patch_rule(self, auth_client, user):
         r = Rule.objects.create(user=user, text="Old", priority=5)
         resp = _patch(
@@ -258,6 +315,21 @@ class TestRulesCRUD:
         r.refresh_from_db()
         assert r.text == "New"
         assert r.is_active is False
+
+    def test_patch_does_not_compact_priorities(self, auth_client, user):
+        # PATCH must NOT renumber to 0..N-1 — that would fight the
+        # RulesList.vue bumpPriority two-PATCH swap mid-reorder. Compaction
+        # runs on create/delete only. Non-contiguous priorities left as-is.
+        low = Rule.objects.create(user=user, text="Low", priority=0)
+        high = Rule.objects.create(user=user, text="High", priority=5)
+
+        resp = _patch(auth_client, f"/api/rules/{high.id}/", {"text": "High edited"})
+
+        assert resp.status_code == 200
+        low.refresh_from_db()
+        high.refresh_from_db()
+        assert low.priority == 0
+        assert high.priority == 5  # not compacted to 1
 
     def test_cross_user_patch_returns_404(self, auth_client):
         other = User.objects.create_user(username="o5", password="x")
@@ -272,6 +344,34 @@ class TestRulesCRUD:
         resp = auth_client.delete(f"/api/rules/{r.id}/")
         assert resp.status_code == 200
         assert not Rule.objects.filter(pk=r.id).exists()
+
+    def test_delete_compacts_priorities(self, auth_client, user):
+        bottom = Rule.objects.create(user=user, text="Bottom", priority=0)
+        Rule.objects.create(user=user, text="Middle", priority=1)
+        Rule.objects.create(user=user, text="Top", priority=2)
+
+        resp = auth_client.delete(f"/api/rules/{bottom.id}/")
+
+        assert resp.status_code == 200
+        listed = auth_client.get("/api/rules/").json()["rules"]
+        assert [rule["text"] for rule in listed] == ["Top", "Middle"]
+        assert [rule["priority"] for rule in listed] == [1, 0]
+
+    def test_add_delete_cycle_keeps_priorities_small(self, auth_client):
+        first_resp = _post(auth_client, "/api/rules/", {"text": "Rule one"})
+        second_resp = _post(auth_client, "/api/rules/", {"text": "Rule two"})
+        assert first_resp.status_code == second_resp.status_code == 201
+
+        delete_resp = auth_client.delete(
+            f"/api/rules/{first_resp.json()['id']}/"
+        )
+        assert delete_resp.status_code == 200
+        third_resp = _post(auth_client, "/api/rules/", {"text": "Rule three"})
+        assert third_resp.status_code == 201
+
+        listed = auth_client.get("/api/rules/").json()["rules"]
+        assert [rule["text"] for rule in listed] == ["Rule three", "Rule two"]
+        assert {rule["priority"] for rule in listed} == {0, 1}
 
     def test_rule_post_locks_user_before_count_and_create(
         self, auth_client, user, monkeypatch
@@ -413,16 +513,22 @@ class TestRulePriorityBounds:
         assert resp.status_code == 400
         assert "priority" in resp.json()["errors"]
 
-    def test_create_accepts_priority_at_max(self, auth_client, user):
+    def test_create_accepts_priority_at_max_and_places_rule_on_top(
+        self, auth_client, user
+    ):
         from templates_mgr.api import MAX_PRIORITY
 
+        Rule.objects.create(user=user, text="Existing", priority=0)
         resp = _post(
             auth_client,
             "/api/rules/",
             {"text": "X", "priority": MAX_PRIORITY},
         )
         assert resp.status_code == 201
-        assert Rule.objects.get(user=user, text="X").priority == MAX_PRIORITY
+        assert resp.json()["priority"] == 1
+        listed = auth_client.get("/api/rules/").json()["rules"]
+        assert [rule["text"] for rule in listed] == ["X", "Existing"]
+        assert [rule["priority"] for rule in listed] == [1, 0]
 
     def test_patch_rejects_out_of_range_priority(self, auth_client, user):
         r = Rule.objects.create(user=user, text="X", priority=5)

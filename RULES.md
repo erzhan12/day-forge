@@ -125,6 +125,8 @@ The frontend refreshes `currentHHMM` on a 1-minute interval (matches `Schedule.v
 - `seed_templates --user <username>` is **required**; there is no fallback to "first superuser". The `0002_user_fk` migration deletes orphan rows; rerun the seed per user post-migration.
 - All API queries are scoped by `request.user`. Cross-user PK access returns **404 (not 403)** to avoid id enumeration — same convention as `block_detail`.
 - POST/PUT to `/api/templates/` wrap saves in `transaction.atomic()` and catch `IntegrityError` → `409`. Without the catch the unique-constraint failure becomes a 500 and leaves the transaction in a broken state for any follow-up queries.
+- A Rule created without an explicit priority is assigned `max(existing) + 1`, then all of the user's Rule priorities are compacted to `0..N-1` in canonical `-priority, id` order. Create and delete compact inside the existing `transaction.atomic()` block while holding the per-user `select_for_update` lock; PATCH intentionally does not compact.
+- Keep `RulesList.bumpPriority` as a two-PATCH swap, including its equal-priority `±1` bias. Because PATCH does not compact, the bias remains necessary for transient ties and manually patched legacy values.
 
 ## Active Rules injection across both AI endpoints
 

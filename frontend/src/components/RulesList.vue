@@ -41,7 +41,7 @@ async function addRule() {
   }
   submitting.value = true
   newError.value = ""
-  const result = await createRule({ text, is_active: true, priority: 0 })
+  const result = await createRule({ text, is_active: true })
   submitting.value = false
   if (result.ok) {
     newText.value = ""
@@ -156,6 +156,7 @@ async function confirmDelete(rule: Rule) {
             type="button"
             class="arrow-btn"
             :disabled="idx === 0"
+            :title="localRules.length === 1 ? 'Add another rule to reorder' : undefined"
             aria-label="Increase priority"
             @click="bumpPriority(rule, 'up')"
           >
@@ -165,6 +166,7 @@ async function confirmDelete(rule: Rule) {
             type="button"
             class="arrow-btn"
             :disabled="idx === localRules.length - 1"
+            :title="localRules.length === 1 ? 'Add another rule to reorder' : undefined"
             aria-label="Decrease priority"
             @click="bumpPriority(rule, 'down')"
           >

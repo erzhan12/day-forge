@@ -390,7 +390,7 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
   leading gap is an interactive `GapSlot` (click-to-add), so any
   collapse must preserve the early-morning add affordance.
 
-- [ ] **Auto-bump default priority for new Rules.** Today every new rule
+- [x] **Auto-bump default priority for new Rules.** Today every new rule
   lands at `priority=0` (hardcoded in `RulesList.vue:44`'s `createRule({...,
   priority: 0 })` call). Adding a second rule produces two rules at
   priority 0 → the user has to click ▲ once just to see ordering change,
@@ -402,14 +402,14 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
   — single source of truth and consistent across clients. Discovered while
   walking Test 3 of `docs/features/0005_MANUAL_TEST.md`.
 
-- [ ] **Disabled-arrow tooltip on a single Rule.** Both ▲ and ▼ are
+- [x] **Disabled-arrow tooltip on a single Rule.** Both ▲ and ▼ are
   disabled when there's only one rule (`:disabled="idx === 0"` and
   `:disabled="idx === localRules.length - 1"` both true). Currently
   silent — the user sees greyed-out arrows with no explanation. Add a
   `title` attribute like "Add another rule to reorder" so the affordance
   is self-documenting. Pairs naturally with the auto-bump task above.
 
-- [ ] **Compact Rule priorities on add/delete.** Combined with the
+- [x] **Compact Rule priorities on add/delete.** Combined with the
   auto-bump task above, priorities will only grow monotonically over
   time. Concretely: start with `[r1=0, r2=1]`, delete `r1`, add `r3` →
   `[r2=1, r3=2]`. After many add/delete cycles the user sees badge values

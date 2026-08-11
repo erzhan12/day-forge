@@ -16,6 +16,7 @@ from ai.prompts import DAY_END, DAY_START
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.db import IntegrityError, transaction
+from django.db.models import Max
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from schedules.http import (
@@ -330,6 +331,25 @@ def template_detail(request, pk):
 # ---------------------------------------------------------------------------
 
 
+def _compact_rule_priorities(user) -> None:
+    """Renumber the user's rules to contiguous priorities 0..N-1 (the
+    highest-priority rule keeps the largest value) while preserving the
+    canonical ``-priority, id`` display order.
+
+    Callers must hold the user's row lock for the enclosing transaction.
+    """
+    rules = list(
+        Rule.objects.filter(user=user).order_by("-priority", "id")
+    )
+    changed = []
+    for priority, rule in zip(range(len(rules) - 1, -1, -1), rules):
+        if rule.priority != priority:
+            rule.priority = priority
+            changed.append(rule)
+    if changed:
+        Rule.objects.bulk_update(changed, ["priority"])
+
+
 @login_required
 @require_http_methods(["GET", "POST"])
 def rules_collection(request):
@@ -358,7 +378,19 @@ def rules_collection(request):
                 f"You have reached the maximum of {MAX_RULES_PER_USER} rules.",
                 status=400,
             )
+        if "priority" not in cleaned:
+            # Default the new rule to the top of the list. The +1 is
+            # load-bearing: it sorts the new row first under `-priority`
+            # so the immediately-following _compact_rule_priorities()
+            # assigns it N-1 (top). Dropping it to 0 would tie the row and
+            # let the `id` tiebreak sink it to the bottom before compaction.
+            max_priority = Rule.objects.filter(user=request.user).aggregate(
+                Max("priority")
+            )["priority__max"]
+            cleaned["priority"] = 0 if max_priority is None else max_priority + 1
         rule = Rule.objects.create(user=request.user, **cleaned)
+        _compact_rule_priorities(request.user)
+        rule.refresh_from_db(fields=["priority"])
     return JsonResponse(_rule_to_dict(rule), status=201)
 
 
@@ -373,6 +405,7 @@ def rule_detail(request, pk):
             except Rule.DoesNotExist:
                 return JsonResponse({"errors": {"detail": "Not found."}}, status=404)
             rule.delete()
+            _compact_rule_priorities(request.user)
         return JsonResponse({"ok": True})
 
     oversized = reject_oversized_body(request)

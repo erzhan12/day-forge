@@ -440,10 +440,12 @@ Deletes the template. Returns `404` for cross-user PK access.
 
 ### `GET /api/rules/`
 
-Returns the current user's rules ordered by `-priority`.
+Returns the current user's rules ordered by `-priority`. After any create or
+delete, priorities are contiguous from `0` to `N-1`, with the top rule holding
+the highest value.
 
 ```json
-{"rules": [{"id": 1, "text": "No meetings before 9", "is_active": true, "priority": 10}]}
+{"rules": [{"id": 1, "text": "No meetings before 9", "is_active": true, "priority": 0}]}
 ```
 
 ### `POST /api/rules/`
@@ -454,7 +456,7 @@ Returns the current user's rules ordered by `-priority`.
 |-------|------|-------|
 | `text` | string | 1–500 chars. |
 | `is_active` | boolean | Optional. Default `true`. |
-| `priority` | integer | Optional. Default `0`. |
+| `priority` | integer | Optional. When omitted, the new rule is placed at the top (highest priority). Priorities are compacted to `0..N-1` on every create and delete, so the stored and returned value may differ from an explicit priority sent by the client. |
 
 A user is capped at 100 rules; over-cap requests return `400`.
 
@@ -464,7 +466,8 @@ Partial update of `text`, `is_active`, `priority`. Cross-user PK → `404`.
 
 ### `DELETE /api/rules/{pk}/`
 
-Deletes the rule. Cross-user PK → `404`.
+Deletes the rule and compacts surviving priorities to `0..N-1`. Cross-user
+PK → `404`.
 
 ---
 
