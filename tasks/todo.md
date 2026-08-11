@@ -169,9 +169,9 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
 
 ## Follow-ups (discovered during manual testing)
 
-### 0044 — collapse `AICommandResult` into `AIChatResult` (PR #138 claude-review P2)
+### 0045 — collapse `AICommandResult` into `AIChatResult` (PR #138 claude-review P2)
 
-- [ ] **Remove the now-vestigial `AICommandResult` dataclass.** After feature
+- [x] **Remove the now-vestigial `AICommandResult` dataclass.** After feature
   0044 deleted `run_command`, `AICommandResult` (`backend/ai/service.py`) is no
   longer produced by any code path — it survives only as a member of the
   `_apply_actions_sync` `result: AICommandResult | AIChatResult` type union, as

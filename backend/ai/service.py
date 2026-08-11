@@ -95,25 +95,14 @@ class AIParseError(AIError):
         self.raw_response_text = raw_response_text
 
 
-# Retained for test_ai_apply.py (constructs it to drive _apply_actions_sync);
-# no production caller since /command/ + run_command were removed (feature 0044).
-# Do not delete in an "unused export" sweep without also migrating that test —
-# tracked for collapse-into-AIChatResult in tasks/todo.md.
-@dataclass
-class AICommandResult:
-    raw_response_text: str
-    parsed_actions: list[dict]
-    explanation: str
-
-
 @dataclass
 class AIChatResult:
     """Result envelope for ``run_chat`` (feature 0007).
 
-    Carries the same provider raw text + parsed actions as
-    ``AICommandResult`` plus an optional ``ask`` clarifying-question
-    string. Exactly one of ``parsed_actions`` (non-empty) or ``ask``
-    (non-null) is set, OR both are empty/null for a chit-chat turn.
+    Carries the provider raw text, parsed actions, an explanation, and an
+    optional ``ask`` clarifying-question string. Exactly one of
+    ``parsed_actions`` (non-empty) or ``ask`` (non-null) is set, OR both
+    are empty/null for a chit-chat turn.
     """
 
     raw_response_text: str
@@ -126,9 +115,10 @@ class AIChatResult:
 class AIDraftResult:
     """Result envelope for ``run_draft``.
 
-    Same shape as ``AICommandResult`` but kept separate so call sites are
-    explicit about which path produced the actions. The view's audit log
-    distinguishes the two via the new ``AIInteraction.kind`` field.
+    Carries the provider raw text, parsed actions, and an explanation. It is
+    kept separate so call sites are explicit about which path produced the
+    actions. The view's audit log distinguishes the two via the
+    ``AIInteraction.kind`` field.
     """
 
     raw_response_text: str

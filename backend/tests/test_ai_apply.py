@@ -5,7 +5,7 @@ import time
 
 import ai.views
 import pytest
-from ai.service import AICommandResult
+from ai.service import AIChatResult
 from asgiref.sync import async_to_sync, sync_to_async
 from django.core.cache import cache
 from schedules.models import Schedule
@@ -23,7 +23,7 @@ class TestRollbackPropagation:
     @pytest.mark.django_db
     def test_rollback_propagates_across_sync_to_async(self, user):
         schedule = Schedule.objects.create(user=user, date="2026-04-18")
-        result = AICommandResult(
+        result = AIChatResult(
             raw_response_text="{}",
             parsed_actions=[
                 {
@@ -35,6 +35,7 @@ class TestRollbackPropagation:
                 }
             ],
             explanation="x",
+            ask=None,
         )
 
         async def _run():

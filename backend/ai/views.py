@@ -41,7 +41,6 @@ from ai.mutation_planner import (
 from ai.prompts import DAY_END, DAY_START
 from ai.service import (
     AIChatResult,
-    AICommandResult,
     AIDraftResult,
     AIError,
     AIInvalidInputError,
@@ -542,7 +541,7 @@ def _persist_mutation_diff(
 
 def _apply_actions_sync(
     schedule: Schedule,
-    result: AICommandResult | AIChatResult,
+    result: AIChatResult,
     *,
     expected_fingerprint: str,
     interaction_id: int | None = None,
