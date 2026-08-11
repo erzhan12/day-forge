@@ -126,7 +126,8 @@ The frontend refreshes `currentHHMM` on a 1-minute interval (matches `Schedule.v
 - All API queries are scoped by `request.user`. Cross-user PK access returns **404 (not 403)** to avoid id enumeration — same convention as `block_detail`.
 - POST/PUT to `/api/templates/` wrap saves in `transaction.atomic()` and catch `IntegrityError` → `409`. Without the catch the unique-constraint failure becomes a 500 and leaves the transaction in a broken state for any follow-up queries.
 - A Rule created without an explicit priority is assigned `max(existing) + 1`, then all of the user's Rule priorities are compacted to `0..N-1` in canonical `-priority, id` order. Create and delete compact inside the existing `transaction.atomic()` block while holding the per-user `select_for_update` lock; PATCH intentionally does not compact.
-- Keep `RulesList.bumpPriority` as a two-PATCH swap, including its equal-priority `±1` bias. Because PATCH does not compact, the bias remains necessary for transient ties and manually patched legacy values.
+- Distinct-value Rule and TravelRule reorders use the atomic `POST /api/rules/swap/` and `POST /api/calendar/travel-rules/swap/` endpoints. Both delegate to `swap_ordering_field` in `schedules/http.py`, which locks the per-user row **and** both target rows (`select_for_update`) — the target-row lock serializes the swap against a concurrent `travel_rule_detail` DELETE, which does not take the user lock — then swaps both values with one `bulk_update`; do not reintroduce the two-PATCH swap gap from feature 0026.
+- Keep the single-PATCH equal-value nudge branches for legacy duplicate rows: `RulesList.bumpPriority` uses `±1`, while `TravelRulesList.bumpOrder` uses `∓1` because lower `order` sorts first. An equal-value swap would be a no-op.
 
 ## Active Rules injection across both AI endpoints
 

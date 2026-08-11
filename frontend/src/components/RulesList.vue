@@ -10,7 +10,7 @@ const emit = defineEmits<{
   (e: "changed"): void
 }>()
 
-const { createRule, updateRule, deleteRule } = useRules()
+const { createRule, updateRule, swapRules, deleteRule } = useRules()
 
 const newText = ref("")
 const newError = ref("")
@@ -104,14 +104,15 @@ async function bumpPriority(rule: Rule, direction: "up" | "down") {
     const ruleResult = await updateRule(rule.id, {
       priority: rule.priority + (direction === "up" ? 1 : -1),
     })
-    if (ruleResult.ok) emit("changed")
+    if (ruleResult.ok) {
+      emit("changed")
+    } else {
+      rowError.value = { id: rule.id, message: "Reorder failed" }
+    }
     return
   }
-  const ruleResult = await updateRule(rule.id, { priority: neighbour.priority })
-  const neighbourResult = await updateRule(neighbour.id, {
-    priority: rule.priority,
-  })
-  if (ruleResult.ok && neighbourResult.ok) {
+  const result = await swapRules(rule.id, neighbour.id)
+  if (result.ok) {
     emit("changed")
   } else {
     rowError.value = { id: rule.id, message: "Reorder failed" }

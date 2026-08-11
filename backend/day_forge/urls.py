@@ -59,6 +59,11 @@ urlpatterns = [
         name="rules_collection",
     ),
     path(
+        "api/rules/swap/",
+        templates_api.rules_swap,
+        name="rules_swap",
+    ),
+    path(
         "api/rules/<int:pk>/",
         templates_api.rule_detail,
         name="rule_detail",
@@ -98,6 +103,11 @@ urlpatterns = [
         "api/calendar/travel-rules/",
         calendar_travel_rules.travel_rules_collection,
         name="travel_rules_collection",
+    ),
+    path(
+        "api/calendar/travel-rules/swap/",
+        calendar_travel_rules.travel_rules_swap,
+        name="travel_rules_swap",
     ),
     path(
         "api/calendar/travel-rules/<int:pk>/",

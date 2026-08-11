@@ -13,7 +13,12 @@ from django.contrib.auth.decorators import login_required
 from django.db.models import Max
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
-from schedules.http import VALID_CATEGORIES, is_plain_int, reject_oversized_body
+from schedules.http import (
+    VALID_CATEGORIES,
+    is_plain_int,
+    reject_oversized_body,
+    swap_ordering_field,
+)
 
 from calendar_sync.models import TravelRule
 
@@ -199,6 +204,43 @@ def travel_rules_collection(request):
 
     rule = TravelRule.objects.create(user=request.user, **cleaned)
     return JsonResponse(serialize_travel_rule(rule), status=201)
+
+
+@login_required
+@require_http_methods(["POST"])
+def travel_rules_swap(request):
+    oversized = reject_oversized_body(request)
+    if oversized is not None:
+        return oversized
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return _err("body", "Invalid JSON.")
+
+    if not isinstance(data, dict):
+        return _err("body", "Request body must be a JSON object.")
+    id_a = data.get("a")
+    id_b = data.get("b")
+    if not is_plain_int(id_a) or not is_plain_int(id_b) or id_a == id_b:
+        return _err("body", "a and b must be distinct integer travel rule ids.")
+
+    swapped = swap_ordering_field(
+        request.user,
+        TravelRule,
+        "order",
+        id_a,
+        id_b,
+    )
+    if swapped is None:
+        return JsonResponse({"errors": {"detail": "Not found."}}, status=404)
+    return JsonResponse(
+        {
+            "travel_rules": [
+                serialize_travel_rule(rule) for rule in swapped
+            ]
+        }
+    )
 
 
 @login_required

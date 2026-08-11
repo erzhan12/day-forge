@@ -53,6 +53,15 @@ export function useRules() {
     return result
   }
 
+  async function swapRules(a: number, b: number): Promise<RulesListResult> {
+    const result = await requestJson("/api/rules/swap/", "POST", { a, b })
+    if (result.ok) {
+      const list = (result.data?.rules as Rule[]) ?? []
+      return { ok: true, status: result.status, data: result.data, rules: list }
+    }
+    return result
+  }
+
   async function updateRule(
     id: number,
     payload: RulePatchPayload,
@@ -77,5 +86,5 @@ export function useRules() {
     return await requestJson(`/api/rules/${id}/`, "DELETE")
   }
 
-  return { listRules, createRule, updateRule, deleteRule }
+  return { listRules, createRule, swapRules, updateRule, deleteRule }
 }

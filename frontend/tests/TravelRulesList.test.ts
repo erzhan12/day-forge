@@ -15,11 +15,12 @@ import { describe, expect, it, vi } from "vitest"
 import { mount } from "@vue/test-utils"
 
 const updateRule = vi.fn().mockResolvedValue({ ok: true })
+const swapRules = vi.fn().mockResolvedValue({ ok: true })
 const createRule = vi.fn().mockResolvedValue({ ok: true })
 const deleteRule = vi.fn().mockResolvedValue({ ok: true })
 
 vi.mock("../src/composables/useTravelRules", () => ({
-  useTravelRules: () => ({ createRule, updateRule, deleteRule }),
+  useTravelRules: () => ({ createRule, updateRule, swapRules, deleteRule }),
 }))
 
 import TravelRulesList from "../src/components/TravelRulesList.vue"
@@ -43,6 +44,7 @@ const RULES = [rule(1, "gym", 0), rule(2, "dentist", 1), rule(3, "office", 2)]
 
 function mountList(rules: TravelRule[] = RULES) {
   updateRule.mockClear()
+  swapRules.mockClear()
   return mount(TravelRulesList, { props: { rules } })
 }
 
@@ -55,40 +57,40 @@ function downButtons(wrapper: ReturnType<typeof mountList>) {
 }
 
 describe("TravelRulesList reorder direction", () => {
-  it('"up" swaps a rule to its predecessor\'s lower order', async () => {
+  it('"up" atomically swaps a rule with its predecessor', async () => {
     const wrapper = mountList()
-    // Middle row: dentist, order 1. Up should take it to gym's 0.
     await upButtons(wrapper)[1].trigger("click")
 
-    expect(updateRule).toHaveBeenCalledWith(2, { order: 0 })
-    expect(updateRule).toHaveBeenCalledWith(1, { order: 1 })
+    expect(swapRules).toHaveBeenCalledOnce()
+    expect(swapRules).toHaveBeenCalledWith(2, 1)
+    expect(updateRule).not.toHaveBeenCalled()
+    expect(wrapper.emitted("changed")).toHaveLength(1)
   })
 
-  it('"down" swaps a rule to its successor\'s higher order', async () => {
+  it('"down" atomically swaps a rule with its successor', async () => {
     const wrapper = mountList()
     await downButtons(wrapper)[1].trigger("click")
 
-    expect(updateRule).toHaveBeenCalledWith(2, { order: 2 })
-    expect(updateRule).toHaveBeenCalledWith(3, { order: 1 })
+    expect(swapRules).toHaveBeenCalledOnce()
+    expect(swapRules).toHaveBeenCalledWith(2, 3)
+    expect(updateRule).not.toHaveBeenCalled()
   })
 
-  it('"up" swaps with the immediate predecessor, not an arbitrary lower value', async () => {
+  it('"up" swaps with the immediate predecessor', async () => {
     const wrapper = mountList()
     await upButtons(wrapper)[2].trigger("click")
 
-    // office(2) must take dentist's exact order (1) — asserting merely "< 2"
-    // would accept a jump to 0, which is a different (wrong) reordering.
-    const officeCall = updateRule.mock.calls.find((c) => c[0] === 3)
-    expect(officeCall?.[1].order).toBe(1)
-    expect(updateRule).toHaveBeenCalledWith(2, { order: 2 })
+    expect(swapRules).toHaveBeenCalledWith(3, 2)
   })
 
   it("is a no-op at the boundaries", async () => {
     const wrapper = mountList()
     await upButtons(wrapper)[0].trigger("click")
+    expect(swapRules).not.toHaveBeenCalled()
     expect(updateRule).not.toHaveBeenCalled()
 
     await downButtons(wrapper)[2].trigger("click")
+    expect(swapRules).not.toHaveBeenCalled()
     expect(updateRule).not.toHaveBeenCalled()
   })
 
@@ -113,24 +115,9 @@ describe("TravelRulesList reorder direction", () => {
     expect(wrapper.emitted("changed")).toBeUndefined()
   })
 
-  it("surfaces an error and reconciles when exactly one swap PATCH fails", async () => {
-    // Partial failure: first PATCH lands, second doesn't. The rows now
-    // disagree, so the component must both flag the error AND re-emit so the
-    // parent refetches the true server state instead of showing stale order.
+  it("surfaces an error when the atomic swap fails", async () => {
     const wrapper = mountList()
-    updateRule.mockResolvedValueOnce({ ok: true }).mockResolvedValueOnce({ ok: false })
-    await upButtons(wrapper)[1].trigger("click")
-    await wrapper.vm.$nextTick()
-
-    expect(wrapper.text()).toContain("Reorder failed")
-    expect(wrapper.emitted("changed")).toHaveLength(1)
-  })
-
-  it("does not reconcile when both swap PATCHes fail", async () => {
-    // Both failed → nothing changed server-side, so the stale local order is
-    // already correct; only the error should show, no refetch.
-    const wrapper = mountList()
-    updateRule.mockResolvedValueOnce({ ok: false }).mockResolvedValueOnce({ ok: false })
+    swapRules.mockResolvedValueOnce({ ok: false })
     await upButtons(wrapper)[1].trigger("click")
     await wrapper.vm.$nextTick()
 

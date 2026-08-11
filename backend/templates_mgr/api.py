@@ -24,6 +24,7 @@ from schedules.http import (
     is_plain_int,
     parse_time_or_error,
     reject_oversized_body,
+    swap_ordering_field,
     validate_five_minute_or_error,
     validate_time_range,
 )
@@ -397,6 +398,31 @@ def rules_collection(request):
 
 
 @login_required
+@require_http_methods(["POST"])
+def rules_swap(request):
+    oversized = reject_oversized_body(request)
+    if oversized is not None:
+        return oversized
+
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return _err("body", "Invalid JSON.")
+
+    if not isinstance(data, dict):
+        return _err("body", "Request body must be a JSON object.")
+    id_a = data.get("a")
+    id_b = data.get("b")
+    if not is_plain_int(id_a) or not is_plain_int(id_b) or id_a == id_b:
+        return _err("body", "a and b must be distinct integer rule ids.")
+
+    swapped = swap_ordering_field(request.user, Rule, "priority", id_a, id_b)
+    if swapped is None:
+        return JsonResponse({"errors": {"detail": "Not found."}}, status=404)
+    return JsonResponse({"rules": [_rule_to_dict(rule) for rule in swapped]})
+
+
+@login_required
 @require_http_methods(["PATCH", "DELETE"])
 def rule_detail(request, pk):
     if request.method == "DELETE":
@@ -544,6 +570,7 @@ __all__ = [
     "templates_collection",
     "template_detail",
     "rules_collection",
+    "rules_swap",
     "rule_detail",
     "user_preferences",
     "validate_template_blocks",

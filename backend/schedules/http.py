@@ -12,7 +12,9 @@ a circular import.
 """
 import datetime
 
+from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.http import JsonResponse
 
 from schedules.models import TimeBlock
@@ -59,6 +61,44 @@ def is_plain_int(value) -> bool:
     the rationale in one place.
     """
     return isinstance(value, int) and not isinstance(value, bool)
+
+
+def swap_ordering_field(user, model, order_field: str, id_a: int, id_b: int):
+    """Atomically exchange one ordering field on two user-owned rows.
+
+    ``None`` means at least one id was missing or belonged to another user.
+    The user row lock serializes read-modify-write reorder operations for a
+    single account, and locking the two target rows serializes the swap
+    against a concurrent detail-view delete — both on databases that support
+    ``select_for_update`` (no-op on SQLite, where ``atomic()`` alone gives
+    all-or-nothing).
+    """
+    with transaction.atomic():
+        User.objects.select_for_update().get(pk=user.pk)
+        try:
+            # Lock both target rows for the transaction. The user-row lock
+            # above serializes swap-vs-swap for one account; locking the rows
+            # too serializes swap-vs-delete uniformly across models. The Rule
+            # detail DELETE also takes the user lock, but the TravelRule detail
+            # DELETE does not, so without a row lock a concurrent travel-rule
+            # delete could half-apply a swap. With it, a concurrent delete of a
+            # target either blocks until the swap commits or makes this get()
+            # raise DoesNotExist -> clean 404, never a half-applied swap. No-op
+            # on SQLite (whole-db write lock via atomic()).
+            row_a = model.objects.select_for_update().get(pk=id_a, user=user)
+            row_b = model.objects.select_for_update().get(pk=id_b, user=user)
+        except model.DoesNotExist:
+            return None
+
+        value_a = getattr(row_a, order_field)
+        value_b = getattr(row_b, order_field)
+        setattr(row_a, order_field, value_b)
+        setattr(row_b, order_field, value_a)
+        model.objects.bulk_update([row_a, row_b], [order_field])
+        # No refresh_from_db: bulk_update persists the in-memory values
+        # verbatim (no DB default/trigger on the ordering field), so the
+        # rows already hold the swapped values. Mirrors 0046 compaction.
+        return row_a, row_b
 
 
 def parse_time(value):

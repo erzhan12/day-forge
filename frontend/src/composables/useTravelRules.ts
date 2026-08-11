@@ -62,6 +62,22 @@ export function useTravelRules() {
     return result
   }
 
+  async function swapRules(
+    a: number,
+    b: number,
+  ): Promise<TravelRulesListResult> {
+    const result = await requestJson(
+      "/api/calendar/travel-rules/swap/",
+      "POST",
+      { a, b },
+    )
+    if (result.ok) {
+      const list = (result.data?.travel_rules as TravelRule[]) ?? []
+      return { ok: true, status: result.status, data: result.data, rules: list }
+    }
+    return result
+  }
+
   async function updateRule(
     id: number,
     payload: TravelRulePatchPayload,
@@ -86,5 +102,5 @@ export function useTravelRules() {
     return await requestJson(`/api/calendar/travel-rules/${id}/`, "DELETE")
   }
 
-  return { listRules, createRule, updateRule, deleteRule }
+  return { listRules, createRule, swapRules, updateRule, deleteRule }
 }

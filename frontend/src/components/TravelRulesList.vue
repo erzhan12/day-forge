@@ -12,7 +12,7 @@ const emit = defineEmits<{
   (e: "changed"): void
 }>()
 
-const { createRule, updateRule, deleteRule } = useTravelRules()
+const { createRule, updateRule, swapRules, deleteRule } = useTravelRules()
 
 const newKeyword = ref("")
 const newThere = ref(0)
@@ -138,17 +138,11 @@ async function bumpOrder(rule: TravelRule, direction: "up" | "down") {
     }
     return
   }
-  const ruleResult = await updateRule(rule.id, { order: neighbour.order })
-  const neighbourResult = await updateRule(neighbour.id, { order: rule.order })
-  if (ruleResult.ok && neighbourResult.ok) {
+  const result = await swapRules(rule.id, neighbour.id)
+  if (result.ok) {
     emit("changed")
   } else {
     rowError.value = { id: rule.id, message: "Reorder failed" }
-    // Non-atomic swap (accepted gap, 0026-followup): if exactly one PATCH
-    // landed, the two rows now disagree. Re-emit so the parent refetches and
-    // the list shows the true server state rather than the stale pre-swap
-    // order — otherwise the visible order silently lies about what's stored.
-    if (ruleResult.ok !== neighbourResult.ok) emit("changed")
   }
 }
 

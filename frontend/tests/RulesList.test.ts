@@ -3,10 +3,11 @@ import { mount } from "@vue/test-utils"
 
 const createRule = vi.fn().mockResolvedValue({ ok: true })
 const updateRule = vi.fn().mockResolvedValue({ ok: true })
+const swapRules = vi.fn().mockResolvedValue({ ok: true })
 const deleteRule = vi.fn().mockResolvedValue({ ok: true })
 
 vi.mock("../src/composables/useRules", () => ({
-  useRules: () => ({ createRule, updateRule, deleteRule }),
+  useRules: () => ({ createRule, updateRule, swapRules, deleteRule }),
 }))
 
 import RulesList from "../src/components/RulesList.vue"
@@ -22,6 +23,14 @@ function mountList(rules: Rule[]) {
 
 function arrowButtons(wrapper: ReturnType<typeof mountList>) {
   return wrapper.findAll("button.arrow-btn")
+}
+
+function upButtons(wrapper: ReturnType<typeof mountList>) {
+  return wrapper.findAll('button[aria-label="Increase priority"]')
+}
+
+function downButtons(wrapper: ReturnType<typeof mountList>) {
+  return wrapper.findAll('button[aria-label="Decrease priority"]')
 }
 
 describe("RulesList", () => {
@@ -96,5 +105,66 @@ describe("RulesList", () => {
     expect(
       (wrapper.get('input[type="text"]').element as HTMLInputElement).value,
     ).toBe("Keep me")
+  })
+
+  it("swaps distinct priorities atomically and emits changed", async () => {
+    swapRules.mockClear()
+    updateRule.mockClear()
+    const wrapper = mountList([
+      rule(2, "Top rule", 1),
+      rule(1, "Bottom rule", 0),
+    ])
+
+    await downButtons(wrapper)[0].trigger("click")
+
+    expect(swapRules).toHaveBeenCalledOnce()
+    expect(swapRules).toHaveBeenCalledWith(2, 1)
+    expect(updateRule).not.toHaveBeenCalled()
+    expect(wrapper.emitted("changed")).toHaveLength(1)
+  })
+
+  it("surfaces an error when an atomic priority swap fails", async () => {
+    swapRules.mockReset()
+    swapRules.mockResolvedValueOnce({ ok: false })
+    const wrapper = mountList([
+      rule(2, "Top rule", 1),
+      rule(1, "Bottom rule", 0),
+    ])
+
+    await downButtons(wrapper)[0].trigger("click")
+    await wrapper.vm.$nextTick()
+
+    expect(swapRules).toHaveBeenCalledOnce()
+    expect(wrapper.text()).toContain("Reorder failed")
+    expect(wrapper.emitted("changed")).toBeUndefined()
+    swapRules.mockResolvedValue({ ok: true })
+  })
+
+  it("nudges one row when legacy neighbours share a priority", async () => {
+    swapRules.mockClear()
+    updateRule.mockClear()
+    const wrapper = mountList([
+      rule(1, "Older", 0),
+      rule(2, "Newer", 0),
+    ])
+
+    await upButtons(wrapper)[1].trigger("click")
+
+    expect(swapRules).not.toHaveBeenCalled()
+    expect(updateRule).toHaveBeenCalledOnce()
+    expect(updateRule).toHaveBeenCalledWith(2, { priority: 1 })
+  })
+
+  it("surfaces an error when the equal-priority nudge PATCH fails", async () => {
+    swapRules.mockClear()
+    updateRule.mockClear()
+    updateRule.mockResolvedValueOnce({ ok: false })
+    const wrapper = mountList([rule(1, "Older", 0), rule(2, "Newer", 0)])
+
+    await upButtons(wrapper)[1].trigger("click")
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.text()).toContain("Reorder failed")
+    expect(wrapper.emitted("changed")).toBeUndefined()
   })
 })

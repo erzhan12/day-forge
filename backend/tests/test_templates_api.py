@@ -317,9 +317,11 @@ class TestRulesCRUD:
         assert r.is_active is False
 
     def test_patch_does_not_compact_priorities(self, auth_client, user):
-        # PATCH must NOT renumber to 0..N-1 — that would fight the
-        # RulesList.vue bumpPriority two-PATCH swap mid-reorder. Compaction
-        # runs on create/delete only. Non-contiguous priorities left as-is.
+        # PATCH must NOT renumber to 0..N-1. Reordering now goes through the
+        # atomic /rules/swap/ endpoint, but RulesList.vue's equal-value ±1
+        # nudge still PATCHes priority to open a gap; compacting on PATCH would
+        # fight that (and any manual priority edit). Compaction runs on
+        # create/delete only. Non-contiguous priorities left as-is.
         low = Rule.objects.create(user=user, text="Low", priority=0)
         high = Rule.objects.create(user=user, text="High", priority=5)
 
@@ -495,6 +497,111 @@ class TestRulesCRUD:
         resp = _patch(auth_client, f"/api/rules/{r.id}/", {"text": "Too late"})
         assert resp.status_code == 404
         assert resp.json() == {"errors": {"detail": "Not found."}}
+
+
+@pytest.mark.django_db
+class TestRuleSwap:
+    URL = "/api/rules/swap/"
+
+    def test_swap_two_rules_swaps_priority(self, auth_client, user):
+        high = Rule.objects.create(user=user, text="High", priority=1)
+        low = Rule.objects.create(user=user, text="Low", priority=0)
+
+        resp = _post(auth_client, self.URL, {"a": high.id, "b": low.id})
+
+        assert resp.status_code == 200
+        high.refresh_from_db()
+        low.refresh_from_db()
+        assert (high.priority, low.priority) == (0, 1)
+        # Response envelope carries the swapped values, not just the ids.
+        by_id = {rule["id"]: rule["priority"] for rule in resp.json()["rules"]}
+        assert by_id == {high.id: 0, low.id: 1}
+
+    def test_swap_missing_id_returns_404(self, auth_client, user):
+        rule = Rule.objects.create(user=user, text="Mine", priority=1)
+
+        resp = _post(auth_client, self.URL, {"a": rule.id, "b": 999_999})
+
+        assert resp.status_code == 404
+        rule.refresh_from_db()
+        assert rule.priority == 1
+
+    def test_swap_cross_user_id_returns_404(self, auth_client, user):
+        mine = Rule.objects.create(user=user, text="Mine", priority=1)
+        other = User.objects.create_user(username="swap-other", password="x")
+        theirs = Rule.objects.create(user=other, text="Theirs", priority=0)
+
+        resp = _post(auth_client, self.URL, {"a": mine.id, "b": theirs.id})
+
+        assert resp.status_code == 404
+        mine.refresh_from_db()
+        theirs.refresh_from_db()
+        assert (mine.priority, theirs.priority) == (1, 0)
+
+    def test_swap_equal_ids_returns_400(self, auth_client, user):
+        rule = Rule.objects.create(user=user, text="Mine", priority=1)
+
+        resp = _post(auth_client, self.URL, {"a": rule.id, "b": rule.id})
+
+        assert resp.status_code == 400
+        assert "body" in resp.json()["errors"]
+
+    def test_swap_non_int_id_returns_400(self, auth_client, user):
+        rule = Rule.objects.create(user=user, text="Mine", priority=1)
+
+        resp = _post(auth_client, self.URL, {"a": "x", "b": rule.id})
+
+        assert resp.status_code == 400
+        assert "body" in resp.json()["errors"]
+
+    def test_swap_bool_id_returns_400(self, auth_client, user):
+        # bool subclasses int; is_plain_int must reject it.
+        rule = Rule.objects.create(user=user, text="Mine", priority=1)
+
+        resp = _post(auth_client, self.URL, {"a": True, "b": rule.id})
+
+        assert resp.status_code == 400
+        assert "body" in resp.json()["errors"]
+
+    def test_swap_oversized_body_returns_413(self, auth_client, user):
+        high = Rule.objects.create(user=user, text="High", priority=1)
+        low = Rule.objects.create(user=user, text="Low", priority=0)
+
+        # Pad the body past the 100 KB cap; rejected before json.loads.
+        resp = _post(
+            auth_client,
+            self.URL,
+            {"a": high.id, "b": low.id, "pad": "x" * 200_000},
+        )
+
+        assert resp.status_code == 413
+        high.refresh_from_db()
+        low.refresh_from_db()
+        assert (high.priority, low.priority) == (1, 0)  # unchanged
+
+    def test_swap_rolls_back_on_bulk_update_failure(
+        self, auth_client, user, monkeypatch
+    ):
+        high = Rule.objects.create(user=user, text="High", priority=1)
+        low = Rule.objects.create(user=user, text="Low", priority=0)
+
+        # Perform the real write, THEN raise: this proves transaction.atomic()
+        # rolls back a write that actually landed, not just that an early
+        # failure skipped the write.
+        original_bulk_update = Rule.objects.bulk_update
+
+        def write_then_raise(*args, **kwargs):
+            original_bulk_update(*args, **kwargs)
+            raise RuntimeError("db write failed mid-swap")
+
+        monkeypatch.setattr(Rule.objects, "bulk_update", write_then_raise)
+
+        with pytest.raises(RuntimeError):
+            _post(auth_client, self.URL, {"a": high.id, "b": low.id})
+
+        high.refresh_from_db()
+        low.refresh_from_db()
+        assert (high.priority, low.priority) == (1, 0)  # both-or-neither
 
 
 @pytest.mark.django_db

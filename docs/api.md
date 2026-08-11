@@ -469,6 +469,19 @@ Partial update of `text`, `is_active`, `priority`. Cross-user PK → `404`.
 Deletes the rule and compacts surviving priorities to `0..N-1`. Cross-user
 PK → `404`.
 
+### `POST /api/rules/swap/`
+
+Atomically swaps the `priority` values of two rules owned by the current user.
+
+```json
+{"a": 12, "b": 13}
+```
+
+Success → `200 {"rules": [...]}` containing both swapped rows. A missing or
+cross-user id returns `404`; non-integer ids (including booleans) or equal ids
+return `400` with `errors.body`. The two writes occur in one transaction, so
+they both commit or neither does.
+
 ---
 
 ## User Preferences
@@ -955,6 +968,20 @@ Success → `200 {"ok": true}`.
 
 Cross-user `pk` access returns `404` (not `403`) on both `PATCH` and
 `DELETE` — same id-enumeration convention as `PATCH /api/blocks/{pk}/`.
+
+### `POST /api/calendar/travel-rules/swap/`
+
+Atomically swaps the `order` values of two travel rules owned by the current
+user.
+
+```json
+{"a": 3, "b": 4}
+```
+
+Success → `200 {"travel_rules": [...]}` containing both swapped rows. A
+missing or cross-user id returns `404`; non-integer ids (including booleans)
+or equal ids return `400` with `errors.body`. The two writes occur in one
+transaction, so they both commit or neither does.
 
 ## Calendar (Google) — feature 0022
 
