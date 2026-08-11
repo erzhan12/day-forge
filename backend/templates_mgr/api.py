@@ -331,7 +331,7 @@ def template_detail(request, pk):
 # ---------------------------------------------------------------------------
 
 
-def _compact_rule_priorities(user) -> None:
+def _compact_rule_priorities(user: User) -> None:
     """Renumber the user's rules to contiguous priorities 0..N-1 (the
     highest-priority rule keeps the largest value) while preserving the
     canonical ``-priority, id`` display order.

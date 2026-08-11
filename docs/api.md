@@ -456,7 +456,7 @@ the highest value.
 |-------|------|-------|
 | `text` | string | 1–500 chars. |
 | `is_active` | boolean | Optional. Default `true`. |
-| `priority` | integer | Optional. When omitted, the new rule is placed at the top (highest priority). Priorities are compacted to `0..N-1` on every create and delete, so the stored and returned value may differ from an explicit priority sent by the client. |
+| `priority` | integer | Optional. When omitted, the new rule is placed at the top (highest priority). Priorities are compacted to `0..N-1` on every create and delete, so the stored and returned value may differ from an explicit priority sent by the client. Out-of-range values are still rejected with `400` before any compaction occurs. |
 
 A user is capped at 100 rules; over-cap requests return `400`.
 

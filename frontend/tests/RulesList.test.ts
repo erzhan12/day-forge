@@ -78,4 +78,23 @@ describe("RulesList", () => {
       is_active: true,
     })
   })
+
+  it("surfaces an error and preserves input when create fails", async () => {
+    createRule.mockClear()
+    createRule.mockResolvedValueOnce({
+      ok: false,
+      errors: { text: ["Server rejected"] },
+    })
+    const wrapper = mountList([])
+    await wrapper.get('input[type="text"]').setValue("Keep me")
+
+    await wrapper.get("form").trigger("submit")
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find(".error-text").text()).not.toBe("")
+    // Input preserved so the user can retry without retyping.
+    expect(
+      (wrapper.get('input[type="text"]').element as HTMLInputElement).value,
+    ).toBe("Keep me")
+  })
 })
