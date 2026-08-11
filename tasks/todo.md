@@ -695,11 +695,16 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
   window using a dedicated `connect_rl` key, env `*_CONNECT_RATE_LIMIT_PER_HOUR`,
   documented in `.claude/rules/project.md`, returning 429).
 
-- [ ] **De-duplicate `extractErrorMessage` across composables.** Identical
+- [x] **De-duplicate `extractErrorMessage` across composables.** Identical
   helper in `useTodoist.ts` and `useTodoistAccount.ts` (and the CalDAV
   analogs). Extract to a shared `frontend/src/composables/useHttp.ts` export
   or `utils/errors.ts`. Multi-file refactor that should also fold in the
   CalDAV copies — its own small PR. (`claude-review` PR #63, P2 [QUALITY].)
+  > CLOSED 2026-08-11: already resolved by commit `58e9f15` — single canonical
+  > `frontend/src/utils/errorMessage.ts`, all 11 composables import it, 9-case
+  > test suite green, `vue-tsc` clean, zero local defs remain. Only remnant was
+  > the behaviorally-distinct inline helper in `DesignSelector.vue` (different
+  > key-priority + `||` semantics), left as-is to preserve behavior.
 
   > Explicitly NOT doing (rejected on PR #63 with rationale): a pagination
   > truncation cap (contradicts the plan's "fetch all, never truncate"),
