@@ -169,6 +169,17 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
 
 ## Follow-ups (discovered during manual testing)
 
+### 0047 — extract shared `parse_swap_body` helper (PR #143 claude-review P3)
+
+- [ ] **De-duplicate the swap-view request parsing.** `rules_swap`
+  (`templates_mgr/api.py`) and `travel_rules_swap` (`calendar_sync/travel_rules.py`)
+  repeat ~15 lines verbatim: `reject_oversized_body` → `json.loads` →
+  `isinstance(data, dict)` → `is_plain_int` → `a == b`. Extract
+  `parse_swap_body(request) -> tuple[int, int] | JsonResponse` into
+  `schedules/http.py` and point both views at it. No model coupling — the
+  two-thin-views design stays. Deferred: small, contained duplication;
+  non-blocking P3 from PR #143 round-3 review.
+
 ### 0047 — move `TestTravelRuleSwap` to a dedicated test module (PR #143 claude-review P3)
 
 - [ ] **Relocate `TestTravelRuleSwap` out of `backend/tests/test_from_event.py`.**
