@@ -389,6 +389,8 @@ def rules_collection(request):
             )["priority__max"]
             cleaned["priority"] = 0 if max_priority is None else max_priority + 1
         rule = Rule.objects.create(user=request.user, **cleaned)
+        # Normalise all rules to 0..N-1 regardless of explicit vs. auto
+        # priority — an explicit out-of-range value is compacted too.
         _compact_rule_priorities(request.user)
         rule.refresh_from_db(fields=["priority"])
     return JsonResponse(_rule_to_dict(rule), status=201)

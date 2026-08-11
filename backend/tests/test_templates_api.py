@@ -357,6 +357,16 @@ class TestRulesCRUD:
         assert [rule["text"] for rule in listed] == ["Top", "Middle"]
         assert [rule["priority"] for rule in listed] == [1, 0]
 
+    def test_delete_last_rule_compacts_to_empty(self, auth_client, user):
+        # Deleting the only rule drives compaction over an empty queryset
+        # (range(-1, -1, -1) yields no iterations) — must not error.
+        only = Rule.objects.create(user=user, text="Only", priority=0)
+
+        resp = auth_client.delete(f"/api/rules/{only.id}/")
+
+        assert resp.status_code == 200
+        assert auth_client.get("/api/rules/").json()["rules"] == []
+
     def test_add_delete_cycle_keeps_priorities_small(self, auth_client):
         first_resp = _post(auth_client, "/api/rules/", {"text": "Rule one"})
         second_resp = _post(auth_client, "/api/rules/", {"text": "Rule two"})

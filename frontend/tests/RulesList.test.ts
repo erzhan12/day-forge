@@ -47,6 +47,24 @@ describe("RulesList", () => {
     }
   })
 
+  it("does not tooltip the legitimately-disabled arrows in a multi-rule list", () => {
+    const wrapper = mountList([
+      rule(3, "Top rule", 2),
+      rule(2, "Middle rule", 1),
+      rule(1, "Bottom rule", 0),
+    ])
+
+    const arrows = arrowButtons(wrapper)
+    // Top rule's ▲ (index 0) and bottom rule's ▼ (last) are disabled but
+    // must carry no tooltip — that copy is reserved for the single-rule case.
+    const topUp = arrows[0]
+    const bottomDown = arrows[arrows.length - 1]
+    expect(topUp.attributes("disabled")).toBeDefined()
+    expect(topUp.attributes("title")).toBeUndefined()
+    expect(bottomDown.attributes("disabled")).toBeDefined()
+    expect(bottomDown.attributes("title")).toBeUndefined()
+  })
+
   it("lets the backend assign priority when creating a rule", async () => {
     createRule.mockClear()
     const wrapper = mountList([])
