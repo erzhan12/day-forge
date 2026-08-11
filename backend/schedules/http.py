@@ -63,7 +63,9 @@ def is_plain_int(value) -> bool:
     return isinstance(value, int) and not isinstance(value, bool)
 
 
-def swap_ordering_field(user, model, order_field: str, id_a: int, id_b: int):
+def swap_ordering_field(
+    user: User, model: type, order_field: str, id_a: int, id_b: int
+) -> tuple | None:
     """Atomically exchange one ordering field on two user-owned rows.
 
     ``None`` means at least one id was missing or belonged to another user.

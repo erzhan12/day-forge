@@ -503,6 +503,14 @@ class TestRulesCRUD:
 class TestRuleSwap:
     URL = "/api/rules/swap/"
 
+    def test_unauthenticated_redirects(self, client, user):
+        high = Rule.objects.create(user=user, text="High", priority=1)
+        low = Rule.objects.create(user=user, text="Low", priority=0)
+
+        resp = _post(client, self.URL, {"a": high.id, "b": low.id})
+
+        assert resp.status_code == 302
+
     def test_swap_two_rules_swaps_priority(self, auth_client, user):
         high = Rule.objects.create(user=user, text="High", priority=1)
         low = Rule.objects.create(user=user, text="Low", priority=0)

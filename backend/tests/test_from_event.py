@@ -619,7 +619,20 @@ class TestTravelRuleCrud:
 
 
 class TestTravelRuleSwap:
-    URL = f"{RULES_URL}swap/"
+    URL = "/api/calendar/travel-rules/swap/"
+
+    @pytest.mark.django_db
+    def test_unauthenticated_redirects(self, client, user):
+        first = TravelRule.objects.create(user=user, keyword="First", order=0)
+        second = TravelRule.objects.create(user=user, keyword="Second", order=1)
+
+        resp = client.post(
+            self.URL,
+            json.dumps({"a": first.id, "b": second.id}),
+            content_type="application/json",
+        )
+
+        assert resp.status_code == 302
 
     @pytest.mark.django_db
     def test_swap_two_rules_swaps_order(
