@@ -193,7 +193,8 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
   accordingly. Deferred as pure churn — the tests pass and are correct where they
   are. Non-blocking P3 raised in PR #143 round-2 review.
   **Done (feature/0048):** moved verbatim to `backend/tests/test_travel_rules.py`
-  (10 tests); `test_from_event.py` truncated to its CRUD subject; both
+  (11 tests — the original 10 plus a malformed-JSON case for `parse_swap_body`);
+  `test_from_event.py` truncated to its CRUD subject; both
   `0047_REVIEW.md` accepted-gap bullets annotated as resolved.
 
 ### 0045 — collapse `AICommandResult` into `AIChatResult` (PR #138 claude-review P2)

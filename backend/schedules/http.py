@@ -106,20 +106,7 @@ def swap_ordering_field(
 
 
 def parse_swap_body(request, *, noun: str) -> tuple[int, int] | JsonResponse:
-    """Parse a reorder-swap request body.
-
-    Shared by ``templates_mgr.api.rules_swap`` and
-    ``calendar_sync.travel_rules.travel_rules_swap`` — both accept a JSON
-    object ``{"a": <id>, "b": <id>}`` naming two distinct rows to swap.
-
-    Runs the oversize gate, JSON parse, dict-shape check, and the two
-    distinct-plain-int-id check in one place. Returns ``(id_a, id_b)`` on
-    success or a 4xx ``JsonResponse`` (413/400) on any failure — callers
-    disambiguate with ``isinstance(result, JsonResponse)``.
-
-    ``noun`` is interpolated into the id-validation message ("rule" /
-    "travel rule") so each endpoint keeps its own wording.
-    """
+    """Parse a swap body {"a","b"}; return (id_a, id_b) or a 4xx JsonResponse."""
     oversized = reject_oversized_body(request)
     if oversized is not None:
         return oversized
