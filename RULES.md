@@ -787,3 +787,55 @@ no Service Worker, no closed-tab alerts.
   post-mortem inspection. Scripts that seed no schedules have no cleanup call.
   New scenarios must register every seeded date and avoid `process.exit()` after
   browser launch, since it skips `finally`.
+
+## Focus indicator — Document PiP (feature 0049, issue #131)
+
+- **Shared completion controller — never re-inline.** `useBlockCompletion.ts`
+  owns the block-completion network/retry/backoff/generation-guard/abort/silent
+  -undo logic. BOTH the timeline checkbox (`TimeBlock.vue`) and the PiP Complete
+  action (`Schedule.vue`) route through it. It is a **per-call-site factory, NOT
+  a singleton**: each call returns its own `{ saving, errorState, setCompleted,
+  complete, reset, dispose }`. `TimeBlock` creates one per row (N rows → N
+  instances); `Schedule` creates exactly one for the PiP. A singleton would
+  collapse per-row `saving`/`generation` and regress the abort-on-list-reshape
+  invariant (issue #21). `TimeBlock` keeps its own optimistic `displayedCompleted`
+  + local `errorMessage` string ("Failed to update" copy, pinned by
+  `TimeBlock.test.ts`); the controller's `errorState` boolean is the PiP surface
+  only. `setCompleted` resolves `"success" | "failure" | "superseded"`; revert
+  the optimistic flip only on `"failure"`, never `"superseded"`. `reset()`
+  (identity change) aborts + clears `saving`/`errorState`; `dispose()` (unmount)
+  aborts + bumps generation only. Composables guard `onUnmounted` with
+  `getCurrentInstance()` so they're unit-testable by direct call.
+- **PiP privacy invariant.** Never put block title/category/date/times into the
+  PiP document — DOM, `aria-*`, `data-testid`, error copy, or `document.title`
+  (which is the generic constant `"Focus"`). `FocusIndicatorView.vue` props are
+  ONLY `active/progressPercent/completing/errorState/disabled` — so the
+  isolated-view privacy test is necessary-but-not-sufficient; the load-bearing
+  gate is the integration test (`scheduleFocusIndicator.test.ts`) asserting the
+  REAL mounted PiP `document.body` + `document.title` contain no sentinel block
+  strings.
+- **Transient activation.** `requestWindow()` must be called synchronously from
+  the header button's user gesture (`useFocusIndicator.open()`); it returns a
+  `Promise<Window>`. A `pendingOpen` flag guards rapid double-clicks; an `epoch`
+  counter makes a request that resolves after `cleanup()` close its orphan
+  window. Never auto-open on load or persist an "open" preference — Chrome
+  requires the gesture each app-window launch. `window.documentPictureInPicture`
+  is not in the TS DOM libs → ambient decl in `frontend/src/types/document-pip.d.ts`.
+- **Reactive bridge.** The PiP is a separate `Document`; the view is a **second
+  `createApp` with a render function** (`createApp({ render: () => h(view,
+  props()) })`, mirroring `app.ts:29`) whose `props()` re-reads the shared refs'
+  `.value` each render, so `nowMinutes` ticks repaint it live. Teardown calls
+  `app.unmount()` before `window.close()`.
+- **Just-completed suppression.** On a `"success"` PiP completion, `Schedule`
+  sets `justCompletedId` so the indicator goes neutral immediately (bridging the
+  gap before the async `router.reload` lands). It is cleared on the next
+  `props.blocks` update (success reload OR a competing undo restore) — NOT on
+  `is_completed === true` — so a Cmd+Z undo strictly within the reload gap
+  re-activates the block. The controller `reset()` watch keys on the **raw**
+  (pre-suppression) `activeUnfinishedBlock` id, never the display-active value.
+- **Vitest fake-PiP.** Stub `window.documentPictureInPicture.requestWindow` to
+  resolve a fake window whose `document` is a real
+  `document.implementation.createHTMLDocument("")` (so Vue can mount into it and
+  `querySelector` works) with `addEventListener`/`close`/`_emit`. Do not depend
+  on real browser PiP. macOS-Chrome always-on-top + minimized-app behavior is
+  manual-smoke only (`docs/features/0049_PLAN.md` § Browser smoke).

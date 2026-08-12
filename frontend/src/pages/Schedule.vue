@@ -13,6 +13,15 @@ import ChatSidebar from "../components/ChatSidebar.vue"
 import ExternalTasksSidebar from "../components/ExternalTasksSidebar.vue"
 import DraftBadge from "../components/DraftBadge.vue"
 import RegenerateDraftButton from "../components/RegenerateDraftButton.vue"
+import ShowIndicatorButton from "../components/ShowIndicatorButton.vue"
+import FocusIndicatorView from "../components/FocusIndicatorView.vue"
+import { useBlockCompletion } from "../composables/useBlockCompletion"
+import { useFocusIndicator } from "../composables/useFocusIndicator"
+import {
+  activeUnfinishedBlock,
+  progressRatio,
+  progressPercentFromRatio,
+} from "../utils/focusIndicator"
 import { todayString } from "../utils/date"
 import { useViewport } from "../composables/useViewport"
 import {
@@ -83,7 +92,7 @@ const prefillEnd = ref<string | undefined>()
 const scheduleBodyRef = ref<HTMLElement | null>(null)
 
 // Initialize composables
-const { reorderBlocks } = useSchedule(props.date)
+const { reorderBlocks, updateBlock } = useSchedule(props.date)
 const getBlocks = () => props.blocks
 
 // Draft generation state — module-level singleton inside useDraft, single
@@ -544,6 +553,80 @@ const currentBlockRemaining = computed(() =>
     : null
 )
 
+// --- Focus indicator: always-on-top PiP progress (feature 0049 / issue #131) ---
+// Shared completion controller — its OWN instance (per-call-site factory), routing
+// through the same module as TimeBlock's checkbox so the two cannot diverge.
+const focusCompletion = useBlockCompletion({
+  updateBlock,
+  undo: { pushUndo, snapshotBlocks },
+  isDisabled: () => scheduleDisabled.value,
+})
+
+// Raw active block (pre-suppression) — the identity the reset watch keys on.
+const rawActiveBlock = computed(() =>
+  activeUnfinishedBlock(effectiveBlocks.value, nowMinutes.value, nowDate.value),
+)
+
+// Bridges the gap between `saving` clearing and the async router.reload landing:
+// the just-completed block is suppressed until the next `props.blocks` update.
+const justCompletedId = ref<number | null>(null)
+watch(
+  () => props.blocks,
+  () => {
+    // The imminent reload (success) OR a competing undo restore has landed —
+    // let the natural is_completed gate own neutrality from here.
+    justCompletedId.value = null
+  },
+)
+// Reset the controller when the RAW active identity changes (PiP analogue of
+// TimeBlock's block.id watcher) so a prior block's saving/error never sticks.
+watch(
+  () => rawActiveBlock.value?.id ?? null,
+  () => {
+    focusCompletion.reset()
+    justCompletedId.value = null
+  },
+)
+
+const indicatorActiveBlock = computed(() => {
+  const b = rawActiveBlock.value
+  if (b === null || b.id === justCompletedId.value) return null
+  return b
+})
+const indicatorActive = computed(() => {
+  const b = indicatorActiveBlock.value
+  return (
+    b !== null && nowMinutes.value !== null && progressRatio(b, nowMinutes.value) !== null
+  )
+})
+const indicatorPercent = computed(() => {
+  const b = indicatorActiveBlock.value
+  if (b === null || nowMinutes.value === null) return 0
+  return progressPercentFromRatio(progressRatio(b, nowMinutes.value))
+})
+
+async function handleIndicatorComplete() {
+  const b = indicatorActiveBlock.value
+  if (b === null) return
+  const outcome = await focusCompletion.complete(b, props.date)
+  if (outcome === "success") justCompletedId.value = b.id
+}
+
+const focusIndicator = useFocusIndicator({
+  component: FocusIndicatorView,
+  props: () => ({
+    active: indicatorActive.value,
+    progressPercent: indicatorPercent.value,
+    completing: focusCompletion.saving.value,
+    errorState: focusCompletion.errorState.value,
+    disabled: scheduleDisabled.value,
+    onComplete: handleIndicatorComplete,
+  }),
+})
+const focusIndicatorSupported = focusIndicator.supported
+const focusIndicatorOpen = focusIndicator.isOpen
+const openFocusIndicator = focusIndicator.open
+
 // Ghost element computed properties
 const draggedBlock = computed(() =>
   dragBlockId.value !== null
@@ -620,6 +703,13 @@ defineExpose({
   calendarsBranch,
   refreshExternalTasks,
   refreshExternalCalendars,
+  // Focus-indicator seam (feature 0049) — asserted by the integration test;
+  // not a parent-facing API.
+  focusIndicator,
+  indicatorActive,
+  indicatorPercent,
+  handleIndicatorComplete,
+  justCompletedId,
 })
 </script>
 
@@ -637,6 +727,11 @@ defineExpose({
           :has-template="has_template_for_type"
           :slot-type="slot_type"
           @click="handleRegenerateClick"
+        />
+        <ShowIndicatorButton
+          :supported="focusIndicatorSupported"
+          :is-open="focusIndicatorOpen"
+          @open="openFocusIndicator"
         />
         <Link
           v-if="showAnalyticsLink"
