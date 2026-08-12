@@ -118,6 +118,21 @@ describe("useFocusIndicator", () => {
     expect(fi.isOpen.value).toBe(false)
   })
 
+  it("allows reopening after cleanup() (distinct epoch path from pagehide)", async () => {
+    const requestWindow = installFakePip(makeFakeWindow())
+    const fi = useFocusIndicator({ component: Probe, props: () => ({ value: 0 }) })
+    await fi.open()
+    await flushPromises()
+    expect(fi.isOpen.value).toBe(true)
+    fi.cleanup()
+    expect(fi.isOpen.value).toBe(false)
+    requestWindow.mockResolvedValueOnce(makeFakeWindow())
+    await fi.open()
+    await flushPromises()
+    expect(fi.isOpen.value).toBe(true)
+    expect(requestWindow).toHaveBeenCalledTimes(2)
+  })
+
   it("cleanup() while the request is still pending closes the orphaned window on resolve", async () => {
     let resolveWin: ((w: unknown) => void) | null = null
     const win = makeFakeWindow()

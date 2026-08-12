@@ -593,17 +593,16 @@ const indicatorActiveBlock = computed(() => {
   if (b === null || b.id === justCompletedId.value) return null
   return b
 })
-const indicatorActive = computed(() => {
+// Computed once per tick, read by both indicatorActive and indicatorPercent.
+const indicatorProgressRatio = computed(() => {
   const b = indicatorActiveBlock.value
-  return (
-    b !== null && nowMinutes.value !== null && progressRatio(b, nowMinutes.value) !== null
-  )
+  if (b === null || nowMinutes.value === null) return null
+  return progressRatio(b, nowMinutes.value)
 })
-const indicatorPercent = computed(() => {
-  const b = indicatorActiveBlock.value
-  if (b === null || nowMinutes.value === null) return 0
-  return progressPercentFromRatio(progressRatio(b, nowMinutes.value))
-})
+const indicatorActive = computed(() => indicatorProgressRatio.value !== null)
+const indicatorPercent = computed(() =>
+  progressPercentFromRatio(indicatorProgressRatio.value),
+)
 
 async function handleIndicatorComplete() {
   const b = indicatorActiveBlock.value

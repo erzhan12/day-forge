@@ -38,7 +38,7 @@ function onComplete() {
       >
         <div class="fi-fill" :style="{ width: progressPercent + '%' }" />
       </div>
-      <span v-if="errorState" class="fi-retry" role="status">Retry</span>
+      <span v-if="errorState" class="fi-retry" role="alert">Retry</span>
       <button
         type="button"
         class="fi-complete"

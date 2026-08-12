@@ -291,6 +291,16 @@ describe("Schedule.vue focus indicator", () => {
     expect(btn!.disabled).toBe(true)
   })
 
+  it("handleIndicatorComplete is a no-op when there is no active block", async () => {
+    nowMinutes.value = 660 // past the 09:00–10:00 block → no active block
+    mountPage([makeBlock()])
+    await flushPromises()
+    expect(vm().vm.indicatorActive).toBe(false)
+    await vm().vm.handleIndicatorComplete()
+    await flushPromises()
+    expect(scheduleUpdateBlock).not.toHaveBeenCalled()
+  })
+
   it("resets the controller when the active block identity changes mid-completion (C3)", async () => {
     let resolveUpdate: ((v: { ok: boolean }) => void) | null = null
     scheduleUpdateBlock.mockImplementation(

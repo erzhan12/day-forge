@@ -176,6 +176,20 @@ describe("useBlockCompletion", () => {
     expect(deps.undo.pushUndo).not.toHaveBeenCalled()
   })
 
+  it("reset() on a freshly constructed instance is a no-op (no throw)", () => {
+    const c = useBlockCompletion(makeDeps())
+    expect(() => c.reset()).not.toThrow()
+    expect(c.saving.value).toBe(false)
+    expect(c.errorState.value).toBe(false)
+  })
+
+  it("dispose() on a freshly constructed instance is a no-op (no throw)", () => {
+    const c = useBlockCompletion(makeDeps())
+    expect(() => c.dispose()).not.toThrow()
+    expect(c.saving.value).toBe(false)
+    expect(c.errorState.value).toBe(false)
+  })
+
   it("keeps two instances isolated: failing A leaves B untouched", async () => {
     vi.useFakeTimers()
     const a = useBlockCompletion(makeDeps({ updateBlock: vi.fn().mockResolvedValue({ ok: false }) }))

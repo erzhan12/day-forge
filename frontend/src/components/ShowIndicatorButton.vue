@@ -28,7 +28,6 @@ function handleClick() {
   <button
     type="button"
     class="show-indicator-btn"
-    :class="{ disabled }"
     :disabled="disabled"
     :title="!supported ? 'Focus indicator is not supported in this browser.' : undefined"
     @click="handleClick"
@@ -53,7 +52,6 @@ function handleClick() {
   background: var(--surface-hover, #f2f2f2);
 }
 
-.show-indicator-btn.disabled,
 .show-indicator-btn:disabled {
   opacity: 0.55;
   cursor: not-allowed;
