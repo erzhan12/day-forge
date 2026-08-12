@@ -706,6 +706,7 @@ defineExpose({
   // Focus-indicator seam (feature 0049) — asserted by the integration test;
   // not a parent-facing API.
   focusIndicator,
+  focusCompletion,
   indicatorActive,
   indicatorPercent,
   handleIndicatorComplete,

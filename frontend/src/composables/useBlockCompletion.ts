@@ -59,9 +59,9 @@ export function useBlockCompletion(deps: BlockCompletionDeps) {
     saving.value = true
 
     const snapshot = undo?.snapshotBlocks()
-    // Bind to the values live when the mutation starts (see issue #21): a
-    // mid-backoff list reshape must not retarget the PATCH or mislabel the undo.
-    const scheduleDate = date
+    // Capture the block's object properties live at mutation start (see issue
+    // #21): a mid-backoff list reshape must not retarget the PATCH or mislabel
+    // the undo. (`date` is a primitive param — already captured by value.)
     const blockId = block.id
     const blockTitle = block.title
 
@@ -85,7 +85,7 @@ export function useBlockCompletion(deps: BlockCompletionDeps) {
             description: `${action} "${blockTitle}"`,
             type: "toggle",
             previousBlocks: snapshot,
-            scheduleDate,
+            scheduleDate: date,
             silent: true,
           })
         }
@@ -98,7 +98,10 @@ export function useBlockCompletion(deps: BlockCompletionDeps) {
       }
     }
 
-    if (myGen !== generation.value) return "superseded"
+    // Retries exhausted. (No post-loop generation re-check: the final iteration
+    // has no async boundary between the in-loop guard at :78 and here, so
+    // `generation` cannot change — a reset/dispose mid-await is already caught
+    // by that guard.)
     saving.value = false
     errorState.value = true
     return "failure"

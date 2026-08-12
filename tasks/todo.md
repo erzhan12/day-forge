@@ -783,3 +783,15 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
   explicit `"denied"`. Plan-mandated for MVP (`denied/default ⇒ permissionDenied`),
   so deferred. Future copy/i18n pass: add a `permissionDefault` flag →
   "Click again to re-request notification permission."
+
+### 0049 — surface a PiP open() failure to the user (PR #145 claude-review P3)
+
+- [ ] **`useFocusIndicator.open()` swallows a `DOMException` rejection with no user
+  feedback.** The common expected failure (no transient user activation) is caught,
+  logged for non-`DOMException`, and `pendingOpen` reset — but the user sees nothing
+  explaining why the indicator didn't open. Suggested: add an `openError` ref
+  (`ref<string | null>(null)`) cleared at the top of `open()` and set to a generic
+  `"Could not open indicator"` on `DOMException`, include it in the return, and have
+  `ShowIndicatorButton` / `Schedule.vue` surface it briefly (tooltip or transient
+  status). Deferred: multi-file + a small UX/design decision, its own change.
+  Non-blocking P3 from PR #145 round-2 review.

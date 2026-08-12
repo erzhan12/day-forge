@@ -226,6 +226,31 @@ describe("TimeBlock", () => {
     }
   })
 
+  it("clears the 'Failed to update' copy after a failure followed by a successful retry", async () => {
+    // Guards the TimeBlock-local errorMessage STRING, which the controller's
+    // errorState boolean test cannot catch (0049 plan § Slice 2 refactor).
+    vi.useFakeTimers()
+    try {
+      mockUpdateBlock.mockResolvedValue({ ok: false })
+      const wrapper = mountWithProvide({ block: makeBlock(), date: "2026-04-10" })
+      await wrapper.find(".checkbox").trigger("change")
+      await flushPromises()
+      await vi.advanceTimersByTimeAsync(4300)
+      await flushPromises()
+      expect(wrapper.text()).toContain("Failed to update")
+
+      // A new toggle that succeeds must clear the stale copy.
+      vi.useRealTimers()
+      mockUpdateBlock.mockResolvedValue({ ok: true })
+      await wrapper.find(".checkbox").trigger("change")
+      await flushPromises()
+      expect(wrapper.text()).not.toContain("Failed to update")
+      expect(wrapper.find(".checkbox").classes()).not.toContain("saving")
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it("a second click aborts the in-flight chain and targets the newest value", async () => {
     vi.useFakeTimers()
     try {

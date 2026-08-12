@@ -291,6 +291,38 @@ describe("Schedule.vue focus indicator", () => {
     expect(btn!.disabled).toBe(true)
   })
 
+  it("resets the controller when the active block identity changes mid-completion (C3)", async () => {
+    let resolveUpdate: ((v: { ok: boolean }) => void) | null = null
+    scheduleUpdateBlock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveUpdate = resolve
+        }),
+    )
+    mountPage([makeBlock({ id: 5 })])
+    await flushPromises()
+    // Start a completion that stays in-flight.
+    const p = vm().vm.handleIndicatorComplete()
+    await flushPromises()
+    expect(vm().vm.focusCompletion.saving.value).toBe(true)
+
+    // Active identity changes mid-flight: advance the clock past the block's end
+    // so rawActiveBlock becomes null → the reset watch fires.
+    nowMinutes.value = 620
+    await nextTick()
+    await nextTick()
+    expect(vm().vm.focusCompletion.saving.value).toBe(false)
+    expect(vm().vm.focusCompletion.errorState.value).toBe(false)
+    expect(vm().vm.indicatorActive).toBe(false)
+
+    // The superseded chain resolves without touching state or pushing undo.
+    resolveUpdate!({ ok: true })
+    await p
+    await flushPromises()
+    expect(pushUndo).not.toHaveBeenCalled()
+    expect(vm().vm.focusCompletion.saving.value).toBe(false)
+  })
+
   it("re-activates the indicator when a completed block is undone (props.blocks update clears suppression)", async () => {
     mountPage([makeBlock({ id: 7 })])
     await flushPromises()
