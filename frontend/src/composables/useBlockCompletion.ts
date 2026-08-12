@@ -38,7 +38,9 @@ export function useBlockCompletion(deps: BlockCompletionDeps) {
 
   const saving = ref(false)
   const errorState = ref(false)
-  const generation = ref(0)
+  // Plain counter, not a ref: nothing subscribes to it reactively — it only
+  // tags each chain so a superseding reset/dispose/re-toggle can bail the old one.
+  let generation = 0
   let toggleAbort: AbortController | null = null
 
   async function setCompleted(
@@ -54,7 +56,7 @@ export function useBlockCompletion(deps: BlockCompletionDeps) {
     toggleAbort?.abort()
     const ac = new AbortController()
     toggleAbort = ac
-    const myGen = ++generation.value
+    const myGen = ++generation
     errorState.value = false
     saving.value = true
 
@@ -75,7 +77,7 @@ export function useBlockCompletion(deps: BlockCompletionDeps) {
         result = { ok: false }
       }
       // Newer toggle (or dispose/reset) superseded this chain — bail cleanly.
-      if (myGen !== generation.value) return "superseded"
+      if (myGen !== generation) return "superseded"
       if (result.ok) {
         if (undo && snapshot) {
           // Label from the value this chain writes, not a captured prop: a
@@ -94,12 +96,12 @@ export function useBlockCompletion(deps: BlockCompletionDeps) {
       }
       if (attempt < TOGGLE_RETRY_DELAYS_MS.length) {
         await sleep(TOGGLE_RETRY_DELAYS_MS[attempt])
-        if (myGen !== generation.value) return "superseded"
+        if (myGen !== generation) return "superseded"
       }
     }
 
     // Retries exhausted. (No post-loop generation re-check: the final iteration
-    // has no async boundary between the in-loop guard at :78 and here, so
+    // has no async boundary between the post-await in-loop guard and here, so
     // `generation` cannot change — a reset/dispose mid-await is already caught
     // by that guard.)
     saving.value = false
@@ -118,7 +120,7 @@ export function useBlockCompletion(deps: BlockCompletionDeps) {
    */
   function reset(): void {
     toggleAbort?.abort()
-    generation.value++
+    generation++
     saving.value = false
     errorState.value = false
   }
@@ -130,7 +132,7 @@ export function useBlockCompletion(deps: BlockCompletionDeps) {
    */
   function dispose(): void {
     toggleAbort?.abort()
-    generation.value++
+    generation++
   }
 
   if (getCurrentInstance()) onUnmounted(dispose)

@@ -65,6 +65,17 @@ describe("useFocusIndicator", () => {
     expect(fi.isOpen.value).toBe(true)
   })
 
+  it("open() is a no-op when the window is already open", async () => {
+    const requestWindow = installFakePip()
+    const fi = useFocusIndicator({ component: Probe, props: () => ({ value: 0 }) })
+    await fi.open()
+    await flushPromises()
+    expect(fi.isOpen.value).toBe(true)
+    await fi.open() // already open → must not re-request
+    await flushPromises()
+    expect(requestWindow).toHaveBeenCalledTimes(1)
+  })
+
   it("sets a generic PiP document.title (never a block title)", async () => {
     const win = makeFakeWindow()
     installFakePip(win)

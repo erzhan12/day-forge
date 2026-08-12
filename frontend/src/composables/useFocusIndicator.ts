@@ -101,10 +101,13 @@ export function useFocusIndicator(config: FocusIndicatorConfig) {
       // untracked PiP window.
       pendingOpen = false
       teardown(true)
-      // Only a DOMException is expected (no transient activation). Surface
-      // anything else (programming errors) rather than swallow it.
+      // NotAllowedError (no transient activation) is the expected, quiet
+      // failure. Surface everything else — non-DOMExceptions (programming
+      // errors) and other DOMException subtypes — for post-mortem diagnosis.
       if (!(err instanceof DOMException)) {
         console.error("[useFocusIndicator] unexpected error during PiP setup:", err)
+      } else if (err.name !== "NotAllowedError") {
+        console.error("[useFocusIndicator] PiP setup DOMException:", err.name)
       }
     }
   }

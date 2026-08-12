@@ -49,7 +49,10 @@ function onComplete() {
         <span aria-hidden="true">✓</span>
       </button>
     </template>
-    <span v-else class="fi-neutral" aria-hidden="true">—</span>
+    <template v-else>
+      <span class="fi-neutral" aria-hidden="true">—</span>
+      <span class="fi-sr-only">No active block</span>
+    </template>
   </div>
 </template>
 
@@ -109,6 +112,17 @@ function onComplete() {
   flex: 1;
   text-align: center;
   opacity: 0.6;
+}
+.fi-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 @media (prefers-reduced-motion: reduce) {
   .fi-fill {
