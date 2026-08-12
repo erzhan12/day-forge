@@ -94,9 +94,18 @@ export function useFocusIndicator(config: FocusIndicatorConfig) {
       app.mount(rootEl)
       win.addEventListener("pagehide", onPagehide)
       isOpen.value = true
-    } catch {
-      // requestWindow rejected (e.g. no transient activation) — stay closed.
+    } catch (err) {
+      // Any mid-setup failure (rejected requestWindow, or a throw after
+      // `pipWindow = win` but before `isOpen`) must close the partially-opened
+      // orphan and clear refs — otherwise a later open() would spawn a second,
+      // untracked PiP window.
       pendingOpen = false
+      teardown(true)
+      // Only a DOMException is expected (no transient activation). Surface
+      // anything else (programming errors) rather than swallow it.
+      if (!(err instanceof DOMException)) {
+        console.error("[useFocusIndicator] unexpected error during PiP setup:", err)
+      }
     }
   }
 

@@ -258,6 +258,8 @@ describe("Schedule.vue focus indicator", () => {
     expect(win.document.querySelector('[role="progressbar"]')).not.toBeNull()
     const html = win.document.body.innerHTML
     for (const s of PRIVATE) expect(html).not.toContain(s)
+    const headHtml = win.document.head.innerHTML
+    for (const s of PRIVATE) expect(headHtml).not.toContain(s)
     expect(win.document.title).toBe("Focus")
     for (const s of PRIVATE) expect(win.document.title).not.toContain(s)
   })
