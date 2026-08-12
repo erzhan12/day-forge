@@ -11,6 +11,7 @@ Keep this module import-light: only ``schedules.models`` and
 a circular import.
 """
 import datetime
+import json
 
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
@@ -102,6 +103,43 @@ def swap_ordering_field(
         # verbatim (no DB default/trigger on the ordering field), so the
         # rows already hold the swapped values. Mirrors 0046 compaction.
         return row_a, row_b
+
+
+def parse_swap_body(request, *, noun: str) -> tuple[int, int] | JsonResponse:
+    """Parse a reorder-swap request body.
+
+    Shared by ``templates_mgr.api.rules_swap`` and
+    ``calendar_sync.travel_rules.travel_rules_swap`` — both accept a JSON
+    object ``{"a": <id>, "b": <id>}`` naming two distinct rows to swap.
+
+    Runs the oversize gate, JSON parse, dict-shape check, and the two
+    distinct-plain-int-id check in one place. Returns ``(id_a, id_b)`` on
+    success or a 4xx ``JsonResponse`` (413/400) on any failure — callers
+    disambiguate with ``isinstance(result, JsonResponse)``.
+
+    ``noun`` is interpolated into the id-validation message ("rule" /
+    "travel rule") so each endpoint keeps its own wording.
+    """
+    oversized = reject_oversized_body(request)
+    if oversized is not None:
+        return oversized
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"errors": {"body": "Invalid JSON."}}, status=400)
+    if not isinstance(data, dict):
+        return JsonResponse(
+            {"errors": {"body": "Request body must be a JSON object."}},
+            status=400,
+        )
+    id_a = data.get("a")
+    id_b = data.get("b")
+    if not is_plain_int(id_a) or not is_plain_int(id_b) or id_a == id_b:
+        return JsonResponse(
+            {"errors": {"body": f"a and b must be distinct integer {noun} ids."}},
+            status=400,
+        )
+    return id_a, id_b
 
 
 def parse_time(value):

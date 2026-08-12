@@ -43,11 +43,14 @@ Engines: OpenAI codex (`gpt-5.6-sol`) + Cursor agent, read-only.
 
 - `TestTravelRuleSwap` lives in `test_from_event.py` rather than a dedicated
   module (discoverability only; plan permitted alternatives).
+  *(Resolved in feature 0048 — moved to `backend/tests/test_travel_rules.py`.)*
 - `RulesList` distinct-value component test covers the "down" direction only.
 - `tasks/todo.md` `0026-followup` checkbox — bookkeeping, flipped at merge.
 - The two thin near-identical swap views retain ~15 lines of duplicated
   request parsing — intentional per plan (two thin views over one branching
   endpoint); the read-modify-write core is shared in `swap_ordering_field`.
+  *(Resolved in feature 0048 — request parsing extracted to
+  `schedules.http.parse_swap_body`.)*
 
 **Rejected:** none (all round-1 findings were valid or accepted gaps).
 

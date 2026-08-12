@@ -16,6 +16,7 @@ from django.views.decorators.http import require_http_methods
 from schedules.http import (
     VALID_CATEGORIES,
     is_plain_int,
+    parse_swap_body,
     reject_oversized_body,
     swap_ordering_field,
 )
@@ -209,21 +210,10 @@ def travel_rules_collection(request):
 @login_required
 @require_http_methods(["POST"])
 def travel_rules_swap(request):
-    oversized = reject_oversized_body(request)
-    if oversized is not None:
-        return oversized
-
-    try:
-        data = json.loads(request.body)
-    except json.JSONDecodeError:
-        return _err("body", "Invalid JSON.")
-
-    if not isinstance(data, dict):
-        return _err("body", "Request body must be a JSON object.")
-    id_a = data.get("a")
-    id_b = data.get("b")
-    if not is_plain_int(id_a) or not is_plain_int(id_b) or id_a == id_b:
-        return _err("body", "a and b must be distinct integer travel rule ids.")
+    parsed = parse_swap_body(request, noun="travel rule")
+    if isinstance(parsed, JsonResponse):
+        return parsed
+    id_a, id_b = parsed
 
     swapped = swap_ordering_field(
         request.user,

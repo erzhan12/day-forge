@@ -171,7 +171,7 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
 
 ### 0047 — extract shared `parse_swap_body` helper (PR #143 claude-review P3)
 
-- [ ] **De-duplicate the swap-view request parsing.** `rules_swap`
+- [x] **De-duplicate the swap-view request parsing.** `rules_swap`
   (`templates_mgr/api.py`) and `travel_rules_swap` (`calendar_sync/travel_rules.py`)
   repeat ~15 lines verbatim: `reject_oversized_body` → `json.loads` →
   `isinstance(data, dict)` → `is_plain_int` → `a == b`. Extract
@@ -179,15 +179,22 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
   `schedules/http.py` and point both views at it. No model coupling — the
   two-thin-views design stays. Deferred: small, contained duplication;
   non-blocking P3 from PR #143 round-3 review.
+  **Done (feature/0048):** `parse_swap_body(request, *, noun)` in
+  `schedules/http.py` (oversize gate → JSON → dict → distinct-plain-int-id);
+  both views collapsed to a 4-line call; `noun="rule"` / `"travel rule"`
+  preserves each endpoint's error wording verbatim (zero test-string churn).
 
 ### 0047 — move `TestTravelRuleSwap` to a dedicated test module (PR #143 claude-review P3)
 
-- [ ] **Relocate `TestTravelRuleSwap` out of `backend/tests/test_from_event.py`.**
+- [x] **Relocate `TestTravelRuleSwap` out of `backend/tests/test_from_event.py`.**
   The class is semantically unrelated to the "from event" subject of that file,
   hurting discoverability. Move it to a dedicated `test_travel_rules.py` (or an
   existing logical travel-rules test file) and update `docs/features/0047_REVIEW.md`
   accordingly. Deferred as pure churn — the tests pass and are correct where they
   are. Non-blocking P3 raised in PR #143 round-2 review.
+  **Done (feature/0048):** moved verbatim to `backend/tests/test_travel_rules.py`
+  (10 tests); `test_from_event.py` truncated to its CRUD subject; both
+  `0047_REVIEW.md` accepted-gap bullets annotated as resolved.
 
 ### 0045 — collapse `AICommandResult` into `AIChatResult` (PR #138 claude-review P2)
 
