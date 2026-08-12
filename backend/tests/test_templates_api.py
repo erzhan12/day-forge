@@ -588,6 +588,17 @@ class TestRuleSwap:
         assert resp.status_code == 400
         assert "body" in resp.json()["errors"]
 
+    def test_swap_invalid_json_returns_400(self, auth_client):
+        # Malformed body must hit parse_swap_body's JSONDecodeError branch
+        # before any id validation (mirrors the TestTravelRuleSwap case).
+        # Bypass _post's json.dumps to send a raw non-JSON string.
+        resp = auth_client.post(
+            self.URL, "not json{", content_type="application/json"
+        )
+
+        assert resp.status_code == 400
+        assert resp.json()["errors"]["body"] == "Invalid JSON."
+
     def test_swap_bool_id_returns_400(self, auth_client, user):
         # bool subclasses int; is_plain_int must reject it.
         rule = Rule.objects.create(user=user, text="Mine", priority=1)
