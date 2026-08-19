@@ -42,6 +42,7 @@ function installFakePip(win?: ReturnType<typeof makeFakeWindow>) {
 
 afterEach(() => {
   delete (window as unknown as { documentPictureInPicture?: unknown }).documentPictureInPicture
+  vi.useRealTimers()
   vi.restoreAllMocks()
 })
 
@@ -74,6 +75,52 @@ describe("useFocusIndicator", () => {
     await fi.open() // already open → must not re-request
     await flushPromises()
     expect(requestWindow).toHaveBeenCalledTimes(1)
+  })
+
+  it("surfaces a generic error when the PiP request is rejected", async () => {
+    const requestWindow = installFakePip()
+    requestWindow.mockRejectedValueOnce(
+      new DOMException("User activation is required", "NotAllowedError"),
+    )
+    const fi = useFocusIndicator({ component: Probe, props: () => ({ value: 0 }) })
+
+    await fi.open()
+
+    expect(fi.isOpen.value).toBe(false)
+    expect(fi.openError.value).toBe("Could not open indicator. Please try again.")
+  })
+
+  it("dismisses the open error after a brief interval", async () => {
+    vi.useFakeTimers()
+    const requestWindow = installFakePip()
+    requestWindow.mockRejectedValueOnce(
+      new DOMException("User activation is required", "NotAllowedError"),
+    )
+    const fi = useFocusIndicator({ component: Probe, props: () => ({ value: 0 }) })
+    await fi.open()
+    expect(fi.openError.value).not.toBeNull()
+
+    vi.advanceTimersByTime(5_000)
+
+    expect(fi.openError.value).toBeNull()
+  })
+
+  it("clears the previous error when retrying and successfully reopens", async () => {
+    const requestWindow = installFakePip()
+    requestWindow.mockRejectedValueOnce(
+      new DOMException("User activation is required", "NotAllowedError"),
+    )
+    const fi = useFocusIndicator({ component: Probe, props: () => ({ value: 0 }) })
+    await fi.open()
+    expect(fi.openError.value).not.toBeNull()
+
+    requestWindow.mockResolvedValueOnce(makeFakeWindow())
+    await fi.open()
+    await flushPromises()
+
+    expect(fi.openError.value).toBeNull()
+    expect(fi.isOpen.value).toBe(true)
+    expect(requestWindow).toHaveBeenCalledTimes(2)
   })
 
   it("sets a generic PiP document.title (never a block title)", async () => {

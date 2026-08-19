@@ -4,7 +4,7 @@ import ShowIndicatorButton from "../src/components/ShowIndicatorButton.vue"
 
 function mountBtn(props: Record<string, unknown> = {}) {
   return mount(ShowIndicatorButton, {
-    props: { supported: true, isOpen: false, ...props },
+    props: { supported: true, isOpen: false, error: null, ...props },
   })
 }
 
@@ -34,8 +34,8 @@ describe("ShowIndicatorButton", () => {
   })
 
   it("label does not depend on active-block state (available with no current block)", () => {
-    // The component takes only supported/isOpen — no block/active prop exists,
-    // so the control is always present regardless of whether a block is current.
+    // No block/active prop exists, so the control is always present regardless
+    // of whether a block is current.
     const w = mountBtn({ supported: true, isOpen: false })
     expect(w.find("button").exists()).toBe(true)
     expect(w.find("button").text()).toContain("Show indicator")
@@ -44,5 +44,15 @@ describe("ShowIndicatorButton", () => {
   it("does not auto-emit on mount", () => {
     const w = mountBtn({ supported: true, isOpen: false })
     expect(w.emitted("open")).toBeUndefined()
+  })
+
+  it("renders an accessible error while leaving retry available", async () => {
+    const w = mountBtn({ error: "Could not open indicator. Please try again." })
+    const alert = w.get('[role="alert"]')
+    expect(alert.text()).toBe("Could not open indicator. Please try again.")
+    expect(w.get("button").attributes("disabled")).toBeUndefined()
+
+    await w.get("button").trigger("click")
+    expect(w.emitted("open")).toHaveLength(1)
   })
 })

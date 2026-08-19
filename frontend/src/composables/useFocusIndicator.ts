@@ -4,6 +4,8 @@ const PIP_WIDTH = 240
 const PIP_HEIGHT = 60
 // Generic, block-agnostic — never the block title (privacy invariant).
 const PIP_TITLE = "Focus"
+const PIP_OPEN_ERROR = "Could not open indicator. Please try again."
+const PIP_OPEN_ERROR_DURATION_MS = 5_000
 
 // The PiP document is a separate Document with no app stylesheet; give it its
 // own minimal scoped styles rather than cloning the whole app CSS.
@@ -38,12 +40,31 @@ export function useFocusIndicator(config: FocusIndicatorConfig) {
     typeof window !== "undefined" && "documentPictureInPicture" in window
 
   const isOpen = ref(false)
+  const openError = ref<string | null>(null)
   let pipWindow: Window | null = null
   let app: App | null = null
   let pendingOpen = false
+  let openErrorTimer: ReturnType<typeof setTimeout> | null = null
   // Bumped by cleanup()/dispose so a request that resolves after teardown
   // closes its just-created window instead of adopting an orphan.
   let epoch = 0
+
+  function clearOpenError(): void {
+    if (openErrorTimer !== null) {
+      clearTimeout(openErrorTimer)
+      openErrorTimer = null
+    }
+    openError.value = null
+  }
+
+  function showOpenError(): void {
+    clearOpenError()
+    openError.value = PIP_OPEN_ERROR
+    openErrorTimer = setTimeout(() => {
+      openError.value = null
+      openErrorTimer = null
+    }, PIP_OPEN_ERROR_DURATION_MS)
+  }
 
   function teardown(closeWindow: boolean): void {
     if (app) {
@@ -68,6 +89,7 @@ export function useFocusIndicator(config: FocusIndicatorConfig) {
     // Single-instance + rapid-double-click guard: ignore if already open or a
     // request is still in flight.
     if (isOpen.value || pendingOpen) return
+    clearOpenError()
     pendingOpen = true
     const myEpoch = epoch
     try {
@@ -101,6 +123,10 @@ export function useFocusIndicator(config: FocusIndicatorConfig) {
       // untracked PiP window.
       pendingOpen = false
       teardown(true)
+      // A request cancelled by cleanup/unmount is no longer user-actionable.
+      // Otherwise every failure gets the same block-agnostic recovery message;
+      // detailed diagnostics remain confined to the console below.
+      if (myEpoch === epoch) showOpenError()
       // NotAllowedError (no transient activation) is the expected, quiet
       // failure. Surface everything else — non-DOMExceptions (programming
       // errors) and other DOMException subtypes — for post-mortem diagnosis.
@@ -116,10 +142,11 @@ export function useFocusIndicator(config: FocusIndicatorConfig) {
     // Invalidate any in-flight request so its resolve closes the orphan window.
     epoch++
     pendingOpen = false
+    clearOpenError()
     teardown(true)
   }
 
   if (getCurrentInstance()) onUnmounted(cleanup)
 
-  return { supported, isOpen, open, cleanup }
+  return { supported, isOpen, openError, open, cleanup }
 }

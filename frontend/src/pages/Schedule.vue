@@ -624,6 +624,7 @@ const focusIndicator = useFocusIndicator({
 })
 const focusIndicatorSupported = focusIndicator.supported
 const focusIndicatorOpen = focusIndicator.isOpen
+const focusIndicatorOpenError = focusIndicator.openError
 const openFocusIndicator = focusIndicator.open
 
 // Ghost element computed properties
@@ -731,6 +732,7 @@ defineExpose({
         <ShowIndicatorButton
           :supported="focusIndicatorSupported"
           :is-open="focusIndicatorOpen"
+          :error="focusIndicatorOpenError"
           @open="openFocusIndicator"
         />
         <Link

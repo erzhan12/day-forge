@@ -248,6 +248,24 @@ describe("Schedule.vue focus indicator", () => {
     expect(wrapper!.text()).toContain("Show indicator")
   })
 
+  it("surfaces a PiP open failure beside the header control", async () => {
+    ;(window as unknown as { documentPictureInPicture: unknown }).documentPictureInPicture = {
+      requestWindow: vi.fn().mockRejectedValue(
+        new DOMException("User activation is required", "NotAllowedError"),
+      ),
+      window: null,
+    }
+    mountPage([makeBlock()])
+    await flushPromises()
+
+    await wrapper!.get(".show-indicator-btn").trigger("click")
+    await flushPromises()
+
+    expect(wrapper!.get('[role="alert"]').text()).toBe(
+      "Could not open indicator. Please try again.",
+    )
+  })
+
   it("leaks NO private block data into the real PiP document (body or title)", async () => {
     const win = makeFakeWindow()
     installFakePip(win)

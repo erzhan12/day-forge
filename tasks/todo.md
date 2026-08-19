@@ -786,7 +786,7 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
 
 ### 0049 — surface a PiP open() failure to the user (PR #145 claude-review P3)
 
-- [ ] **`useFocusIndicator.open()` swallows a `DOMException` rejection with no user
+- [x] **`useFocusIndicator.open()` swallows a `DOMException` rejection with no user
   feedback.** The common expected failure (no transient user activation) is caught,
   logged for non-`DOMException`, and `pendingOpen` reset — but the user sees nothing
   explaining why the indicator didn't open. Suggested: add an `openError` ref
@@ -795,3 +795,8 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
   `ShowIndicatorButton` / `Schedule.vue` surface it briefly (tooltip or transient
   status). Deferred: multi-file + a small UX/design decision, its own change.
   Non-blocking P3 from PR #145 round-2 review.
+  **Done:** `useFocusIndicator` now exposes a generic, block-agnostic
+  `openError`; `ShowIndicatorButton` renders it as a retryable `role="alert"`
+  for five seconds and Schedule wires the state through. Composable, component,
+  and page integration tests cover rejection, timed dismissal, and successful
+  retry.
