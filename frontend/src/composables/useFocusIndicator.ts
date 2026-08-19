@@ -97,12 +97,16 @@ export function useFocusIndicator(config: FocusIndicatorConfig) {
         width: config.width ?? PIP_WIDTH,
         height: config.height ?? PIP_HEIGHT,
       })
-      pendingOpen = false
-      // cleanup() fired while we were pending — do not adopt; close the orphan.
+      // cleanup()/a newer open() fired while we were pending — do not adopt and
+      // do NOT reset the shared `pendingOpen`, which the newer request now owns
+      // (resetting it would let a third open() slip past the in-flight guard and
+      // spawn a duplicate window); just close this orphan. Symmetric to the
+      // epoch guard on the catch path below.
       if (myEpoch !== epoch) {
         win.close()
         return
       }
+      pendingOpen = false
       pipWindow = win
       win.document.title = config.title ?? PIP_TITLE
       const style = win.document.createElement("style")
@@ -120,16 +124,24 @@ export function useFocusIndicator(config: FocusIndicatorConfig) {
       // Any mid-setup failure (rejected requestWindow, or a throw after
       // `pipWindow = win` but before `isOpen`) must close the partially-opened
       // orphan and clear refs — otherwise a later open() would spawn a second,
-      // untracked PiP window.
-      pendingOpen = false
-      teardown(true)
-      // A request cancelled by cleanup/unmount is no longer user-actionable.
-      // Otherwise every failure gets the same block-agnostic recovery message;
-      // detailed diagnostics remain confined to the console below.
-      if (myEpoch === epoch) showOpenError()
-      // NotAllowedError (no transient activation) is the expected, quiet
-      // failure. Surface everything else — non-DOMExceptions (programming
-      // errors) and other DOMException subtypes — for post-mortem diagnosis.
+      // untracked PiP window. Guard the whole recovery on the epoch, mirroring
+      // the success path above: if cleanup()/a newer open() bumped `epoch` while
+      // we were pending, this stale rejection no longer owns the state — running
+      // teardown() would close the *newer* window and resetting the shared
+      // `pendingOpen` would clobber the newer request's in-flight guard. A
+      // superseded request is also no longer user-actionable, so no error shows.
+      if (myEpoch === epoch) {
+        pendingOpen = false
+        teardown(true)
+        // Every surfaced failure gets the same block-agnostic recovery message;
+        // detailed diagnostics remain confined to the console below.
+        showOpenError()
+      }
+      // Console policy (independent of the user-facing alert above):
+      // NotAllowedError (no transient activation) is the expected failure and
+      // stays out of the console. Surface everything else — non-DOMExceptions
+      // (programming errors) and other DOMException subtypes — for post-mortem
+      // diagnosis, even for a superseded request (a genuine bug is worth a log).
       if (!(err instanceof DOMException)) {
         console.error("[useFocusIndicator] unexpected error during PiP setup:", err)
       } else if (err.name !== "NotAllowedError") {

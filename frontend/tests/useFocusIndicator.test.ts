@@ -88,6 +88,8 @@ describe("useFocusIndicator", () => {
 
     expect(fi.isOpen.value).toBe(false)
     expect(fi.openError.value).toBe("Could not open indicator. Please try again.")
+    // Release the 5s auto-dismiss timer so it does not outlive the test.
+    fi.cleanup()
   })
 
   it("dismisses the open error after a brief interval", async () => {
@@ -212,5 +214,94 @@ describe("useFocusIndicator", () => {
     await flushPromises()
     expect(win.close).toHaveBeenCalled()
     expect(fi.isOpen.value).toBe(false)
+  })
+
+  it("a stale rejection after cleanup()+reopen leaves the new window and shows no error", async () => {
+    // #1 stays pending so we can reject it *after* a newer request has adopted
+    // its own window — the epoch-race the catch guard must survive.
+    let rejectFirst: ((e: unknown) => void) | null = null
+    const secondWin = makeFakeWindow()
+    const requestWindow = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            rejectFirst = reject
+          }),
+      )
+      .mockResolvedValueOnce(secondWin)
+    ;(window as unknown as { documentPictureInPicture: unknown }).documentPictureInPicture = {
+      requestWindow,
+      window: null,
+    }
+    const fi = useFocusIndicator({ component: Probe, props: () => ({ value: 0 }) })
+
+    const p1 = fi.open() // #1 pending
+    fi.cleanup() // epoch++ → #1 is now superseded
+    await fi.open() // #2 resolves and adopts secondWin
+    await flushPromises()
+    expect(fi.isOpen.value).toBe(true)
+
+    // #1 rejects late: must NOT tear down #2's live window, reset its guard, or
+    // surface a (no-longer-actionable) error.
+    rejectFirst!(new DOMException("User activation is required", "NotAllowedError"))
+    await p1
+    await flushPromises()
+
+    expect(secondWin.close).not.toHaveBeenCalled()
+    expect(fi.isOpen.value).toBe(true)
+    expect(fi.openError.value).toBeNull()
+
+    fi.cleanup()
+  })
+
+  it("a stale resolution does not clobber a newer pending request's in-flight guard", async () => {
+    // #1 and #2 both stay pending so we can resolve #1 *late* while #2 is still
+    // in flight (isOpen === false) — the success-path analogue of the epoch race.
+    let resolveFirst: ((w: unknown) => void) | null = null
+    let resolveSecond: ((w: unknown) => void) | null = null
+    const firstWin = makeFakeWindow()
+    const requestWindow = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFirst = resolve
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveSecond = resolve
+          }),
+      )
+    ;(window as unknown as { documentPictureInPicture: unknown }).documentPictureInPicture = {
+      requestWindow,
+      window: null,
+    }
+    const fi = useFocusIndicator({ component: Probe, props: () => ({ value: 0 }) })
+
+    const p1 = fi.open() // #1 pending
+    fi.cleanup() // epoch++ → #1 superseded
+    const p2 = fi.open() // #2 pending, isOpen still false
+
+    // #1 resolves late: it must close its orphan and must NOT reset the shared
+    // `pendingOpen` that #2 now owns.
+    resolveFirst!(firstWin)
+    await p1
+    await flushPromises()
+    expect(firstWin.close).toHaveBeenCalled()
+
+    // A third open() while #2 is in flight must still be a no-op.
+    fi.open()
+    expect(requestWindow).toHaveBeenCalledTimes(2)
+
+    // Let #2 finish cleanly.
+    resolveSecond!(makeFakeWindow())
+    await p2
+    await flushPromises()
+    expect(fi.isOpen.value).toBe(true)
+
+    fi.cleanup()
   })
 })
