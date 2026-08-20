@@ -965,7 +965,11 @@ Per-user cap: **100 rules** (`400` beyond it). Body capped at 100 KB
 \* At least one of `keyword` or `calendar_name` must be non-empty after
 trimming. An empty `calendar_name` on a keyword rule means it matches any
 calendar. Use the exact Google or Apple calendar name (for example, `Work`),
-not the account email.
+not the account email. Violations return `400 {"errors":
+{"match_constraints": "At least one of keyword or calendar_name is
+required."}}` — `match_constraints` is a non-field key (it belongs to neither
+individual field), so clients parsing field-level errors should treat it as a
+form-level error, not a model field.
 
 ### `PATCH /api/calendar/travel-rules/{pk}/`
 

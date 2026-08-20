@@ -196,6 +196,7 @@ function categoryLabel(category: TravelRule["category"]): string {
         maxlength="100"
         placeholder="Title keyword, e.g. dentist"
         class="input keyword-input"
+        data-testid="keyword-input"
       />
       <input
         v-model="newCalendarName"
@@ -203,6 +204,7 @@ function categoryLabel(category: TravelRule["category"]): string {
         maxlength="200"
         placeholder="Calendar name, e.g. Work"
         class="input calendar-input"
+        data-testid="calendar-name-input"
       />
       <label class="minutes-field">
         There
@@ -321,7 +323,7 @@ function categoryLabel(category: TravelRule["category"]): string {
         >
           <span v-if="rule.keyword" class="rule-keyword">{{ rule.keyword }}</span>
           <span v-if="rule.calendar_name" class="rule-calendar-name">
-            📅 {{ rule.calendar_name }}
+            {{ rule.calendar_name }}
           </span>
           <span class="rule-details">
             −{{ rule.travel_there_minutes }}m / +{{ rule.travel_back_minutes }}m

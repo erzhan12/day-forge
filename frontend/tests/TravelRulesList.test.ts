@@ -132,9 +132,8 @@ describe("TravelRulesList reorder direction", () => {
 describe("TravelRulesList calendar-name matching", () => {
   it("submits a calendar name when adding a rule", async () => {
     const wrapper = mountList([])
-    const inputs = wrapper.findAll('input[type="text"]')
-    await inputs[0].setValue("")
-    await inputs[1].setValue("Work")
+    await wrapper.find('[data-testid="keyword-input"]').setValue("")
+    await wrapper.find('[data-testid="calendar-name-input"]').setValue("Work")
     await wrapper.find("form").trigger("submit")
 
     expect(createRule).toHaveBeenCalledWith({
@@ -148,14 +147,13 @@ describe("TravelRulesList calendar-name matching", () => {
 
   it("resets the calendar-name input after a successful add", async () => {
     const wrapper = mountList([])
-    const inputs = wrapper.findAll('input[type="text"]')
-    await inputs[1].setValue("Work")
+    await wrapper.find('[data-testid="calendar-name-input"]').setValue("Work")
     await wrapper.find("form").trigger("submit")
     await wrapper.vm.$nextTick()
 
     // Stale calendar would silently apply to the next keyword-only rule.
-    const after = wrapper.findAll('input[type="text"]')
-    expect((after[1].element as HTMLInputElement).value).toBe("")
+    const after = wrapper.find('[data-testid="calendar-name-input"]')
+    expect((after.element as HTMLInputElement).value).toBe("")
   })
 
   it("seeds and saves the calendar name during editing", async () => {
