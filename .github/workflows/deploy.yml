@@ -32,6 +32,13 @@ jobs:
       - name: Install backend deps
         run: uv sync --frozen
 
+      # Backend lint gate (issue #137): identical command to README's
+      # documented backend lint. Placed before pytest so a lint failure
+      # fails the job fast and gates the whole downstream build/push/deploy
+      # chain (build-and-push needs: test).
+      - name: Run backend lint
+        run: uv run ruff check backend/
+
       - name: Run backend tests
         # AI rate-limit tests assume LocMemCache (conftest pins it); leave
         # LLM_API_KEY unset so ai.E001 does not require Redis in CI.
