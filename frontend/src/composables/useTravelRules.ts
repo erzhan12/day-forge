@@ -5,7 +5,8 @@ import type { TravelRule } from "../types"
 // parameter directly — the explicit fields stay type-checked while the index
 // signature removes the previous `as unknown as Record<string, unknown>` cast.
 export interface TravelRuleCreatePayload extends Record<string, unknown> {
-  keyword: string
+  keyword?: string
+  calendar_name?: string
   travel_there_minutes?: number
   travel_back_minutes?: number
   category?: TravelRule["category"]
@@ -14,6 +15,7 @@ export interface TravelRuleCreatePayload extends Record<string, unknown> {
 
 export interface TravelRulePatchPayload extends Record<string, unknown> {
   keyword?: string
+  calendar_name?: string
   travel_there_minutes?: number
   travel_back_minutes?: number
   category?: TravelRule["category"]

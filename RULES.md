@@ -757,9 +757,13 @@ no Service Worker, no closed-tab alerts.
   `frontend/src/utils/travelRules.ts` (`computeEventBlockTimes` anchors to the
   *viewed* local day, not the event's start day) before POST.
 - **Travel rules live in `calendar_sync.TravelRule`** (provider-agnostic).
-  Match = first ascending-`order` keyword substring (case-insensitive). Settings
-  UI: `TravelRulesList.vue` — "up" *decreases* `order` (top row wins; opposite
-  of `RulesList` priority bump).
+  Matching is two-pass: keyword rules (case-insensitive title substring, with
+  optional exact case-insensitive calendar constraint) win first in ascending
+  `order`; calendar-only exact-name rules run second in ascending `order`.
+  Empty calendar name means any calendar only for keyword rules, never for the
+  calendar-only pass. Settings UI: `TravelRulesList.vue` — "up" *decreases*
+  `order` (top row wins within a rule class; opposite of `RulesList` priority
+  bump).
 - **Drag/AI normalize-on-move:** round preserved duration **up** to the next
   5-minute multiple (`roundUpDuration` in `useDrag.ts`; AI bare-move in
   `_compute_move_resize_times`). Drag geometry must use the display-clamped

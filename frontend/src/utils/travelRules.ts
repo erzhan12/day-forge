@@ -9,20 +9,49 @@ const DAY_MS = 86_400_000
 const LAST_MINUTE = 23 * 60 + 59 // 23:59 clamp ceiling
 
 /**
- * First rule (ascending `order`, server-sorted) whose trimmed keyword is a
- * non-empty case-insensitive substring of `title`. `rules` must already be
- * in server order — do not re-sort here.
+ * Keyword rules (ascending `order`, server-sorted) match before calendar-only
+ * rules. A keyword rule may constrain itself to one calendar; empty calendar
+ * name means any calendar. `rules` must already be in server order — do not
+ * re-sort here.
  */
 export function matchTravelRule(
   rules: TravelRule[],
   title: string,
+  calendarName = "",
 ): TravelRule | null {
   const haystack = title.toLowerCase()
+
+  // Keyword rules always take precedence over calendar-only rules, regardless
+  // of their relative order values.
   for (const rule of rules) {
     const needle = rule.keyword.trim().toLowerCase()
-    if (needle !== "" && haystack.includes(needle)) return rule
+    if (needle === "" || !haystack.includes(needle)) continue
+    const ruleCalendarName = (rule.calendar_name ?? "").trim()
+    if (
+      ruleCalendarName === "" ||
+      calendarNamesEqual(ruleCalendarName, calendarName)
+    ) {
+      return rule
+    }
+  }
+
+  // Calendar-only rules must name a calendar. Do not let a legacy degenerate
+  // empty/empty row match every event that lacks a calendar name.
+  for (const rule of rules) {
+    if (rule.keyword.trim() !== "") continue
+    const ruleCalendarName = (rule.calendar_name ?? "").trim()
+    if (
+      ruleCalendarName !== "" &&
+      calendarNamesEqual(ruleCalendarName, calendarName)
+    ) {
+      return rule
+    }
   }
   return null
+}
+
+function calendarNamesEqual(a: string, b: string): boolean {
+  return a.trim().toLowerCase() === b.trim().toLowerCase()
 }
 
 /**

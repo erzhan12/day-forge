@@ -8,6 +8,7 @@ import type { TravelRule } from "../src/types"
 function makeRule(overrides: Partial<TravelRule> & { id: number }): TravelRule {
   return {
     keyword: "dentist",
+    calendar_name: "",
     travel_there_minutes: 30,
     travel_back_minutes: 30,
     category: "",
@@ -61,6 +62,55 @@ describe("matchTravelRule", () => {
   it("trims the keyword before matching", () => {
     const rules = [makeRule({ id: 1, keyword: "  dentist  " })]
     expect(matchTravelRule(rules, "dentist visit")?.id).toBe(1)
+  })
+
+  it("gives a keyword rule precedence over a calendar-only rule", () => {
+    const rules = [
+      makeRule({ id: 1, keyword: "", calendar_name: "Work", order: 0 }),
+      makeRule({ id: 2, keyword: "dentist", calendar_name: "", order: 99 }),
+    ]
+    expect(matchTravelRule(rules, "Dentist visit", "Work")?.id).toBe(2)
+  })
+
+  it("matches a calendar-only rule by calendar name, case-insensitively", () => {
+    const rules = [makeRule({ id: 1, keyword: "", calendar_name: "Work" })]
+    expect(matchTravelRule(rules, "Planning", "work")?.id).toBe(1)
+  })
+
+  it("requires a matching calendar for a keyword+calendar rule", () => {
+    const rules = [
+      makeRule({ id: 1, keyword: "dentist", calendar_name: "Work" }),
+    ]
+    expect(matchTravelRule(rules, "dentist", "Home")).toBeNull()
+  })
+
+  it("does not use keyword+calendar rules as calendar-only fallbacks", () => {
+    const rules = [
+      makeRule({ id: 1, keyword: "dentist", calendar_name: "Work" }),
+    ]
+    expect(matchTravelRule(rules, "Planning", "Work")).toBeNull()
+  })
+
+  it("continues after a keyword rule misses its calendar constraint", () => {
+    const rules = [
+      makeRule({ id: 1, keyword: "dentist", calendar_name: "Work" }),
+      makeRule({ id: 2, keyword: "dentist", calendar_name: "" }),
+    ]
+    expect(matchTravelRule(rules, "dentist", "Home")?.id).toBe(2)
+  })
+
+  it("matches a keyword+calendar rule when both constraints match", () => {
+    const rules = [
+      makeRule({ id: 1, keyword: "dentist", calendar_name: "Work" }),
+    ]
+    expect(matchTravelRule(rules, "Dentist visit", "work")?.id).toBe(1)
+  })
+
+  it("skips a degenerate empty-keyword empty-calendar rule in pass 2", () => {
+    // A whitespace-keyword + empty-calendar row (empty keyword after trim)
+    // must not hijack every event via a bare "" === "" calendar compare.
+    const rules = [makeRule({ id: 1, keyword: "   ", calendar_name: "" })]
+    expect(matchTravelRule(rules, "Anything", "")).toBeNull()
   })
 })
 

@@ -16,7 +16,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { mount, VueWrapper, flushPromises } from "@vue/test-utils"
-import { nextTick, reactive, ref, type Ref } from "vue"
+import { defineComponent, h, nextTick, reactive, ref, type Ref } from "vue"
 
 // --- mocks ---------------------------------------------------------------
 
@@ -74,6 +74,9 @@ vi.mock("../src/composables/useUndo", () => ({
 // Schedule.vue fetches travel rules on setup (feature 0026). Without this the
 // real composable issues a fetch during every mount in this file.
 const listRules = vi.fn().mockResolvedValue({ ok: true, rules: [] })
+const { matchTravelRule } = vi.hoisted(() => ({
+  matchTravelRule: vi.fn(),
+}))
 
 vi.mock("../src/composables/useTravelRules", () => ({
   useTravelRules: () => ({
@@ -83,6 +86,8 @@ vi.mock("../src/composables/useTravelRules", () => ({
     deleteRule: vi.fn(),
   }),
 }))
+
+vi.mock("../src/utils/travelRules", () => ({ matchTravelRule }))
 
 vi.mock("../src/composables/useDrag", () => ({
   // Schedule.vue imports this named helper for its drag-ghost geometry; a
@@ -717,6 +722,77 @@ describe("Schedule.vue external source poll gating (feature 0031)", () => {
   function exposed(w: VueWrapper): ScheduleExposed {
     return w.vm as unknown as ScheduleExposed
   }
+
+  it("passes an external event's calendar name into travel-rule matching", async () => {
+    const event = {
+      title: "Planning",
+      start: "2026-05-04T09:00:00Z",
+      end: "2026-05-04T10:00:00Z",
+      calendar_name: "Work",
+      all_day: false,
+      external_uid: "calendar-rule-event",
+      account_label: "",
+    }
+    const matchedRule = {
+      id: 7,
+      keyword: "",
+      calendar_name: "Work",
+      travel_there_minutes: 15,
+      travel_back_minutes: 15,
+      category: "work",
+      order: 0,
+    }
+    listRules.mockResolvedValueOnce({ ok: true, rules: [matchedRule] })
+    matchTravelRule.mockReturnValueOnce(matchedRule)
+    setPlacement("center")
+    calendarState.statusKnown = true
+    calendarState.connected = true
+    const ExternalEventsPanelStub = defineComponent({
+      emits: ["add-to-schedule"],
+      setup(_, { emit }) {
+        return () =>
+          h(
+            "button",
+            {
+              "data-testid": "add-external",
+              onClick: () => emit("add-to-schedule", event),
+            },
+            "Add",
+          )
+      },
+    })
+
+    wrapper = mount(Schedule, {
+      props: {
+        schedule: makeSchedule("2026-05-04"),
+        blocks: [],
+        date: "2026-05-04",
+        auto_draft_pending: false,
+        has_template_for_type: true,
+        slot_type: "weekday" as const,
+        external_tasks_poll_interval: 60,
+      },
+      global: {
+        stubs: {
+          ...STUBS,
+          ExternalEventsPanel: ExternalEventsPanelStub,
+          AddToScheduleDialog: {
+            props: ["event", "matchedRule"],
+            template: '<div data-testid="matched-rule">{{ matchedRule?.id }}</div>',
+          },
+          ExternalTasksSidebar: true,
+          ExternalCalendarPlacementToggle: true,
+        },
+      },
+    })
+    await flushPromises()
+
+    await wrapper.find('[data-testid="add-external"]').trigger("click")
+    await flushPromises()
+
+    expect(matchTravelRule).toHaveBeenCalledWith([matchedRule], "Planning", "Work")
+    expect(wrapper.find('[data-testid="matched-rule"]').text()).toBe("7")
+  })
 
   it("center placement + narrow viewport + calendar connected → poll active and fans out to refreshEvents", () => {
     stubMatchMedia(false)

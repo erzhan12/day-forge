@@ -32,6 +32,7 @@ function rule(id: number, keyword: string, order: number): TravelRule {
   return {
     id,
     keyword,
+    calendar_name: "",
     travel_there_minutes: 30,
     travel_back_minutes: 30,
     category: "",
@@ -43,6 +44,8 @@ function rule(id: number, keyword: string, order: number): TravelRule {
 const RULES = [rule(1, "gym", 0), rule(2, "dentist", 1), rule(3, "office", 2)]
 
 function mountList(rules: TravelRule[] = RULES) {
+  createRule.mockClear()
+  deleteRule.mockClear()
   updateRule.mockClear()
   swapRules.mockClear()
   return mount(TravelRulesList, { props: { rules } })
@@ -123,5 +126,67 @@ describe("TravelRulesList reorder direction", () => {
 
     expect(wrapper.text()).toContain("Reorder failed")
     expect(wrapper.emitted("changed")).toBeUndefined()
+  })
+})
+
+describe("TravelRulesList calendar-name matching", () => {
+  it("submits a calendar name when adding a rule", async () => {
+    const wrapper = mountList([])
+    const inputs = wrapper.findAll('input[type="text"]')
+    await inputs[0].setValue("")
+    await inputs[1].setValue("Work")
+    await wrapper.find("form").trigger("submit")
+
+    expect(createRule).toHaveBeenCalledWith({
+      keyword: "",
+      calendar_name: "Work",
+      travel_there_minutes: 0,
+      travel_back_minutes: 0,
+      category: "",
+    })
+  })
+
+  it("resets the calendar-name input after a successful add", async () => {
+    const wrapper = mountList([])
+    const inputs = wrapper.findAll('input[type="text"]')
+    await inputs[1].setValue("Work")
+    await wrapper.find("form").trigger("submit")
+    await wrapper.vm.$nextTick()
+
+    // Stale calendar would silently apply to the next keyword-only rule.
+    const after = wrapper.findAll('input[type="text"]')
+    expect((after[1].element as HTMLInputElement).value).toBe("")
+  })
+
+  it("seeds and saves the calendar name during editing", async () => {
+    const wrapper = mountList([
+      { ...rule(1, "", 0), calendar_name: "Work" },
+    ])
+    await wrapper.find(".rule-summary").trigger("click")
+    const editInputs = wrapper.findAll(".rule-edit input")
+    expect((editInputs[1].element as HTMLInputElement).value).toBe("Work")
+    await editInputs[1].setValue("Home")
+    await wrapper.find(".edit-actions .primary-btn").trigger("click")
+
+    expect(updateRule).toHaveBeenCalledWith(1, {
+      keyword: "",
+      calendar_name: "Home",
+      travel_there_minutes: 30,
+      travel_back_minutes: 30,
+      category: "",
+    })
+  })
+
+  it("surfaces API validation errors when saving", async () => {
+    updateRule.mockResolvedValueOnce({
+      ok: false,
+      errors: { calendar_name: ["Calendar name too long."] },
+    })
+    const wrapper = mountList([rule(1, "dentist", 0)])
+    await wrapper.find(".rule-summary").trigger("click")
+    await wrapper.find(".edit-actions .primary-btn").trigger("click")
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.text()).toContain("Calendar name too long.")
   })
 })

@@ -915,12 +915,15 @@ Successful complete invalidates the Habitica task cache by bumping
 ## Travel-time rules — feature 0026
 
 Per-user rules that prefill the "Add to schedule" dialog when adding an
-external calendar event to the timeline. Matching is a case-insensitive
-substring of `keyword` in the event title, evaluated client-side in
-ascending `order` — **first match wins**. Provider-agnostic (applies to
-CalDAV and Google events alike); owned by the `calendar_sync` app. All
-routes are `@login_required`; validation mirrors the templates_mgr rules
-endpoints.
+external calendar event to the timeline. Keyword rules match a
+case-insensitive substring of `keyword` in the event title; a keyword rule
+can optionally be restricted to an exact (case-insensitive) source calendar
+name. Calendar-only rules match the exact source calendar name. Matching is
+client-side in ascending `order` within each class, and **keyword rules always
+win before calendar-only rules**, regardless of their relative order.
+Provider-agnostic (applies to CalDAV and Google events alike); owned by the
+`calendar_sync` app. All routes are `@login_required`; validation mirrors the
+templates_mgr rules endpoints.
 
 **Serialised shape**
 
@@ -928,6 +931,7 @@ endpoints.
 {
   "id": 3,
   "keyword": "dentist",
+  "calendar_name": "Work",
   "travel_there_minutes": 30,
   "travel_back_minutes": 30,
   "category": "",
@@ -948,7 +952,8 @@ Create a rule. Body fields:
 
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
-| `keyword` | string | yes | 1–100 chars after `strip()`. |
+| `keyword` | string | no* | 0–100 chars after `strip()`. |
+| `calendar_name` | string | no* | 0–200 chars after `strip()`. Exact, case-insensitive source calendar-name match. |
 | `travel_there_minutes` | integer | no | `0 ≤ n ≤ 600`. Default `0`. Booleans rejected. |
 | `travel_back_minutes` | integer | no | Same bounds. Default `0`. |
 | `category` | string | no | `""` or a valid category. Default `""`. |
@@ -957,10 +962,16 @@ Create a rule. Body fields:
 Per-user cap: **100 rules** (`400` beyond it). Body capped at 100 KB
 (`413`). Success → `201` with the serialised rule.
 
+\* At least one of `keyword` or `calendar_name` must be non-empty after
+trimming. An empty `calendar_name` on a keyword rule means it matches any
+calendar. Use the exact Google or Apple calendar name (for example, `Work`),
+not the account email.
+
 ### `PATCH /api/calendar/travel-rules/{pk}/`
 
-Partial update; same field rules as `POST` (all optional, at least one
-required). Success → `200` with the serialised rule.
+Partial update; all fields are optional, but the merged rule must retain at
+least one non-empty `keyword` or `calendar_name`. Success → `200` with the
+serialised rule.
 
 ### `DELETE /api/calendar/travel-rules/{pk}/`
 

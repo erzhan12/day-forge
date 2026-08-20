@@ -42,6 +42,7 @@ function localEvent(startHM: string, endHM: string) {
 const GYM_RULE: TravelRule = {
   id: 1,
   keyword: "dentist",
+  calendar_name: "",
   travel_there_minutes: 30,
   travel_back_minutes: 15,
   category: "health",

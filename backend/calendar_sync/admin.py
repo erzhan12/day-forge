@@ -26,7 +26,7 @@ class CalDAVAccountAdmin(admin.ModelAdmin):
 class TravelRuleAdmin(admin.ModelAdmin):
     list_display = (
         "user", "keyword", "travel_there_minutes", "travel_back_minutes",
-        "category", "order",
+        "calendar_name", "category", "order",
     )
     list_select_related = ("user",)
     ordering = ("user", "order", "id")

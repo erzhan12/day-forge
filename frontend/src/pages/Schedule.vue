@@ -271,7 +271,11 @@ async function handleAddToSchedule(ev: NormalizedEvent) {
     await fetchTravelRules()
     if (props.date !== clickedDate) return
   }
-  addDialogRule.value = matchTravelRule(travelRules.value, ev.title)
+  addDialogRule.value = matchTravelRule(
+    travelRules.value,
+    ev.title,
+    ev.calendar_name,
+  )
   addDialogEvent.value = ev
 }
 

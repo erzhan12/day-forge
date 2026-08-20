@@ -16,6 +16,7 @@ import pytest
 from ai.service import AIChatResult
 from calendar_sync.models import TravelRule
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
 from schedules.models import Schedule, TimeBlock
 
 FROM_EVENT_URL = "/api/schedules/2026-04-07/blocks/from-event/"
@@ -488,6 +489,70 @@ class TestTravelRuleCrud:
         assert data["order"] == 3
 
     @pytest.mark.django_db
+    def test_create_calendar_only_without_keyword_key(self, auth_client, user):
+        resp = auth_client.post(
+            RULES_URL,
+            json.dumps({"calendar_name": "Work"}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 201
+        assert resp.json()["keyword"] == ""
+        assert resp.json()["calendar_name"] == "Work"
+
+    @pytest.mark.django_db
+    def test_create_keyword_only_without_calendar_name_key(self, auth_client, user):
+        resp = auth_client.post(
+            RULES_URL,
+            json.dumps({"keyword": "dentist"}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 201
+        assert resp.json()["calendar_name"] == ""
+
+    @pytest.mark.django_db
+    def test_create_accepts_both_match_constraints(self, auth_client, user):
+        resp = self._create(auth_client, calendar_name="Work")
+        assert resp.status_code == 201
+        assert resp.json()["calendar_name"] == "Work"
+
+    @pytest.mark.django_db
+    @pytest.mark.parametrize(
+        "body",
+        [
+            {},
+            {"keyword": "", "calendar_name": ""},
+            {"calendar_name": "   "},
+        ],
+    )
+    def test_create_requires_keyword_or_calendar_name(self, auth_client, user, body):
+        resp = auth_client.post(
+            RULES_URL, json.dumps(body), content_type="application/json"
+        )
+        assert resp.status_code == 400
+
+    @pytest.mark.django_db
+    @pytest.mark.parametrize(
+        "body",
+        [
+            {"keyword": "", "calendar_name": "Work"},
+            {"keyword": "dentist", "calendar_name": ""},
+        ],
+    )
+    def test_create_allows_present_empty_companion_constraint(
+        self, auth_client, user, body
+    ):
+        resp = auth_client.post(
+            RULES_URL, json.dumps(body), content_type="application/json"
+        )
+        assert resp.status_code == 201
+
+    @pytest.mark.django_db
+    @pytest.mark.parametrize("value", [None, [], 42, "x" * 201])
+    def test_create_rejects_invalid_calendar_name(self, auth_client, user, value):
+        resp = self._create(auth_client, calendar_name=value)
+        assert resp.status_code == 400
+
+    @pytest.mark.django_db
     @pytest.mark.parametrize(
         "field,value",
         [
@@ -522,6 +587,97 @@ class TestTravelRuleCrud:
         data = resp.json()
         assert data["travel_there_minutes"] == 20
         assert data["category"] == "work"
+
+    @pytest.mark.django_db
+    def test_patch_sets_calendar_name_and_serializes_it(self, auth_client, user):
+        rule_id = self._create(auth_client).json()["id"]
+        resp = auth_client.patch(
+            f"{RULES_URL}{rule_id}/",
+            json.dumps({"calendar_name": "Work"}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 200
+        assert resp.json()["calendar_name"] == "Work"
+
+    @pytest.mark.django_db
+    def test_patch_can_blank_keyword_when_calendar_name_remains(self, auth_client, user):
+        rule_id = self._create(auth_client, calendar_name="Work").json()["id"]
+        resp = auth_client.patch(
+            f"{RULES_URL}{rule_id}/",
+            json.dumps({"keyword": ""}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 200
+        assert resp.json()["keyword"] == ""
+
+    @pytest.mark.django_db
+    def test_patch_rejects_blanking_both_match_constraints(self, auth_client, user):
+        rule_id = self._create(auth_client).json()["id"]
+        resp = auth_client.patch(
+            f"{RULES_URL}{rule_id}/",
+            json.dumps({"keyword": ""}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 400
+
+    @pytest.mark.django_db
+    def test_patch_rejects_blanking_calendar_only_rule(self, auth_client, user):
+        rule_id = self._create(
+            auth_client, keyword="", calendar_name="Work"
+        ).json()["id"]
+        resp = auth_client.patch(
+            f"{RULES_URL}{rule_id}/",
+            json.dumps({"calendar_name": ""}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 400
+
+    @pytest.mark.django_db
+    @pytest.mark.parametrize("calendar_name", ["", "   "])
+    def test_patch_allows_blank_calendar_name_when_keyword_remains(
+        self, auth_client, user, calendar_name
+    ):
+        rule_id = self._create(auth_client).json()["id"]
+        resp = auth_client.patch(
+            f"{RULES_URL}{rule_id}/",
+            json.dumps({"calendar_name": calendar_name}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 200
+        assert resp.json()["calendar_name"] == ""
+
+    @pytest.mark.django_db
+    def test_order_only_patch_preserves_calendar_name(self, auth_client, user):
+        rule_id = self._create(auth_client, calendar_name="Work").json()["id"]
+        resp = auth_client.patch(
+            f"{RULES_URL}{rule_id}/",
+            json.dumps({"order": 4}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 200
+        assert resp.json()["calendar_name"] == "Work"
+
+    @pytest.mark.django_db
+    @pytest.mark.parametrize("value", [None, [], 42, "x" * 201])
+    def test_patch_rejects_invalid_calendar_name(self, auth_client, user, value):
+        rule_id = self._create(auth_client).json()["id"]
+        resp = auth_client.patch(
+            f"{RULES_URL}{rule_id}/",
+            json.dumps({"calendar_name": value}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 400
+
+    @pytest.mark.django_db
+    def test_model_clean_rejects_both_blank_match_constraints(self, user):
+        with pytest.raises(ValidationError):
+            TravelRule(user=user, keyword="   ", calendar_name=" ").full_clean()
+
+    @pytest.mark.django_db
+    def test_model_clean_allows_calendar_only_rule(self, user):
+        # Calendar-only rows (empty keyword) must pass full_clean() so the
+        # admin/ModelForm surface accepts them, not just the API parser.
+        TravelRule(user=user, keyword="", calendar_name="Work").full_clean()
 
     @pytest.mark.django_db
     def test_patch_empty_body_rejected(self, auth_client, user):

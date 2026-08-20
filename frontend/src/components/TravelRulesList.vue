@@ -15,6 +15,7 @@ const emit = defineEmits<{
 const { createRule, updateRule, swapRules, deleteRule } = useTravelRules()
 
 const newKeyword = ref("")
+const newCalendarName = ref("")
 const newThere = ref(0)
 const newBack = ref(0)
 const newCategory = ref<TravelRule["category"]>("")
@@ -24,6 +25,7 @@ const submitting = ref(false)
 const localRules = ref<TravelRule[]>(props.rules.map((r) => ({ ...r })))
 const editingId = ref<number | null>(null)
 const editKeyword = ref("")
+const editCalendarName = ref("")
 const editThere = ref(0)
 const editBack = ref(0)
 const editCategory = ref<TravelRule["category"]>("")
@@ -50,14 +52,16 @@ function clampMinutes(value: number): number {
 
 async function addRule() {
   const keyword = newKeyword.value.trim()
-  if (!keyword) {
-    newError.value = "Keyword is required."
+  const calendarName = newCalendarName.value.trim()
+  if (!keyword && !calendarName) {
+    newError.value = "Enter a title keyword or calendar name."
     return
   }
   submitting.value = true
   newError.value = ""
   const result = await createRule({
     keyword,
+    calendar_name: calendarName,
     travel_there_minutes: clampMinutes(newThere.value),
     travel_back_minutes: clampMinutes(newBack.value),
     category: newCategory.value,
@@ -65,6 +69,7 @@ async function addRule() {
   submitting.value = false
   if (result.ok) {
     newKeyword.value = ""
+    newCalendarName.value = ""
     newThere.value = 0
     newBack.value = 0
     newCategory.value = ""
@@ -80,6 +85,7 @@ async function addRule() {
 function startEdit(rule: TravelRule) {
   editingId.value = rule.id
   editKeyword.value = rule.keyword
+  editCalendarName.value = rule.calendar_name
   editThere.value = rule.travel_there_minutes
   editBack.value = rule.travel_back_minutes
   editCategory.value = rule.category
@@ -87,13 +93,18 @@ function startEdit(rule: TravelRule) {
 
 async function saveEdit(rule: TravelRule) {
   const keyword = editKeyword.value.trim()
-  if (!keyword) {
-    rowError.value = { id: rule.id, message: "Keyword cannot be empty" }
+  const calendarName = editCalendarName.value.trim()
+  if (!keyword && !calendarName) {
+    rowError.value = {
+      id: rule.id,
+      message: "Enter a title keyword or calendar name",
+    }
     return
   }
   rowError.value = null
   const result = await updateRule(rule.id, {
     keyword,
+    calendar_name: calendarName,
     travel_there_minutes: clampMinutes(editThere.value),
     travel_back_minutes: clampMinutes(editBack.value),
     category: editCategory.value,
@@ -102,7 +113,12 @@ async function saveEdit(rule: TravelRule) {
     editingId.value = null
     emit("changed")
   } else {
-    rowError.value = { id: rule.id, message: "Save failed" }
+    const errs = result.errors ?? {}
+    rowError.value = {
+      id: rule.id,
+      message:
+        Object.values(errs).flat().map(String).join(", ") || "Save failed",
+    }
   }
 }
 
@@ -167,8 +183,10 @@ function categoryLabel(category: TravelRule["category"]): string {
          subsection-title, matching the Apple/Google Calendar subsections
          this list sits among. -->
     <p class="hint-text">
-      When an event title contains the keyword, "Add to schedule" prefills
-      these travel minutes. Top rule wins on multiple matches.
+      Match event titles by keyword or a source calendar name. Keyword rules
+      always match before calendar-only rules, regardless of row order. Use the
+      exact Google or Apple calendar name (for example, “Work”), not the
+      account email.
     </p>
 
     <form class="add-form" @submit.prevent="addRule">
@@ -178,6 +196,13 @@ function categoryLabel(category: TravelRule["category"]): string {
         maxlength="100"
         placeholder="Title keyword, e.g. dentist"
         class="input keyword-input"
+      />
+      <input
+        v-model="newCalendarName"
+        type="text"
+        maxlength="200"
+        placeholder="Calendar name, e.g. Work"
+        class="input calendar-input"
       />
       <label class="minutes-field">
         There
@@ -242,6 +267,14 @@ function categoryLabel(category: TravelRule["category"]): string {
             @keydown.enter.prevent="saveEdit(rule)"
             @keydown.escape="cancelEdit"
           />
+          <input
+            v-model="editCalendarName"
+            class="input"
+            maxlength="200"
+            placeholder="Calendar name, e.g. Work"
+            @keydown.enter.prevent="saveEdit(rule)"
+            @keydown.escape="cancelEdit"
+          />
           <div class="edit-minutes">
             <label class="minutes-field">
               There
@@ -287,6 +320,9 @@ function categoryLabel(category: TravelRule["category"]): string {
           @click="startEdit(rule)"
         >
           <span class="rule-keyword">{{ rule.keyword }}</span>
+          <span v-if="rule.calendar_name" class="rule-calendar-name">
+            📅 {{ rule.calendar_name }}
+          </span>
           <span class="rule-details">
             −{{ rule.travel_there_minutes }}m / +{{ rule.travel_back_minutes }}m
             · {{ categoryLabel(rule.category) }}
@@ -333,7 +369,8 @@ function categoryLabel(category: TravelRule["category"]): string {
   align-items: flex-end;
 }
 
-.keyword-input {
+.keyword-input,
+.calendar-input {
   flex: 1;
   min-width: 160px;
 }

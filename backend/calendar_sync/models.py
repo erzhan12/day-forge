@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 from schedules.models import TimeBlock
 
@@ -46,8 +47,9 @@ class CalDAVAccount(models.Model):
 
 class TravelRule(models.Model):
     """Per-user travel-time rule for the "add external event to schedule"
-    flow (feature 0026). Matched by case-insensitive substring of
-    ``keyword`` in the event title; ascending ``order``, first match wins.
+    flow (feature 0026). Keyword matches are case-insensitive substrings of
+    event titles; calendar-only matches use a calendar name. Keyword rules
+    take precedence, with ascending ``order`` within each class.
 
     Provider-agnostic (applies to CalDAV and Google events alike), hence
     it lives here rather than in ``gcal_sync``. No cache is keyed off
@@ -59,7 +61,10 @@ class TravelRule(models.Model):
         on_delete=models.CASCADE,
         related_name="travel_rules",
     )
-    keyword = models.CharField(max_length=100)
+    keyword = models.CharField(max_length=100, blank=True, default="")
+    # Empty string means no calendar constraint for a keyword rule. A rule
+    # with an empty keyword instead matches this source calendar exactly.
+    calendar_name = models.CharField(max_length=200, blank=True, default="")
     travel_there_minutes = models.PositiveIntegerField(default=0)
     travel_back_minutes = models.PositiveIntegerField(default=0)
     # Empty string means "no override" — the created block falls back to
@@ -74,5 +79,17 @@ class TravelRule(models.Model):
     class Meta:
         ordering = ["order", "id"]
 
+    def clean(self) -> None:
+        super().clean()
+        if not (self.keyword or "").strip() and not (
+            self.calendar_name or ""
+        ).strip():
+            raise ValidationError(
+                "At least one of keyword or calendar name is required."
+            )
+
     def __str__(self) -> str:
-        return f"TravelRule(user={self.user_id}, keyword={self.keyword!r})"
+        return (
+            f"TravelRule(user={self.user_id}, keyword={self.keyword!r}, "
+            f"calendar_name={self.calendar_name!r})"
+        )

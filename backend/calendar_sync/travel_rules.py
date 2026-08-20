@@ -24,6 +24,7 @@ from schedules.http import (
 from calendar_sync.models import TravelRule
 
 MAX_KEYWORD_LEN = 100
+MAX_CALENDAR_NAME_LEN = 200
 MAX_TRAVEL_MINUTES = 600
 MAX_TRAVEL_RULES_PER_USER = 100
 # Same rationale as templates_mgr.api.MIN_PRIORITY/MAX_PRIORITY: fail fast
@@ -40,6 +41,7 @@ def serialize_travel_rule(r: TravelRule) -> dict:
     return {
         "id": r.id,
         "keyword": r.keyword,
+        "calendar_name": r.calendar_name,
         "travel_there_minutes": r.travel_there_minutes,
         "travel_back_minutes": r.travel_back_minutes,
         "category": r.category,
@@ -48,14 +50,38 @@ def serialize_travel_rule(r: TravelRule) -> dict:
 
 
 def _clean_keyword(value) -> tuple[str | None, JsonResponse | None]:
-    if not isinstance(value, str) or not value.strip():
-        return None, _err("keyword", "Keyword is required.")
+    if not isinstance(value, str):
+        return None, _err("keyword", "keyword must be a string.")
     keyword = value.strip()
     if len(keyword) > MAX_KEYWORD_LEN:
         return None, _err(
             "keyword", f"Keyword too long (max {MAX_KEYWORD_LEN} characters)."
         )
     return keyword, None
+
+
+def _clean_calendar_name(value) -> tuple[str | None, JsonResponse | None]:
+    if not isinstance(value, str):
+        return None, _err("calendar_name", "calendar_name must be a string.")
+    calendar_name = value.strip()
+    if len(calendar_name) > MAX_CALENDAR_NAME_LEN:
+        return None, _err(
+            "calendar_name",
+            "Calendar name too long "
+            f"(max {MAX_CALENDAR_NAME_LEN} characters).",
+        )
+    return calendar_name, None
+
+
+def _validate_match_constraint(
+    keyword: str, calendar_name: str
+) -> JsonResponse | None:
+    if not keyword and not calendar_name:
+        return _err(
+            "keyword",
+            "At least one of keyword or calendar_name is required.",
+        )
+    return None
 
 
 def _clean_minutes(field: str, value) -> tuple[int | None, JsonResponse | None]:
@@ -94,10 +120,23 @@ def _parse_create_payload(data) -> tuple[dict, JsonResponse | None]:
     if not isinstance(data, dict):
         return {}, _err("body", "Request body must be a JSON object.")
 
-    keyword, err = _clean_keyword(data.get("keyword"))
+    cleaned: dict = {}
+    if "keyword" in data:
+        keyword, err = _clean_keyword(data["keyword"])
+        if err is not None:
+            return {}, err
+        cleaned["keyword"] = keyword
+    if "calendar_name" in data:
+        calendar_name, err = _clean_calendar_name(data["calendar_name"])
+        if err is not None:
+            return {}, err
+        cleaned["calendar_name"] = calendar_name
+
+    err = _validate_match_constraint(
+        cleaned.get("keyword", ""), cleaned.get("calendar_name", "")
+    )
     if err is not None:
         return {}, err
-    cleaned: dict = {"keyword": keyword}
 
     for field in ("travel_there_minutes", "travel_back_minutes"):
         if field in data:
@@ -118,7 +157,9 @@ def _parse_create_payload(data) -> tuple[dict, JsonResponse | None]:
     return cleaned, None
 
 
-def _parse_patch_payload(data) -> tuple[dict, JsonResponse | None]:
+def _parse_patch_payload(
+    data, rule: TravelRule
+) -> tuple[dict, JsonResponse | None]:
     if not isinstance(data, dict):
         return {}, _err("body", "Request body must be a JSON object.")
 
@@ -128,6 +169,11 @@ def _parse_patch_payload(data) -> tuple[dict, JsonResponse | None]:
         if err is not None:
             return {}, err
         cleaned["keyword"] = keyword
+    if "calendar_name" in data:
+        calendar_name, err = _clean_calendar_name(data["calendar_name"])
+        if err is not None:
+            return {}, err
+        cleaned["calendar_name"] = calendar_name
     for field in ("travel_there_minutes", "travel_back_minutes"):
         if field in data:
             value, err = _clean_minutes(field, data[field])
@@ -147,6 +193,13 @@ def _parse_patch_payload(data) -> tuple[dict, JsonResponse | None]:
 
     if not cleaned:
         return {}, _err("body", "No editable fields supplied.")
+
+    err = _validate_match_constraint(
+        cleaned.get("keyword", rule.keyword),
+        cleaned.get("calendar_name", rule.calendar_name),
+    )
+    if err is not None:
+        return {}, err
     return cleaned, None
 
 
@@ -255,7 +308,7 @@ def travel_rule_detail(request, pk):
     except json.JSONDecodeError:
         return _err("body", "Invalid JSON.")
 
-    cleaned, err = _parse_patch_payload(data)
+    cleaned, err = _parse_patch_payload(data, rule)
     if err is not None:
         return err
 

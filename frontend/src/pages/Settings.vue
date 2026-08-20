@@ -489,7 +489,8 @@ async function handleHabiticaDisconnect() {
       <h3 class="subsection-title">Travel-time rules</h3>
       <p class="section-subtitle">
         Prefill travel minutes and category when adding an external event to
-        your schedule, matched by event-title keyword.
+        your schedule, matched by title keyword or source calendar name.
+        Keyword rules always take precedence over calendar-only rules.
       </p>
       <TravelRulesList :rules="localTravelRules" @changed="refreshTravelRules" />
     </section>

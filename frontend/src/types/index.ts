@@ -55,11 +55,13 @@ export interface Rule {
 }
 
 // Travel-time rule for adding external calendar events to the timeline
-// (feature 0026). Ascending `order`, first keyword match wins. Empty
-// `category` means "no override" — the created block uses "other".
+// (feature 0026). Keyword matches win over calendar-only matches; ascending
+// `order` breaks ties within each class. Empty `category` means "no override"
+// — the created block uses "other".
 export interface TravelRule {
   id: number
   keyword: string
+  calendar_name: string
   travel_there_minutes: number
   travel_back_minutes: number
   category: "" | "work" | "personal" | "health" | "other"
