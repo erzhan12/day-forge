@@ -522,6 +522,7 @@ class TestTravelRuleCrud:
             {},
             {"keyword": "", "calendar_name": ""},
             {"calendar_name": "   "},
+            {"keyword": "   "},
         ],
     )
     def test_create_requires_keyword_or_calendar_name(self, auth_client, user, body):

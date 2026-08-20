@@ -77,8 +77,10 @@ def _validate_match_constraint(
     keyword: str, calendar_name: str
 ) -> JsonResponse | None:
     if not keyword and not calendar_name:
+        # Non-field sentinel: the error belongs to neither field individually
+        # (a client sending only calendar_name shouldn't see it under "keyword").
         return _err(
-            "keyword",
+            "match_constraints",
             "At least one of keyword or calendar_name is required.",
         )
     return None

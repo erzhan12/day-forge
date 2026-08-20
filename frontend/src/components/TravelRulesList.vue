@@ -319,7 +319,7 @@ function categoryLabel(category: TravelRule["category"]): string {
           class="rule-summary"
           @click="startEdit(rule)"
         >
-          <span class="rule-keyword">{{ rule.keyword }}</span>
+          <span v-if="rule.keyword" class="rule-keyword">{{ rule.keyword }}</span>
           <span v-if="rule.calendar_name" class="rule-calendar-name">
             📅 {{ rule.calendar_name }}
           </span>
