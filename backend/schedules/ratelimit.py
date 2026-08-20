@@ -37,6 +37,11 @@ def consume_rate_limit(key: str, limit: int) -> bool:
                 key,
             )
             for _ in range(_MAX_RESEED_ATTEMPTS):
+                # Reseeds with a full-window TTL; the original window's remaining
+                # TTL is unrecoverable after eviction, so an adversary who forces
+                # eviction near window-end gets a fresh window (up to ~2x budget
+                # in a targeted attack). Not closable without persisting the
+                # original anchor timestamp; accepted trade-off.
                 if cache.add(key, 1, CONNECT_RATE_LIMIT_WINDOW_SECONDS):
                     count = 1
                     break

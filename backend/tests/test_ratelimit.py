@@ -6,6 +6,7 @@ import time
 
 from django.core.cache import cache
 from schedules.ratelimit import (
+    _MAX_RESEED_ATTEMPTS,
     CONNECT_RATE_LIMIT_WINDOW_SECONDS,
     connect_rate_limit_key,
     consume_rate_limit,
@@ -154,15 +155,30 @@ def test_consume_rate_limit_contention_single_add_winner_others_increment(
 
 def test_consume_rate_limit_repeated_eviction_fails_closed(monkeypatch, caplog):
     key = "connect_rl:test:7"
+    add_calls = 0
+    incr_calls = 0
+
+    def always_false(*_args, **_kwargs):
+        nonlocal add_calls
+        add_calls += 1
+        return False
 
     def always_raise(_key):
+        nonlocal incr_calls
+        incr_calls += 1
         raise ValueError("key repeatedly evicted")
 
-    monkeypatch.setattr("schedules.ratelimit.cache.add", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr("schedules.ratelimit.cache.add", always_false)
     monkeypatch.setattr("schedules.ratelimit.cache.incr", always_raise)
 
     with caplog.at_level(logging.WARNING, logger="schedules.ratelimit"):
         assert consume_rate_limit(key, limit=2) is False
+
+    # The full retry budget must be consumed before failing closed: one initial
+    # attempt outside the loop plus _MAX_RESEED_ATTEMPTS inside it. Guards
+    # against a short-circuit regression that fails closed after a single retry.
+    assert add_calls == _MAX_RESEED_ATTEMPTS + 1
+    assert incr_calls == _MAX_RESEED_ATTEMPTS + 1
 
     # The reseed warning must fire once per recovery entry, not once per retry
     # attempt — guards against a regression that moves it inside the loop.
