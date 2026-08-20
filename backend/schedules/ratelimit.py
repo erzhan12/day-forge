@@ -8,6 +8,8 @@ from django.http import JsonResponse
 logger = logging.getLogger(__name__)
 
 CONNECT_RATE_LIMIT_WINDOW_SECONDS = 3600
+# Bound recovery if an evicted key keeps disappearing between cache operations.
+_MAX_RESEED_ATTEMPTS = 3
 
 
 def consume_rate_limit(key: str, limit: int) -> bool:
@@ -16,7 +18,9 @@ def consume_rate_limit(key: str, limit: int) -> bool:
     The first call anchors the one-hour TTL. Later calls use the cache
     backend's synchronous ``incr`` so Redis increments remain atomic and
     preserve that original expiry. If an entry disappears between ``add``
-    and ``incr``, re-seed a fresh fixed window.
+    and ``incr``, callers race to re-seed with ``add``: one establishes the
+    new shared window and the others retry ``incr`` against it. Repeated
+    eviction has a bounded retry budget and fails closed.
     """
     if cache.add(key, 1, CONNECT_RATE_LIMIT_WINDOW_SECONDS):
         count = 1
@@ -32,8 +36,22 @@ def consume_rate_limit(key: str, limit: int) -> bool:
                 "Connect rate limit key evicted mid-window; reseeding (key=%s)",
                 key,
             )
-            cache.set(key, 1, CONNECT_RATE_LIMIT_WINDOW_SECONDS)
-            count = 1
+            for _ in range(_MAX_RESEED_ATTEMPTS):
+                if cache.add(key, 1, CONNECT_RATE_LIMIT_WINDOW_SECONDS):
+                    count = 1
+                    break
+
+                try:
+                    count = cache.incr(key)
+                    break
+                except ValueError:
+                    # The replacement key disappeared before this caller
+                    # could join its shared counter. Try to re-seed again.
+                    continue
+            else:
+                # Do not permit credential-verification attempts when the
+                # counter cannot be established reliably.
+                return False
 
     if count > limit:
         logger.warning(
