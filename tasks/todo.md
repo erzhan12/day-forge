@@ -169,6 +169,25 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
 
 ## Follow-ups (discovered during manual testing)
 
+### 0051 — port cache-expiry-race fix to async AI limiter (PR #149 claude-review P1)
+
+- [ ] **`backend/ai/views.py::_consume_rate_limit` (async, draft/chat endpoints)
+  has the same expiry-race bypass fixed for the sync connect limiter in #136 /
+  PR #149.** Its recovery branch does an unconditional
+  `await cache.aset(key, 1, _RATE_LIMIT_WINDOW_SECONDS)`, so under the eviction
+  race N concurrent callers each reset the counter to `1` and are admitted,
+  exceeding the per-user budget (draft 10/hr, chat 60/hr). Port the bounded
+  `aadd` → retry-`incr` recovery with a `_MAX_RESEED_ATTEMPTS` bound that fails
+  closed, plus race / reseed-TTL / single-winner / fail-closed tests analogous
+  to `backend/tests/test_ratelimit.py`. Deliberately **out of scope** for #136
+  (sync connect limiter + its 3 endpoints only); surfaced by claude-review on
+  PR #149 (APPROVED — pre-existing, not a regression). Its own PR. **File a
+  GitHub tracking issue for this** (was blocked from auto-filing during the
+  PR #149 loop). NB Django `RedisCache.incr` does a non-atomic `EXISTS`+`INCR`;
+  a key expiring between them yields a persistent no-TTL counter — a separate
+  backend limitation not closable at the app layer (documented in
+  `docs/features/0051_PLAN.md`).
+
 ### 0047 — extract shared `parse_swap_body` helper (PR #143 claude-review P3)
 
 - [x] **De-duplicate the swap-view request parsing.** `rules_swap`

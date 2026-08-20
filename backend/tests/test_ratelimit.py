@@ -1,6 +1,7 @@
 """Unit tests for the synchronous shared connect rate limiter."""
 
 import json
+import logging
 import time
 
 from django.core.cache import cache
@@ -151,7 +152,7 @@ def test_consume_rate_limit_contention_single_add_winner_others_increment(
     assert cache.get(key) == 4
 
 
-def test_consume_rate_limit_repeated_eviction_fails_closed(monkeypatch):
+def test_consume_rate_limit_repeated_eviction_fails_closed(monkeypatch, caplog):
     key = "connect_rl:test:7"
 
     def always_raise(_key):
@@ -160,7 +161,17 @@ def test_consume_rate_limit_repeated_eviction_fails_closed(monkeypatch):
     monkeypatch.setattr("schedules.ratelimit.cache.add", lambda *_args, **_kwargs: False)
     monkeypatch.setattr("schedules.ratelimit.cache.incr", always_raise)
 
-    assert consume_rate_limit(key, limit=2) is False
+    with caplog.at_level(logging.WARNING, logger="schedules.ratelimit"):
+        assert consume_rate_limit(key, limit=2) is False
+
+    # The reseed warning must fire once per recovery entry, not once per retry
+    # attempt — guards against a regression that moves it inside the loop.
+    reseed_warnings = [
+        record
+        for record in caplog.records
+        if "evicted mid-window" in record.getMessage()
+    ]
+    assert len(reseed_warnings) == 1
 
 
 def test_connect_rate_limit_key_shape():

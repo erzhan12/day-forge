@@ -30,9 +30,8 @@ preserved on the reseeded counter.
 
 ## External review trail (ext-code-review)
 
-- Engines: codex (`gpt-5.6-sol`, read-only) + cursor. Cursor hit a usage cap
-  (`ActionRequiredError: out of usage`) and was dropped for the run; codex
-  completed a full pass and independently ran the test suite (120 passed).
+- Engines: codex + cursor (read-only). Cursor was unavailable for this run;
+  codex completed a full pass and independently ran the test suite (120 passed).
 - Iterations: 1.
 - Findings: raised 1, accepted 0 as blocking, rejected 0, P3-ignored 1.
   - **P3** (codex) — `test_ratelimit.py` repeated-eviction test asserts only
