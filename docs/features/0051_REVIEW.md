@@ -20,9 +20,11 @@ preserved on the reseeded counter.
 - **0 CRITICAL, 0 WARNING.** 2 INFO:
   - `test_ratelimit.py` leftover editing-note comment on the rewritten eviction
     test — **fixed** (rewritten to describe the eviction-then-recover scenario).
-  - `test_consume_rate_limit_repeated_eviction_fails_closed` asserts only the
-    `False` return, not the exact attempt count / single-warning — recorded,
-    not fixed (non-blocking, low value).
+  - `test_consume_rate_limit_repeated_eviction_fails_closed` originally asserted
+    only the `False` return. **Fixed during PR #149 review** (rounds 1-2): it now
+    also asserts the reseed warning fires exactly once (`len(reseed_warnings)
+    == 1`) and that the full retry budget is consumed before failing closed
+    (`add_calls == incr_calls == _MAX_RESEED_ATTEMPTS + 1`).
 - Verification: ratelimit unit tests 9 passed; connect-view regression
   (`test_calendar_sync_views`, `test_todoist_sync_views`,
   `test_habitica_sync_views`, `_connect_rate_limit_contract`) 120 passed; ruff
