@@ -22,6 +22,7 @@ from schedules.http import (
     validate_time_range,
 )
 from schedules.models import Schedule, TimeBlock
+from schedules.window import clamp_boundary, get_schedule_window
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,20 @@ _validate_time_range = validate_time_range
 _validate_block_times = validate_block_times
 _validate_sort_order = validate_sort_order
 _block_to_dict = block_to_dict
+
+
+def _outside_window_response(window):
+    """Stable skip envelope for a newly-calculated fully-outside interval."""
+    return JsonResponse(
+        {
+            "skipped": True,
+            "code": "outside_window",
+            "detail": "Block is outside your day window.",
+            "window": {"start": window.start_str, "end": window.end_str},
+            "errors": {"time": "Block is outside your day window."},
+        },
+        status=422,
+    )
 
 
 @login_required
@@ -88,11 +103,16 @@ def create_block(request, date):
             {"errors": {"category": "Category must be a string."}}, status=400
         )
 
-    schedule, _ = Schedule.objects.get_or_create(user=request.user, date=parsed_date)
-
     start, end, err = _validate_block_times(data["start_time"], data["end_time"])
     if err is not None:
         return err
+    window = get_schedule_window(request.user)
+    clamped = clamp_boundary(
+        start, end, window, clamp_start=True, clamp_end=True
+    )
+    if clamped is None:
+        return _outside_window_response(window)
+    start, end = clamped
 
     title = data.get("title", "").strip()
     if not title:
@@ -111,6 +131,8 @@ def create_block(request, date):
             {"errors": {"category": f"Invalid category. Choose from: {choices}."}},
             status=400,
         )
+
+    schedule, _ = Schedule.objects.get_or_create(user=request.user, date=parsed_date)
 
     # Lock the candidate-overlap rows to serialize concurrent inserts under
     # PostgreSQL. SQLite ignores select_for_update silently but still
@@ -201,8 +223,6 @@ def create_block_from_event(request, date):
             {"errors": {"category": "Category must be a string."}}, status=400
         )
 
-    schedule, _ = Schedule.objects.get_or_create(user=request.user, date=parsed_date)
-
     # No ``validate_five_minute_or_error`` — off-grid times are the point.
     start, err = _parse_time_or_error("start_time", data["start_time"])
     if err is not None:
@@ -215,6 +235,13 @@ def create_block_from_event(request, date):
     err = _validate_time_range(start, end)
     if err is not None:
         return err
+    window = get_schedule_window(request.user)
+    clamped = clamp_boundary(
+        start, end, window, clamp_start=True, clamp_end=True
+    )
+    if clamped is None:
+        return _outside_window_response(window)
+    start, end = clamped
 
     title = data.get("title", "").strip()
     if not title:
@@ -233,6 +260,8 @@ def create_block_from_event(request, date):
             {"errors": {"category": f"Invalid category. Choose from: {choices}."}},
             status=400,
         )
+
+    schedule, _ = Schedule.objects.get_or_create(user=request.user, date=parsed_date)
 
     try:
         with transaction.atomic():
@@ -419,6 +448,20 @@ def block_detail(request, pk):
                     err = _validate_five_minute_or_error(*changed)
                     if err is not None:
                         return err
+                changed_start = "start_time" in pending and block.start_time != stored_start
+                changed_end = "end_time" in pending and block.end_time != stored_end
+                if changed_start or changed_end:
+                    window = get_schedule_window(request.user)
+                    clamped = clamp_boundary(
+                        block.start_time,
+                        block.end_time,
+                        window,
+                        clamp_start=changed_start,
+                        clamp_end=changed_end,
+                    )
+                    if clamped is None:
+                        return _outside_window_response(window)
+                    block.start_time, block.end_time = clamped
                 err = _validate_time_range(block.start_time, block.end_time)
                 if err is not None:
                     return err
@@ -612,6 +655,9 @@ def reorder_blocks(request):
             # query) by mutating the updated blocks in place and including
             # every schedule block in the overlap candidates.
             blocks_to_save = []
+            # Single request-scoped window lookup — never inside the per-block
+            # loop (window.py docstring forbids the N+1).
+            window = get_schedule_window(request.user)
             for b in schedule_blocks:
                 if b.id in update_map:
                     entry = update_map[b.id]
@@ -632,6 +678,21 @@ def reorder_blocks(request):
                         err = _validate_five_minute_or_error(*changed)
                         if err is not None:
                             return err
+                    changed_start = new_start != b.start_time
+                    changed_end = new_end != b.end_time
+                    if changed_start or changed_end:
+                        clamped = clamp_boundary(
+                            new_start,
+                            new_end,
+                            window,
+                            clamp_start=changed_start,
+                            clamp_end=changed_end,
+                        )
+                        # A reorder is atomic: an outside row aborts the
+                        # whole batch instead of committing a partial order.
+                        if clamped is None:
+                            return _outside_window_response(window)
+                        new_start, new_end = clamped
                     b.start_time = new_start
                     b.end_time = new_end
                     b.sort_order = entry["sort_order"]

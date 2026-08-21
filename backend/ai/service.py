@@ -46,12 +46,13 @@ from dataclasses import dataclass
 import openai
 from django.conf import settings
 from openai import AsyncOpenAI
+from schedules.window import DEFAULT_WINDOW
 
 from ai.prompts import (
-    SYSTEM_PROMPT_CHAT,
-    SYSTEM_PROMPT_DRAFT,
     build_chat_user_message,
     build_draft_user_message,
+    build_system_prompt_chat,
+    build_system_prompt_draft,
     serialise_prior_turns,
 )
 from ai.schemas import (
@@ -183,7 +184,9 @@ def _get_client() -> AsyncOpenAI:
     return client
 
 
-async def run_draft(schedule, template, history_schedules, rules, now) -> AIDraftResult:
+async def run_draft(
+    schedule, template, history_schedules, rules, now, window=None
+) -> AIDraftResult:
     """Call the LLM to generate a draft schedule.
 
     Uses the shared exception taxonomy so the view can map errors via the
@@ -239,7 +242,12 @@ async def run_draft(schedule, template, history_schedules, rules, now) -> AIDraf
         response = await client.chat.completions.create(
             model=settings.LLM_DRAFT_MODEL,
             messages=[
-                {"role": "system", "content": SYSTEM_PROMPT_DRAFT},
+                {
+                    "role": "system",
+                    "content": build_system_prompt_draft(
+                        window or getattr(schedule, "_schedule_window", DEFAULT_WINDOW)
+                    ),
+                },
                 {"role": "user", "content": user_message},
             ],
             response_format={"type": "json_object"},
@@ -282,7 +290,7 @@ async def run_draft(schedule, template, history_schedules, rules, now) -> AIDraf
     )
 
 
-async def run_chat(messages, schedule, blocks, rules, now) -> AIChatResult:
+async def run_chat(messages, schedule, blocks, rules, now, window=None) -> AIChatResult:
     """Multi-turn chat (feature 0007).
 
     ``messages`` is the FULL client-supplied transcript ordered
@@ -319,7 +327,12 @@ async def run_chat(messages, schedule, blocks, rules, now) -> AIChatResult:
     latest_user_turn = messages[-1]["content"]
 
     chat_messages = [
-        {"role": "system", "content": SYSTEM_PROMPT_CHAT},
+        {
+            "role": "system",
+            "content": build_system_prompt_chat(
+                window or getattr(schedule, "_schedule_window", DEFAULT_WINDOW)
+            ),
+        },
         # Schedule context + the flattened prior transcript live in a
         # single leading user message so the model treats them as
         # untrusted input. The latest real user turn stays in its own

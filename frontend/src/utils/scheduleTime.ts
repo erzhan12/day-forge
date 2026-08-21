@@ -9,13 +9,29 @@ export const PX_PER_MINUTE = 2 // 120px per hour, 30px per 15min
 export const SNAP_MINUTES = 5
 export const STUB_MINUTES = 30
 
+export interface ScheduleWindowBounds {
+  start: string
+  end: string
+  startMinutes: number
+  endMinutes: number
+}
+
+export const DEFAULT_SCHEDULE_WINDOW: ScheduleWindowBounds = {
+  start: DAY_START, end: DAY_END,
+  startMinutes: DAY_START_MINUTES, endMinutes: DAY_END_MINUTES,
+}
+
 export interface RenderBounds {
   renderStart: number
   renderEnd: number
 }
 
 export interface ScheduleDisplayItem {
-  type: "block" | "gap" | "block-with-now" | "gap-with-now"
+  // "spacer" is a NON-INTERACTIVE flow-layout filler: geometry only, never a
+  // clickable GapSlot. It occupies the region between an out-of-window legacy
+  // block and the window so later items keep their correct vertical offset,
+  // without offering an "add here" surface outside the window.
+  type: "block" | "gap" | "block-with-now" | "gap-with-now" | "spacer"
   block?: TimeBlock
   start_time: string
   end_time: string
@@ -39,23 +55,21 @@ export function snapToGrid(minutes: number): number {
   return Math.round(minutes / SNAP_MINUTES) * SNAP_MINUTES
 }
 
-export function clampToDay(minutes: number): number {
-  return Math.max(DAY_START_MINUTES, Math.min(DAY_END_MINUTES, minutes))
+export function clampToDay(minutes: number, window = DEFAULT_SCHEDULE_WINDOW): number {
+  return Math.max(window.startMinutes, Math.min(window.endMinutes, minutes))
 }
 
-/** Blocks overlapping [DAY_START, DAY_END), sorted by (start_time, sort_order). */
-export function filterVisibleBlocks(blocks: TimeBlock[]): TimeBlock[] {
-  return blocks
-    .filter(
-      (b) =>
-        timeToMinutes(b.end_time) > DAY_START_MINUTES &&
-        timeToMinutes(b.start_time) < DAY_END_MINUTES,
-    )
-    .sort((a, b) => {
-      const startDelta =
-        timeToMinutes(a.start_time) - timeToMinutes(b.start_time)
-      return startDelta !== 0 ? startDelta : a.sort_order - b.sort_order
-    })
+/**
+ * All blocks sorted by (start_time, sort_order). Stored blocks are never
+ * dropped — real blocks (including legacy out-of-window / off-grid from-event
+ * blocks) always render at their true geometry. Returns a fresh array so the
+ * caller's (Inertia prop) array is never mutated in place.
+ */
+export function filterVisibleBlocks(blocks: TimeBlock[], _window = DEFAULT_SCHEDULE_WINDOW): TimeBlock[] {
+  return [...blocks].sort((a, b) => {
+    const startDelta = timeToMinutes(a.start_time) - timeToMinutes(b.start_time)
+    return startDelta !== 0 ? startDelta : a.sort_order - b.sort_order
+  })
 }
 
 /**
@@ -71,9 +85,10 @@ export function filterVisibleBlocks(blocks: TimeBlock[]): TimeBlock[] {
 export function computeTrailingAnchor(
   anchorFloor: number,
   nowMinutes: number | null,
+  window = DEFAULT_SCHEDULE_WINDOW,
 ): number {
   if (nowMinutes === null) return anchorFloor
-  return Math.min(DAY_END_MINUTES, Math.max(anchorFloor, nowMinutes))
+  return Math.min(window.endMinutes, Math.max(anchorFloor, nowMinutes))
 }
 
 /**
@@ -85,41 +100,83 @@ export function computeTrailingAnchor(
 export function computeRenderBounds(
   blocks: TimeBlock[],
   nowMinutes: number | null = null,
+  window = DEFAULT_SCHEDULE_WINDOW,
 ): RenderBounds {
-  const visible = filterVisibleBlocks(blocks)
+  const visible = blocks
+    .filter((b) => timeToMinutes(b.end_time) > window.startMinutes && timeToMinutes(b.start_time) < window.endMinutes)
+    .sort((a, b) => timeToMinutes(a.start_time) - timeToMinutes(b.start_time) || a.sort_order - b.sort_order)
   if (visible.length === 0) {
-    if (nowMinutes === null) {
-      return { renderStart: DAY_START_MINUTES, renderEnd: DAY_END_MINUTES }
+    // Empty window-overlapping subset. A truly empty day (no blocks at all)
+    // renders the full window geometry (compressed tail on today). But when
+    // blocks EXIST yet none overlaps the window, using the full window as the
+    // base and then unioning the outside blocks blows the canvas out to
+    // [windowStart, windowEnd] ∪ blocks. Instead, when every block is outside
+    // the window, size the canvas to the blocks alone so a wholly-outside-only
+    // day never spans the empty window.
+    if (blocks.length === 0) {
+      if (nowMinutes === null) {
+        return { renderStart: window.startMinutes, renderEnd: window.endMinutes }
+      }
+      const trailingAnchor = computeTrailingAnchor(window.startMinutes, nowMinutes, window)
+      return {
+        renderStart: window.startMinutes,
+        renderEnd: Math.min(window.endMinutes, trailingAnchor + STUB_MINUTES),
+      }
     }
-    const trailingAnchor = computeTrailingAnchor(DAY_START_MINUTES, nowMinutes)
+    // Blocks exist but none overlaps the window (e.g. a 06:00–07:00-only day
+    // after narrowing to 08:00). Show the working window as the base — the user
+    // still needs an in-window canvas to see/add slots — then union the
+    // stranded outside blocks so they stay on-screen (a leading spacer bridges
+    // the gap). Basing on the blocks alone would collapse the window to 0px.
+    const windowEndBase =
+      nowMinutes === null
+        ? window.endMinutes
+        : Math.min(
+            window.endMinutes,
+            computeTrailingAnchor(window.startMinutes, nowMinutes, window) +
+              STUB_MINUTES,
+          )
     return {
-      renderStart: DAY_START_MINUTES,
-      renderEnd: Math.min(DAY_END_MINUTES, trailingAnchor + STUB_MINUTES),
+      renderStart: Math.min(
+        window.startMinutes,
+        ...blocks.map((b) => timeToMinutes(b.start_time)),
+      ),
+      renderEnd: Math.max(
+        windowEndBase,
+        ...blocks.map((b) => timeToMinutes(b.end_time)),
+      ),
     }
   }
 
   const firstStart = Math.max(
     timeToMinutes(visible[0].start_time),
-    DAY_START_MINUTES,
+    window.startMinutes,
   )
   const lastEnd = Math.min(
     timeToMinutes(visible[visible.length - 1].end_time),
-    DAY_END_MINUTES,
+    window.endMinutes,
   )
 
-  const leadingGap = firstStart - DAY_START_MINUTES
+  const leadingGap = firstStart - window.startMinutes
   // Compression threshold stays keyed off the REAL trailing gap from lastEnd
   // (0017): an already-natural trailing gap never compresses regardless of now.
-  const trailingGap = DAY_END_MINUTES - lastEnd
-  const trailingAnchor = computeTrailingAnchor(lastEnd, nowMinutes)
+  const trailingGap = window.endMinutes - lastEnd
+  const trailingAnchor = computeTrailingAnchor(lastEnd, nowMinutes, window)
 
-  return {
+  const base = {
     renderStart:
-      leadingGap > STUB_MINUTES ? firstStart - STUB_MINUTES : DAY_START_MINUTES,
+      leadingGap > STUB_MINUTES ? firstStart - STUB_MINUTES : window.startMinutes,
     renderEnd:
       trailingGap > STUB_MINUTES
-        ? Math.min(DAY_END_MINUTES, trailingAnchor + STUB_MINUTES)
-        : DAY_END_MINUTES,
+        ? Math.min(window.endMinutes, trailingAnchor + STUB_MINUTES)
+        : window.endMinutes,
+  }
+  // Stored blocks always retain their true geometry. The compact/stub base
+  // is calculated only from window-overlapping blocks, then expanded so
+  // legacy blocks outside a newly narrowed window remain on-screen.
+  return {
+    renderStart: Math.min(base.renderStart, ...blocks.map((b) => timeToMinutes(b.start_time))),
+    renderEnd: Math.max(base.renderEnd, ...blocks.map((b) => timeToMinutes(b.end_time))),
   }
 }
 
@@ -139,11 +196,12 @@ function pushTrailingGap(
   gapStart: number,
   activeRenderEnd: number,
   nowMinutes: number | null,
+  window = DEFAULT_SCHEDULE_WINDOW,
 ): void {
-  if (gapStart >= DAY_END_MINUTES) return
+  if (gapStart >= window.endMinutes) return
 
-  const trailingAnchor = computeTrailingAnchor(gapStart, nowMinutes)
-  if (trailingAnchor > gapStart && activeRenderEnd < DAY_END_MINUTES) {
+  const trailingAnchor = computeTrailingAnchor(gapStart, nowMinutes, window)
+  if (trailingAnchor > gapStart && activeRenderEnd < window.endMinutes) {
     items.push({
       type: "gap",
       start_time: minutesToTime(gapStart),
@@ -153,20 +211,20 @@ function pushTrailingGap(
     items.push({
       type: "gap",
       start_time: minutesToTime(trailingAnchor),
-      end_time: DAY_END,
-      duration_minutes: DAY_END_MINUTES - trailingAnchor,
+      end_time: window.end,
+      duration_minutes: window.endMinutes - trailingAnchor,
       render_minutes: Math.max(0, activeRenderEnd - trailingAnchor),
       compact: true,
     })
     return
   }
 
-  const compressed = activeRenderEnd < DAY_END_MINUTES
+  const compressed = activeRenderEnd < window.endMinutes
   items.push({
     type: "gap",
     start_time: minutesToTime(gapStart),
-    end_time: DAY_END,
-    duration_minutes: DAY_END_MINUTES - gapStart,
+    end_time: window.end,
+    duration_minutes: window.endMinutes - gapStart,
     ...(compressed
       ? {
           render_minutes: Math.max(0, activeRenderEnd - gapStart),
@@ -174,6 +232,61 @@ function pushTrailingGap(
         }
       : {}),
   })
+}
+
+/**
+ * Emit the region `[gapStart, nextStart)` between two consecutive blocks, split
+ * into up to three segments so no "add here" surface is offered outside the
+ * window:
+ *  - the part before `window.startMinutes` → inert `spacer`;
+ *  - the in-window part `[window.startMinutes, window.endMinutes)` → clickable `gap`;
+ *  - the part at/after `window.endMinutes` (e.g. before a late out-of-window
+ *    legacy block) → inert `spacer`.
+ * Spacers are non-interactive geometry that keep the following item at the
+ * correct vertical offset. (The trailing gap after the LAST block is handled by
+ * `pushTrailingGap`, which caps at `window.endMinutes`.)
+ */
+function pushInterBlockGap(
+  items: ScheduleDisplayItem[],
+  gapStart: number,
+  nextStart: number,
+  window = DEFAULT_SCHEDULE_WINDOW,
+): void {
+  if (nextStart <= gapStart) return
+
+  // Region before the window start → inert spacer (out-of-window geometry).
+  const leadEnd = Math.min(nextStart, window.startMinutes)
+  if (leadEnd > gapStart) {
+    items.push({
+      type: "spacer",
+      start_time: minutesToTime(gapStart),
+      end_time: minutesToTime(leadEnd),
+      duration_minutes: leadEnd - gapStart,
+    })
+  }
+
+  // In-window remainder → clickable gap, capped at the window end.
+  const clickStart = Math.max(gapStart, window.startMinutes)
+  const clickEnd = Math.min(nextStart, window.endMinutes)
+  if (clickEnd > clickStart) {
+    items.push({
+      type: "gap",
+      start_time: minutesToTime(clickStart),
+      end_time: minutesToTime(clickEnd),
+      duration_minutes: clickEnd - clickStart,
+    })
+  }
+
+  // Region at/after the window end → inert spacer (out-of-window geometry).
+  const trailStart = Math.max(gapStart, window.endMinutes)
+  if (nextStart > trailStart) {
+    items.push({
+      type: "spacer",
+      start_time: minutesToTime(trailStart),
+      end_time: minutesToTime(nextStart),
+      duration_minutes: nextStart - trailStart,
+    })
+  }
 }
 
 /**
@@ -189,76 +302,92 @@ export function buildBaseDisplayItems(
   activeRenderStart: number,
   activeRenderEnd: number,
   nowMinutes: number | null = null,
+  window = DEFAULT_SCHEDULE_WINDOW,
 ): ScheduleDisplayItem[] {
   const items: ScheduleDisplayItem[] = []
-  const visibleBlocks = filterVisibleBlocks(blocks)
+  const visibleBlocks = filterVisibleBlocks(blocks, window)
 
   if (visibleBlocks.length === 0) {
-    pushTrailingGap(items, DAY_START_MINUTES, activeRenderEnd, nowMinutes)
+    pushTrailingGap(items, window.startMinutes, activeRenderEnd, nowMinutes, window)
     return items
   }
 
-  const firstStart = Math.max(
-    timeToMinutes(visibleBlocks[0].start_time),
-    DAY_START_MINUTES,
-  )
-  if (firstStart > DAY_START_MINUTES) {
-    const compressed = activeRenderStart > DAY_START_MINUTES
-    items.push({
-      type: "gap",
-      start_time: DAY_START,
-      end_time: minutesToTime(firstStart),
-      duration_minutes: firstStart - DAY_START_MINUTES,
-      ...(compressed
-        ? {
-            render_minutes: Math.max(0, firstStart - activeRenderStart),
-            compact: true,
-          }
-        : {}),
-    })
+  // A leading GAP only exists when the first item that reaches the window
+  // starts after the window start AND no block sits before the window. An
+  // out-of-window early block (start < windowStart) renders at true geometry
+  // first, then the flow-layout emits an inert spacer up to the window (below).
+  const firstBlockStart = timeToMinutes(visibleBlocks[0].start_time)
+  const firstStart = Math.max(firstBlockStart, window.startMinutes)
+  if (firstBlockStart >= window.startMinutes && firstStart > window.startMinutes) {
+    // Cap the clickable leading gap at the window end — a late-only first block
+    // (e.g. 22:00 under an 08:00–20:00 window) must not offer an "add here"
+    // surface past the window end; the overflow becomes an inert spacer.
+    const gapEnd = Math.min(firstStart, window.endMinutes)
+    if (gapEnd > window.startMinutes) {
+      const compressed = activeRenderStart > window.startMinutes
+      items.push({
+        type: "gap",
+        start_time: window.start,
+        end_time: minutesToTime(gapEnd),
+        duration_minutes: gapEnd - window.startMinutes,
+        ...(compressed
+          ? {
+              render_minutes: Math.max(0, gapEnd - activeRenderStart),
+              compact: true,
+            }
+          : {}),
+      })
+    }
+    // Out-of-window remainder before a late-only first block → inert spacer.
+    if (firstStart > window.endMinutes) {
+      items.push({
+        type: "spacer",
+        start_time: window.end,
+        end_time: minutesToTime(firstStart),
+        duration_minutes: firstStart - window.endMinutes,
+      })
+    }
   }
 
   for (let i = 0; i < visibleBlocks.length; i++) {
     const block = visibleBlocks[i]
-    const clampedStart = Math.max(
-      timeToMinutes(block.start_time),
-      DAY_START_MINUTES,
-    )
-    const clampedEnd = Math.min(
-      timeToMinutes(block.end_time),
-      DAY_END_MINUTES,
-    )
+    const blockStart = timeToMinutes(block.start_time)
+    const blockEnd = timeToMinutes(block.end_time)
     items.push({
       type: "block",
       block,
-      start_time: minutesToTime(clampedStart),
-      end_time: minutesToTime(clampedEnd),
-      duration_minutes: clampedEnd - clampedStart,
+      start_time: minutesToTime(blockStart),
+      end_time: minutesToTime(blockEnd),
+      duration_minutes: blockEnd - blockStart,
     })
 
     if (i < visibleBlocks.length - 1) {
-      const gapStart = clampedEnd
-      const nextStart = Math.max(
-        timeToMinutes(visibleBlocks[i + 1].start_time),
-        DAY_START_MINUTES,
-      )
-      const gapMinutes = nextStart - gapStart
-      if (gapMinutes > 0) {
-        items.push({
-          type: "gap",
-          start_time: minutesToTime(gapStart),
-          end_time: minutesToTime(nextStart),
-          duration_minutes: gapMinutes,
-        })
-      }
+      const gapStart = blockEnd
+      const nextBlockStart = timeToMinutes(visibleBlocks[i + 1].start_time)
+      pushInterBlockGap(items, gapStart, nextBlockStart, window)
     }
   }
 
-  const lastEnd = Math.min(
-    timeToMinutes(visibleBlocks[visibleBlocks.length - 1].end_time),
-    DAY_END_MINUTES,
+  const lastEnd = timeToMinutes(visibleBlocks[visibleBlocks.length - 1].end_time)
+  // If the last block ends before the window start (an early-only out-of-window
+  // day, e.g. a lone 06:00–07:00 block under 08:00–20:00), the pre-window
+  // remainder is an inert spacer; the clickable trailing gap begins at the
+  // window start so no "add here" surface is offered outside the window.
+  if (lastEnd < window.startMinutes) {
+    items.push({
+      type: "spacer",
+      start_time: minutesToTime(lastEnd),
+      end_time: window.start,
+      duration_minutes: window.startMinutes - lastEnd,
+    })
+  }
+  pushTrailingGap(
+    items,
+    Math.max(lastEnd, window.startMinutes),
+    activeRenderEnd,
+    nowMinutes,
+    window,
   )
-  pushTrailingGap(items, lastEnd, activeRenderEnd, nowMinutes)
 
   return items
 }
@@ -285,7 +414,11 @@ export function spliceNowMarker(
     const start = timeToMinutes(item.start_time)
     const end = timeToMinutes(item.end_time)
 
-    if (inserted || nowMinutes < start || nowMinutes >= end) {
+    // A `spacer` is inert out-of-window geometry with no `block`; retagging it
+    // to `block-with-now` would make the template render nothing (it requires
+    // `item.block`), dropping the spacer height and the NowLine. Leave spacers
+    // untouched — the pre-window zone is outside the working day, so no marker.
+    if (inserted || nowMinutes < start || nowMinutes >= end || item.type === "spacer") {
       result.push(item)
       continue
     }

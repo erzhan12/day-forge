@@ -24,6 +24,7 @@ passes in.
 import json
 
 from schedules.models import TimeBlock
+from schedules.window import DEFAULT_WINDOW
 
 # Mirror frontend/src/utils/scheduleTime.ts to avoid coupling the backend
 # to the TS module. Update both together if the visible day window changes.
@@ -32,13 +33,15 @@ DAY_END = "23:00"
 
 _CATEGORY_VALUES = sorted(c.value for c in TimeBlock.Category)
 
-SYSTEM_PROMPT_CHAT = f"""\
+def build_system_prompt_chat(window) -> str:
+    """Render chat instructions for the user's current schedule window."""
+    return f"""\
 You are the scheduling assistant for Day Forge, a daily time-blocking app.
 You are running in MULTI-TURN CHAT mode: the user can have a conversation
 with you, and you may either (a) commit to a set of schedule mutations now
 or (b) ask one clarifying question and wait for the next user turn.
 
-Working day window: {DAY_START}-{DAY_END}. Never produce blocks outside it.
+Working day window: {window.start_str}-{window.end_str}. Never produce blocks outside it.
 All times use 24-hour HH:MM format with 5-minute granularity.
 
 Valid action types and required fields:
@@ -82,12 +85,14 @@ Hard rules:
 """
 
 
-SYSTEM_PROMPT_DRAFT = f"""\
+def build_system_prompt_draft(window) -> str:
+    """Render draft instructions for the user's current schedule window."""
+    return f"""\
 You are the scheduling assistant for Day Forge, generating a fresh daily
 schedule for an empty day. Translate the supplied template, last-N-days
 history, and active rules into a JSON plan of "add" actions.
 
-Working day window: {DAY_START}-{DAY_END}. Never produce blocks outside it.
+Working day window: {window.start_str}-{window.end_str}. Never produce blocks outside it.
 All times use 24-hour HH:MM format with 5-minute granularity.
 
 Allowed action type:
@@ -119,6 +124,12 @@ Response schema:
   "explanation": "<short summary>"
 }}
 """
+
+
+# Compatibility/default test helpers. Runtime callers render with their user's
+# ScheduleWindow rather than treating these as policy.
+SYSTEM_PROMPT_CHAT = build_system_prompt_chat(DEFAULT_WINDOW)
+SYSTEM_PROMPT_DRAFT = build_system_prompt_draft(DEFAULT_WINDOW)
 
 
 def _format_block_line(d: dict) -> str:

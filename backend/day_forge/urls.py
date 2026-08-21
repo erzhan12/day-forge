@@ -7,6 +7,7 @@ from django.urls import path
 from gcal_sync import views as gcal_views
 from habitica_sync import views as habitica_views
 from schedules import api as schedules_api
+from schedules import settings_api as schedule_settings_api
 from schedules import views as schedules_views
 from templates_mgr import api as templates_api
 from templates_mgr import views as templates_views
@@ -29,6 +30,11 @@ urlpatterns = [
     ),
     path("api/blocks/<int:pk>/", schedules_api.block_detail, name="block_detail"),
     path("api/blocks/reorder/", schedules_api.reorder_blocks, name="reorder_blocks"),
+    path(
+        "api/user/schedule-settings/",
+        schedule_settings_api.schedule_settings,
+        name="schedule_settings",
+    ),
     path(
         "api/schedules/<str:date>/blocks/restore/",
         schedules_api.restore_blocks,

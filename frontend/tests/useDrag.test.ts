@@ -860,12 +860,12 @@ describe("useDrag off-grid geometry and payload (feature 0026)", () => {
     vi.unstubAllGlobals()
   })
 
-  it("uses the display-clamped span for a partially-visible day-bound block", () => {
+  it("uses the true span for a partially-visible legacy block", () => {
     vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
       cb(0)
       return 0
     })
-    // Clamp-to-day from-event block: raw 00:00–06:30, displayed 06:00–06:30.
+    // Legacy from-event block remains true-geometry: raw 00:00–06:30.
     const blocks = [
       makeBlock({ id: 1, start_time: "00:00", end_time: "06:30", sort_order: 0 }),
     ]
@@ -874,22 +874,94 @@ describe("useDrag off-grid geometry and payload (feature 0026)", () => {
     Object.defineProperty(container, "scrollTop", { value: 0, writable: true })
 
     drag.startDrag({ pointerId: 1, clientY: 0 } as PointerEvent, blocks[0], container)
-    // Grab geometry anchors to the DISPLAYED position (06:00 = renderStart),
-    // not the raw midnight start (which would put the ghost at −720px).
+    // Grab geometry anchors to the raw block start, matching the true canvas.
     expect(drag.ghostTop.value).toBe(0)
-    // The label must agree with that ghost from the very first frame, BEFORE
-    // any pointermove: seeding from the raw times showed "00:00–06:30" over a
-    // 30-minute ghost until the first move corrected it.
-    expect(drag.previewStartTime.value).toBe("06:00")
+    expect(drag.previewStartTime.value).toBe("00:00")
     expect(drag.previewEndTime.value).toBe("06:30")
 
     fireMove(container, 60)
     const start = toMinutes(drag.previewStartTime.value)
     const end = toMinutes(drag.previewEndTime.value)
-    // Payload derives from the clamped 30-minute span, not the raw 390.
-    expect(end - start).toBe(30)
+    expect(end - start).toBe(390)
     expect(start % 5).toBe(0)
     expect(end).toBeLessThanOrEqual(DAY_END_MINUTES)
+    vi.unstubAllGlobals()
+  })
+
+  it("clamps the drop preview to the window start under a narrowed window (feature 0053)", () => {
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+      cb(0)
+      return 0
+    })
+    const W = {
+      start: "08:00",
+      end: "20:00",
+      startMinutes: 8 * 60,
+      endMinutes: 20 * 60,
+    }
+    // A legacy block sits below the window start, so renderStart is < 08:00 —
+    // the drop floor must still be the window start, not renderStart.
+    const blocks = [
+      makeBlock({ id: 1, start_time: "06:00", end_time: "07:00", sort_order: 0 }),
+    ]
+    const drag = useDrag(
+      "2026-04-16",
+      () => blocks,
+      vi.fn(async () => ({ ok: true as const })),
+      vi.fn(),
+      () => blocks.map((b) => ({ ...b })),
+      undefined,
+      () => computeRenderBounds(blocks, null, W),
+      undefined,
+      () => W,
+    )
+    const container = makeFakeContainer()
+    Object.defineProperty(container, "scrollTop", { value: 0, writable: true })
+
+    drag.startDrag({ pointerId: 1, clientY: 0 } as PointerEvent, blocks[0], container)
+    // Drag toward the very top of the canvas.
+    fireMove(container, 0)
+    const start = toMinutes(drag.previewStartTime.value)
+    // Never previews before the window start (08:00 = 480), even though a
+    // legacy 06:00 block pulls renderStart lower.
+    expect(start).toBeGreaterThanOrEqual(480)
+    vi.unstubAllGlobals()
+  })
+
+  it("keeps the drop preview at/after the window start for a block longer than the window (feature 0053)", () => {
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+      cb(0)
+      return 0
+    })
+    // Window 08:00–12:00 (240 min) with a 390-min legacy block: the day-end
+    // clamp (dayEnd − duration = 05:30) must NOT push the preview before the
+    // window start; the window floor is re-applied last.
+    const W = {
+      start: "08:00",
+      end: "12:00",
+      startMinutes: 8 * 60,
+      endMinutes: 12 * 60,
+    }
+    const blocks = [
+      makeBlock({ id: 1, start_time: "00:00", end_time: "06:30", sort_order: 0 }),
+    ]
+    const drag = useDrag(
+      "2026-04-16",
+      () => blocks,
+      vi.fn(async () => ({ ok: true as const })),
+      vi.fn(),
+      () => blocks.map((b) => ({ ...b })),
+      undefined,
+      () => computeRenderBounds(blocks, null, W),
+      undefined,
+      () => W,
+    )
+    const container = makeFakeContainer()
+    Object.defineProperty(container, "scrollTop", { value: 0, writable: true })
+
+    drag.startDrag({ pointerId: 1, clientY: 0 } as PointerEvent, blocks[0], container)
+    fireMove(container, 0)
+    expect(toMinutes(drag.previewStartTime.value)).toBeGreaterThanOrEqual(480)
     vi.unstubAllGlobals()
   })
 })

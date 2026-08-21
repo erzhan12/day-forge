@@ -3,11 +3,13 @@ import type { TimeBlock } from "../src/types"
 import {
   DAY_END_MINUTES,
   DAY_START_MINUTES,
+  DEFAULT_SCHEDULE_WINDOW,
   PX_PER_MINUTE,
   STUB_MINUTES,
   buildBaseDisplayItems,
   computeRenderBounds,
   computeTrailingAnchor,
+  filterVisibleBlocks,
   findCurrentBlock,
   formatDurationMinutes,
   formatRemainingMinutes,
@@ -15,6 +17,7 @@ import {
   remainingMinutesForBlock,
   spliceNowMarker,
 } from "../src/utils/scheduleTime"
+import type { ScheduleWindowBounds } from "../src/utils/scheduleTime"
 
 function block(overrides: Partial<TimeBlock> = {}): TimeBlock {
   return {
@@ -85,10 +88,7 @@ describe("computeRenderBounds", () => {
       block({ id: 1, start_time: "02:00", end_time: "05:00" }),
       block({ id: 2, start_time: "23:30", end_time: "23:59" }),
     ])
-    expect(bounds).toEqual({
-      renderStart: DAY_START_MINUTES,
-      renderEnd: DAY_END_MINUTES,
-    })
+    expect(bounds).toEqual({ renderStart: 120, renderEnd: 23 * 60 + 59 })
   })
 
   it("clamps partially outside blocks and sorts by start then sort_order", () => {
@@ -96,10 +96,7 @@ describe("computeRenderBounds", () => {
       block({ id: 2, start_time: "09:00", end_time: "22:30", sort_order: 10 }),
       block({ id: 1, start_time: "05:00", end_time: "07:00", sort_order: 0 }),
     ])
-    expect(bounds).toEqual({
-      renderStart: DAY_START_MINUTES,
-      renderEnd: DAY_END_MINUTES,
-    })
+    expect(bounds).toEqual({ renderStart: 300, renderEnd: DAY_END_MINUTES })
   })
 
   // Feature 0023: now-aware trailing anchor on today.
@@ -598,6 +595,155 @@ describe("scheduleTime current-block helpers", () => {
   })
 })
 
+// Feature 0053: the configurable day window. A NARROWED window (start 08:00,
+// end 20:00) must still render legacy blocks that sit fully outside it at their
+// TRUE geometry (never clamped), and the out-of-window region before the window
+// start becomes an inert `spacer`, not a clickable `gap`.
+describe("configurable day window (feature 0053)", () => {
+  // 08:00–20:00 narrowed window.
+  const NARROW: ScheduleWindowBounds = {
+    start: "08:00",
+    end: "20:00",
+    startMinutes: 8 * 60, // 480
+    endMinutes: 20 * 60, // 1200
+  }
+
+  describe("computeRenderBounds under a narrowed window", () => {
+    it("renders a legacy 06:00–07:00 block at its true geometry (no clamp to windowStart)", () => {
+      const bounds = computeRenderBounds(
+        [block({ start_time: "06:00", end_time: "07:00" })],
+        null,
+        NARROW,
+      )
+      // The block sits entirely before the 08:00 window start. renderStart must
+      // reach the block's real start (360), NOT clamp up to the window (480).
+      expect(bounds.renderStart).toBeLessThanOrEqual(6 * 60)
+      expect(bounds.renderStart).toBe(6 * 60)
+      // Positive-duration canvas — end strictly after start.
+      expect(bounds.renderEnd).toBeGreaterThan(bounds.renderStart)
+    })
+
+    it("expands the compact base to cover an out-of-window early block alongside an in-window one", () => {
+      const bounds = computeRenderBounds(
+        [
+          block({ id: 1, start_time: "06:00", end_time: "07:00" }),
+          block({ id: 2, start_time: "10:00", end_time: "12:00", sort_order: 10 }),
+        ],
+        null,
+        NARROW,
+      )
+      // Legacy early block still on-screen: canvas start is its true 06:00.
+      expect(bounds.renderStart).toBe(6 * 60)
+      expect(bounds.renderEnd).toBeGreaterThan(bounds.renderStart)
+    })
+  })
+
+  describe("buildBaseDisplayItems under a narrowed window", () => {
+    it("keeps a legacy out-of-window block's real start/end (not clamped) and emits a spacer, not a gap, before the window", () => {
+      const blocks = [
+        block({ id: 1, start_time: "06:00", end_time: "07:00" }),
+        block({ id: 2, start_time: "10:00", end_time: "12:00", sort_order: 10 }),
+      ]
+      const bounds = computeRenderBounds(blocks, null, NARROW)
+      const items = buildBaseDisplayItems(
+        blocks,
+        bounds.renderStart,
+        bounds.renderEnd,
+        null,
+        NARROW,
+      )
+
+      // The legacy block renders at its TRUE geometry — not clamped to 08:00.
+      const legacy = items.find((i) => i.type === "block" && i.block?.id === 1)!
+      expect(legacy.start_time).toBe("06:00")
+      expect(legacy.end_time).toBe("07:00")
+      expect(legacy.duration_minutes).toBe(60)
+
+      // The region [07:00, 08:00) between the out-of-window block and the
+      // window start is an inert spacer — geometry only, never clickable.
+      const spacers = items.filter((i) => i.type === "spacer")
+      expect(spacers).toHaveLength(1)
+      const spacer = spacers[0]
+      expect(spacer.start_time).toBe("07:00")
+      expect(spacer.end_time).toBe("08:00")
+      expect(spacer.duration_minutes).toBe(60)
+      expect(spacer.block).toBeUndefined()
+
+      // No clickable gap covers any part of the pre-window [07:00, 08:00)
+      // region. Zero-padded "HH:MM" → lexicographic == numeric order.
+      const preWindowGap = items.find(
+        (i) =>
+          (i.type === "gap" || i.type === "gap-with-now") &&
+          i.start_time < "08:00",
+      )
+      expect(preWindowGap).toBeUndefined()
+
+      // The in-window remainder before the second block IS a clickable gap.
+      const clickable = items.find(
+        (i) => i.type === "gap" && i.start_time === "08:00",
+      )
+      expect(clickable).toBeDefined()
+      expect(clickable!.end_time).toBe("10:00")
+    })
+  })
+
+  describe("explicit default window is behaviourally identical to no window", () => {
+    it("computeRenderBounds matches the no-window call for a fully in-window schedule", () => {
+      const blocks = [
+        block({ id: 1, start_time: "09:00", end_time: "12:00" }),
+        block({ id: 2, start_time: "13:00", end_time: "18:00", sort_order: 10 }),
+      ]
+      const implicit = computeRenderBounds(blocks)
+      const explicit = computeRenderBounds(blocks, null, DEFAULT_SCHEDULE_WINDOW)
+      expect(explicit).toEqual(implicit)
+      // And still carries the expected compact stubs.
+      expect(explicit).toEqual({
+        renderStart: 9 * 60 - STUB_MINUTES,
+        renderEnd: 18 * 60 + STUB_MINUTES,
+      })
+    })
+
+    it("buildBaseDisplayItems matches the no-window call for a fully in-window schedule", () => {
+      const blocks = [block({ start_time: "09:00", end_time: "18:00" })]
+      const implicit = buildBaseDisplayItems(
+        blocks,
+        9 * 60 - STUB_MINUTES,
+        DAY_END_MINUTES,
+      )
+      const explicit = buildBaseDisplayItems(
+        blocks,
+        9 * 60 - STUB_MINUTES,
+        DAY_END_MINUTES,
+        null,
+        DEFAULT_SCHEDULE_WINDOW,
+      )
+      expect(explicit).toEqual(implicit)
+      // No spacer for a fully in-window day.
+      expect(explicit.some((i) => i.type === "spacer")).toBe(false)
+    })
+  })
+
+  describe("filterVisibleBlocks does not mutate the caller's array (props-mutation guard)", () => {
+    it("returns a sorted copy while leaving the input order untouched", () => {
+      const input = [
+        block({ id: 1, start_time: "12:00", end_time: "13:00", sort_order: 0 }),
+        block({ id: 2, start_time: "09:00", end_time: "10:00", sort_order: 0 }),
+        block({ id: 3, start_time: "15:00", end_time: "16:00", sort_order: 0 }),
+      ]
+      const snapshotIds = input.map((b) => b.id)
+      const result = filterVisibleBlocks(input)
+
+      // A fresh array — never the same reference (Inertia prop must stay put).
+      expect(result).not.toBe(input)
+      // Result is sorted by start time.
+      expect(result.map((b) => b.id)).toEqual([2, 1, 3])
+      // The caller's array order is UNCHANGED (no in-place sort).
+      expect(input.map((b) => b.id)).toEqual(snapshotIds)
+      expect(input.map((b) => b.id)).toEqual([1, 2, 3])
+    })
+  })
+})
+
 describe("scheduleTime duration formatters", () => {
   it.each([
     [-5, "0m"],
@@ -618,5 +764,121 @@ describe("scheduleTime duration formatters", () => {
     [90, "1h 30m left"],
   ])("formats %i remaining minutes as %s", (minutes, expected) => {
     expect(formatRemainingMinutes(minutes)).toBe(expected)
+  })
+})
+
+// Regression: narrowed-window edge cases surfaced by external code review iter2.
+describe("configurable day window edge cases (feature 0053)", () => {
+  const W = {
+    start: "08:00",
+    end: "20:00",
+    startMinutes: 8 * 60, // 480
+    endMinutes: 20 * 60, // 1200
+  }
+
+  it("keeps the working window visible (not 0px) when every block is out-of-window", () => {
+    // A 06:00–07:00-only day narrowed to 08:00–20:00: the canvas must still
+    // span the window so the user can see/add in-window slots, while the
+    // stranded block stays on-screen via a leading spacer.
+    const bounds = computeRenderBounds(
+      [block({ start_time: "06:00", end_time: "07:00" })],
+      null,
+      W,
+    )
+    expect(bounds.renderStart).toBeLessThanOrEqual(6 * 60) // includes the 06:00 block
+    expect(bounds.renderEnd).toBeGreaterThanOrEqual(W.endMinutes) // includes the window
+  })
+
+  it("does not retag a spacer as block-with-now when now falls inside it", () => {
+    const blocks = [
+      block({ id: 1, start_time: "06:00", end_time: "07:00" }),
+      block({ id: 2, start_time: "10:00", end_time: "12:00", sort_order: 10 }),
+    ]
+    const bounds = computeRenderBounds(blocks, null, W)
+    const base = buildBaseDisplayItems(blocks, bounds.renderStart, bounds.renderEnd, null, W)
+    const spacer = base.find((i) => i.type === "spacer")
+    expect(spacer).toBeDefined() // [07:00, 08:00)
+
+    // now = 07:30 falls inside the inert pre-window spacer.
+    const withNow = spliceNowMarker(base, 7 * 60 + 30)
+    const preWindow = withNow.find((i) => i.start_time === "07:00")!
+    expect(preWindow.type).toBe("spacer") // NOT block-with-now (would render nothing)
+    expect(withNow.some((i) => i.type === "block-with-now")).toBe(false)
+  })
+})
+
+// Regression (external review iter2 residual C): the out-of-window region AFTER
+// the window end, before a late legacy block, must be an inert spacer too.
+describe("trailing out-of-window spacer (feature 0053)", () => {
+  const W = { start: "08:00", end: "20:00", startMinutes: 8 * 60, endMinutes: 20 * 60 }
+
+  it("emits a spacer (not a clickable gap) between an in-window block and a late legacy block", () => {
+    const blocks = [
+      block({ id: 1, start_time: "10:00", end_time: "11:00" }),
+      block({ id: 2, start_time: "22:00", end_time: "23:00", sort_order: 10 }),
+    ]
+    const bounds = computeRenderBounds(blocks, null, W)
+    const items = buildBaseDisplayItems(blocks, bounds.renderStart, bounds.renderEnd, null, W)
+
+    // [20:00, 22:00) after the window end is inert geometry.
+    const trailingSpacer = items.find((i) => i.type === "spacer" && i.start_time === "20:00")
+    expect(trailingSpacer).toBeDefined()
+    expect(trailingSpacer!.end_time).toBe("22:00")
+    // No clickable gap at/after the window end.
+    const clickableAfterWindow = items.find((i) => i.type === "gap" && i.start_time >= "20:00")
+    expect(clickableAfterWindow).toBeUndefined()
+    // The in-window remainder [11:00, 20:00) IS clickable.
+    const inWindowGap = items.find((i) => i.type === "gap" && i.start_time === "11:00")
+    expect(inWindowGap).toBeDefined()
+    expect(inWindowGap!.end_time).toBe("20:00")
+  })
+})
+
+// Regression (external review iter3 C-corner): the LEADING gap before the first
+// block must also be capped at window.end for a late-only day.
+describe("late-only day leading gap cap (feature 0053)", () => {
+  const W = { start: "08:00", end: "20:00", startMinutes: 8 * 60, endMinutes: 20 * 60 }
+
+  it("caps the leading clickable gap at window.end and spacers the overflow before a late-only block", () => {
+    const blocks = [block({ id: 1, start_time: "22:00", end_time: "23:00" })]
+    const bounds = computeRenderBounds(blocks, null, W)
+    const items = buildBaseDisplayItems(blocks, bounds.renderStart, bounds.renderEnd, null, W)
+
+    // Leading clickable gap [08:00, 20:00) — capped at the window end.
+    const leadGap = items.find((i) => i.type === "gap" && i.start_time === "08:00")
+    expect(leadGap).toBeDefined()
+    expect(leadGap!.end_time).toBe("20:00")
+    // No clickable gap extends past the window end.
+    const clickablePastWindow = items.find((i) => i.type === "gap" && i.end_time > "20:00")
+    expect(clickablePastWindow).toBeUndefined()
+    // [20:00, 22:00) before the late block is an inert spacer.
+    const spacer = items.find((i) => i.type === "spacer" && i.start_time === "20:00")
+    expect(spacer).toBeDefined()
+    expect(spacer!.end_time).toBe("22:00")
+  })
+})
+
+// Regression (external review iter4 #2): an early-only out-of-window block's
+// pre-window trailing remainder must be an inert spacer, not a clickable gap.
+describe("early-only day trailing spacer (feature 0053)", () => {
+  const W = { start: "08:00", end: "20:00", startMinutes: 8 * 60, endMinutes: 20 * 60 }
+
+  it("spacers the pre-window remainder after a lone early block; clickable gap starts at window.start", () => {
+    const blocks = [block({ id: 1, start_time: "06:00", end_time: "07:00" })]
+    const bounds = computeRenderBounds(blocks, null, W)
+    const items = buildBaseDisplayItems(blocks, bounds.renderStart, bounds.renderEnd, null, W)
+
+    // [07:00, 08:00) after the lone early block is inert geometry.
+    const spacer = items.find((i) => i.type === "spacer" && i.start_time === "07:00")
+    expect(spacer).toBeDefined()
+    expect(spacer!.end_time).toBe("08:00")
+    // No clickable gap before the window start.
+    const clickableBeforeWindow = items.find(
+      (i) => i.type === "gap" && i.start_time < "08:00",
+    )
+    expect(clickableBeforeWindow).toBeUndefined()
+    // The clickable trailing gap begins at the window start.
+    const trailingGap = items.find((i) => i.type === "gap" && i.start_time === "08:00")
+    expect(trailingGap).toBeDefined()
   })
 })

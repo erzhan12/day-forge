@@ -24,6 +24,9 @@ export interface ApiResult {
   status?: number
   data?: Record<string, unknown>
   errors?: Record<string, string | string[]>
+  skipped?: boolean
+  code?: string
+  window?: { start: string; end: string }
 }
 
 /**
@@ -97,5 +100,12 @@ export async function requestJson(
   const errors = (data?.errors as ApiResult["errors"]) ?? {
     detail: `Server error (${resp.status})`,
   }
-  return { ok: false, status: resp.status, errors }
+  return {
+    ok: false,
+    status: resp.status,
+    errors,
+    skipped: data?.skipped === true,
+    code: typeof data?.code === "string" ? data.code : undefined,
+    window: data?.window as ApiResult["window"],
+  }
 }

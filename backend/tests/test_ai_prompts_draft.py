@@ -15,15 +15,41 @@ from ai.prompts import (
     _runtime_block_to_dict,
     _template_entry_to_dict,
     build_draft_user_message,
+    build_system_prompt_chat,
+    build_system_prompt_draft,
 )
 from analytics.models import DailyReview
 from schedules.models import Schedule, TimeBlock
+from schedules.window import DEFAULT_WINDOW, ScheduleWindow
 from templates_mgr.models import Rule, Template
 
 
 def test_system_prompt_only_allows_add():
     assert "add" in SYSTEM_PROMPT_DRAFT
     assert "No move/remove/resize" in SYSTEM_PROMPT_DRAFT
+
+
+def test_build_system_prompt_draft_embeds_custom_window_bounds():
+    """The rendered draft system prompt must reflect the user's actual window,
+    not the hardcoded 06:00-23:00 default (feature 0053)."""
+    window = ScheduleWindow(datetime.time(8, 0), datetime.time(21, 0))
+    prompt = build_system_prompt_draft(window)
+    assert "08:00-21:00" in prompt
+    # The default bounds must NOT leak into a narrowed-window prompt.
+    assert "06:00-23:00" not in prompt
+
+
+def test_build_system_prompt_chat_embeds_custom_window_bounds():
+    window = ScheduleWindow(datetime.time(8, 0), datetime.time(21, 0))
+    prompt = build_system_prompt_chat(window)
+    assert "08:00-21:00" in prompt
+    assert "06:00-23:00" not in prompt
+
+
+def test_build_system_prompt_draft_default_window_bounds():
+    """The default window still renders the historical 06:00-23:00 bounds."""
+    prompt = build_system_prompt_draft(DEFAULT_WINDOW)
+    assert "06:00-23:00" in prompt
 
 
 @pytest.mark.django_db

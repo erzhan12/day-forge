@@ -109,6 +109,11 @@ export interface UiPreferences {
   theme: ThemeId
 }
 
+export interface ScheduleWindow {
+  start: string
+  end: string
+}
+
 // Augment Inertia's shared PageProps so every `usePage()` call site can
 // reach `page.props.ui_preferences` without an inline generic.
 //
@@ -118,5 +123,6 @@ export interface UiPreferences {
 declare module "@inertiajs/core" {
   interface PageProps {
     ui_preferences?: UiPreferences
+    schedule_window?: ScheduleWindow
   }
 }

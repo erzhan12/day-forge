@@ -3,6 +3,7 @@ from calendar_sync.travel_rules import serialize_travel_rule
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.csrf import ensure_csrf_cookie
 from inertia import render as inertia_render
+from schedules.window import get_schedule_window
 
 from templates_mgr.models import Rule, Template
 from templates_mgr.preferences import get_user_preferences
@@ -32,6 +33,7 @@ def settings_view(request):
     # Resolve preferences exactly once per render so the SSR data-theme
     # and the Inertia ``ui_preferences`` prop always agree.
     prefs = get_user_preferences(request.user)
+    window = get_schedule_window(request.user)
 
     return inertia_render(
         request,
@@ -60,6 +62,7 @@ def settings_view(request):
             # field change.
             "travel_rules": [serialize_travel_rule(r) for r in travel_rules],
             "ui_preferences": {"theme": prefs.theme},
+            "schedule_window": {"start": window.start_str, "end": window.end_str},
         },
         template_data={"initial_theme": prefs.theme},
     )

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from "vue"
 import { Link } from "@inertiajs/vue3"
-import type { DailyReview, Schedule, StreakInfo, TimeBlock } from "../types"
+import type { DailyReview, Schedule, StreakInfo, TimeBlock, ScheduleWindow } from "../types"
 import CompletionBar from "../components/CompletionBar.vue"
 import CategoryBreakdown from "../components/CategoryBreakdown.vue"
 import StreakCounter from "../components/StreakCounter.vue"
@@ -13,13 +13,16 @@ import "../app.css"
 
 useThemeFromProps()
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   review: DailyReview
   streak: StreakInfo
   schedule: Schedule
   blocks: TimeBlock[]
   date: string
-}>()
+  schedule_window?: ScheduleWindow
+}>(), {
+  schedule_window: () => ({ start: "06:00", end: "23:00" }),
+})
 
 const { isMarkingReviewed, lastError, markReviewed, saveNotes } = useAnalytics()
 
@@ -120,6 +123,8 @@ async function onMarkReviewed() {
       <CategoryBreakdown
         :planned="review.planned_minutes_by_category"
         :completed="review.completed_minutes_by_category"
+        :window-start="schedule_window.start"
+        :window-end="schedule_window.end"
       />
       <SkippedTasks :blocks="blocks" :date="date" />
       <section class="notes-card">

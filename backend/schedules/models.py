@@ -3,6 +3,7 @@ import datetime
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import F, Q
 
 from schedules.validators import validate_five_minute_granularity
 
@@ -92,6 +93,58 @@ class Schedule(models.Model):
             self.status = self.Status.REVIEWED
             return True
         return False
+
+
+class UserScheduleSettings(models.Model):
+    """Per-user scheduling policy, intentionally separate from UI preferences.
+
+    ``QuerySet.update`` and bulk operations bypass ``save``/``full_clean``;
+    they must not be used for this model because they can bypass the
+    five-minute-grid invariant. The database constraint still protects order.
+    """
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="schedule_settings"
+    )
+    day_start = models.TimeField(default=datetime.time(6, 0))
+    day_end = models.TimeField(default=datetime.time(23, 0))
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(day_start__lt=F("day_end")),
+                name="schedule_window_start_lt_end",
+            )
+        ]
+
+    def clean(self):
+        super().clean()
+        # Imported inside clean() to avoid a circular import: schedules.window
+        # imports UserScheduleSettings at module load. The grid/seconds rule
+        # lives in exactly one place (check_time_on_grid) so this model surface
+        # and the string-based validate_window can never drift.
+        from schedules.window import check_time_on_grid
+
+        errors = {}
+        for field in ("day_start", "day_end"):
+            value = getattr(self, field)
+            if value:
+                grid_error = check_time_on_grid(value)
+                if grid_error:
+                    errors[field] = grid_error
+        if self.day_start and self.day_end and self.day_start >= self.day_end:
+            errors["day_end"] = "Must be later than day_start; overnight windows are not supported."
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.user} schedule window ({self.day_start}-{self.day_end})"
 
 
 class TimeBlock(models.Model):

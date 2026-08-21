@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from "vue"
 import { Link, router } from "@inertiajs/vue3"
-import type { Rule, Template, TravelRule } from "../types"
+import type { Rule, Template, TravelRule, ScheduleWindow } from "../types"
 import TemplateEditor from "../components/TemplateEditor.vue"
 import RulesList from "../components/RulesList.vue"
 import TravelRulesList from "../components/TravelRulesList.vue"
@@ -9,6 +9,7 @@ import DesignSelector from "../components/DesignSelector.vue"
 import SoundNotificationToggle from "../components/SoundNotificationToggle.vue"
 import DesktopNotificationToggle from "../components/DesktopNotificationToggle.vue"
 import ExternalCalendarPlacementToggle from "../components/ExternalCalendarPlacementToggle.vue"
+import DayWindowEditor from "../components/DayWindowEditor.vue"
 import { todayString } from "../utils/date"
 // Keeps `<html data-theme>` in sync with ui_preferences across reloads.
 // Required convention for every authenticated page — see RULES.md.
@@ -25,6 +26,7 @@ const props = defineProps<{
   templates: Template[]
   rules: Rule[]
   travel_rules: TravelRule[]
+  schedule_window: ScheduleWindow
 }>()
 
 const localTemplates = ref<Template[]>(props.templates.map((t) => ({ ...t })))
@@ -296,6 +298,10 @@ async function handleHabiticaDisconnect() {
 
     <section class="section">
       <DesktopNotificationToggle />
+    </section>
+
+    <section class="section">
+      <DayWindowEditor :window="schedule_window" />
     </section>
 
     <section class="section">

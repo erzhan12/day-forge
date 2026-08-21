@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.db.models import Count
 
-from schedules.models import Schedule, TimeBlock
+from schedules.models import Schedule, TimeBlock, UserScheduleSettings
 
 
 class TimeBlockInline(admin.TabularInline):
@@ -29,3 +29,9 @@ class TimeBlockAdmin(admin.ModelAdmin):
     list_display = ("schedule", "title", "start_time", "end_time", "category", "is_completed")
     list_filter = ("category", "is_completed")
     list_select_related = ("schedule",)
+
+
+@admin.register(UserScheduleSettings)
+class UserScheduleSettingsAdmin(admin.ModelAdmin):
+    list_display = ("user", "day_start", "day_end", "updated_at")
+    list_select_related = ("user",)

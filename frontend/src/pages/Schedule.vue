@@ -33,11 +33,10 @@ import {
   writeExternalTasksSidebarOpen,
 } from "../utils/externalTasksSidebarStorage"
 import {
-  DAY_START, DAY_END, DAY_START_MINUTES, DAY_END_MINUTES,
   PX_PER_MINUTE, timeToMinutes, findCurrentBlock,
   remainingMinutesForBlock, computeRenderBounds, buildBaseDisplayItems,
   spliceNowMarker, nowOffsetPercent as computeNowOffsetPercent,
-  type ScheduleDisplayItem,
+  type ScheduleDisplayItem, type ScheduleWindowBounds,
 } from "../utils/scheduleTime"
 import { useSchedule } from "../composables/useSchedule"
 import { useUndo } from "../composables/useUndo"
@@ -75,6 +74,7 @@ const props = withDefaults(
     has_template_for_type?: boolean
     slot_type?: "weekday" | "weekend"
     external_tasks_poll_interval?: number
+    schedule_window?: { start: string; end: string }
   }>(),
   {
     auto_draft_pending: false,
@@ -84,12 +84,19 @@ const props = withDefaults(
     // always sends the prop, so this fallback is near-unreachable — but a
     // divergent value here misleads tests and static analysis.
     external_tasks_poll_interval: 60,
+    schedule_window: () => ({ start: "06:00", end: "23:00" }),
   },
 )
 
 const prefillStart = ref<string | undefined>()
 const prefillEnd = ref<string | undefined>()
 const scheduleBodyRef = ref<HTMLElement | null>(null)
+const scheduleWindow = computed<ScheduleWindowBounds>(() => ({
+  start: props.schedule_window.start,
+  end: props.schedule_window.end,
+  startMinutes: timeToMinutes(props.schedule_window.start),
+  endMinutes: timeToMinutes(props.schedule_window.end),
+}))
 
 // Initialize composables
 const { reorderBlocks, updateBlock } = useSchedule(props.date)
@@ -130,7 +137,7 @@ const todayNowMinutes = computed(() =>
 // bounds formula — the useDrag getter below reads this computed so the
 // drag-start frozen snapshot can never diverge from the live bounds.
 const renderBounds = computed(() =>
-  computeRenderBounds(props.blocks, todayNowMinutes.value),
+  computeRenderBounds(props.blocks, todayNowMinutes.value, scheduleWindow.value),
 )
 
 const {
@@ -142,6 +149,7 @@ const {
   () => scheduleDisabled.value,
   () => renderBounds.value,
   () => todayNowMinutes.value,
+  () => scheduleWindow.value,
 )
 
 // Provide to child components
@@ -675,6 +683,7 @@ const displayList = computed<ScheduleDisplayItem[]>(() => {
     activeRenderStart,
     activeRenderEnd,
     frozenBounds ? frozenNowMinutes.value : todayNowMinutes.value,
+    scheduleWindow.value,
   )
 
   return spliceNowMarker(baseItems, nowMinutes.value, nowDate.value)
@@ -832,6 +841,7 @@ defineExpose({
             :end-time="item.end_time"
             :duration-minutes="item.duration_minutes"
             :compact="item.compact"
+            :window-start="schedule_window.start"
             :disabled="scheduleDisabled"
             @add-here="handleAddHere"
           />
@@ -864,10 +874,19 @@ defineExpose({
             :end-time="item.end_time"
             :duration-minutes="item.duration_minutes"
             :compact="item.compact"
+            :window-start="schedule_window.start"
             :disabled="scheduleDisabled"
             @add-here="handleAddHere"
           />
         </div>
+
+        <!-- Inert spacer: out-of-window flow geometry only, not clickable. -->
+        <div
+          v-else-if="item.type === 'spacer'"
+          class="schedule-slot schedule-spacer"
+          :style="{ height: itemHeight(item) }"
+          aria-hidden="true"
+        />
       </template>
     </div>
 
@@ -923,6 +942,7 @@ defineExpose({
       :matched-rule="addDialogRule"
       :date="date"
       :rules-unavailable="travelRulesError"
+      :window="scheduleWindow"
       @close="closeAddDialog"
     />
     <ChatSidebar

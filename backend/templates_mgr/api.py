@@ -12,7 +12,6 @@ import datetime
 import json
 import logging
 
-from ai.prompts import DAY_END, DAY_START
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.db import IntegrityError, transaction
@@ -29,6 +28,7 @@ from schedules.http import (
     validate_five_minute_or_error,
     validate_time_range,
 )
+from schedules.window import DEFAULT_WINDOW, ScheduleWindow, get_schedule_window
 
 from templates_mgr.models import Rule, Template, UserPreferences
 from templates_mgr.preferences import get_user_preferences
@@ -46,10 +46,6 @@ MAX_RULES_PER_USER = 100
 # exists purely to fail fast at the API boundary.
 MIN_PRIORITY = -1_000_000
 MAX_PRIORITY = 1_000_000
-
-_DAY_START_T = datetime.time.fromisoformat(DAY_START)
-_DAY_END_T = datetime.time.fromisoformat(DAY_END)
-
 
 def _err(field: str, message: str, status: int = 400) -> JsonResponse:
     return JsonResponse({"errors": {field: message}}, status=status)
@@ -73,7 +69,9 @@ def _rule_to_dict(r: Rule) -> dict:
     }
 
 
-def validate_template_blocks(blocks) -> list[str]:
+def validate_template_blocks(
+    blocks, window: ScheduleWindow = DEFAULT_WINDOW
+) -> list[str]:
     """Validate the ``blocks`` JSON array on a Template.
 
     Returns a list of error strings. Empty list means OK.
@@ -119,9 +117,9 @@ def validate_template_blocks(blocks) -> list[str]:
             continue
         if start.minute % 5 != 0 or end.minute % 5 != 0:
             errors.append(f"block[{i}]: times must align to 5-minute granularity")
-        if start < _DAY_START_T or end > _DAY_END_T:
+        if start < window.day_start or end > window.day_end:
             errors.append(
-                f"block[{i}]: times must fall within {DAY_START}-{DAY_END}"
+                f"block[{i}]: times must fall within {window.start_str}-{window.end_str}"
             )
         if start >= end:
             errors.append(f"block[{i}]: start_time must be before end_time")
@@ -141,7 +139,7 @@ def validate_template_blocks(blocks) -> list[str]:
     return errors
 
 
-def _parse_template_payload(data) -> tuple[dict, JsonResponse | None]:
+def _parse_template_payload(data, window: ScheduleWindow) -> tuple[dict, JsonResponse | None]:
     """Validate the create/update body. Returns ``(cleaned, None)`` on
     success, or ``({}, JsonResponse)`` with a 400 on failure."""
     if not isinstance(data, dict):
@@ -160,7 +158,7 @@ def _parse_template_payload(data) -> tuple[dict, JsonResponse | None]:
         return {}, _err("type", "Type must be 'weekday' or 'weekend'.")
 
     blocks = data.get("blocks", [])
-    block_errors = validate_template_blocks(blocks)
+    block_errors = validate_template_blocks(blocks, window)
     if block_errors:
         return {}, JsonResponse(
             {"errors": {"blocks": block_errors}}, status=400
@@ -259,7 +257,7 @@ def templates_collection(request):
     except json.JSONDecodeError:
         return _err("body", "Invalid JSON.")
 
-    cleaned, err = _parse_template_payload(data)
+    cleaned, err = _parse_template_payload(data, get_schedule_window(request.user))
     if err is not None:
         return err
 
@@ -303,7 +301,7 @@ def template_detail(request, pk):
     except json.JSONDecodeError:
         return _err("body", "Invalid JSON.")
 
-    cleaned, err = _parse_template_payload(data)
+    cleaned, err = _parse_template_payload(data, get_schedule_window(request.user))
     if err is not None:
         return err
 

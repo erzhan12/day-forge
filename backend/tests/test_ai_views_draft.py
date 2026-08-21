@@ -16,7 +16,7 @@ from ai.service import (
 )
 from django.contrib.auth.models import User
 from django.core.cache import cache
-from schedules.models import Schedule, TimeBlock
+from schedules.models import Schedule, TimeBlock, UserScheduleSettings
 from templates_mgr.models import Rule, Template
 
 URL = "/api/ai/schedules/2026-05-04/generate-draft/"
@@ -24,6 +24,19 @@ URL = "/api/ai/schedules/2026-05-04/generate-draft/"
 
 def _post(client, url=URL):
     return client.post(url, "", content_type="application/json")
+
+
+def _set_window(user, day_start, day_end):
+    """Seed the per-user schedule window (feature 0053).
+
+    ``_apply_draft_sync`` resolves the window under its ``select_for_update``
+    lock via ``get_schedule_window`` → ``UserScheduleSettings`` and threads it
+    into ``_apply_add`` → ``_check_day_window``. Seeding a row is how a
+    non-default window reaches the draft guard in these integration tests.
+    """
+    UserScheduleSettings.objects.update_or_create(
+        user=user, defaults={"day_start": day_start, "day_end": day_end}
+    )
 
 
 def _patch_run(monkeypatch, behaviour):
@@ -373,3 +386,69 @@ class TestActiveRulesWiring:
         resp = _post(auth_client)
         assert resp.status_code == 200
         assert captured["rules_texts"] == ["HIGH rule", "LOW rule"]
+
+
+@pytest.mark.django_db
+class TestDraftDayWindow:
+    """Feature 0053: the draft apply path threads the per-user window (resolved
+    under the apply lock in ``_apply_draft_sync``) into ``_apply_add`` →
+    ``_check_day_window``. The guard REJECTS out-of-window draft adds and names
+    the user's bound, not the stale default 23:00.
+    """
+
+    def _draft_add(self, start, end):
+        return AIDraftResult(
+            raw_response_text='{"actions":[...],"explanation":"ok"}',
+            parsed_actions=[
+                {
+                    "type": "add",
+                    "title": "Draft block",
+                    "start_time": start,
+                    "end_time": end,
+                    "category": "work",
+                }
+            ],
+            explanation="Generated draft",
+        )
+
+    def test_draft_add_rejected_under_narrowed_window_names_narrowed_bound(
+        self, auth_client, user, template, monkeypatch
+    ):
+        # 22:00–22:30 is inside the default 06:00–23:00 but outside a narrowed
+        # 08:00–21:00 → rejected with 21:00 in the detail (not 23:00), and no
+        # block persisted.
+        _set_window(user, datetime.time(8, 0), datetime.time(21, 0))
+        _patch_run(monkeypatch, self._draft_add("22:00", "22:30"))
+        resp = _post(auth_client)
+        assert resp.status_code == 400
+        detail = resp.json()["errors"]["detail"]
+        assert "21:00" in detail
+        assert "23:00" not in detail
+        schedule = Schedule.objects.get(user=user, date="2026-05-04")
+        assert TimeBlock.objects.filter(schedule=schedule).count() == 0
+
+    def test_draft_add_rejected_under_default_window(
+        self, auth_client, user, template, monkeypatch
+    ):
+        # Same 23:00–23:30 add is rejected under the DEFAULT window — proving the
+        # widened-window acceptance below is genuinely window-driven.
+        _set_window(user, datetime.time(6, 0), datetime.time(23, 0))
+        _patch_run(monkeypatch, self._draft_add("23:00", "23:30"))
+        resp = _post(auth_client)
+        assert resp.status_code == 400
+        assert "23:00" in resp.json()["errors"]["detail"]
+
+    def test_draft_add_accepted_under_widened_window(
+        self, auth_client, user, template, monkeypatch
+    ):
+        # A draft add ending 23:30 is accepted under a widened 06:00–23:55
+        # window (23:55, not 23:59 — 5-minute-valid).
+        _set_window(user, datetime.time(6, 0), datetime.time(23, 55))
+        _patch_run(monkeypatch, self._draft_add("23:00", "23:30"))
+        resp = _post(auth_client)
+        assert resp.status_code == 200, resp.content
+        schedule = Schedule.objects.get(user=user, date="2026-05-04")
+        blocks = list(TimeBlock.objects.filter(schedule=schedule))
+        assert len(blocks) == 1
+        assert blocks[0].start_time.strftime("%H:%M") == "23:00"
+        assert blocks[0].end_time.strftime("%H:%M") == "23:30"

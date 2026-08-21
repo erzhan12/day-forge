@@ -24,6 +24,7 @@ from schedules.http import (
 )
 from schedules.models import Schedule, TimeBlock
 from schedules.validators import validate_five_minute_granularity
+from schedules.window import DEFAULT_WINDOW, ScheduleWindow, get_schedule_window
 from templates_mgr.models import Rule, Template
 
 from ai.models import AIInteraction
@@ -38,7 +39,6 @@ from ai.mutation_planner import (
 from ai.mutation_planner import (
     compute_move_resize_times as _compute_move_resize_times,
 )
-from ai.prompts import DAY_END, DAY_START
 from ai.service import (
     AIChatResult,
     AIDraftResult,
@@ -51,9 +51,6 @@ from ai.service import (
     run_chat,
     run_draft,
 )
-
-_DAY_START_T = datetime.time.fromisoformat(DAY_START)
-_DAY_END_T = datetime.time.fromisoformat(DAY_END)
 
 logger = logging.getLogger(__name__)
 
@@ -249,6 +246,7 @@ def _check_day_window(
     action_index: int,
     start: datetime.time | None = None,
     end: datetime.time | None = None,
+    window: ScheduleWindow = DEFAULT_WINDOW,
 ) -> JsonResponse | None:
     """Reject times outside the ``[DAY_START, DAY_END]`` working-day window.
 
@@ -262,13 +260,13 @@ def _check_day_window(
     from-event blocks (feature 0026, e.g. 00:00–00:30) legitimately sit
     outside the window.
     """
-    if start is not None and start < _DAY_START_T:
+    if start is not None and not window.day_start <= start <= window.day_end:
         return _action_error(
-            action_index, f"start_time must be >= {DAY_START}"
+            action_index, f"start_time must fall within {window.start_str}-{window.end_str}"
         )
-    if end is not None and end > _DAY_END_T:
+    if end is not None and not window.day_start <= end <= window.day_end:
         return _action_error(
-            action_index, f"end_time must be <= {DAY_END}"
+            action_index, f"end_time must fall within {window.start_str}-{window.end_str}"
         )
     return None
 
@@ -307,6 +305,7 @@ def _apply_add(
     blocks_by_id: dict[int, TimeBlock],
     action: dict[str, Any],
     action_index: int,
+    window: ScheduleWindow = DEFAULT_WINDOW,
 ) -> JsonResponse | None:
     title = action["title"].strip()
     # ``category`` is required by ``schemas.validate_action_shape``; the
@@ -318,7 +317,7 @@ def _apply_add(
     start = parse_time(action["start_time"])
     end = parse_time(action["end_time"])
 
-    err = _check_day_window(action_index, start, end)
+    err = _check_day_window(action_index, start, end, window)
     if err is not None:
         return err
     err = _check_granularity(action_index, start, end)
@@ -583,11 +582,12 @@ def _apply_actions_sync(
                 )
             )
 
+        window = get_schedule_window(locked_schedule.user)
         plan_result = plan_mutations(
             locked_context.schedule,
             result.parsed_actions,
-            day_start=DAY_START,
-            day_end=DAY_END,
+            day_start=window.start_str,
+            day_end=window.end_str,
         )
         if isinstance(plan_result, PlanError):
             raise _Rollback(
@@ -604,7 +604,7 @@ def _apply_draft_sync(schedule: Schedule, result: AIDraftResult) -> None:
         # Lock the SCHEDULE row, not the empty ``TimeBlock`` queryset —
         # see the comment in the original ai_generate_draft for the
         # full rationale.
-        Schedule.objects.select_for_update().get(pk=schedule.pk)
+        locked_schedule = Schedule.objects.select_for_update().get(pk=schedule.pk)
         locked_blocks = list(TimeBlock.objects.filter(schedule=schedule))
         if locked_blocks:
             raise _Rollback(
@@ -621,8 +621,16 @@ def _apply_draft_sync(schedule: Schedule, result: AIDraftResult) -> None:
                 )
             )
         blocks_by_id: dict = {}
+        # Resolve the window once under the lock — not per action (N+1).
+        window = get_schedule_window(locked_schedule.user)
         for idx, action in enumerate(result.parsed_actions):
-            err = _apply_add(schedule, blocks_by_id, action, idx)
+            err = _apply_add(
+                locked_schedule,
+                blocks_by_id,
+                action,
+                idx,
+                window,
+            )
             if err is not None:
                 raise _Rollback(err)
 
@@ -726,6 +734,7 @@ async def ai_generate_draft(request, date):
 
     now = timezone.localtime()
     try:
+        schedule._schedule_window = await sync_to_async(get_schedule_window)(user)
         result = await run_draft(schedule, template, history, rules, now)
     except AIError as e:
         raw = getattr(e, "raw_response_text", "") or str(e)
@@ -977,6 +986,7 @@ async def ai_chat(request, date):
     now = timezone.localtime()
 
     try:
+        schedule._schedule_window = await sync_to_async(get_schedule_window)(user)
         result = await run_chat(messages, schedule, current_blocks, rules, now)
     except AIError as e:
         await _log_chat_failure(schedule, last_user_msg, messages, e)

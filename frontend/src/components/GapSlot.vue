@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed } from "vue"
-import { DAY_START } from "../utils/scheduleTime"
 
 const props = withDefaults(
   defineProps<{
@@ -9,8 +8,9 @@ const props = withDefaults(
     durationMinutes: number
     compact?: boolean
     disabled?: boolean
+    windowStart?: string
   }>(),
-  { compact: false, disabled: false },
+  { compact: false, disabled: false, windowStart: "06:00" },
 )
 
 const emit = defineEmits<{
@@ -23,7 +23,7 @@ const emit = defineEmits<{
 // compact gap is the trailing stub ("later").
 const edgeHint = computed(() => {
   if (!props.compact) return ""
-  return props.startTime === DAY_START ? "earlier" : "later"
+  return props.startTime === props.windowStart ? "earlier" : "later"
 })
 
 const durationLabel = computed(() => {

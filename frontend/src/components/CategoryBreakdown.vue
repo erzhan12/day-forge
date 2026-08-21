@@ -3,7 +3,7 @@ import { computed } from "vue"
 import type { CategoryMinutes, TimeBlock } from "../types"
 import { getCategoryColor } from "../utils/categoryColors"
 import { useActiveTheme } from "../composables/useActiveTheme"
-import { DAY_END_MINUTES, DAY_START_MINUTES } from "../utils/scheduleTime"
+import { timeToMinutes } from "../utils/scheduleTime"
 
 // Reactive dep so the rows computed re-runs when the user switches
 // themes (shared with TimeBlock / SkippedTasks; see composable).
@@ -12,6 +12,8 @@ const activeTheme = useActiveTheme()
 const props = defineProps<{
   planned: CategoryMinutes
   completed: CategoryMinutes
+  windowStart?: string
+  windowEnd?: string
 }>()
 
 // Render in a stable order so the layout doesn't reshuffle as values
@@ -24,7 +26,7 @@ const categoryOrder: TimeBlock["category"][] = ["work", "personal", "health", "o
 // the planned bars are normalised against. Phase 6 plan: planned width
 // = total minutes / day-window-minutes. Communicates absolute time
 // invested across the day, not just the relative ranking of categories.
-const DAY_WINDOW_MINUTES = DAY_END_MINUTES - DAY_START_MINUTES
+const dayWindowMinutes = computed(() => timeToMinutes(props.windowEnd ?? "23:00") - timeToMinutes(props.windowStart ?? "06:00"))
 
 const totalPlanned = computed(() =>
   categoryOrder.reduce((sum, key) => sum + (props.planned[key] || 0), 0),
@@ -58,7 +60,7 @@ const rows = computed<Row[]>(() => {
       label: key.charAt(0).toUpperCase() + key.slice(1),
       planned,
       completed,
-      plannedPct: Math.min(100, (planned / DAY_WINDOW_MINUTES) * 100),
+      plannedPct: Math.min(100, (planned / dayWindowMinutes.value) * 100),
       completedPctOfPlanned:
         planned > 0 ? Math.min(100, (completed / planned) * 100) : 0,
       color: getCategoryColor(key, theme),

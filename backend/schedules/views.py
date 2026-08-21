@@ -13,6 +13,7 @@ from templates_mgr.models import Template
 from templates_mgr.preferences import get_user_preferences
 
 from schedules.models import Schedule, TimeBlock
+from schedules.window import get_schedule_window
 
 # Login renders Strategic statically — no user preference exists pre-auth.
 # Centralized so every login render path gets the same template_data; a
@@ -104,6 +105,7 @@ def schedule_view(request, date):
     ).exists()
     api_key_set = bool(settings.LLM_API_KEY and settings.LLM_API_KEY.strip())
     prefs = get_user_preferences(request.user)
+    window = get_schedule_window(request.user)
 
     return inertia_render(
         request,
@@ -136,6 +138,7 @@ def schedule_view(request, date):
                 settings.EXTERNAL_TASKS_POLL_INTERVAL_SECONDS
             ),
             "ui_preferences": {"theme": prefs.theme},
+            "schedule_window": {"start": window.start_str, "end": window.end_str},
         },
         template_data={"initial_theme": prefs.theme},
     )

@@ -6,12 +6,10 @@ import type { NormalizedEvent } from "../types/calendar"
 import { useSchedule } from "../composables/useSchedule"
 import { computeEventBlockTimes } from "../utils/travelRules"
 import {
-  DAY_START,
-  DAY_END,
-  DAY_START_MINUTES,
-  DAY_END_MINUTES,
+  DEFAULT_SCHEDULE_WINDOW,
   timeToMinutes,
 } from "../utils/scheduleTime"
+import type { ScheduleWindowBounds } from "../utils/scheduleTime"
 
 const MAX_TRAVEL_MINUTES = 600
 
@@ -24,10 +22,15 @@ const props = defineProps<{
   // 0/0/"other" prefills, so the distinction has to be shown or the user
   // silently confirms an unpadded block believing their rule applied.
   rulesUnavailable?: boolean
+  // The user's configurable day window (feature 0053). The visible-hours
+  // warning and skip messaging derive from this, not the static 06:00–23:00.
+  window?: ScheduleWindowBounds
 }>()
 const emit = defineEmits<{
   (e: "close"): void
 }>()
+
+const win = computed(() => props.window ?? DEFAULT_SCHEDULE_WINDOW)
 
 // Function DateSource — the string variant would stale-capture the
 // setup-time date if the user navigates dates while the dialog is open.
@@ -79,14 +82,14 @@ const zeroLength = computed(() => {
   return t !== null && t.start_time === t.end_time
 })
 
-// The timeline renders only [06:00, 23:00) — warn (non-blocking) when the
-// block would be created fine but never appear there.
+// The timeline renders only the user's day window — warn (non-blocking) when
+// the block would be created fine but never appear there.
 const outsideVisibleHours = computed(() => {
   const t = computedTimes.value
   if (t === null || t.start_time === t.end_time) return false
   return (
-    timeToMinutes(t.end_time) <= DAY_START_MINUTES ||
-    timeToMinutes(t.start_time) >= DAY_END_MINUTES
+    timeToMinutes(t.end_time) <= win.value.startMinutes ||
+    timeToMinutes(t.start_time) >= win.value.endMinutes
   )
 })
 
@@ -126,6 +129,13 @@ async function handleConfirm() {
       })
     }
     emit("close")
+  } else if (result.code === "outside_window") {
+    // Deliberate skip (feature 0053): event fell fully outside the day window.
+    // Non-blocking, window-derived, no undo pushed (nothing created).
+    const w = result.window
+    errorMessage.value = w
+      ? `Skipped — outside your day window ${w.start}–${w.end}`
+      : "Skipped — outside your day window"
   } else {
     const errs = result.errors ?? {}
     errorMessage.value =
@@ -214,7 +224,7 @@ async function handleConfirm() {
         Zero-length event — add travel minutes to create a block.
       </p>
       <p v-else-if="outsideVisibleHours" class="ats-hint">
-        This block falls outside the visible timeline hours {{ DAY_START }}–{{ DAY_END }}.
+        This block falls outside the visible timeline hours {{ win.start }}–{{ win.end }}.
       </p>
 
       <div class="ats-actions">

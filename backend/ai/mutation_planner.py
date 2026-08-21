@@ -14,8 +14,7 @@ from typing import Any
 from django.core.exceptions import ValidationError
 from schedules.http import VALID_CATEGORIES, parse_time, times_overlap
 from schedules.validators import validate_five_minute_granularity
-
-from ai.prompts import DAY_END, DAY_START
+from schedules.window import DEFAULT_WINDOW
 
 _UNKNOWN_TASK_DETAIL = (
     "Referenced block no longer exists; it may have been deleted. Please retry."
@@ -525,28 +524,30 @@ def _validate_update(
 ) -> list[tuple[int, int, int, str]]:
     violations: list[tuple[int, int, int, str]] = []
     idx = upd.action_index
+    window_label = f"{day_start_t:%H:%M}-{day_end_t:%H:%M}"
 
     if upd.wrapped and upd.bare_move_derived_end:
         violations.append(
             _violation(idx, _RANK_WRAP, candidate_key, "moved block would extend past midnight")
         )
 
-    if upd.start_supplied and upd.new_start < day_start_t:
+    if upd.start_supplied and not day_start_t <= upd.new_start <= day_end_t:
         violations.append(
             _violation(
                 idx,
                 _RANK_DAY_WINDOW,
                 candidate_key,
-                f"start_time must be >= {DAY_START}",
+                f"start_time must fall within {window_label}",
             )
         )
-    if (upd.end_supplied or upd.bare_move_derived_end) and upd.new_end > day_end_t:
+    end_changed = upd.end_supplied or upd.bare_move_derived_end
+    if end_changed and not day_start_t <= upd.new_end <= day_end_t:
         violations.append(
             _violation(
                 idx,
                 _RANK_DAY_WINDOW,
                 candidate_key,
-                f"end_time must be <= {DAY_END}",
+                f"end_time must fall within {window_label}",
             )
         )
 
@@ -577,6 +578,7 @@ def _validate_create(
 ) -> list[tuple[int, int, int, str]]:
     violations: list[tuple[int, int, int, str]] = []
     idx = create.action_index
+    window_label = f"{day_start_t:%H:%M}-{day_end_t:%H:%M}"
 
     if create.category not in VALID_CATEGORIES:
         violations.append(
@@ -592,22 +594,22 @@ def _validate_create(
             _violation(idx, _RANK_CREATE_SCHEMA, temp_id, "title must not be empty")
         )
 
-    if create.start_time < day_start_t:
+    if not day_start_t <= create.start_time <= day_end_t:
         violations.append(
             _violation(
                 idx,
                 _RANK_DAY_WINDOW,
                 temp_id,
-                f"start_time must be >= {DAY_START}",
+                f"start_time must fall within {window_label}",
             )
         )
-    if create.end_time > day_end_t:
+    if not day_start_t <= create.end_time <= day_end_t:
         violations.append(
             _violation(
                 idx,
                 _RANK_DAY_WINDOW,
                 temp_id,
-                f"end_time must be <= {DAY_END}",
+                f"end_time must fall within {window_label}",
             )
         )
 
@@ -753,8 +755,8 @@ def plan_mutations(
     snapshot: ScheduleSnapshot,
     parsed_actions: Sequence[dict],
     *,
-    day_start: str = DAY_START,
-    day_end: str = DAY_END,
+    day_start: str = DEFAULT_WINDOW.start_str,
+    day_end: str = DEFAULT_WINDOW.end_str,
 ) -> MutationPlan | PlanError:
     """Pure final-state planner: normalize, build candidate, validate, diff."""
     normalized = _normalize_actions(snapshot, parsed_actions)

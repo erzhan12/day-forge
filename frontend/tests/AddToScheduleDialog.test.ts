@@ -19,6 +19,7 @@ vi.mock("../src/composables/useSchedule", () => ({
 
 import AddToScheduleDialog from "../src/components/AddToScheduleDialog.vue"
 import type { TravelRule } from "../src/types"
+import type { ScheduleWindowBounds } from "../src/utils/scheduleTime"
 
 const DATE = "2026-05-07"
 
@@ -208,5 +209,66 @@ describe("AddToScheduleDialog", () => {
     // Same null matchedRule — only the flag distinguishes the two states.
     const wrapper = mountDialog({ rulesUnavailable: false })
     expect(wrapper.find('[data-testid="rules-unavailable"]').exists()).toBe(false)
+  })
+
+  // Feature 0053: the configurable day window drives both the "outside visible
+  // hours" warning bounds and the outside_window skip messaging.
+  describe("configurable day window (feature 0053)", () => {
+    // 15:00–20:00 narrowed window. The 14:07–14:33 event ends before 15:00, so
+    // it falls outside the visible timeline hours under this window.
+    const NARROW: ScheduleWindowBounds = {
+      start: "15:00",
+      end: "20:00",
+      startMinutes: 15 * 60,
+      endMinutes: 20 * 60,
+    }
+
+    it("does NOT warn under the default window when the event is in visible hours", () => {
+      // No window prop → default 06:00–23:00. 14:07–14:33 is well inside.
+      const wrapper = mountDialog()
+      expect(wrapper.text()).not.toContain(
+        "outside the visible timeline hours",
+      )
+    })
+
+    it("triggers the outside-visible-hours warning against the CUSTOM window bounds", () => {
+      const wrapper = mountDialog({ window: NARROW })
+      // The event ends 14:33 < 15:00 window start → outside visible hours.
+      expect(wrapper.text()).toContain(
+        "This block falls outside the visible timeline hours 15:00–20:00",
+      )
+    })
+
+    it("shows the window-derived skip notice and pushes no undo for an outside_window create", async () => {
+      createBlockFromEvent.mockResolvedValue({
+        ok: false,
+        code: "outside_window",
+        window: { start: "15:00", end: "20:00" },
+      })
+      const pushUndo = vi.fn()
+      const wrapper = mount(AddToScheduleDialog, {
+        props: {
+          event: localEvent("14:07", "14:33"),
+          matchedRule: null,
+          date: DATE,
+          window: NARROW,
+        },
+        global: {
+          provide: { undo: { pushUndo, snapshotBlocks: () => [] } },
+        },
+      })
+      await confirmBtn(wrapper).trigger("click")
+      await Promise.resolve()
+
+      expect(wrapper.text()).toContain(
+        "Skipped — outside your day window 15:00–20:00",
+      )
+      // Not the generic add-failure copy.
+      expect(wrapper.text()).not.toContain("Failed to add block")
+      // No undo pushed — nothing was created.
+      expect(pushUndo).not.toHaveBeenCalled()
+      // Dialog stays open so the user can adjust.
+      expect(wrapper.emitted("close")).toBeUndefined()
+    })
   })
 })

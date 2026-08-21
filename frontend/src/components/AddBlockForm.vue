@@ -68,6 +68,14 @@ async function handleSubmit() {
     }
     title.value = ""
     showForm.value = false
+  } else if (result.code === "outside_window") {
+    // Deliberate skip (feature 0053): the block fell fully outside the user's
+    // day window. Non-blocking notice, window-derived — NOT a validation error,
+    // and no undo is pushed (nothing was created).
+    const w = result.window
+    errorMessage.value = w
+      ? `Skipped — outside your day window ${w.start}–${w.end}`
+      : "Skipped — outside your day window"
   } else {
     const errs = result.errors ?? {}
     errorMessage.value = Object.values(errs).flat().join(", ") || "Failed to create block"

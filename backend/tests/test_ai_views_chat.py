@@ -5,6 +5,7 @@ error so no network call is made. The view's validation order, audit
 logging shape, rate-limit independence, and untrusted-transcript
 handling are all exercised against real DB.
 """
+import datetime
 import hashlib
 import json
 
@@ -21,10 +22,24 @@ from ai.service import (
 from asgiref.sync import sync_to_async
 from django.contrib.auth.models import User
 from django.core.cache import cache
-from schedules.models import Schedule, TimeBlock
+from schedules.models import Schedule, TimeBlock, UserScheduleSettings
 from templates_mgr.models import Rule
 
 URL = "/api/ai/schedules/2026-04-18/chat/"
+
+
+def _set_window(user, day_start, day_end):
+    """Seed the per-user schedule window (feature 0053).
+
+    ``_apply_actions_sync`` resolves the window under its apply lock via
+    ``get_schedule_window`` → ``UserScheduleSettings`` (default 06:00–23:00),
+    so a DB row is how a non-default window reaches the planner in these
+    integration tests. ``update_or_create`` keeps the row valid (save() runs
+    full_clean).
+    """
+    UserScheduleSettings.objects.update_or_create(
+        user=user, defaults={"day_start": day_start, "day_end": day_end}
+    )
 
 
 @pytest.fixture
@@ -1071,12 +1086,17 @@ class TestSharedApplyCoverage:
     def test_add_day_window(
         self,
         auth_client,
+        user,
         today_schedule,
         monkeypatch,
         start_time,
         end_time,
         expected_status,
     ):
+        # Feature 0053: make the DEFAULT window explicit. Behaviour is identical
+        # to the pre-0053 hardcoded 06:00–23:00 (the default seeded window), but
+        # this now proves the boundary is window-driven, not a constant.
+        _set_window(user, datetime.time(6, 0), datetime.time(23, 0))
         action = {
             "type": "add",
             "title": "Boundary block",
@@ -1092,8 +1112,10 @@ class TestSharedApplyCoverage:
         assert resp.status_code == expected_status
 
     def test_resize_rejected_after_day_end(
-        self, auth_client, today_schedule, monkeypatch
+        self, auth_client, user, today_schedule, monkeypatch
     ):
+        # Feature 0053: default window made explicit.
+        _set_window(user, datetime.time(6, 0), datetime.time(23, 0))
         block = TimeBlock.objects.create(
             schedule=today_schedule,
             title="Work",
@@ -1302,3 +1324,104 @@ class TestSharedApplyCoverage:
         assert block.start_time.strftime("%H:%M") == "11:00"
         interaction = AIInteraction.objects.get(schedule=today_schedule)
         assert interaction.success is True
+
+
+@pytest.mark.django_db
+class TestChatNonDefaultDayWindow:
+    """Feature 0053: the chat apply path resolves the per-user window under the
+    apply lock (``_apply_actions_sync`` → ``get_schedule_window`` →
+    ``plan_mutations(day_start=…, day_end=…)``). The planner REJECTS (never
+    clamps) out-of-window actions, and the rejection error names the *user's*
+    bound, not the stale default 23:00.
+    """
+
+    def test_add_rejected_under_narrowed_window_names_narrowed_bound(
+        self, auth_client, user, today_schedule, monkeypatch
+    ):
+        # 22:00–22:30 is inside the default 06:00–23:00 but outside a narrowed
+        # 08:00–21:00 window → rejected, and the detail names 21:00 not 23:00.
+        _set_window(user, datetime.time(8, 0), datetime.time(21, 0))
+        action = {
+            "type": "add",
+            "title": "Late block",
+            "start_time": "22:00",
+            "end_time": "22:30",
+            "category": "work",
+        }
+        _patch_run_chat(monkeypatch, AIChatResult("{}", [action], "Added", None))
+        resp = _post(auth_client, {"messages": [_user_turn("add late block")]})
+        assert resp.status_code == 400
+        detail = resp.json()["errors"]["detail"]
+        assert "21:00" in detail
+        assert "23:00" not in detail
+        assert TimeBlock.objects.filter(schedule=today_schedule).count() == 0
+
+    def test_add_accepted_under_widened_window(
+        self, auth_client, user, today_schedule, monkeypatch
+    ):
+        # An add ending 23:30 is outside the default 23:00 upper bound but inside
+        # a widened 06:00–23:55 window → accepted. 23:55 (not 23:59) is
+        # 5-minute-valid, the only kind ``validate_window`` accepts.
+        _set_window(user, datetime.time(6, 0), datetime.time(23, 55))
+        action = {
+            "type": "add",
+            "title": "Evening",
+            "start_time": "23:00",
+            "end_time": "23:30",
+            "category": "work",
+        }
+        _patch_run_chat(monkeypatch, AIChatResult("{}", [action], "Added", None))
+        resp = _post(auth_client, {"messages": [_user_turn("add evening")]})
+        assert resp.status_code == 200, resp.content
+        blocks = list(TimeBlock.objects.filter(schedule=today_schedule))
+        assert len(blocks) == 1
+        assert blocks[0].start_time.strftime("%H:%M") == "23:00"
+        assert blocks[0].end_time.strftime("%H:%M") == "23:30"
+
+    def test_resize_supplied_start_past_day_end_is_rejected(
+        self, auth_client, user, today_schedule, monkeypatch
+    ):
+        # SYMMETRIC-bound hole (feature 0053). The stored block's inherited end
+        # 23:50 is legacy-outside the default window; a supplied start of 23:35
+        # is PAST day_end. The ``start <= day_end`` half must reject it — a naive
+        # ``start < day_start`` check would let 23:35 through since it's after
+        # 06:00. Uses the default 06:00–23:00 window.
+        _set_window(user, datetime.time(6, 0), datetime.time(23, 0))
+        block = TimeBlock.objects.create(
+            schedule=today_schedule,
+            title="Legacy late",
+            start_time="23:30",
+            end_time="23:50",
+            category="work",
+        )
+        action = {"type": "resize", "task_id": block.id, "start_time": "23:35"}
+        _patch_run_chat(monkeypatch, AIChatResult("{}", [action], "Resized", None))
+        resp = _post(auth_client, {"messages": [_user_turn("start it at 23:35")]})
+        assert resp.status_code == 400
+        detail = resp.json()["errors"]["detail"]
+        assert "start_time must fall within 06:00-23:00" == detail
+        # Not silently accepted — the stored times are unchanged.
+        block.refresh_from_db()
+        assert block.start_time.strftime("%H:%M") == "23:30"
+
+    def test_narrowed_window_does_not_affect_other_user(
+        self, auth_client, user, today_schedule, monkeypatch
+    ):
+        # Multi-user isolation: user A's narrowed window must not gate the
+        # apply, which is keyed off the *authenticated* user's window. Here the
+        # authenticated ``user`` keeps the default window while another user has
+        # a narrow one — the 22:00 add still succeeds for ``user``.
+        other = User.objects.create_user(username="narrow-other", password="x")
+        _set_window(other, datetime.time(8, 0), datetime.time(21, 0))
+        _set_window(user, datetime.time(6, 0), datetime.time(23, 0))
+        action = {
+            "type": "add",
+            "title": "Evening",
+            "start_time": "22:00",
+            "end_time": "22:30",
+            "category": "work",
+        }
+        _patch_run_chat(monkeypatch, AIChatResult("{}", [action], "Added", None))
+        resp = _post(auth_client, {"messages": [_user_turn("add evening")]})
+        assert resp.status_code == 200, resp.content
+        assert TimeBlock.objects.filter(schedule=today_schedule).count() == 1

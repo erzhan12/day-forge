@@ -129,6 +129,45 @@ describe("AddBlockForm", () => {
     expect(mockPushUndo).not.toHaveBeenCalled()
   })
 
+  // Feature 0053: a block that falls fully outside the user's day window is
+  // deliberately skipped server-side (409 { code: "outside_window", window }).
+  // The UI must show a window-derived skip notice, NOT a generic create error,
+  // and push NO undo (nothing was created).
+  it("shows a window-derived skip notice (not a generic error) for an outside_window result", async () => {
+    mockCreateBlock.mockResolvedValue({
+      ok: false,
+      code: "outside_window",
+      window: { start: "08:00", end: "20:00" },
+    })
+    const wrapper = mountForm({ date: "2026-04-10" })
+    await wrapper.find(".add-btn").trigger("click")
+    await wrapper.find(".title-input").setValue("Late night")
+    await wrapper.find("form").trigger("submit")
+    await vi.dynamicImportSettled()
+
+    expect(wrapper.text()).toContain(
+      "Skipped — outside your day window 08:00–20:00",
+    )
+    // NOT the generic failure copy.
+    expect(wrapper.text()).not.toContain("Failed to create block")
+    // Form stays open so the user can adjust the times.
+    expect(wrapper.find(".add-form").exists()).toBe(true)
+  })
+
+  it("pushes NO undo for an outside_window skip", async () => {
+    mockCreateBlock.mockResolvedValue({
+      ok: false,
+      code: "outside_window",
+      window: { start: "08:00", end: "20:00" },
+    })
+    const wrapper = mountForm({ date: "2026-04-10" })
+    await wrapper.find(".add-btn").trigger("click")
+    await wrapper.find(".title-input").setValue("Late night")
+    await wrapper.find("form").trigger("submit")
+    await vi.dynamicImportSettled()
+    expect(mockPushUndo).not.toHaveBeenCalled()
+  })
+
   it("pushUndo binds scheduleDate to the date active when the request started, not when it resolved (issue #21)", async () => {
     // Simulate user navigating to a new date while createBlock is in
     // flight: without the fix, ``pushUndo`` would read ``props.date``

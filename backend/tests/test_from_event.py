@@ -76,8 +76,10 @@ class TestCreateBlockFromEvent:
         )
         assert resp.status_code == 201
         data = resp.json()
-        assert data["start_time"] == "00:00"
-        assert data["end_time"] == "23:59"
+        # Feature 0053 clamps externally-sourced event placement to the
+        # user's day window while retaining the off-grid bypass inside it.
+        assert data["start_time"] == "06:00"
+        assert data["end_time"] == "23:00"
 
     @pytest.mark.django_db
     def test_creates_schedule_when_missing(self, auth_client, user):

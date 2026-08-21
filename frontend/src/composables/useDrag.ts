@@ -5,11 +5,13 @@ import { type DateSource, readDate } from "../utils/dateSource"
 import {
   DAY_START_MINUTES,
   DAY_END_MINUTES,
+  DEFAULT_SCHEDULE_WINDOW,
   PX_PER_MINUTE,
   SNAP_MINUTES,
   timeToMinutes,
   minutesToTime,
   type RenderBounds,
+  type ScheduleWindowBounds,
 } from "../utils/scheduleTime"
 
 /**
@@ -34,8 +36,12 @@ import {
  * @param newStartMinutes   Drop position in minutes since midnight.
  * @param newEndMinutes     Drop end in minutes since midnight (preserves
  *                          original duration).
+ * @param dayEndMinutes     The user's window end in minutes since midnight
+ *                          (defaults to `DAY_END_MINUTES` = 23:00). A widened
+ *                          window lets the cascade shift blocks past 23:00; a
+ *                          narrowed one clamps earlier.
  * @returns The resolved block list, or `null` if the cascade pushes any
- *          block past `DAY_END_MINUTES` (e.g. dragging a block onto the last
+ *          block past `dayEndMinutes` (e.g. dragging a block onto the last
  *          slot leaves no room for the trailing neighbours to shift forward),
  *          or if the defensive iteration cap is exceeded (should never
  *          happen for valid input — see safety guard below).
@@ -55,7 +61,8 @@ import {
  *   resolveConflicts(blocks, 1, 540, 600) // → blocks with #1 anchored at 09:00
  *
  * @example
- *   // Returns null: shifting the trailing block would push it past 23:00
+ *   // Returns null: shifting the trailing block would push it past the
+ *   // window end (default 23:00)
  *   resolveConflicts([{id:1,...}, {id:2, end:23:00}], 1, 1370, 1380)
  */
 /**
@@ -85,9 +92,9 @@ export function clampedDragDuration(block: {
   start_time: string
   end_time: string
 }): number {
-  const clampedStart = Math.max(timeToMinutes(block.start_time), DAY_START_MINUTES)
-  const clampedEnd = Math.min(timeToMinutes(block.end_time), DAY_END_MINUTES)
-  return roundUpDuration(Math.max(0, clampedEnd - clampedStart))
+  return roundUpDuration(
+    Math.max(0, timeToMinutes(block.end_time) - timeToMinutes(block.start_time)),
+  )
 }
 
 export function resolveConflicts(
@@ -95,6 +102,7 @@ export function resolveConflicts(
   draggedId: number,
   newStartMinutes: number,
   newEndMinutes: number,
+  dayEndMinutes: number = DAY_END_MINUTES,
 ): TimeBlock[] | null {
   // Deep clone blocks and apply the dragged block's new time
   const result: TimeBlock[] = blocks.map((b) => {
@@ -126,7 +134,7 @@ export function resolveConflicts(
   // next collision in O(n). It is NOT used to find the dragged block.
   //
   // Safety: termination is already proven — each shift strictly advances a
-  // block's `start_time` and the `newEnd > DAY_END_MINUTES` check bounds
+  // block's `start_time` and the `newEnd > dayEndMinutes` check bounds
   // the total motion. The `MAX_ITERATIONS` guard below is a belt-and-braces
   // check against a *future* bug introducing an infinite loop, and fails
   // fast so a broken algorithm can't freeze the UI.
@@ -167,7 +175,7 @@ export function resolveConflicts(
           )
           const newStart = timeToMinutes(result[i + 1].end_time)
           const newEnd = newStart + shiftDuration
-          if (newEnd > DAY_END_MINUTES) return null
+          if (newEnd > dayEndMinutes) return null
           result[i].start_time = minutesToTime(newStart)
           result[i].end_time = minutesToTime(newEnd)
         } else {
@@ -176,7 +184,7 @@ export function resolveConflicts(
           )
           const newStart = currEnd
           const newEnd = newStart + shiftDuration
-          if (newEnd > DAY_END_MINUTES) return null
+          if (newEnd > dayEndMinutes) return null
           result[i + 1].start_time = minutesToTime(newStart)
           result[i + 1].end_time = minutesToTime(newEnd)
         }
@@ -268,6 +276,11 @@ export function useDrag(
   isDisabled?: () => boolean,
   getRenderBounds?: () => RenderBounds,
   getNow?: () => number | null,
+  // The user's day window (feature 0053). Drag caps derive from this so a
+  // widened window can drag past 23:00 and a narrowed one clamps earlier.
+  // Defaults to the static [06:00, 23:00) constants for callers/tests that
+  // predate the configurable window.
+  getWindow?: () => ScheduleWindowBounds,
 ) {
   const isDragging = ref(false)
   const frozenRenderBounds = ref<RenderBounds | null>(null)
@@ -328,12 +341,25 @@ export function useDrag(
     // rounds UP so a clamped start stays both in-view and on-grid; the
     // day-end clamp is on-grid by construction (DAY_END and the rounded
     // duration are both snap multiples).
+    const dayStartMinutes =
+      getWindow?.().startMinutes ?? DEFAULT_SCHEDULE_WINDOW.startMinutes
+    const dayEndMinutes =
+      getWindow?.().endMinutes ?? DEFAULT_SCHEDULE_WINDOW.endMinutes
+
     let newStart =
       Math.round((renderStart + minuteOffset) / SNAP_MINUTES) * SNAP_MINUTES
     if (newStart < renderStart)
       newStart = Math.ceil(renderStart / SNAP_MINUTES) * SNAP_MINUTES
-    if (newStart + blockDuration > DAY_END_MINUTES)
-      newStart = DAY_END_MINUTES - blockDuration
+    if (newStart + blockDuration > dayEndMinutes)
+      newStart = dayEndMinutes - blockDuration
+    // Window-start floor (feature 0053), applied LAST so the day-end clamp above
+    // can't push the preview back before the window start. A drop can't land
+    // before the window start even when `renderStart` sits earlier (a legacy
+    // out-of-window / 0026 off-grid block pulled the canvas top down) or when a
+    // block longer than the window makes `dayEndMinutes - blockDuration`
+    // negative-relative. `dayStartMinutes` is 5-min aligned, so the ceil is exact.
+    if (newStart < dayStartMinutes)
+      newStart = Math.ceil(dayStartMinutes / SNAP_MINUTES) * SNAP_MINUTES
 
     const newEnd = newStart + blockDuration
 
@@ -342,12 +368,14 @@ export function useDrag(
     ghostTop.value =
       containerPaddingTop + (newStart - renderStart) * PX_PER_MINUTE
 
-    // Resolve conflicts
+    // Resolve conflicts — cascade caps at the user's window end (feature 0053),
+    // not the hardcoded 23:00, so a widened window can shift blocks later.
     const resolved = resolveConflicts(
       getCurrentBlocks(),
       originalBlock.id,
       newStart,
       newEnd,
+      dayEndMinutes,
     )
 
     if (resolved === null) {
@@ -411,10 +439,7 @@ export function useDrag(
     // rounded up to the snap grid so the drop payload is on-grid — the
     // hidden out-of-window remainder normalizing away on move is the same
     // accepted normalize-on-move semantics as the round-up.
-    const clampedStartMinutes = Math.max(
-      timeToMinutes(block.start_time),
-      DAY_START_MINUTES,
-    )
+    const clampedStartMinutes = timeToMinutes(block.start_time)
     blockDuration = clampedDragDuration(block)
     dropValid = true
     pointerId = event.pointerId

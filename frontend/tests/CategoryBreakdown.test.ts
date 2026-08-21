@@ -49,4 +49,34 @@ describe("CategoryBreakdown", () => {
     // Should render without throwing; 0 minutes shows "0m planned".
     expect(wrapper.text()).toContain("0m planned")
   })
+
+  // Feature 0053: planned bars normalise against the configurable day-window
+  // span, not the historical hardcoded 1020 minutes.
+  it("normalises the planned bar against a CUSTOM window span, not the 1020-minute default", () => {
+    const wrapper = mount(CategoryBreakdown, {
+      props: {
+        planned: { work: 240, personal: 0, health: 0, other: 0 },
+        completed: { work: 0, personal: 0, health: 0, other: 0 },
+        // 09:00–17:00 → 480-minute span. 240/480 = 50%, whereas 240/1020 ≈ 23.5%.
+        windowStart: "09:00",
+        windowEnd: "17:00",
+      },
+    })
+    const workBar = wrapper.findAll(".bar-planned")[0]
+    expect(workBar.attributes("style")).toContain("width: 50%")
+    // Guard against a regression to the old 1020 denominator.
+    expect(workBar.attributes("style")).not.toContain("23.5")
+  })
+
+  it("falls back to the 06:00–23:00 (1020-minute) span when no window props are passed", () => {
+    const wrapper = mount(CategoryBreakdown, {
+      props: {
+        // 510/1020 = 50% under the default span.
+        planned: { work: 510, personal: 0, health: 0, other: 0 },
+        completed: { work: 0, personal: 0, health: 0, other: 0 },
+      },
+    })
+    const workBar = wrapper.findAll(".bar-planned")[0]
+    expect(workBar.attributes("style")).toContain("width: 50%")
+  })
 })

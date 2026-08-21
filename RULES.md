@@ -843,3 +843,14 @@ no Service Worker, no closed-tab alerts.
   `querySelector` works) with `addEventListener`/`close`/`_emit`. Do not depend
   on real browser PiP. macOS-Chrome always-on-top + minimized-app behavior is
   manual-smoke only (`docs/features/0049_PLAN.md` § Browser smoke).
+
+## Per-user schedule window (feature 0053)
+
+- Resolve scheduling bounds through `schedules.window.get_schedule_window(user)`.
+  `DEFAULT_WINDOW` is only a default/test helper; it is not runtime policy.
+- New manual/from-event intervals clamp to the window and return the top-level
+  `422 outside_window` skip envelope when entirely outside. PATCH/reorder clamp
+  only boundaries the client changed; AI and templates reject rather than clamp.
+- `UserScheduleSettings.save()` calls `full_clean()` to enforce the five-minute
+  grid. Do not use `update`, `bulk_create`, or `bulk_update` for it: those bypass
+  Python validation (the DB check constraint protects ordering only).

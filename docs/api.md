@@ -524,6 +524,45 @@ Unauthenticated requests follow the conventions header — Django's `@login_requ
 
 ---
 
+## Schedule Settings
+
+Per-user schedule **day window** (the working-day bounds that constrain manual, AI, template, and calendar-placement times). One row per user, created on first authenticated access with the default `06:00–23:00`. Lives in the `schedules` app (a scheduling-domain rule), intentionally separate from the theme-only `/api/user/preferences/`.
+
+`GET` and `PATCH` set `Cache-Control: private, no-store` on every response, including error responses (same rationale as User Preferences).
+
+### `GET /api/user/schedule-settings/`
+
+Returns the current user's window. Creates the default row if none exists.
+
+```json
+{"day_start": "06:00", "day_end": "23:00"}
+```
+
+### `PATCH /api/user/schedule-settings/`
+
+Sets the window. **Both** fields are required — the window is a coupled pair, validated together so an overnight cross-pair is caught. On any validation failure the stored row is left unchanged (last saved value preserved).
+
+**Body**
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `day_start` | string | `HH:MM`, 5-minute aligned. |
+| `day_end` | string | `HH:MM`, 5-minute aligned, later than `day_start` (same calendar day — overnight windows are not supported). |
+
+**Errors**
+
+| Status | `errors` key | Meaning |
+|--------|--------------|---------|
+| `400` | `body` | Invalid JSON or non-object body. |
+| `400` | `day_start` / `day_end` | `"{field} is required."`, `"Use HH:MM format."`, `"Must align to 5-minute granularity."`, or (on `day_end`) `"Must be later than day_start; overnight windows are not supported."` |
+| `413` | `body` | Request body exceeds 100 KB. |
+
+Unauthenticated requests return a `302` redirect (per the conventions header), not a JSON `401`.
+
+**Note — window enforcement on block placement.** The saved window also constrains the schedule-mutation endpoints (manual create/PATCH, drag/reorder, AI, template, CalDAV/Google from-event). A new block/event **fully outside** the window is not created; those endpoints return `422` with a top-level skip envelope: `{"skipped": true, "code": "outside_window", "window": {"start": "HH:MM", "end": "HH:MM"}, "errors": {...}}` (`code`/`window` are top-level siblings, not nested under `errors`). A partially-outside interval is clamped to the boundary instead. Narrowing the window never mutates existing blocks.
+
+---
+
 ## Analytics
 
 Per-day review panel + Mark-reviewed flow. The Inertia page route

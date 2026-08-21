@@ -12,8 +12,16 @@ from ai.mutation_planner import (
     plan_mutations,
     snapshot_apply_context,
 )
-from ai.prompts import DAY_END, DAY_START
 from schedules.http import parse_time
+from schedules.window import DEFAULT_WINDOW
+
+# Feature 0053: the working-day window is now the canonical ``ScheduleWindow``
+# (``schedules.window``), no longer the demoted ``ai.prompts.DAY_START/DAY_END``
+# module constants. The existing hardcoded-06:00-23:00 planner tests are
+# converted to pass the DEFAULT window explicitly so behaviour stays identical
+# under the default while proving the window is a parameter, not a constant.
+DAY_START = DEFAULT_WINDOW.start_str  # "06:00"
+DAY_END = DEFAULT_WINDOW.end_str  # "23:00"
 
 
 def _t(hhmm: str) -> datetime.time:
@@ -594,3 +602,127 @@ class TestPlannerEdgeCases:
         assert isinstance(result, PlanError)
         assert result.action_index == 0
         assert result.detail == "block would overlap existing block"
+
+
+# --- Feature 0053: per-user configurable day window ---
+
+
+class TestNonDefaultDayWindow:
+    """The planner rejects (never clamps) out-of-window actions, keyed off the
+    per-user window strings threaded through ``plan_mutations`` — not the demoted
+    ``ai.prompts`` constants. The rejection error text must name the *passed*
+    bound so a narrowed window reports the correct edge, not a stale ``23:00``.
+    """
+
+    # A widened window whose upper bound is 5-minute-valid (never 23:59, which
+    # ``validate_window`` rejects for off-grid).
+    WIDE_START = "06:00"
+    WIDE_END = "23:55"
+
+    NARROW_START = "08:00"
+    NARROW_END = "21:00"
+
+    def test_create_rejected_under_narrowed_window_names_narrowed_bound(self):
+        # 22:00–22:30 is inside the default 06:00–23:00 but outside a narrowed
+        # 08:00–21:00; the planner must reject and the detail must name 21:00,
+        # not the stale default 23:00.
+        snap = _schedule([])
+        actions = [_add("Late block", "22:00", "22:30")]
+        result = plan_mutations(
+            snap,
+            actions,
+            day_start=self.NARROW_START,
+            day_end=self.NARROW_END,
+        )
+        assert isinstance(result, PlanError)
+        # 22:00–22:30 is past the narrowed upper bound on both ends; the planner
+        # reports one window violation naming the narrowed bound (start_time or
+        # end_time depending on violation ranking — don't pin which).
+        assert "must fall within 08:00-21:00" in result.detail
+        assert self.NARROW_END in result.detail
+        # Regression guard against the pre-0053 stale-window bug.
+        assert "23:00" not in result.detail
+
+    def test_update_rejected_under_narrowed_window_names_narrowed_bound(self):
+        # An in-default-window block resized to 22:00–22:30: rejected under the
+        # narrowed window with the narrowed upper bound in the message.
+        snap = _schedule([_block(1, "10:00", "11:00")])
+        result = plan_mutations(
+            snap,
+            [_resize(1, start="22:00", end="22:30")],
+            day_start=self.NARROW_START,
+            day_end=self.NARROW_END,
+        )
+        assert isinstance(result, PlanError)
+        assert self.NARROW_END in result.detail
+        assert "23:00" not in result.detail
+
+    def test_create_accepted_under_widened_window(self):
+        # A block ending 23:30 is outside the default 23:00 upper bound but
+        # inside a widened 06:00–23:55 window → accepted.
+        snap = _schedule([])
+        actions = [_add("Evening", "23:00", "23:30")]
+        result = plan_mutations(
+            snap,
+            actions,
+            day_start=self.WIDE_START,
+            day_end=self.WIDE_END,
+        )
+        assert isinstance(result, MutationPlan)
+        assert len(result.diff.creates) == 1
+        create = result.diff.creates[0]
+        assert create.start_time.strftime("%H:%M") == "23:00"
+        assert create.end_time.strftime("%H:%M") == "23:30"
+
+    def test_update_accepted_under_widened_window(self):
+        # A block resized to end 23:30 is accepted under a widened window.
+        snap = _schedule([_block(1, "22:00", "22:30")])
+        result = plan_mutations(
+            snap,
+            [_resize(1, end="23:30")],
+            day_start=self.WIDE_START,
+            day_end=self.WIDE_END,
+        )
+        assert isinstance(result, MutationPlan)
+        assert _final_intervals(snap, result) == {1: ("22:00", "23:30")}
+
+    def test_default_window_still_rejects_ending_past_23_00(self):
+        # Same 23:00–23:30 create is rejected under the DEFAULT window — proving
+        # the widened-window acceptance above is genuinely window-driven, not a
+        # loosening of the default.
+        snap = _schedule([])
+        actions = [_add("Evening", "23:00", "23:30")]
+        result = plan_mutations(snap, actions, day_start=DAY_START, day_end=DAY_END)
+        assert isinstance(result, PlanError)
+        assert result.detail == "end_time must fall within 06:00-23:00"
+
+    def test_supplied_start_past_day_end_is_rejected_symmetric_bound(self):
+        # SYMMETRIC-bound hole: a supplied start PAST day_end. The block's stored
+        # (inherited) end 23:50 is itself legacy-outside the default window, so a
+        # naive ``start < day_start`` / ``end > day_end`` check would never fire
+        # on the supplied start. The 0053 ``start <= day_end`` half must reject a
+        # start of 23:35 under the default 06:00–23:00 window — not silently
+        # accept it.
+        snap = _schedule([_block(1, "23:30", "23:50")])
+        result = plan_mutations(
+            snap,
+            [_resize(1, start="23:35")],
+            day_start=DAY_START,
+            day_end=DAY_END,
+        )
+        assert isinstance(result, PlanError)
+        assert result.detail == "start_time must fall within 06:00-23:00"
+
+    def test_supplied_end_before_day_start_is_rejected_symmetric_bound(self):
+        # Mirror of the above: a supplied end BEFORE day_start (05:35 under the
+        # default 06:00 start), opposite endpoint 05:10 inherited-outside. The
+        # ``end >= day_start`` half must reject it.
+        snap = _schedule([_block(1, "05:10", "05:30")])
+        result = plan_mutations(
+            snap,
+            [_resize(1, end="05:35")],
+            day_start=DAY_START,
+            day_end=DAY_END,
+        )
+        assert isinstance(result, PlanError)
+        assert result.detail == "end_time must fall within 06:00-23:00"

@@ -1,8 +1,11 @@
 """Tests for the templates + rules CRUD endpoints."""
+import datetime
 import json
 
 import pytest
 from django.contrib.auth.models import User
+from django.test import Client
+from schedules.models import UserScheduleSettings
 from templates_mgr.models import Rule, Template
 
 
@@ -178,6 +181,128 @@ class TestTemplatesCreate:
             },
         )
         assert resp.status_code == 400
+
+
+@pytest.mark.django_db
+class TestTemplatesCustomWindow:
+    """Template validation is gated by the *per-user* schedule window
+    (feature 0053), not the hardcoded 06:00-23:00 default."""
+
+    def test_rejects_block_outside_narrowed_window(self, auth_client, user):
+        # Narrow the acting user's window to 08:00-21:00; a 09:00-22:00 block
+        # (fine under the default) now exceeds the custom day_end.
+        UserScheduleSettings.objects.create(
+            user=user, day_start=datetime.time(8, 0), day_end=datetime.time(21, 0)
+        )
+        resp = _post(
+            auth_client,
+            "/api/templates/",
+            {
+                "name": "X",
+                "type": "weekday",
+                "blocks": [
+                    {
+                        "title": "Evening",
+                        "start_time": "09:00",
+                        "end_time": "22:00",
+                        "category": "work",
+                    }
+                ],
+            },
+        )
+        assert resp.status_code == 400
+        body = resp.json()
+        # The error text names the *narrowed* bound, not the default 23:00.
+        flat = json.dumps(body)
+        assert "08:00-21:00" in flat
+        assert "06:00-23:00" not in flat
+        assert not Template.objects.filter(user=user).exists()
+
+    def test_block_inside_narrowed_window_accepted(self, auth_client, user):
+        UserScheduleSettings.objects.create(
+            user=user, day_start=datetime.time(8, 0), day_end=datetime.time(21, 0)
+        )
+        resp = _post(
+            auth_client,
+            "/api/templates/",
+            {
+                "name": "OK",
+                "type": "weekday",
+                "blocks": [
+                    {
+                        "title": "Midday",
+                        "start_time": "09:00",
+                        "end_time": "17:00",
+                        "category": "work",
+                    }
+                ],
+            },
+        )
+        assert resp.status_code == 201
+        assert Template.objects.filter(user=user, name="OK").exists()
+
+    def test_window_isolation_between_users(self, auth_client, user):
+        """User A's narrowed window does not gate user B's template save."""
+        # A narrows their own window.
+        UserScheduleSettings.objects.create(
+            user=user, day_start=datetime.time(8, 0), day_end=datetime.time(21, 0)
+        )
+        # B keeps the default window and posts a 22:00-ending block that A's
+        # window would reject — B must succeed.
+        other = User.objects.create_user(username="win_other", password="x")
+        other_client = Client()
+        other_client.login(username="win_other", password="x")
+        resp = _post(
+            other_client,
+            "/api/templates/",
+            {
+                "name": "B",
+                "type": "weekday",
+                "blocks": [
+                    {
+                        "title": "Evening",
+                        "start_time": "09:00",
+                        "end_time": "22:00",
+                        "category": "work",
+                    }
+                ],
+            },
+        )
+        assert resp.status_code == 201
+        assert Template.objects.filter(user=other, name="B").exists()
+
+    def test_narrowing_window_does_not_mutate_stored_template(
+        self, auth_client, user
+    ):
+        """Narrowing the window never auto-edits an existing stored template
+        whose blocks now fall outside the new bounds."""
+        stored_blocks = [
+            {
+                "title": "Evening",
+                "start_time": "09:00",
+                "end_time": "22:00",
+                "category": "work",
+            }
+        ]
+        # Create the template under the default window (22:00 is in range).
+        resp = _post(
+            auth_client,
+            "/api/templates/",
+            {"name": "Keep", "type": "weekday", "blocks": stored_blocks},
+        )
+        assert resp.status_code == 201
+
+        # Now narrow the window; the stored template must be untouched.
+        # The POST above already provisioned the settings row via
+        # get_schedule_window (get_or_create), so update it in place rather
+        # than create a second (OneToOne) row.
+        settings_obj, _ = UserScheduleSettings.objects.get_or_create(user=user)
+        settings_obj.day_start = datetime.time(8, 0)
+        settings_obj.day_end = datetime.time(21, 0)
+        settings_obj.save()
+
+        tpl = Template.objects.get(user=user, name="Keep")
+        assert tpl.blocks == stored_blocks
 
 
 @pytest.mark.django_db
