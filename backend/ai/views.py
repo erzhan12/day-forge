@@ -365,6 +365,7 @@ def _apply_move_or_resize(
     action: dict[str, Any],
     action_index: int,
     block: TimeBlock,
+    window: ScheduleWindow = DEFAULT_WINDOW,
 ) -> JsonResponse | None:
     new_start, new_end, wrapped = _compute_move_resize_times(action, block)
     if wrapped:
@@ -385,6 +386,7 @@ def _apply_move_or_resize(
         action_index,
         start=new_start if start_supplied else None,
         end=new_end if (end_supplied or bare_move) else None,
+        window=window,
     )
     if err is not None:
         return err
@@ -425,6 +427,7 @@ def _apply_existing_block_action(
     blocks_by_id: dict[int, TimeBlock],
     action: dict[str, Any],
     action_index: int,
+    window: ScheduleWindow = DEFAULT_WINDOW,
 ) -> JsonResponse | None:
     """Dispatcher for move / remove / resize — all need an existing block."""
     task_id = action["task_id"]
@@ -443,7 +446,7 @@ def _apply_existing_block_action(
     if action["type"] == "remove":
         return _apply_remove(schedule, blocks_by_id, action, action_index, block)
     return _apply_move_or_resize(
-        schedule, blocks_by_id, action, action_index, block
+        schedule, blocks_by_id, action, action_index, block, window
     )
 
 
@@ -613,7 +616,7 @@ def _apply_draft_sync(schedule: Schedule, result: AIDraftResult) -> None:
             .select_related("user")
             .get(pk=schedule.pk)
         )
-        locked_blocks = list(TimeBlock.objects.filter(schedule=schedule))
+        locked_blocks = list(TimeBlock.objects.filter(schedule=locked_schedule))
         if locked_blocks:
             raise _Rollback(
                 JsonResponse(

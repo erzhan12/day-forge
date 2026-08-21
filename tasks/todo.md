@@ -169,6 +169,15 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
 
 ## Follow-ups (discovered during manual testing)
 
+- [ ] **0053-followup: minimum useful day-window size.** `validate_window`
+  (`backend/schedules/window.py`) accepts any ordered, 5-min-aligned pair, so a
+  degenerate window like `06:00–06:05` passes but makes the scheduler unusable
+  (every block is immediately out-of-window). claude-review (PR #152 cycle 2, P3)
+  suggested a minimum span (e.g. ≥30 min). Deferred: the threshold is a product
+  decision and the rule should be mirrored in the `DayWindowEditor.vue`
+  client-side validation + covered by its own backend/frontend tests — its own
+  scope, not a cycle-2 inline fix.
+
 ### 0051 — port cache-expiry-race fix to async AI limiter (PR #149 claude-review P1)
 
 - [ ] **`backend/ai/views.py::_consume_rate_limit` (async, draft/chat endpoints)

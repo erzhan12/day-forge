@@ -45,7 +45,12 @@ def schedule_settings(request):
     window, errors = validate_window(data["day_start"], data["day_end"])
     if errors:
         return _settings_response({"errors": errors}, status=400)
-    assert window is not None
+    if window is None:
+        # Unreachable today (validate_window returns either an error dict or a
+        # window), but an assert would be stripped under `python -O`.
+        return _settings_response(
+            {"errors": {"detail": "Internal validation error."}}, status=500
+        )
     # Create straight into the target window via ``defaults`` so a first-time
     # PATCH never persists the 06:00/23:00 model defaults in a separate write
     # that a concurrent reader could observe between the two saves.
