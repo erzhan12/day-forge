@@ -130,7 +130,7 @@ describe("AddBlockForm", () => {
   })
 
   // Feature 0053: a block that falls fully outside the user's day window is
-  // deliberately skipped server-side (409 { code: "outside_window", window }).
+  // deliberately skipped server-side (422 { code: "outside_window", window }).
   // The UI must show a window-derived skip notice, NOT a generic create error,
   // and push NO undo (nothing was created).
   it("shows a window-derived skip notice (not a generic error) for an outside_window result", async () => {

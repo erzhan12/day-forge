@@ -130,11 +130,18 @@ class UserScheduleSettings(models.Model):
         errors = {}
         for field in ("day_start", "day_end"):
             value = getattr(self, field)
-            if value:
+            # ``is not None`` — datetime.time(0, 0) is falsy, so a bare
+            # truthiness test would silently skip the grid check for a
+            # midnight-based value (e.g. time(0, 0, 30)).
+            if value is not None:
                 grid_error = check_time_on_grid(value)
                 if grid_error:
                     errors[field] = grid_error
-        if self.day_start and self.day_end and self.day_start >= self.day_end:
+        if (
+            self.day_start is not None
+            and self.day_end is not None
+            and self.day_start >= self.day_end
+        ):
             errors["day_end"] = "Must be later than day_start; overnight windows are not supported."
         if errors:
             raise ValidationError(errors)

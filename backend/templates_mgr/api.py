@@ -117,7 +117,9 @@ def validate_template_blocks(
             continue
         if start.minute % 5 != 0 or end.minute % 5 != 0:
             errors.append(f"block[{i}]: times must align to 5-minute granularity")
-        if start < window.day_start or end > window.day_end:
+        if not (window.day_start <= start <= window.day_end) or not (
+            window.day_start <= end <= window.day_end
+        ):
             errors.append(
                 f"block[{i}]: times must fall within {window.start_str}-{window.end_str}"
             )

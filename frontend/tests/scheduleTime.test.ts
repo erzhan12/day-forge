@@ -9,7 +9,7 @@ import {
   buildBaseDisplayItems,
   computeRenderBounds,
   computeTrailingAnchor,
-  filterVisibleBlocks,
+  sortBlocksByStart,
   findCurrentBlock,
   formatDurationMinutes,
   formatRemainingMinutes,
@@ -723,7 +723,7 @@ describe("configurable day window (feature 0053)", () => {
     })
   })
 
-  describe("filterVisibleBlocks does not mutate the caller's array (props-mutation guard)", () => {
+  describe("sortBlocksByStart does not mutate the caller's array (props-mutation guard)", () => {
     it("returns a sorted copy while leaving the input order untouched", () => {
       const input = [
         block({ id: 1, start_time: "12:00", end_time: "13:00", sort_order: 0 }),
@@ -731,7 +731,7 @@ describe("configurable day window (feature 0053)", () => {
         block({ id: 3, start_time: "15:00", end_time: "16:00", sort_order: 0 }),
       ]
       const snapshotIds = input.map((b) => b.id)
-      const result = filterVisibleBlocks(input)
+      const result = sortBlocksByStart(input)
 
       // A fresh array — never the same reference (Inertia prop must stay put).
       expect(result).not.toBe(input)

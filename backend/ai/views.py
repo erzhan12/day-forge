@@ -248,7 +248,7 @@ def _check_day_window(
     end: datetime.time | None = None,
     window: ScheduleWindow = DEFAULT_WINDOW,
 ) -> JsonResponse | None:
-    """Reject times outside the ``[DAY_START, DAY_END]`` working-day window.
+    """Reject times outside the caller's per-user ``ScheduleWindow`` (feature 0053).
 
     Mirrors the frontend guard in ``useDrag.ts`` and the constraint the
     system prompt asks the model to respect — enforced here so a
@@ -556,7 +556,11 @@ def _apply_actions_sync(
 
     with transaction.atomic():
         User.objects.select_for_update().get(pk=schedule.user_id)
-        locked_schedule = Schedule.objects.select_for_update().get(pk=schedule.pk)
+        locked_schedule = (
+            Schedule.objects.select_for_update()
+            .select_related("user")
+            .get(pk=schedule.pk)
+        )
         locked_blocks = list(
             TimeBlock.objects.filter(schedule=locked_schedule).select_for_update()
         )
@@ -604,7 +608,11 @@ def _apply_draft_sync(schedule: Schedule, result: AIDraftResult) -> None:
         # Lock the SCHEDULE row, not the empty ``TimeBlock`` queryset —
         # see the comment in the original ai_generate_draft for the
         # full rationale.
-        locked_schedule = Schedule.objects.select_for_update().get(pk=schedule.pk)
+        locked_schedule = (
+            Schedule.objects.select_for_update()
+            .select_related("user")
+            .get(pk=schedule.pk)
+        )
         locked_blocks = list(TimeBlock.objects.filter(schedule=schedule))
         if locked_blocks:
             raise _Rollback(

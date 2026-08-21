@@ -304,6 +304,45 @@ class TestTemplatesCustomWindow:
         tpl = Template.objects.get(user=user, name="Keep")
         assert tpl.blocks == stored_blocks
 
+    def test_editing_template_after_narrowing_rejects_stale_blocks(
+        self, auth_client, user
+    ):
+        """Once the window is narrowed, re-saving a template whose (previously
+        valid) blocks now fall outside the window is rejected with a
+        window-derived error — the edit cliff users would otherwise hit
+        silently."""
+        stored_blocks = [
+            {
+                "title": "Evening",
+                "start_time": "09:00",
+                "end_time": "22:00",
+                "category": "work",
+            }
+        ]
+        # Create under the default window (22:00 in range).
+        resp = _post(
+            auth_client,
+            "/api/templates/",
+            {"name": "Edit", "type": "weekday", "blocks": stored_blocks},
+        )
+        assert resp.status_code == 201
+        tpl = Template.objects.get(user=user, name="Edit")
+
+        # Narrow the window so the stored 22:00 end is now out of range.
+        settings_obj, _ = UserScheduleSettings.objects.get_or_create(user=user)
+        settings_obj.day_start = datetime.time(8, 0)
+        settings_obj.day_end = datetime.time(21, 0)
+        settings_obj.save()
+
+        # Re-PUT the same blocks → rejected, naming the narrowed bound.
+        resp = _put(
+            auth_client,
+            f"/api/templates/{tpl.id}/",
+            {"name": "Edit", "type": "weekday", "blocks": stored_blocks},
+        )
+        assert resp.status_code == 400
+        assert "08:00-21:00" in json.dumps(resp.json())
+
 
 @pytest.mark.django_db
 class TestTemplateDetail:

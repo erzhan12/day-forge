@@ -65,7 +65,7 @@ export function clampToDay(minutes: number, window = DEFAULT_SCHEDULE_WINDOW): n
  * blocks) always render at their true geometry. Returns a fresh array so the
  * caller's (Inertia prop) array is never mutated in place.
  */
-export function filterVisibleBlocks(blocks: TimeBlock[], _window = DEFAULT_SCHEDULE_WINDOW): TimeBlock[] {
+export function sortBlocksByStart(blocks: TimeBlock[]): TimeBlock[] {
   return [...blocks].sort((a, b) => {
     const startDelta = timeToMinutes(a.start_time) - timeToMinutes(b.start_time)
     return startDelta !== 0 ? startDelta : a.sort_order - b.sort_order
@@ -305,7 +305,7 @@ export function buildBaseDisplayItems(
   window = DEFAULT_SCHEDULE_WINDOW,
 ): ScheduleDisplayItem[] {
   const items: ScheduleDisplayItem[] = []
-  const visibleBlocks = filterVisibleBlocks(blocks, window)
+  const visibleBlocks = sortBlocksByStart(blocks)
 
   if (visibleBlocks.length === 0) {
     pushTrailingGap(items, window.startMinutes, activeRenderEnd, nowMinutes, window)

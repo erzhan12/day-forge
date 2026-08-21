@@ -185,7 +185,7 @@ def _get_client() -> AsyncOpenAI:
 
 
 async def run_draft(
-    schedule, template, history_schedules, rules, now, window=None
+    schedule, template, history_schedules, rules, now
 ) -> AIDraftResult:
     """Call the LLM to generate a draft schedule.
 
@@ -245,7 +245,7 @@ async def run_draft(
                 {
                     "role": "system",
                     "content": build_system_prompt_draft(
-                        window or getattr(schedule, "_schedule_window", DEFAULT_WINDOW)
+                        getattr(schedule, "_schedule_window", DEFAULT_WINDOW)
                     ),
                 },
                 {"role": "user", "content": user_message},
@@ -290,7 +290,7 @@ async def run_draft(
     )
 
 
-async def run_chat(messages, schedule, blocks, rules, now, window=None) -> AIChatResult:
+async def run_chat(messages, schedule, blocks, rules, now) -> AIChatResult:
     """Multi-turn chat (feature 0007).
 
     ``messages`` is the FULL client-supplied transcript ordered
@@ -330,7 +330,7 @@ async def run_chat(messages, schedule, blocks, rules, now, window=None) -> AICha
         {
             "role": "system",
             "content": build_system_prompt_chat(
-                window or getattr(schedule, "_schedule_window", DEFAULT_WINDOW)
+                getattr(schedule, "_schedule_window", DEFAULT_WINDOW)
             ),
         },
         # Schedule context + the flattened prior transcript live in a
