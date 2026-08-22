@@ -296,12 +296,12 @@ def _build_resolution_ask(
                 "That time is outside your schedule window. "
                 "Please give a time within your day."
             )
-    for outcome in skipped:
-        return (
-            f"That time range for {title(outcome)} is not valid or available. "
-            "Please give a valid time."
-        )
-    return None
+    # ``skipped`` is guaranteed non-empty (the early ``if not skipped`` guard),
+    # so fall back to the first outcome's generic message.
+    return (
+        f"That time range for {title(skipped[0])} is not valid or available. "
+        "Please give a valid time."
+    )
 
 
 def _validation_error_detail(e: ValidationError) -> dict:

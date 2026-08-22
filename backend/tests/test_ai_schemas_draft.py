@@ -81,6 +81,27 @@ def test_bad_direction_value_rejected():
     assert any("direction must be one of" in e for e in errors)
 
 
+def test_update_empty_title_rejected():
+    # The general title check applies to update too (not only add): an empty /
+    # whitespace title is caught at the schema layer, never reaching full_clean.
+    errors = validate_action_shape(
+        {"type": "update", "task_id": 5, "title": "   "},
+        ALLOWED,
+    )
+    assert any("title cannot be empty" in e for e in errors)
+
+
+def test_update_invalid_category_rejected():
+    # An invalid category on an update is a malformed field — caught at the
+    # schema layer (whole-turn parse error), not soft-skipped, and never
+    # reaching full_clean.
+    errors = validate_action_shape(
+        {"type": "update", "task_id": 5, "category": "not_a_category"},
+        ALLOWED,
+    )
+    assert any("category must be one of" in e for e in errors)
+
+
 def test_non_string_direction_rejected_without_crashing():
     # A non-string direction (list/dict) must surface as a clean validation
     # error, not a TypeError from ``in`` on a set of strings (which would
