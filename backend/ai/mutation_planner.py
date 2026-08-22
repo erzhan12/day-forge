@@ -176,6 +176,8 @@ def slot_suggestion_to_dict(suggestion: SlotSuggestion | None) -> dict | None:
         return None
     if suggestion.direction_required:
         return {"direction_required": True}
+    if suggestion.start_time is None or suggestion.end_time is None:
+        return None
     return {
         "start_time": suggestion.start_time.strftime("%H:%M"),
         "end_time": suggestion.end_time.strftime("%H:%M"),
@@ -621,7 +623,7 @@ def plan_mutations(
         accepted_changed.add(task_id)
         start, end = upd.new_start, upd.new_end
         if upd.wrapped and upd.bare_move_derived_end:
-            reject(task_id, "window")
+            reject(task_id, "out_of_window")
             continue
         if (
             upd.start_supplied
@@ -780,7 +782,7 @@ def plan_mutations(
         if (
             skipped
             and time_requested
-            and reason not in {"unresolved_conflict", "interval", "granularity", "window"}
+            and reason not in {"unresolved_conflict", "interval", "granularity", "out_of_window"}
         ):
             from ai.free_slot import find_slot
 

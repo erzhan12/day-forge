@@ -1373,6 +1373,7 @@ def test_chat_partially_applies_metadata_and_returns_one_resolution_ask(
                     "category": "health",
                     "start_time": "10:00",
                     "end_time": "11:00",
+                    "direction": "later",
                 }
             ],
             "Updated",
@@ -1383,12 +1384,59 @@ def test_chat_partially_applies_metadata_and_returns_one_resolution_ask(
     assert response.status_code == 200
     payload = response.json()
     assert payload["applied"] is True and payload["partial"] is True and payload["ask"]
+    # FIX-4: the ask names the block by its NEW (post-rename) title, locking the
+    # FIX-2 stale-pre-rename-title regression.
+    assert "Renamed" in payload["ask"]
     assert payload["outcomes"][0]["status"] == "partial"
     target.refresh_from_db()
     assert target.title == "Renamed" and target.category == "health"
     assert target.start_time.strftime("%H:%M") == "09:00"
     interaction = AIInteraction.objects.get(schedule=today_schedule)
     assert interaction.success is True and interaction.outcomes_json == payload["outcomes"]
+
+
+def test_chat_out_of_window_exact_move_yields_window_ask_not_direction(
+    auth_client, today_schedule, monkeypatch
+):
+    # FIX-1: an out-of-window exact move must never call find_slot (which for
+    # direction="exact" returns direction_required and would emit the
+    # "earlier or later?" ask). The user must see the window-specific message
+    # and the outcome must carry reason_code "out_of_window" with no suggestion.
+    target = TimeBlock.objects.create(
+        schedule=today_schedule,
+        title="Focus",
+        start_time="09:00",
+        end_time="10:00",
+        category="work",
+    )
+    _patch_run_chat(
+        monkeypatch,
+        AIChatResult(
+            "{}",
+            [
+                {
+                    "type": "update",
+                    "task_id": target.id,
+                    "start_time": "23:30",
+                    "end_time": "23:59",
+                }
+            ],
+            "Moved",
+            None,
+        ),
+    )
+    response = _post(auth_client, {"messages": [_user_turn("move it to 23:30")]})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ask"] == (
+        "That time is outside your schedule window. Please give a time within your day."
+    )
+    assert "earlier or later" not in payload["ask"]
+    outcome = payload["outcomes"][0]
+    assert outcome["reason_code"] == "out_of_window"
+    assert outcome["suggestion"] is None
+    target.refresh_from_db()
+    assert target.start_time.strftime("%H:%M") == "09:00"
 
 
 class TestResolutionAskPrecedence:

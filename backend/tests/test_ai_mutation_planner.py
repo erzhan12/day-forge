@@ -532,7 +532,9 @@ class TestPlannerEdgeCases:
             day_end=DAY_END,
         )
         assert isinstance(result, MutationPlan)
-        assert result.outcomes[0].reason_code == "window"
+        assert result.outcomes[0].reason_code == "out_of_window"
+        # FIX-1: out_of_window rejections never call find_slot, so no suggestion.
+        assert result.outcomes[0].suggestion is None
 
     def test_plan_overwritten_wrap_is_not_rejected(self):
         # Bare move would wrap past midnight; a later supplied end clears wrap provenance.

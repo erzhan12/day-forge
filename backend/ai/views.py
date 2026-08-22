@@ -1104,7 +1104,7 @@ async def ai_chat(request, date):
             "start_time", "sort_order"
         )
     ]
-    block_titles = {block.id: block.title for block in current_blocks}
+    block_titles = {block.id: block.title for block in result_blocks}
     create_titles = {
         index: action.get("title", "New block")
         for index, action in enumerate(result.parsed_actions)
