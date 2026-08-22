@@ -788,3 +788,26 @@ def test_same_task_bare_move_preserves_prior_direction():
     assert not outcome.suggestion.direction_required
     assert outcome.suggestion.direction == "later"
     assert outcome.suggestion.start_time >= _t("11:00")
+
+
+def test_plan_update_unknown_task_id():
+    """An ``update`` referencing a task_id absent from the snapshot is a
+    structural miss — ``plan_mutations`` returns a ``PlanError`` (whole-turn
+    abort), mirroring the move/resize unknown-id behavior."""
+    snap = _schedule([_block(1, "09:00", "10:00")])
+    result = plan_mutations(
+        snap,
+        [
+            {
+                "type": "update",
+                "task_id": 999,
+                "title": "Renamed",
+            }
+        ],
+        day_start=DAY_START,
+        day_end=DAY_END,
+    )
+    assert isinstance(result, PlanError)
+    assert result.detail == (
+        "Referenced block no longer exists; it may have been deleted. Please retry."
+    )

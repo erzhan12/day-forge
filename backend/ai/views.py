@@ -1061,6 +1061,8 @@ async def ai_chat(request, date):
                 "explanation": result.explanation,
                 "ask": result.ask,
                 "applied": False,
+                "partial": False,
+                "outcomes": [],
             }
         )
 
@@ -1073,6 +1075,8 @@ async def ai_chat(request, date):
                 "explanation": result.explanation,
                 "ask": None,
                 "applied": False,
+                "partial": False,
+                "outcomes": [],
             }
         )
 

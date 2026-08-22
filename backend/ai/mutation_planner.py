@@ -171,7 +171,7 @@ class PartialPlan(MutationPlan):
     overall_status: str = "applied"
 
 
-def slot_suggestion_to_dict(suggestion: SlotSuggestion | None) -> dict | None:
+def _slot_suggestion_to_dict(suggestion: SlotSuggestion | None) -> dict | None:
     if suggestion is None:
         return None
     if suggestion.direction_required:
@@ -195,7 +195,7 @@ def action_outcome_to_dict(outcome: ActionOutcome) -> dict:
         "reason_code": outcome.reason_code,
         "conflicting_task_ids": list(outcome.conflicting_task_ids),
         "attempted_direction": outcome.attempted_direction,
-        "suggestion": slot_suggestion_to_dict(outcome.suggestion),
+        "suggestion": _slot_suggestion_to_dict(outcome.suggestion),
     }
 
 
@@ -779,11 +779,11 @@ def plan_mutations(
         reason, conflicts = rejected.get(task_id, (None, ()))
         suggestion = None
         attempted_direction = None
-        if (
-            skipped
-            and time_requested
-            and reason not in {"unresolved_conflict", "interval", "granularity", "out_of_window"}
-        ):
+        # Allowlist: a directional free-slot search is meaningful ONLY for an
+        # ``overlap`` skip. Any other reason code (window, grid, interval, or a
+        # future one) must NOT reach ``find_slot`` — it would yield a
+        # misleading direction question.
+        if skipped and time_requested and reason == "overlap":
             from ai.free_slot import find_slot
 
             occupied = [

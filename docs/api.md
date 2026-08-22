@@ -356,7 +356,9 @@ skipped time work (`ask` non-null) — the partial-apply case.
   "blocks": null,
   "explanation": "What time should gym start?",
   "ask": "What time?",
-  "applied": false
+  "applied": false,
+  "partial": false,
+  "outcomes": []
 }
 ```
 
@@ -369,11 +371,15 @@ No mutations; `Schedule.status` is unchanged. Append the assistant's `explanatio
   "blocks": null,
   "explanation": "You're welcome!",
   "ask": null,
-  "applied": false
+  "applied": false,
+  "partial": false,
+  "outcomes": []
 }
 ```
 
 Empty `parsed_actions` with `ask: null`. No mutations; status unchanged.
+
+**Envelope uniformity:** `partial` and `outcomes` are **always present on every `200` response** — the apply, clarifying-question, and chit-chat turns alike. On non-apply turns they default to `false` and `[]` respectively, so a client can read them unconditionally without branching on the response variant.
 
 **Errors**
 

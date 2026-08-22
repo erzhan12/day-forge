@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import datetime
 from collections.abc import Iterable
+from typing import TYPE_CHECKING
 
 from schedules.http import times_overlap
 from schedules.window import ScheduleWindow
+
+if TYPE_CHECKING:
+    from ai.mutation_planner import SlotSuggestion
 
 # Keep aligned with schedules.validators.validate_five_minute_granularity.
 GRID_MINUTES = 5
@@ -27,7 +31,7 @@ def find_slot(
     direction: str,
     window: ScheduleWindow,
     occupied_intervals: Iterable[tuple[datetime.time, datetime.time]],
-):
+) -> SlotSuggestion | None:
     """Return a SlotSuggestion, an exact-direction sentinel, or None.
 
     The import is deliberately local: ``SlotSuggestion`` is the planner's
