@@ -327,9 +327,9 @@ onUnmounted(() => {
 }
 
 :global(html[data-theme="dark_4a"]) .command-bar.variant-dock {
-  background: #1b1d20;
-  color: #eceae6;
-  border-color: #26292d;
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  border-color: var(--border);
 }
 
 /* Sidebar variant — fills the parent (ChatSidebar) as a flex column. */
