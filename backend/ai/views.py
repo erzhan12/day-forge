@@ -1,4 +1,5 @@
 """AI draft and chat endpoints with atomic schedule mutation helpers."""
+
 import datetime
 import hashlib
 import json
@@ -29,8 +30,11 @@ from templates_mgr.models import Rule, Template
 
 from ai.models import AIInteraction
 from ai.mutation_planner import (
+    ActionOutcome,
     MutationDiff,
+    PartialPlan,
     PlanError,
+    action_outcome_to_dict,
     compute_apply_context_fingerprint,
     plan_mutations,
     snapshot_apply_context,
@@ -192,24 +196,26 @@ async def _log_interaction(
             kind=kind,
         )
     except Exception:
-        logger.exception(
-            "Failed to persist AIInteraction (schedule=%s)", schedule.id
-        )
+        logger.exception("Failed to persist AIInteraction (schedule=%s)", schedule.id)
         return None
 
 
-async def _mark_success(interaction: AIInteraction | None) -> None:
+async def _mark_success(
+    interaction: AIInteraction | None, outcomes: list[dict] | None = None
+) -> None:
     """Flip a just-logged AIInteraction row to ``success=True``. No-op if
     the initial log write failed (``interaction is None``)."""
     if interaction is None:
         return
     try:
         interaction.success = True
-        await interaction.asave(update_fields=["success"])
+        update_fields = ["success"]
+        if outcomes is not None:
+            interaction.outcomes_json = outcomes
+            update_fields.append("outcomes_json")
+        await interaction.asave(update_fields=update_fields)
     except Exception:
-        logger.exception(
-            "Failed to mark AIInteraction success (id=%s)", interaction.id
-        )
+        logger.exception("Failed to mark AIInteraction success (id=%s)", interaction.id)
 
 
 class _Rollback(Exception):
@@ -228,6 +234,68 @@ def _action_error(action_index: int, detail: str | dict, status: int = 400) -> J
         {"errors": {"action_index": action_index, "detail": detail}},
         status=status,
     )
+
+
+def _build_resolution_ask(
+    outcomes: tuple[ActionOutcome, ...],
+    block_titles: dict[int, str],
+    create_titles: dict[int, str],
+) -> str | None:
+    """Return one concise server-owned follow-up for skipped time work."""
+    skipped = [outcome for outcome in outcomes if outcome.skipped_fields]
+    if not skipped:
+        return None
+
+    def title(outcome: ActionOutcome) -> str:
+        return block_titles.get(
+            outcome.task_id, create_titles.get(outcome.action_index, "That block")
+        )
+
+    def title_for_id(block_id: int) -> str:
+        return block_titles.get(block_id, create_titles.get(block_id, "that block"))
+
+    # Resolve by fixed precedence, scanning ALL skipped outcomes so the
+    # question the user sees is order-invariant (not whichever skipped
+    # outcome happened to appear first). Precedence:
+    #   concrete suggestion > direction_required > unresolved_conflict
+    #   > no-slot(attempted_direction) > skipped-add(task_id None)
+    #   > generic-invalid.
+    for outcome in skipped:
+        suggestion = outcome.suggestion
+        if suggestion and not suggestion.direction_required and suggestion.start_time:
+            return (
+                f"{title(outcome)} conflicts at that time. Move it to "
+                f"{suggestion.start_time:%H:%M}–{suggestion.end_time:%H:%M}?"
+            )
+    for outcome in skipped:
+        if outcome.suggestion and outcome.suggestion.direction_required:
+            return "That time conflicts. Should I look for an earlier or later slot?"
+    for outcome in skipped:
+        if outcome.reason_code == "unresolved_conflict":
+            others = [title_for_id(cid) for cid in outcome.conflicting_task_ids]
+            names = [title(outcome), *others]
+            if len(names) >= 2:
+                joined = f"'{names[0]}' and '{names[1]}'"
+                return f"{joined} can't both move to that time. Which should move?"
+            return "Those requested moves conflict with each other. Which one should move?"
+    for outcome in skipped:
+        if outcome.attempted_direction in {"later", "earlier"}:
+            return (
+                f"No free {outcome.attempted_direction} slot fits {title(outcome)} "
+                "within your day window. Please choose another time."
+            )
+    for outcome in skipped:
+        if outcome.task_id is None:
+            return (
+                f"{title(outcome)} does not fit at that time. Please give it a "
+                "concrete free start and end time."
+            )
+    for outcome in skipped:
+        return (
+            f"That time range for {title(outcome)} is not valid or available. "
+            "Please give a valid time."
+        )
+    return None
 
 
 def _validation_error_detail(e: ValidationError) -> dict:
@@ -369,9 +437,7 @@ def _apply_move_or_resize(
 ) -> JsonResponse | None:
     new_start, new_end, wrapped = _compute_move_resize_times(action, block)
     if wrapped:
-        return _action_error(
-            action_index, "moved block would extend past midnight"
-        )
+        return _action_error(action_index, "moved block would extend past midnight")
 
     # Enforce day-window and granularity only on times the action supplied
     # (or, for a bare move, derived from the supplied start): a value
@@ -402,9 +468,7 @@ def _apply_move_or_resize(
         return err
     if new_start >= new_end:
         return _action_error(action_index, "start_time must be < end_time")
-    err = _check_no_overlap(
-        blocks_by_id, new_start, new_end, block.id, action_index
-    )
+    err = _check_no_overlap(blocks_by_id, new_start, new_end, block.id, action_index)
     if err is not None:
         return err
 
@@ -440,14 +504,11 @@ def _apply_existing_block_action(
         # step — surface both as the same "no longer exists" message.
         return _action_error(
             action_index,
-            "Referenced block no longer exists; it may have been "
-            "deleted. Please retry.",
+            "Referenced block no longer exists; it may have been deleted. Please retry.",
         )
     if action["type"] == "remove":
         return _apply_remove(schedule, blocks_by_id, action, action_index, block)
-    return _apply_move_or_resize(
-        schedule, blocks_by_id, action, action_index, block, window
-    )
+    return _apply_move_or_resize(schedule, blocks_by_id, action, action_index, block, window)
 
 
 _ACTION_DISPATCH = {
@@ -510,14 +571,23 @@ def _persist_mutation_diff(
         block = blocks_by_id.get(entry.block_id)
         if block is None:
             continue
-        block.start_time = entry.start_time
-        block.end_time = entry.end_time
+        if entry.title is not None:
+            block.title = entry.title
+        if entry.category is not None:
+            block.category = entry.category
+        if entry.start_changed:
+            block.start_time = entry.start_time
+        if entry.end_changed:
+            block.end_time = entry.end_time
         try:
-            block.full_clean(exclude=["start_time", "end_time"])
+            excluded = []
+            if not entry.start_changed:
+                excluded.append("start_time")
+            if not entry.end_changed:
+                excluded.append("end_time")
+            block.full_clean(exclude=excluded)
         except ValidationError as e:
-            raise _Rollback(
-                _action_error(entry.action_index, _validation_error_detail(e))
-            )
+            raise _Rollback(_action_error(entry.action_index, _validation_error_detail(e)))
         block.save()
 
     max_sort = max((b.sort_order for b in blocks_by_id.values()), default=-1)
@@ -534,9 +604,7 @@ def _persist_mutation_diff(
         try:
             block.full_clean()
         except ValidationError as e:
-            raise _Rollback(
-                _action_error(entry.action_index, _validation_error_detail(e))
-            )
+            raise _Rollback(_action_error(entry.action_index, _validation_error_detail(e)))
         block.save()
         blocks_by_id[block.id] = block
 
@@ -547,7 +615,7 @@ def _apply_actions_sync(
     *,
     expected_fingerprint: str,
     interaction_id: int | None = None,
-) -> None:
+) -> PartialPlan:
     """Apply parsed actions under one atomic+select_for_update lock.
 
     Used by ``ai_chat``. ``_apply_draft_sync`` stays separate because the draft path
@@ -555,18 +623,14 @@ def _apply_actions_sync(
     semantics that don't merge cleanly.
     """
     if not result.parsed_actions:
-        return
+        return PartialPlan(MutationDiff((), (), ()), (), "applied")
 
     with transaction.atomic():
         User.objects.select_for_update().get(pk=schedule.user_id)
         locked_schedule = (
-            Schedule.objects.select_for_update()
-            .select_related("user")
-            .get(pk=schedule.pk)
+            Schedule.objects.select_for_update().select_related("user").get(pk=schedule.pk)
         )
-        locked_blocks = list(
-            TimeBlock.objects.filter(schedule=locked_schedule).select_for_update()
-        )
+        locked_blocks = list(TimeBlock.objects.filter(schedule=locked_schedule).select_for_update())
         locked_rules = list(
             Rule.objects.filter(user_id=schedule.user_id, is_active=True)
             .only("id", "text", "priority")
@@ -576,8 +640,7 @@ def _apply_actions_sync(
         locked_context = snapshot_apply_context(schedule_snapshot, locked_rules)
         if locked_context.fingerprint != expected_fingerprint:
             logger.warning(
-                "schedule_changed during AI apply "
-                "(user=%s, schedule=%s, interaction=%s)",
+                "schedule_changed during AI apply (user=%s, schedule=%s, interaction=%s)",
                 schedule.user_id,
                 schedule.id,
                 interaction_id,
@@ -597,12 +660,12 @@ def _apply_actions_sync(
             day_end=window.end_str,
         )
         if isinstance(plan_result, PlanError):
-            raise _Rollback(
-                _action_error(plan_result.action_index, plan_result.detail)
-            )
+            raise _Rollback(_action_error(plan_result.action_index, plan_result.detail))
 
         _persist_mutation_diff(locked_schedule, locked_blocks, plan_result.diff)
-        locked_schedule.mark_active_on_edit()
+        if plan_result.diff.deletes or plan_result.diff.updates or plan_result.diff.creates:
+            locked_schedule.mark_active_on_edit()
+        return plan_result
 
 
 def _apply_draft_sync(schedule: Schedule, result: AIDraftResult) -> None:
@@ -612,9 +675,7 @@ def _apply_draft_sync(schedule: Schedule, result: AIDraftResult) -> None:
         # see the comment in the original ai_generate_draft for the
         # full rationale.
         locked_schedule = (
-            Schedule.objects.select_for_update()
-            .select_related("user")
-            .get(pk=schedule.pk)
+            Schedule.objects.select_for_update().select_related("user").get(pk=schedule.pk)
         )
         locked_blocks = list(TimeBlock.objects.filter(schedule=locked_schedule))
         if locked_blocks:
@@ -623,8 +684,7 @@ def _apply_draft_sync(schedule: Schedule, result: AIDraftResult) -> None:
                     {
                         "errors": {
                             "detail": (
-                                "Schedule already has blocks; delete "
-                                "them before regenerating."
+                                "Schedule already has blocks; delete them before regenerating."
                             )
                         }
                     },
@@ -677,37 +737,23 @@ async def ai_generate_draft(request, date):
         return JsonResponse({"errors": {"date": "Invalid date format."}}, status=400)
 
     user = await request.auser()
-    schedule, _ = await Schedule.objects.aget_or_create(
-        user=user, date=parsed_date
-    )
+    schedule, _ = await Schedule.objects.aget_or_create(user=user, date=parsed_date)
 
     if await TimeBlock.objects.filter(schedule=schedule).aexists():
         return JsonResponse(
             {
                 "errors": {
-                    "detail": (
-                        "Schedule already has blocks; delete them before "
-                        "regenerating."
-                    )
+                    "detail": ("Schedule already has blocks; delete them before regenerating.")
                 }
             },
             status=409,
         )
 
     slot_type = Template.slot_type_for_date(parsed_date)
-    template = await Template.objects.filter(
-        user=user, type=slot_type
-    ).afirst()
+    template = await Template.objects.filter(user=user, type=slot_type).afirst()
     if template is None:
         return JsonResponse(
-            {
-                "errors": {
-                    "detail": (
-                        "No template configured for this day type. "
-                        "Open Settings."
-                    )
-                }
-            },
+            {"errors": {"detail": ("No template configured for this day type. Open Settings.")}},
             status=422,
         )
 
@@ -721,9 +767,7 @@ async def ai_generate_draft(request, date):
     ):
         return _rate_limited_response()
 
-    history_start = parsed_date - datetime.timedelta(
-        days=settings.LLM_HISTORY_DAYS
-    )
+    history_start = parsed_date - datetime.timedelta(days=settings.LLM_HISTORY_DAYS)
     history = [
         s
         async for s in Schedule.objects.filter(
@@ -749,9 +793,7 @@ async def ai_generate_draft(request, date):
         result = await run_draft(schedule, template, history, rules, now)
     except AIError as e:
         raw = getattr(e, "raw_response_text", "") or str(e)
-        await _log_interaction(
-            schedule, "[DRAFT]", raw, [], kind=AIInteraction.Kind.DRAFT
-        )
+        await _log_interaction(schedule, "[DRAFT]", raw, [], kind=AIInteraction.Kind.DRAFT)
         status = next(
             (s for cls, s in _AI_ERROR_STATUS.items() if isinstance(e, cls)),
             None,
@@ -773,9 +815,7 @@ async def ai_generate_draft(request, date):
     )
 
     try:
-        await sync_to_async(_apply_draft_sync, thread_sensitive=True)(
-            schedule, result
-        )
+        await sync_to_async(_apply_draft_sync, thread_sensitive=True)(schedule, result)
     except _Rollback as rb:
         logger.warning(
             "AI draft apply failed (user=%s, schedule=%s, actions=%s)",
@@ -843,10 +883,7 @@ def _validate_chat_messages(messages: object) -> str | None:
         if len(content) < 1:
             return f"messages[{idx}].content cannot be empty"
         if len(content) > settings.LLM_MAX_COMMAND_CHARS:
-            return (
-                f"messages[{idx}].content too long "
-                f"(max {settings.LLM_MAX_COMMAND_CHARS} chars)"
-            )
+            return f"messages[{idx}].content too long (max {settings.LLM_MAX_COMMAND_CHARS} chars)"
         total_chars += len(content)
         # Roles strictly alternate, starting with user.
         expected = "user" if idx % 2 == 0 else "assistant"
@@ -857,10 +894,7 @@ def _validate_chat_messages(messages: object) -> str | None:
             )
 
     if total_chars > settings.LLM_CHAT_MAX_TOTAL_CHARS:
-        return (
-            f"total content too long ({total_chars} > "
-            f"{settings.LLM_CHAT_MAX_TOTAL_CHARS} chars)"
-        )
+        return f"total content too long ({total_chars} > {settings.LLM_CHAT_MAX_TOTAL_CHARS} chars)"
 
     if messages[-1]["role"] != "user":
         return "messages must end with a user turn"
@@ -906,12 +940,8 @@ async def _log_chat_failure(
 ) -> None:
     """Persist the failure-row variant of the chat audit envelope."""
     raw = getattr(exc, "raw_response_text", "") or str(exc)
-    payload = _build_chat_audit_response(
-        messages, raw, error_class=type(exc).__name__
-    )
-    await _log_interaction(
-        schedule, last_user_msg, payload, [], kind=AIInteraction.Kind.CHAT
-    )
+    payload = _build_chat_audit_response(messages, raw, error_class=type(exc).__name__)
+    await _log_interaction(schedule, last_user_msg, payload, [], kind=AIInteraction.Kind.CHAT)
 
 
 @login_required
@@ -945,16 +975,12 @@ async def ai_chat(request, date):
     try:
         parsed_date = datetime.date.fromisoformat(date)
     except ValueError:
-        return JsonResponse(
-            {"errors": {"date": "Invalid date format."}}, status=400
-        )
+        return JsonResponse({"errors": {"date": "Invalid date format."}}, status=400)
 
     try:
         data = json.loads(request.body)
     except json.JSONDecodeError:
-        return JsonResponse(
-            {"errors": {"body": "Invalid JSON."}}, status=400
-        )
+        return JsonResponse({"errors": {"body": "Invalid JSON."}}, status=400)
     # Non-object JSON roots (``[]``, ``"x"``, ``123``, ``null``) parse
     # fine but break ``data.get(...)`` with AttributeError → 500. Reject
     # them as 400 here so the contract from the planning doc holds:
@@ -971,13 +997,9 @@ async def ai_chat(request, date):
         return JsonResponse({"errors": {"messages": err}}, status=400)
 
     user = await request.auser()
-    schedule, _ = await Schedule.objects.aget_or_create(
-        user=user, date=parsed_date
-    )
+    schedule, _ = await Schedule.objects.aget_or_create(user=user, date=parsed_date)
 
-    if not await _consume_rate_limit(
-        user.id, "ai_chat_rl", settings.LLM_CHAT_RATE_LIMIT_PER_HOUR
-    ):
+    if not await _consume_rate_limit(user.id, "ai_chat_rl", settings.LLM_CHAT_RATE_LIMIT_PER_HOUR):
         return _rate_limited_response()
 
     last_user_msg = messages[-1]["content"]
@@ -1052,7 +1074,7 @@ async def ai_chat(request, date):
     # It re-fetches under the lock so a concurrent edit between
     # the LLM call and the apply surfaces as a clean per-action error.
     try:
-        await sync_to_async(_apply_actions_sync, thread_sensitive=True)(
+        plan = await sync_to_async(_apply_actions_sync, thread_sensitive=True)(
             schedule,
             result,
             expected_fingerprint=expected_fingerprint,
@@ -1067,7 +1089,8 @@ async def ai_chat(request, date):
         )
         return rb.response
 
-    await _mark_success(interaction)
+    outcome_payload = [action_outcome_to_dict(outcome) for outcome in plan.outcomes]
+    await _mark_success(interaction, outcome_payload)
 
     result_blocks = [
         b
@@ -1075,6 +1098,14 @@ async def ai_chat(request, date):
             "start_time", "sort_order"
         )
     ]
+    block_titles = {block.id: block.title for block in current_blocks}
+    create_titles = {
+        index: action.get("title", "New block")
+        for index, action in enumerate(result.parsed_actions)
+        if action.get("type") == "add"
+    }
+    ask = _build_resolution_ask(plan.outcomes, block_titles, create_titles)
+    applied = bool(plan.diff.deletes or plan.diff.updates or plan.diff.creates)
     logger.info(
         "AI chat applied (user=%s, schedule=%s, actions=%s)",
         user.id,
@@ -1085,7 +1116,9 @@ async def ai_chat(request, date):
         {
             "blocks": [block_to_dict(b) for b in result_blocks],
             "explanation": result.explanation,
-            "ask": None,
-            "applied": True,
+            "ask": ask,
+            "applied": applied,
+            "partial": plan.overall_status == "partial",
+            "outcomes": outcome_payload,
         }
     )

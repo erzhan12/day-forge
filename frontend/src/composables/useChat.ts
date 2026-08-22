@@ -59,6 +59,8 @@ interface ChatApiResult extends ApiResult {
     explanation?: string | null
     ask?: string | null
     applied?: boolean
+    partial?: boolean
+    outcomes?: unknown[]
   }
 }
 

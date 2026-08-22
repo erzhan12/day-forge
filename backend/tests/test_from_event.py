@@ -425,9 +425,13 @@ class TestAIMoveResizeOffGrid:
         assert block.end_time.strftime("%H:%M") == "07:00"
 
     @pytest.mark.django_db
-    def test_action_supplied_off_grid_time_still_rejected(
+    def test_action_supplied_off_grid_time_is_skipped_not_persisted(
         self, auth_client, ai_schedule, monkeypatch
     ):
+        """Feature 0054: an off-grid action-supplied time is SKIPPED at the
+        planner (not persisted) and the turn returns 200 with a skipped
+        outcome — no longer an all-or-nothing 400 rejection. The block's
+        stored times never change to the off-grid value."""
         block = TimeBlock.objects.create(
             schedule=ai_schedule, title="Gym",
             start_time="17:00", end_time="18:00", category="health",
@@ -437,9 +441,22 @@ class TestAIMoveResizeOffGrid:
             [{"type": "move", "task_id": block.id, "start_time": "17:03"}],
         )
         resp = self._post(auth_client)
-        assert resp.status_code == 400
+        assert resp.status_code == 200
+        data = resp.json()
+        # The time intent was skipped, nothing applied.
+        assert data["applied"] is False
+        outcomes = data["outcomes"]
+        assert len(outcomes) == 1
+        outcome = outcomes[0]
+        assert outcome["status"] == "skipped"
+        # Off-grid time never persists — it lands in skipped_fields with a
+        # granularity reason, not an applied field.
+        assert "start_time" in outcome["skipped_fields"]
+        assert outcome["reason_code"] == "granularity"
+        # The stored block is untouched (no off-grid time written).
         block.refresh_from_db()
         assert block.start_time.strftime("%H:%M") == "17:00"
+        assert block.end_time.strftime("%H:%M") == "18:00"
 
 
 class TestTravelRuleCrud:

@@ -168,6 +168,32 @@ describe("useChat", () => {
     expect(routerReload).not.toHaveBeenCalled()
   })
 
+  it("partial apply with a server ask pushes one undo entry and preserves the ask", async () => {
+    const chat = useChat()
+    chat.setActiveDate("2026-05-07")
+    requestJsonMock.mockResolvedValue({
+      ok: true,
+      data: {
+        blocks: [{ ...BLOCK, title: "Renamed" }],
+        explanation: "Renamed it",
+        ask: "Should I look for an earlier or later slot?",
+        applied: true,
+        partial: true,
+        outcomes: [],
+      },
+    })
+    const pushUndo = vi.fn()
+
+    await chat.submitTurn("rename and move it", snapshotBlocks, pushUndo)
+
+    expect(pushUndo).toHaveBeenCalledOnce()
+    expect(chat.pendingAsk.value).toBe("Should I look for an earlier or later slot?")
+    expect(chat.messages.value.at(-1)).toMatchObject({
+      content: "Should I look for an earlier or later slot?",
+      ask: "Should I look for an earlier or later slot?",
+    })
+  })
+
   it("409 schedule_changed shows retry message, reloads, no undo, apiHealthy true", async () => {
     const chat = useChat()
     chat.setActiveDate("2026-05-07")

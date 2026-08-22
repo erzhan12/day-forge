@@ -1,5 +1,6 @@
 """Unit tests for ``validate_draft_response``."""
-from ai.schemas import validate_draft_response
+
+from ai.schemas import ALLOWED_ACTION_TYPES, validate_action_shape, validate_draft_response
 
 ALLOWED = {"work", "personal", "health", "other"}
 
@@ -61,3 +62,73 @@ def test_invalid_add_action_per_action_check_fires():
     }
     errors = validate_draft_response(parsed, ALLOWED)
     assert any("title" in e for e in errors)
+
+
+def test_update_shape_accepts_metadata_and_rejects_empty_or_bad_direction():
+    assert "update" in ALLOWED_ACTION_TYPES
+    assert validate_action_shape({"type": "update", "task_id": 5, "title": "X"}, ALLOWED) == []
+    assert validate_action_shape({"type": "update", "task_id": 5}, ALLOWED)
+    assert validate_action_shape(
+        {"type": "update", "task_id": 5, "title": "X", "direction": "sideways"}, ALLOWED
+    )
+
+
+def test_bad_direction_value_rejected():
+    errors = validate_action_shape(
+        {"type": "update", "task_id": 5, "start_time": "09:00", "direction": "sideways"},
+        ALLOWED,
+    )
+    assert any("direction must be one of" in e for e in errors)
+
+
+def test_non_string_direction_rejected_without_crashing():
+    # A non-string direction (list/dict) must surface as a clean validation
+    # error, not a TypeError from ``in`` on a set of strings (which would
+    # escape the AIParseError path and 500).
+    for bad in ([], {}, 3, None):
+        errors = validate_action_shape(
+            {"type": "update", "task_id": 5, "start_time": "09:00", "direction": bad},
+            ALLOWED,
+        )
+        assert any("direction must be one of" in e for e in errors)
+
+
+def test_direction_without_time_rejected():
+    # A metadata-only update carrying a valid direction but no time field is a
+    # meaningless patch — direction requires an accompanying start/end time.
+    errors = validate_action_shape(
+        {"type": "update", "task_id": 5, "title": "X", "direction": "later"},
+        ALLOWED,
+    )
+    assert any("direction requires an accompanying" in e for e in errors)
+
+
+def test_valid_update_with_time_and_direction_accepted():
+    assert (
+        validate_action_shape(
+            {
+                "type": "update",
+                "task_id": 5,
+                "start_time": "09:00",
+                "end_time": "10:00",
+                "direction": "later",
+            },
+            ALLOWED,
+        )
+        == []
+    )
+
+
+def test_direction_rejected_on_non_update_types():
+    # ``direction`` is placement intent for an update time change only; the
+    # planner never reads it on move/resize/add, so it must be rejected there.
+    for kind, extra in (
+        ("move", {"task_id": 5, "start_time": "09:00"}),
+        ("resize", {"task_id": 5, "end_time": "10:00"}),
+        ("add", {"title": "X", "start_time": "09:00", "end_time": "10:00",
+                 "category": "work"}),
+    ):
+        errors = validate_action_shape(
+            {"type": kind, "direction": "later", **extra}, ALLOWED
+        )
+        assert any("'direction' is not valid on a" in e for e in errors)

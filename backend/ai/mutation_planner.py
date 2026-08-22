@@ -2,6 +2,7 @@
 
 Snapshot in, ``MutationPlan`` or ``PlanError`` out — no ORM writes.
 """
+
 from __future__ import annotations
 
 import datetime
@@ -16,9 +17,7 @@ from schedules.http import VALID_CATEGORIES, parse_time, times_overlap
 from schedules.validators import validate_five_minute_granularity
 from schedules.window import DEFAULT_WINDOW
 
-_UNKNOWN_TASK_DETAIL = (
-    "Referenced block no longer exists; it may have been deleted. Please retry."
-)
+_UNKNOWN_TASK_DETAIL = "Referenced block no longer exists; it may have been deleted. Please retry."
 
 # add: category/title → day window → granularity → interval → overlap → model
 # move/resize: wrap → day window → granularity → interval → overlap → model
@@ -105,6 +104,9 @@ class UpdateMutation:
     end_supplied: bool
     bare_move_derived_end: bool
     wrapped: bool
+    new_title: str | None = None
+    new_category: str | None = None
+    direction: str = "exact"
 
 
 @dataclass(frozen=True)
@@ -125,6 +127,10 @@ class UpdateDiffEntry:
     start_time: datetime.time
     end_time: datetime.time
     action_index: int
+    title: str | None = None
+    category: str | None = None
+    start_changed: bool = True
+    end_changed: bool = True
 
 
 @dataclass(frozen=True)
@@ -150,6 +156,59 @@ class MutationPlan:
 
 
 @dataclass(frozen=True)
+class SlotSuggestion:
+    start_time: datetime.time | None = None
+    end_time: datetime.time | None = None
+    direction: str | None = None
+    direction_required: bool = False
+
+
+@dataclass(frozen=True)
+class ActionOutcome:
+    action_index: int
+    task_id: int | None
+    status: str
+    applied_fields: tuple[str, ...] = ()
+    skipped_fields: tuple[str, ...] = ()
+    reason_code: str | None = None
+    conflicting_task_ids: tuple[int, ...] = ()
+    suggestion: SlotSuggestion | None = None
+    attempted_direction: str | None = None
+
+
+@dataclass(frozen=True)
+class PartialPlan(MutationPlan):
+    outcomes: tuple[ActionOutcome, ...] = ()
+    overall_status: str = "applied"
+
+
+def slot_suggestion_to_dict(suggestion: SlotSuggestion | None) -> dict | None:
+    if suggestion is None:
+        return None
+    if suggestion.direction_required:
+        return {"direction_required": True}
+    return {
+        "start_time": suggestion.start_time.strftime("%H:%M"),
+        "end_time": suggestion.end_time.strftime("%H:%M"),
+        "direction": suggestion.direction,
+    }
+
+
+def action_outcome_to_dict(outcome: ActionOutcome) -> dict:
+    return {
+        "action_index": outcome.action_index,
+        "task_id": outcome.task_id,
+        "status": outcome.status,
+        "applied_fields": list(outcome.applied_fields),
+        "skipped_fields": list(outcome.skipped_fields),
+        "reason_code": outcome.reason_code,
+        "conflicting_task_ids": list(outcome.conflicting_task_ids),
+        "attempted_direction": outcome.attempted_direction,
+        "suggestion": slot_suggestion_to_dict(outcome.suggestion),
+    }
+
+
+@dataclass(frozen=True)
 class PlanError:
     action_index: int
     detail: str
@@ -171,22 +230,13 @@ def compute_move_resize_times(
     ``(new_start, new_end, wrapped_past_midnight)``.
     """
     kind = action["type"]
-    new_start = (
-        parse_time(action["start_time"])
-        if "start_time" in action
-        else block.start_time
-    )
-    new_end = (
-        parse_time(action["end_time"])
-        if "end_time" in action
-        else block.end_time
-    )
+    new_start = parse_time(action["start_time"]) if "start_time" in action else block.start_time
+    new_end = parse_time(action["end_time"]) if "end_time" in action else block.end_time
 
     if kind == "move" and "end_time" not in action:
-        original = (
-            datetime.datetime.combine(datetime.date.min, block.end_time)
-            - datetime.datetime.combine(datetime.date.min, block.start_time)
-        )
+        original = datetime.datetime.combine(
+            datetime.date.min, block.end_time
+        ) - datetime.datetime.combine(datetime.date.min, block.start_time)
         minutes = int(original.total_seconds()) // 60
         rounded = max(5, -(-minutes // 5) * 5)
         new_end = (
@@ -264,9 +314,7 @@ def snapshot_from_blocks(schedule, blocks: Iterable) -> ScheduleSnapshot:
 
 
 def _rules_from_iterable(rules: Iterable) -> tuple[RuleSnapshot, ...]:
-    snaps = tuple(
-        RuleSnapshot(id=r.id, text=r.text, priority=r.priority) for r in rules
-    )
+    snaps = tuple(RuleSnapshot(id=r.id, text=r.text, priority=r.priority) for r in rules)
     return tuple(sorted(snaps, key=lambda r: (-r.priority, r.id)))
 
 
@@ -316,9 +364,7 @@ def compute_apply_context_fingerprint(
     rules_arg: Iterable = () if rules is None else rules
 
     # Mode 1 — production apply path: ORM schedule + ORM TimeBlock rows.
-    if schedule is not None and (
-        blocks_list and not isinstance(blocks_list[0], BlockSnapshot)
-    ):
+    if schedule is not None and (blocks_list and not isinstance(blocks_list[0], BlockSnapshot)):
         schedule_snap = snapshot_from_blocks(schedule, blocks_list)
     else:
         # Mode 2/3 — tests (BlockSnapshot list) or empty-block schedule.
@@ -383,11 +429,14 @@ def _pick_violation(violations: list[tuple[int, int, int, str]]) -> PlanError | 
 def _normalize_actions(
     snapshot: ScheduleSnapshot,
     parsed_actions: Sequence[dict],
-) -> PlanError | tuple[
-    list[DeleteMutation],
-    dict[int, UpdateMutation],
-    list[CreateMutation],
-]:
+) -> (
+    PlanError
+    | tuple[
+        list[DeleteMutation],
+        dict[int, UpdateMutation],
+        list[CreateMutation],
+    ]
+):
     snapshot_by_id = {b.id: b for b in snapshot.blocks}
     removed: set[int] = set()
     deletes: list[DeleteMutation] = []
@@ -423,7 +472,7 @@ def _normalize_actions(
             deletes.append(DeleteMutation(action_index=action_index, task_id=task_id))
             continue
 
-        if kind not in ("move", "resize"):
+        if kind not in ("move", "resize", "update"):
             continue
 
         if task_id in removed:
@@ -459,6 +508,26 @@ def _normalize_actions(
             bare_move_derived_end = prev.bare_move_derived_end
             wrapped_flag = prev.wrapped
 
+        new_title = action.get("title") if kind == "update" else None
+        new_category = action.get("category") if kind == "update" else None
+        # Direction is placement intent tied to THIS action's explicit
+        # ``direction`` key. A later same-task action that supplies a time
+        # but no ``direction`` must NOT clobber a prior action's later/earlier
+        # with "exact" (regression: FIX-C). Only default to "exact" when
+        # neither this action nor any prior action carried a direction.
+        this_direction = action.get("direction")
+        if this_direction is not None:
+            direction = this_direction
+        elif prev is not None:
+            direction = prev.direction
+        else:
+            direction = "exact"
+        if prev is not None:
+            if new_title is None:
+                new_title = prev.new_title
+            if new_category is None:
+                new_category = prev.new_category
+
         merged_updates[task_id] = UpdateMutation(
             action_index=action_index,
             task_id=task_id,
@@ -468,6 +537,9 @@ def _normalize_actions(
             end_supplied=end_supplied,
             bare_move_derived_end=bare_move_derived_end,
             wrapped=wrapped_flag,
+            new_title=new_title,
+            new_category=new_category,
+            direction=direction,
         )
         chain_effective[task_id] = _EffectiveTimes(
             start_time=new_start,
@@ -495,8 +567,8 @@ def _build_candidate(
             id=task_id,
             start_time=upd.new_start,
             end_time=upd.new_end,
-            title=base.title,
-            category=base.category,
+            title=upd.new_title if upd.new_title is not None else base.title,
+            category=upd.new_category if upd.new_category is not None else base.category,
             is_completed=base.is_completed,
             source_action_index=upd.action_index,
         )
@@ -590,9 +662,7 @@ def _validate_create(
             )
         )
     if not create.title:
-        violations.append(
-            _violation(idx, _RANK_CREATE_SCHEMA, temp_id, "title must not be empty")
-        )
+        violations.append(_violation(idx, _RANK_CREATE_SCHEMA, temp_id, "title must not be empty"))
 
     if not day_start_t <= create.start_time <= day_end_t:
         violations.append(
@@ -620,9 +690,7 @@ def _validate_create(
             violations.append(_violation(idx, _RANK_GRANULARITY, temp_id, str(e.message)))
 
     if create.start_time >= create.end_time:
-        violations.append(
-            _violation(idx, _RANK_INTERVAL, temp_id, "start_time must be < end_time")
-        )
+        violations.append(_violation(idx, _RANK_INTERVAL, temp_id, "start_time must be < end_time"))
 
     return violations
 
@@ -643,15 +711,11 @@ def _validate_candidate(
     changed_ids = set(merged_updates.keys()) | {-(c.action_index + 1) for c in creates}
 
     for upd in merged_updates.values():
-        violations.extend(
-            _validate_update(upd, day_start_t, day_end_t, upd.task_id)
-        )
+        violations.extend(_validate_update(upd, day_start_t, day_end_t, upd.task_id))
 
     for create in creates:
         temp_id = -(create.action_index + 1)
-        violations.extend(
-            _validate_create(create, day_start_t, day_end_t, temp_id)
-        )
+        violations.extend(_validate_create(create, day_start_t, day_end_t, temp_id))
 
     for block_id in sorted(candidate.keys()):
         block = candidate[block_id]
@@ -670,11 +734,9 @@ def _validate_candidate(
     candidate_ids = sorted(candidate.keys())
     for i, id1 in enumerate(candidate_ids):
         b1 = candidate[id1]
-        for id2 in candidate_ids[i + 1:]:
+        for id2 in candidate_ids[i + 1 :]:
             b2 = candidate[id2]
-            if not times_overlap(
-                b1.start_time, b1.end_time, b2.start_time, b2.end_time
-            ):
+            if not times_overlap(b1.start_time, b1.end_time, b2.start_time, b2.end_time):
                 continue
 
             idx1 = b1.source_action_index
@@ -757,24 +819,299 @@ def plan_mutations(
     *,
     day_start: str = DEFAULT_WINDOW.start_str,
     day_end: str = DEFAULT_WINDOW.end_str,
-) -> MutationPlan | PlanError:
-    """Pure final-state planner: normalize, build candidate, validate, diff."""
+) -> PartialPlan | PlanError:
+    """Plan the accepted subset of a chat turn.
+
+    Structural misses still abort.  Policy failures (window, grid, interval,
+    and overlap) reject only the affected time intent so independent metadata
+    can safely persist in the same atomic turn.
+    """
     normalized = _normalize_actions(snapshot, parsed_actions)
     if isinstance(normalized, PlanError):
         return normalized
 
     deletes, merged_updates, creates = normalized
     candidate = _build_candidate(snapshot, deletes, merged_updates, creates)
+    snapshot_by_id = {block.id: block for block in snapshot.blocks}
+    window_start, window_end = _day_bounds(day_start, day_end)
+    from schedules.window import ScheduleWindow, clamp_boundary
 
-    error = _validate_candidate(
-        candidate,
-        merged_updates,
-        creates,
-        day_start,
-        day_end,
+    window = ScheduleWindow(window_start, window_end)
+    accepted_changed: set[int] = set()
+    rejected: dict[int, tuple[str, tuple[int, ...]]] = {}
+
+    def reject(block_id: int, reason: str, conflicts: tuple[int, ...] = ()) -> None:
+        if block_id in rejected:
+            return
+        rejected[block_id] = (reason, conflicts)
+        accepted_changed.discard(block_id)
+        if block_id < 0:
+            candidate.pop(block_id, None)
+            return
+        original = snapshot_by_id[block_id]
+        current = candidate[block_id]
+        candidate[block_id] = BlockCandidate(
+            id=current.id,
+            start_time=original.start_time,
+            end_time=original.end_time,
+            title=current.title,
+            category=current.category,
+            is_completed=current.is_completed,
+            source_action_index=current.source_action_index,
+        )
+
+    def invalid_grid(value: datetime.time) -> bool:
+        try:
+            validate_five_minute_granularity(value)
+        except ValidationError:
+            return True
+        return False
+
+    # Intrinsic validation and the narrowly-scoped near-edge clamping pass.
+    for task_id, upd in merged_updates.items():
+        time_requested = upd.start_supplied or upd.end_supplied or upd.bare_move_derived_end
+        if not time_requested:
+            continue
+        accepted_changed.add(task_id)
+        start, end = upd.new_start, upd.new_end
+        if upd.wrapped and upd.bare_move_derived_end:
+            reject(task_id, "window")
+            continue
+        if (
+            upd.start_supplied
+            and start > window.day_end
+            or upd.end_supplied
+            and end < window.day_start
+        ):
+            reject(task_id, "out_of_window")
+            continue
+        if (upd.start_supplied and invalid_grid(start)) or (upd.end_supplied and invalid_grid(end)):
+            reject(task_id, "granularity")
+            continue
+        if start >= end:
+            reject(task_id, "interval")
+            continue
+        # A derived bare-move end is checked but never silently clamped.
+        if upd.bare_move_derived_end and end > window.day_end:
+            reject(task_id, "out_of_window")
+            continue
+        clamped = clamp_boundary(
+            start,
+            end,
+            window,
+            clamp_start=upd.start_supplied and start < window.day_start,
+            clamp_end=upd.end_supplied and end > window.day_end,
+        )
+        if clamped is None:
+            reject(task_id, "out_of_window")
+            continue
+        start, end = clamped
+        if (upd.start_supplied and start != upd.new_start) or (
+            upd.end_supplied and end != upd.new_end
+        ):
+            current = candidate[task_id]
+            candidate[task_id] = BlockCandidate(
+                current.id,
+                start,
+                end,
+                current.title,
+                current.category,
+                current.is_completed,
+                current.source_action_index,
+            )
+
+    for create in creates:
+        temp_id = -(create.action_index + 1)
+        accepted_changed.add(temp_id)
+        start, end = create.start_time, create.end_time
+        if invalid_grid(start) or invalid_grid(end):
+            reject(temp_id, "granularity")
+            continue
+        if start >= end:
+            reject(temp_id, "interval")
+            continue
+        if start > window.day_end or end < window.day_start:
+            reject(temp_id, "out_of_window")
+            continue
+        clamped = clamp_boundary(
+            start,
+            end,
+            window,
+            clamp_start=start < window.day_start,
+            clamp_end=end > window.day_end,
+        )
+        if clamped is None:
+            reject(temp_id, "out_of_window")
+            continue
+        if clamped != (start, end):
+            current = candidate[temp_id]
+            candidate[temp_id] = BlockCandidate(
+                current.id,
+                clamped[0],
+                clamped[1],
+                current.title,
+                current.category,
+                current.is_completed,
+                current.source_action_index,
+            )
+
+    # Rebuild after every rejection round.  This avoids action-order wins.
+    for _round in range(len(accepted_changed) + 1):
+        changed_vs_unchanged: dict[int, set[int]] = {}
+        changed_vs_changed: dict[int, set[int]] = {}
+        ids = sorted(candidate)
+        for position, left_id in enumerate(ids):
+            left = candidate[left_id]
+            for right_id in ids[position + 1 :]:
+                right = candidate[right_id]
+                if not times_overlap(
+                    left.start_time, left.end_time, right.start_time, right.end_time
+                ):
+                    continue
+                left_changed, right_changed = (
+                    left_id in accepted_changed,
+                    right_id in accepted_changed,
+                )
+                if left_changed ^ right_changed:
+                    changed_id, unchanged_id = (
+                        (left_id, right_id) if left_changed else (right_id, left_id)
+                    )
+                    if unchanged_id > 0:
+                        changed_vs_unchanged.setdefault(changed_id, set()).add(unchanged_id)
+                elif left_changed and right_changed:
+                    changed_vs_changed.setdefault(left_id, set()).add(right_id)
+                    changed_vs_changed.setdefault(right_id, set()).add(left_id)
+        if changed_vs_unchanged:
+            for block_id, conflicts in changed_vs_unchanged.items():
+                reject(block_id, "overlap", tuple(sorted(conflicts)))
+            continue
+        if changed_vs_changed:
+            for block_id, related_ids in changed_vs_changed.items():
+                others = tuple(sorted(other for other in related_ids if other > 0))
+                reject(block_id, "unresolved_conflict", others)
+            continue
+        break
+
+    update_entries: list[UpdateDiffEntry] = []
+    outcomes: list[ActionOutcome] = []
+    for task_id in sorted(merged_updates):
+        upd = merged_updates[task_id]
+        current = candidate[task_id]
+        time_requested = upd.start_supplied or upd.end_supplied or upd.bare_move_derived_end
+        time_accepted = task_id not in rejected and time_requested
+        start_changed = time_accepted and upd.start_supplied
+        end_changed = time_accepted and (upd.end_supplied or upd.bare_move_derived_end)
+        title = upd.new_title
+        category = upd.new_category
+        if title is not None or category is not None or start_changed or end_changed:
+            update_entries.append(
+                UpdateDiffEntry(
+                    task_id,
+                    current.start_time,
+                    current.end_time,
+                    upd.action_index,
+                    title,
+                    category,
+                    start_changed,
+                    end_changed,
+                )
+            )
+        applied = []
+        skipped = []
+        if title is not None:
+            applied.append("title")
+        if category is not None:
+            applied.append("category")
+        if time_requested:
+            target = applied if time_accepted else skipped
+            if upd.start_supplied:
+                target.append("start_time")
+            if upd.end_supplied or upd.bare_move_derived_end:
+                target.append("end_time")
+        reason, conflicts = rejected.get(task_id, (None, ()))
+        suggestion = None
+        attempted_direction = None
+        if (
+            skipped
+            and time_requested
+            and reason not in {"unresolved_conflict", "interval", "granularity", "window"}
+        ):
+            from ai.free_slot import find_slot
+
+            occupied = [
+                (block.start_time, block.end_time)
+                for block_id, block in candidate.items()
+                if block_id != task_id
+            ]
+            suggestion = find_slot(upd.new_start, upd.new_end, upd.direction, window, occupied)
+            attempted_direction = upd.direction
+        status = "applied" if not skipped else "partial" if applied else "skipped"
+        outcomes.append(
+            ActionOutcome(
+                upd.action_index,
+                task_id,
+                status,
+                tuple(applied),
+                tuple(skipped),
+                reason,
+                conflicts,
+                suggestion,
+                attempted_direction,
+            )
+        )
+
+    create_entries: list[CreateDiffEntry] = []
+    for create in creates:
+        temp_id = -(create.action_index + 1)
+        if temp_id not in rejected:
+            current = candidate[temp_id]
+            create_entries.append(
+                CreateDiffEntry(
+                    temp_id,
+                    create.title,
+                    create.category,
+                    current.start_time,
+                    current.end_time,
+                    create.action_index,
+                )
+            )
+            outcomes.append(
+                ActionOutcome(
+                    create.action_index,
+                    None,
+                    "applied",
+                    ("title", "category", "start_time", "end_time"),
+                )
+            )
+        else:
+            reason, conflicts = rejected[temp_id]
+            outcomes.append(
+                ActionOutcome(
+                    create.action_index,
+                    None,
+                    "skipped",
+                    (),
+                    ("title", "category", "start_time", "end_time"),
+                    reason,
+                    conflicts,
+                )
+            )
+
+    delete_entries = tuple(
+        DeleteDiffEntry(d.task_id, d.action_index) for d in sorted(deletes, key=lambda d: d.task_id)
     )
-    if error is not None:
-        return error
-
-    diff = _build_diff(snapshot, candidate, deletes, merged_updates, creates)
-    return MutationPlan(diff=diff)
+    outcomes.extend(ActionOutcome(d.action_index, d.task_id, "applied") for d in deletes)
+    outcomes.sort(key=lambda outcome: outcome.action_index)
+    statuses = [outcome.status for outcome in outcomes]
+    overall = (
+        "applied"
+        if all(status == "applied" for status in statuses)
+        else "skipped"
+        if not any(status in {"applied", "partial"} for status in statuses)
+        else "partial"
+    )
+    return PartialPlan(
+        MutationDiff(delete_entries, tuple(update_entries), tuple(create_entries)),
+        tuple(outcomes),
+        overall,
+    )

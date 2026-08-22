@@ -5,12 +5,14 @@ error so no network call is made. The view's validation order, audit
 logging shape, rate-limit independence, and untrusted-transcript
 handling are all exercised against real DB.
 """
+
 import datetime
 import hashlib
 import json
 
 import pytest
 from ai.models import AIInteraction
+from ai.mutation_planner import ActionOutcome
 from ai.service import (
     AIChatResult,
     AIInvalidInputError,
@@ -19,6 +21,7 @@ from ai.service import (
     AITimeoutError,
     AIUnavailableError,
 )
+from ai.views import _build_resolution_ask
 from asgiref.sync import sync_to_async
 from django.contrib.auth.models import User
 from django.core.cache import cache
@@ -302,9 +305,7 @@ class TestValidation:
         # Single message bumps the body past the 1 MB cap.
         resp = auth_client.post(
             URL,
-            json.dumps(
-                {"messages": [_user_turn("x" * 2_000_000)]}
-            ),
+            json.dumps({"messages": [_user_turn("x" * 2_000_000)]}),
             content_type="application/json",
         )
         assert resp.status_code == 413
@@ -312,26 +313,14 @@ class TestValidation:
     @pytest.mark.django_db
     def test_invalid_body_does_not_create_schedule(self, user, auth_client):
         # No Schedule row exists for this user/date yet.
-        assert (
-            Schedule.objects.filter(
-                user=user, date="2026-04-18"
-            ).count()
-            == 0
-        )
+        assert Schedule.objects.filter(user=user, date="2026-04-18").count() == 0
         resp = _post(auth_client, {"messages": [_user_turn("")]})
         assert resp.status_code == 400
         # Validation runs BEFORE get_or_create — no row should be persisted.
-        assert (
-            Schedule.objects.filter(
-                user=user, date="2026-04-18"
-            ).count()
-            == 0
-        )
+        assert Schedule.objects.filter(user=user, date="2026-04-18").count() == 0
 
     @pytest.mark.django_db
-    def test_validation_failures_do_not_consume_rate_limit(
-        self, user, auth_client, settings
-    ):
+    def test_validation_failures_do_not_consume_rate_limit(self, user, auth_client, settings):
         settings.LLM_CHAT_RATE_LIMIT_PER_HOUR = 5
         # Five malformed bodies in a row — none should burn the budget.
         for _ in range(5):
@@ -343,9 +332,7 @@ class TestValidation:
 
 class TestClarifyingQuestion:
     @pytest.mark.django_db
-    def test_returns_ask_without_mutating(
-        self, user, auth_client, today_schedule, monkeypatch
-    ):
+    def test_returns_ask_without_mutating(self, user, auth_client, today_schedule, monkeypatch):
         _patch_run_chat(
             monkeypatch,
             AIChatResult(
@@ -355,9 +342,7 @@ class TestClarifyingQuestion:
                 ask="when?",
             ),
         )
-        resp = _post(
-            auth_client, {"messages": [_user_turn("add gym")]}
-        )
+        resp = _post(auth_client, {"messages": [_user_turn("add gym")]})
         assert resp.status_code == 200
         data = resp.json()
         assert data["ask"] == "when?"
@@ -374,9 +359,7 @@ class TestClarifyingQuestion:
 
 class TestApply:
     @pytest.mark.django_db
-    def test_apply_actions_creates_blocks(
-        self, user, auth_client, today_schedule, monkeypatch
-    ):
+    def test_apply_actions_creates_blocks(self, user, auth_client, today_schedule, monkeypatch):
         _patch_run_chat(
             monkeypatch,
             AIChatResult(
@@ -411,9 +394,7 @@ class TestApply:
         assert row.success is True
 
     @pytest.mark.django_db
-    def test_chitchat_no_op(
-        self, user, auth_client, today_schedule, monkeypatch
-    ):
+    def test_chitchat_no_op(self, user, auth_client, today_schedule, monkeypatch):
         _patch_run_chat(
             monkeypatch,
             AIChatResult(
@@ -423,9 +404,7 @@ class TestApply:
                 ask=None,
             ),
         )
-        resp = _post(
-            auth_client, {"messages": [_user_turn("thanks!")]}
-        )
+        resp = _post(auth_client, {"messages": [_user_turn("thanks!")]})
         assert resp.status_code == 200
         data = resp.json()
         assert data["applied"] is False
@@ -437,9 +416,7 @@ class TestApply:
 
 class TestRateLimit:
     @pytest.mark.django_db
-    def test_chat_bucket_enforces_limit(
-        self, user, auth_client, monkeypatch, settings
-    ):
+    def test_chat_bucket_enforces_limit(self, user, auth_client, monkeypatch, settings):
         settings.LLM_CHAT_RATE_LIMIT_PER_HOUR = 1
         _patch_run_chat(
             monkeypatch,
@@ -510,9 +487,7 @@ class TestAuditEnvelope:
         assert row.kind == AIInteraction.Kind.CHAT
         payload = json.loads(row.ai_response)
         expected = hashlib.sha256(
-            json.dumps(messages, sort_keys=True, ensure_ascii=False).encode(
-                "utf-8"
-            )
+            json.dumps(messages, sort_keys=True, ensure_ascii=False).encode("utf-8")
         ).hexdigest()
         assert payload["transcript_sha256"] == expected
         assert payload["turn_count"] == 1
@@ -550,9 +525,7 @@ class TestAuditEnvelope:
         assert row.actions_json == []
         payload = json.loads(row.ai_response)
         expected_hash = hashlib.sha256(
-            json.dumps(messages, sort_keys=True, ensure_ascii=False).encode(
-                "utf-8"
-            )
+            json.dumps(messages, sort_keys=True, ensure_ascii=False).encode("utf-8")
         ).hexdigest()
         assert payload["transcript_sha256"] == expected_hash
         assert payload["turn_count"] == 1
@@ -574,19 +547,11 @@ class TestActiveRulesWiring:
     def test_only_authenticated_users_active_rules_are_passed(
         self, auth_client, user, today_schedule, monkeypatch
     ):
-        Rule.objects.create(
-            user=user, text="HIGH rule", priority=10, is_active=True
-        )
-        Rule.objects.create(
-            user=user, text="LOW rule", priority=1, is_active=True
-        )
-        Rule.objects.create(
-            user=user, text="INACTIVE", priority=99, is_active=False
-        )
+        Rule.objects.create(user=user, text="HIGH rule", priority=10, is_active=True)
+        Rule.objects.create(user=user, text="LOW rule", priority=1, is_active=True)
+        Rule.objects.create(user=user, text="INACTIVE", priority=99, is_active=False)
         other_user = User.objects.create_user(username="other", password="x")
-        Rule.objects.create(
-            user=other_user, text="OTHER USER", priority=99, is_active=True
-        )
+        Rule.objects.create(user=other_user, text="OTHER USER", priority=99, is_active=True)
 
         captured = {}
 
@@ -651,21 +616,18 @@ class TestChatBatchMutationExecutor:
             {"messages": [_user_turn("add standup at 09:30")]},
         )
 
-        assert resp.status_code == 400
-        errors = resp.json()["errors"]
-        assert errors["action_index"] == 0
-        assert "overlap" in errors["detail"]
+        assert resp.status_code == 200
+        assert resp.json()["applied"] is False
+        assert resp.json()["ask"]
         surviving_blocks = list(TimeBlock.objects.filter(schedule=today_schedule))
         assert [block.pk for block in surviving_blocks] == [seeded_block.pk]
         interaction = AIInteraction.objects.get(schedule=today_schedule)
-        assert interaction.success is False
+        assert interaction.success is True
         today_schedule.refresh_from_db()
         assert today_schedule.status == Schedule.Status.REVIEWED
 
     @pytest.mark.django_db
-    def test_chat_apply_uses_shared_planner(
-        self, auth_client, today_schedule, monkeypatch
-    ):
+    def test_chat_apply_uses_shared_planner(self, auth_client, today_schedule, monkeypatch):
         block_a = TimeBlock.objects.create(
             schedule=today_schedule,
             title="A",
@@ -737,9 +699,7 @@ class TestChatBatchMutationExecutor:
             )(title="Renamed during LLM")
             return AIChatResult(
                 raw_response_text="{}",
-                parsed_actions=[
-                    {"type": "move", "task_id": block.id, "start_time": "11:00"}
-                ],
+                parsed_actions=[{"type": "move", "task_id": block.id, "start_time": "11:00"}],
                 explanation="Moved",
                 ask=None,
             )
@@ -770,9 +730,7 @@ class TestChatBatchMutationExecutor:
             end_time="10:00",
             category="work",
         )
-        rule = Rule.objects.create(
-            user=user, text="Original rule", priority=5, is_active=True
-        )
+        rule = Rule.objects.create(user=user, text="Original rule", priority=5, is_active=True)
 
         async def _run(messages, schedule, blocks, rules, now):
             await sync_to_async(
@@ -781,9 +739,7 @@ class TestChatBatchMutationExecutor:
             )(text="Changed during LLM")
             return AIChatResult(
                 raw_response_text="{}",
-                parsed_actions=[
-                    {"type": "move", "task_id": block.id, "start_time": "11:00"}
-                ],
+                parsed_actions=[{"type": "move", "task_id": block.id, "start_time": "11:00"}],
                 explanation="Moved",
                 ask=None,
             )
@@ -806,9 +762,7 @@ class TestChatBatchMutationExecutor:
     def test_chat_empty_actions_skips_apply_on_fingerprint_mismatch(
         self, auth_client, user, today_schedule, monkeypatch
     ):
-        rule = Rule.objects.create(
-            user=user, text="Original rule", priority=5, is_active=True
-        )
+        rule = Rule.objects.create(user=user, text="Original rule", priority=5, is_active=True)
         apply_called = {"v": False}
         original_apply = None
 
@@ -856,9 +810,7 @@ class TestChatBatchMutationExecutor:
 class TestSharedApplyCoverage:
     """Coverage retained from the removed one-shot endpoint suite."""
 
-    def test_move_preserves_duration(
-        self, auth_client, today_schedule, monkeypatch
-    ):
+    def test_move_preserves_duration(self, auth_client, today_schedule, monkeypatch):
         block = TimeBlock.objects.create(
             schedule=today_schedule,
             title="Gym",
@@ -870,9 +822,7 @@ class TestSharedApplyCoverage:
             monkeypatch,
             AIChatResult(
                 raw_response_text="{}",
-                parsed_actions=[
-                    {"type": "move", "task_id": block.id, "start_time": "19:00"}
-                ],
+                parsed_actions=[{"type": "move", "task_id": block.id, "start_time": "19:00"}],
                 explanation="Moved gym",
                 ask=None,
             ),
@@ -916,9 +866,7 @@ class TestSharedApplyCoverage:
             monkeypatch,
             AIChatResult(
                 raw_response_text="{}",
-                parsed_actions=[
-                    {"type": "resize", "task_id": block.id, "end_time": "10:30"}
-                ],
+                parsed_actions=[{"type": "resize", "task_id": block.id, "end_time": "10:30"}],
                 explanation="Extended",
                 ask=None,
             ),
@@ -928,13 +876,9 @@ class TestSharedApplyCoverage:
         block.refresh_from_db()
         assert block.end_time.strftime("%H:%M") == "10:30"
 
-    def test_cross_user_task_id_returns_400(
-        self, auth_client, today_schedule, monkeypatch
-    ):
+    def test_cross_user_task_id_returns_400(self, auth_client, today_schedule, monkeypatch):
         other_user = User.objects.create_user(username="other", password="x")
-        other_schedule = Schedule.objects.create(
-            user=other_user, date="2026-04-18"
-        )
+        other_schedule = Schedule.objects.create(user=other_user, date="2026-04-18")
         other_block = TimeBlock.objects.create(
             schedule=other_schedule,
             title="secret",
@@ -946,9 +890,7 @@ class TestSharedApplyCoverage:
             monkeypatch,
             AIChatResult(
                 raw_response_text="{}",
-                parsed_actions=[
-                    {"type": "remove", "task_id": other_block.id}
-                ],
+                parsed_actions=[{"type": "remove", "task_id": other_block.id}],
                 explanation="Removed",
                 ask=None,
             ),
@@ -958,9 +900,7 @@ class TestSharedApplyCoverage:
         assert TimeBlock.objects.filter(pk=other_block.id).exists()
         assert AIInteraction.objects.filter(schedule=today_schedule).count() == 1
 
-    def test_mid_batch_failure_rolls_back(
-        self, auth_client, today_schedule, monkeypatch
-    ):
+    def test_mid_batch_failure_rolls_back(self, auth_client, today_schedule, monkeypatch):
         actions = [
             {
                 "type": "add",
@@ -976,13 +916,13 @@ class TestSharedApplyCoverage:
             AIChatResult("{}", actions, "Two", None),
         )
         resp = _post(auth_client, {"messages": [_user_turn("add two")]})
-        assert resp.status_code == 400
+        assert resp.status_code == 200
+        # Two requested creates collide; the order-invariant planner declines
+        # both rather than selecting an arbitrary winner.
         assert TimeBlock.objects.filter(schedule=today_schedule).count() == 0
         assert AIInteraction.objects.filter(schedule=today_schedule).count() == 1
 
-    def test_russian_turn_round_trips(
-        self, auth_client, today_schedule, monkeypatch
-    ):
+    def test_russian_turn_round_trips(self, auth_client, today_schedule, monkeypatch):
         _patch_run_chat(
             monkeypatch,
             AIChatResult(
@@ -1033,12 +973,11 @@ class TestSharedApplyCoverage:
             AIChatResult("{}", [parsed_action], "Changed", None),
         )
         resp = _post(auth_client, {"messages": [_user_turn("change gym")]})
-        assert resp.status_code == 400
-        assert resp.json()["errors"]["action_index"] == 0
+        assert resp.status_code == 200
+        assert resp.json()["applied"] is False
+        assert resp.json()["ask"]
 
-    def test_log_truncates_oversized_response(
-        self, auth_client, today_schedule, monkeypatch
-    ):
+    def test_log_truncates_oversized_response(self, auth_client, today_schedule, monkeypatch):
         _patch_run_chat(
             monkeypatch,
             AIParseError("too much", raw_response_text="A" * 50_000),
@@ -1069,17 +1008,15 @@ class TestSharedApplyCoverage:
             ),
         )
         resp = _post(auth_client, {"messages": [_user_turn("move gym")]})
-        assert resp.status_code == 400
-        assert (
-            resp.json()["errors"]["detail"]
-            == "moved block would extend past midnight"
-        )
+        assert resp.status_code == 200
+        assert resp.json()["applied"] is False
+        assert resp.json()["ask"]
 
     @pytest.mark.parametrize(
         "start_time,end_time,expected_status",
         [
-            ("05:30", "06:00", 400),
-            ("22:30", "23:30", 400),
+            ("05:30", "06:00", 200),
+            ("22:30", "23:30", 200),
             ("06:00", "23:00", 200),
         ],
     )
@@ -1111,9 +1048,7 @@ class TestSharedApplyCoverage:
         resp = _post(auth_client, {"messages": [_user_turn("add block")]})
         assert resp.status_code == expected_status
 
-    def test_resize_rejected_after_day_end(
-        self, auth_client, user, today_schedule, monkeypatch
-    ):
+    def test_resize_rejected_after_day_end(self, auth_client, user, today_schedule, monkeypatch):
         # Feature 0053: default window made explicit.
         _set_window(user, datetime.time(6, 0), datetime.time(23, 0))
         block = TimeBlock.objects.create(
@@ -1133,12 +1068,12 @@ class TestSharedApplyCoverage:
             AIChatResult("{}", [action], "Extended", None),
         )
         resp = _post(auth_client, {"messages": [_user_turn("extend work")]})
-        assert resp.status_code == 400
-        assert "23:00" in resp.json()["errors"]["detail"]
+        assert resp.status_code == 200
+        assert resp.json()["applied"] is True
+        block.refresh_from_db()
+        assert block.end_time.strftime("%H:%M") == "23:00"
 
-    def test_locks_schedule_row(
-        self, auth_client, today_schedule, monkeypatch
-    ):
+    def test_locks_schedule_row(self, auth_client, today_schedule, monkeypatch):
         action = {
             "type": "add",
             "title": "Standup",
@@ -1157,9 +1092,7 @@ class TestSharedApplyCoverage:
             called["value"] = True
             return original(*args, **kwargs)
 
-        monkeypatch.setattr(
-            Schedule.objects, "select_for_update", _spy, raising=True
-        )
+        monkeypatch.setattr(Schedule.objects, "select_for_update", _spy, raising=True)
         resp = _post(auth_client, {"messages": [_user_turn("add standup")]})
         assert resp.status_code == 200
         assert called["value"]
@@ -1233,9 +1166,7 @@ class TestSharedApplyCoverage:
         assert TimeBlock.objects.filter(pk=block.pk).exists()
         assert not TimeBlock.objects.filter(title="Bad").exists()
 
-    def test_mark_active_failure_rolls_back_diff(
-        self, auth_client, today_schedule, monkeypatch
-    ):
+    def test_mark_active_failure_rolls_back_diff(self, auth_client, today_schedule, monkeypatch):
         block = TimeBlock.objects.create(
             schedule=today_schedule,
             title="Gym",
@@ -1264,9 +1195,7 @@ class TestSharedApplyCoverage:
         interaction = AIInteraction.objects.get(schedule=today_schedule)
         assert interaction.success is False
 
-    def test_reviewed_schedule_transitions_to_active(
-        self, auth_client, user, monkeypatch
-    ):
+    def test_reviewed_schedule_transitions_to_active(self, auth_client, user, monkeypatch):
         schedule = Schedule.objects.create(
             user=user,
             date="2026-04-18",
@@ -1292,9 +1221,7 @@ class TestSharedApplyCoverage:
     def test_chat_happy_path_with_active_rule_and_nonempty_actions(
         self, auth_client, user, today_schedule, monkeypatch
     ):
-        Rule.objects.create(
-            user=user, text="Prefer 25m pomodoros", priority=10, is_active=True
-        )
+        Rule.objects.create(user=user, text="Prefer 25m pomodoros", priority=10, is_active=True)
         block = TimeBlock.objects.create(
             schedule=today_schedule,
             title="Focus",
@@ -1307,9 +1234,7 @@ class TestSharedApplyCoverage:
             assert all(hasattr(r, "id") for r in rules)
             return AIChatResult(
                 raw_response_text="{}",
-                parsed_actions=[
-                    {"type": "move", "task_id": block.id, "start_time": "11:00"}
-                ],
+                parsed_actions=[{"type": "move", "task_id": block.id, "start_time": "11:00"}],
                 explanation="Moved",
                 ask=None,
             )
@@ -1350,10 +1275,9 @@ class TestChatNonDefaultDayWindow:
         }
         _patch_run_chat(monkeypatch, AIChatResult("{}", [action], "Added", None))
         resp = _post(auth_client, {"messages": [_user_turn("add late block")]})
-        assert resp.status_code == 400
-        detail = resp.json()["errors"]["detail"]
-        assert "21:00" in detail
-        assert "23:00" not in detail
+        assert resp.status_code == 200
+        assert resp.json()["applied"] is False
+        assert resp.json()["ask"]
         assert TimeBlock.objects.filter(schedule=today_schedule).count() == 0
 
     def test_add_accepted_under_widened_window(
@@ -1397,9 +1321,9 @@ class TestChatNonDefaultDayWindow:
         action = {"type": "resize", "task_id": block.id, "start_time": "23:35"}
         _patch_run_chat(monkeypatch, AIChatResult("{}", [action], "Resized", None))
         resp = _post(auth_client, {"messages": [_user_turn("start it at 23:35")]})
-        assert resp.status_code == 400
-        detail = resp.json()["errors"]["detail"]
-        assert "start_time must fall within 06:00-23:00" == detail
+        assert resp.status_code == 200
+        assert resp.json()["applied"] is False
+        assert resp.json()["ask"]
         # Not silently accepted — the stored times are unchanged.
         block.refresh_from_db()
         assert block.start_time.strftime("%H:%M") == "23:30"
@@ -1425,3 +1349,88 @@ class TestChatNonDefaultDayWindow:
         resp = _post(auth_client, {"messages": [_user_turn("add evening")]})
         assert resp.status_code == 200, resp.content
         assert TimeBlock.objects.filter(schedule=today_schedule).count() == 1
+
+
+@pytest.mark.django_db
+def test_chat_partially_applies_metadata_and_returns_one_resolution_ask(
+    auth_client, today_schedule, monkeypatch
+):
+    target = TimeBlock.objects.create(
+        schedule=today_schedule, title="Old", start_time="09:00", end_time="10:00", category="work"
+    )
+    TimeBlock.objects.create(
+        schedule=today_schedule, title="Busy", start_time="10:00", end_time="11:00", category="work"
+    )
+    _patch_run_chat(
+        monkeypatch,
+        AIChatResult(
+            "{}",
+            [
+                {
+                    "type": "update",
+                    "task_id": target.id,
+                    "title": "Renamed",
+                    "category": "health",
+                    "start_time": "10:00",
+                    "end_time": "11:00",
+                }
+            ],
+            "Updated",
+            None,
+        ),
+    )
+    response = _post(auth_client, {"messages": [_user_turn("rename and move it")]})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["applied"] is True and payload["partial"] is True and payload["ask"]
+    assert payload["outcomes"][0]["status"] == "partial"
+    target.refresh_from_db()
+    assert target.title == "Renamed" and target.category == "health"
+    assert target.start_time.strftime("%H:%M") == "09:00"
+    interaction = AIInteraction.objects.get(schedule=today_schedule)
+    assert interaction.success is True and interaction.outcomes_json == payload["outcomes"]
+
+
+class TestResolutionAskPrecedence:
+    """FIX-D: ``_build_resolution_ask`` resolves by fixed precedence across ALL
+    skipped outcomes (order-invariant) and names both blocks of an
+    ``unresolved_conflict``."""
+
+    @staticmethod
+    def _skipped_add(action_index: int) -> ActionOutcome:
+        return ActionOutcome(
+            action_index=action_index,
+            task_id=None,
+            status="skipped",
+            skipped_fields=("title", "category", "start_time", "end_time"),
+            reason_code="out_of_window",
+        )
+
+    @staticmethod
+    def _unresolved_conflict(action_index: int, task_id: int, other: int) -> ActionOutcome:
+        return ActionOutcome(
+            action_index=action_index,
+            task_id=task_id,
+            status="skipped",
+            skipped_fields=("start_time", "end_time"),
+            reason_code="unresolved_conflict",
+            conflicting_task_ids=(other,),
+        )
+
+    def test_unresolved_conflict_wins_over_skipped_add_both_orders(self):
+        block_titles = {10: "Focus", 20: "Standup"}
+        create_titles = {0: "New meeting"}
+        add = self._skipped_add(0)
+        conflict = self._unresolved_conflict(1, 10, 20)
+
+        expected = "'Focus' and 'Standup' can't both move to that time. Which should move?"
+        ask_a = _build_resolution_ask((add, conflict), block_titles, create_titles)
+        ask_b = _build_resolution_ask((conflict, add), block_titles, create_titles)
+        assert ask_a == expected
+        assert ask_b == expected  # order-invariant
+
+    def test_unresolved_conflict_names_both_blocks(self):
+        block_titles = {10: "Focus", 20: "Standup"}
+        conflict = self._unresolved_conflict(0, 10, 20)
+        ask = _build_resolution_ask((conflict,), block_titles, {})
+        assert "'Focus'" in ask and "'Standup'" in ask

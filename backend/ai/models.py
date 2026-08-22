@@ -15,6 +15,9 @@ class AIInteraction(models.Model):
     user_command = models.TextField()
     ai_response = models.TextField()
     actions_json = models.JSONField(default=list)
+    # Execution outcomes are structured separately from the bounded raw model
+    # response, which may be truncated for audit storage.
+    outcomes_json = models.JSONField(null=True, default=None)
     # Pessimistic default: row is created before mutations apply, then
     # flipped to True only if apply succeeds. Lets audit dashboards query
     # failures without correlating against Django's application log.
@@ -23,9 +26,7 @@ class AIInteraction(models.Model):
     # audit reports don't have to overload ``user_command`` (which is a
     # synthetic ``"[DRAFT]"`` placeholder for draft rows). Defaults to CHAT —
     # the only interactive producer since the /command/ endpoint was removed.
-    kind = models.CharField(
-        max_length=10, choices=Kind.choices, default=Kind.CHAT
-    )
+    kind = models.CharField(max_length=10, choices=Kind.choices, default=Kind.CHAT)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

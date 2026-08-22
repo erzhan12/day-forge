@@ -16,7 +16,7 @@ from schedules.http import is_plain_int
 
 MAX_ACTIONS_PER_COMMAND = 20
 
-ALLOWED_ACTION_TYPES = {"add", "move", "remove", "resize"}
+ALLOWED_ACTION_TYPES = {"add", "move", "remove", "resize", "update"}
 
 # Fields expected per action type. ``task_id`` is always an int; time fields
 # use HH:MM.
@@ -25,6 +25,7 @@ _REQUIRED_FIELDS = {
     "move": {"task_id"},
     "remove": {"task_id"},
     "resize": {"task_id"},
+    "update": {"task_id"},
 }
 
 _TIME_PATTERN = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
@@ -69,6 +70,35 @@ def validate_action_shape(action, allowed_categories) -> list[str]:
                 f"{action_type} action requires at least one of "
                 "'start_time' or 'end_time'"
             )
+
+    if action_type == "update":
+        editable = {"title", "category", "start_time", "end_time"}
+        if not editable.intersection(action):
+            errors.append(
+                "update action requires at least one of 'title', 'category', "
+                "'start_time' or 'end_time'"
+            )
+        if "direction" in action:
+            if (
+                not isinstance(action["direction"], str)
+                or action["direction"] not in {"later", "earlier", "exact"}
+            ):
+                errors.append("direction must be one of ['earlier', 'exact', 'later']")
+            # ``direction`` is placement intent for a TIME change. A
+            # metadata-only update carrying ``direction`` but no time field is
+            # a meaningless patch — the planner only reads direction alongside
+            # a supplied start/end. Reject it at the schema layer.
+            elif "start_time" not in action and "end_time" not in action:
+                errors.append(
+                    "direction requires an accompanying 'start_time' or 'end_time'"
+                )
+
+    # ``direction`` is only meaningful on an ``update`` (the planner reads
+    # ``action.get('direction')`` on updates only). Reject it on any other
+    # action type so a move/resize can't silently carry an unvalidated,
+    # unhonored direction.
+    if action_type != "update" and "direction" in action:
+        errors.append(f"'direction' is not valid on a {action_type} action")
 
     if "task_id" in action and not is_plain_int(action["task_id"]):
         errors.append("task_id must be an integer")

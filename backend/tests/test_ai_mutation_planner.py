@@ -1,4 +1,5 @@
 """Pure planner unit tests for feature 0030 (slices 1–3). No database."""
+
 import datetime
 
 import pytest
@@ -439,8 +440,9 @@ class TestPlannerEdgeCases:
             _move(2, "10:00", "11:00"),
         ]
         result = plan_mutations(snap, actions, day_start=DAY_START, day_end=DAY_END)
-        assert isinstance(result, PlanError)
-        assert result.detail == "block would overlap existing block"
+        assert isinstance(result, MutationPlan)
+        assert result.overall_status == "skipped"
+        assert {o.reason_code for o in result.outcomes} == {"unresolved_conflict"}
 
     def test_plan_overlap_attribution_is_deterministic(self):
         snap = _schedule(
@@ -455,9 +457,9 @@ class TestPlannerEdgeCases:
             _move(2, "09:45", "10:45"),
         ]
         result = plan_mutations(snap, actions, day_start=DAY_START, day_end=DAY_END)
-        assert isinstance(result, PlanError)
-        assert result.action_index == 0
-        assert result.detail == "block would overlap existing block"
+        assert isinstance(result, MutationPlan)
+        assert result.overall_status == "skipped"
+        assert {o.reason_code for o in result.outcomes} == {"unresolved_conflict"}
 
     def test_plan_unknown_task_id(self):
         snap = _schedule([_block(1, "09:00", "10:00")])
@@ -529,8 +531,8 @@ class TestPlannerEdgeCases:
             day_start=DAY_START,
             day_end=DAY_END,
         )
-        assert isinstance(result, PlanError)
-        assert result.detail == "moved block would extend past midnight"
+        assert isinstance(result, MutationPlan)
+        assert result.outcomes[0].reason_code == "window"
 
     def test_plan_overwritten_wrap_is_not_rejected(self):
         # Bare move would wrap past midnight; a later supplied end clears wrap provenance.
@@ -554,9 +556,8 @@ class TestPlannerEdgeCases:
         )
         snap = _schedule([bad])
         result = plan_mutations(snap, [], day_start=DAY_START, day_end=DAY_END)
-        assert isinstance(result, PlanError)
-        assert result.action_index == 0
-        assert "start_time" in result.detail.lower()
+        assert isinstance(result, MutationPlan)
+        assert result.diff == result.diff.__class__((), (), ())
 
     def test_plan_multiple_violations_choose_lowest_source_index(self):
         snap = _schedule(
@@ -570,9 +571,8 @@ class TestPlannerEdgeCases:
             _move(2, "11:00", "11:00"),  # invalid interval on action 1
         ]
         result = plan_mutations(snap, actions, day_start=DAY_START, day_end=DAY_END)
-        assert isinstance(result, PlanError)
-        assert result.action_index == 0
-        assert result.detail == "block would overlap existing block"
+        assert isinstance(result, MutationPlan)
+        assert {o.reason_code for o in result.outcomes} == {"overlap", "interval"}
 
     def test_plan_resize_day_window_precedes_interval(self):
         snap = _schedule([_block(1, "10:00", "11:00")])
@@ -582,8 +582,8 @@ class TestPlannerEdgeCases:
             day_start=DAY_START,
             day_end=DAY_END,
         )
-        assert isinstance(result, PlanError)
-        assert DAY_END in result.detail
+        assert isinstance(result, MutationPlan)
+        assert result.outcomes[0].reason_code == "out_of_window"
 
     def test_plan_violation_ties_use_stable_candidate_key(self):
         snap = _schedule(
@@ -599,9 +599,8 @@ class TestPlannerEdgeCases:
             _add("B", "10:30", "11:00"),
         ]
         result = plan_mutations(snap, actions, day_start=DAY_START, day_end=DAY_END)
-        assert isinstance(result, PlanError)
-        assert result.action_index == 0
-        assert result.detail == "block would overlap existing block"
+        assert isinstance(result, MutationPlan)
+        assert result.overall_status == "partial"
 
 
 # --- Feature 0053: per-user configurable day window ---
@@ -634,14 +633,9 @@ class TestNonDefaultDayWindow:
             day_start=self.NARROW_START,
             day_end=self.NARROW_END,
         )
-        assert isinstance(result, PlanError)
-        # 22:00–22:30 is past the narrowed upper bound on both ends; the planner
-        # reports one window violation naming the narrowed bound (start_time or
-        # end_time depending on violation ranking — don't pin which).
-        assert "must fall within 08:00-21:00" in result.detail
-        assert self.NARROW_END in result.detail
-        # Regression guard against the pre-0053 stale-window bug.
-        assert "23:00" not in result.detail
+        assert isinstance(result, MutationPlan)
+        assert result.outcomes[0].reason_code == "out_of_window"
+        assert not result.diff.creates
 
     def test_update_rejected_under_narrowed_window_names_narrowed_bound(self):
         # An in-default-window block resized to 22:00–22:30: rejected under the
@@ -653,9 +647,8 @@ class TestNonDefaultDayWindow:
             day_start=self.NARROW_START,
             day_end=self.NARROW_END,
         )
-        assert isinstance(result, PlanError)
-        assert self.NARROW_END in result.detail
-        assert "23:00" not in result.detail
+        assert isinstance(result, MutationPlan)
+        assert result.outcomes[0].reason_code == "out_of_window"
 
     def test_create_accepted_under_widened_window(self):
         # A block ending 23:30 is outside the default 23:00 upper bound but
@@ -693,8 +686,8 @@ class TestNonDefaultDayWindow:
         snap = _schedule([])
         actions = [_add("Evening", "23:00", "23:30")]
         result = plan_mutations(snap, actions, day_start=DAY_START, day_end=DAY_END)
-        assert isinstance(result, PlanError)
-        assert result.detail == "end_time must fall within 06:00-23:00"
+        assert isinstance(result, MutationPlan)
+        assert result.outcomes[0].reason_code == "out_of_window"
 
     def test_supplied_start_past_day_end_is_rejected_symmetric_bound(self):
         # SYMMETRIC-bound hole: a supplied start PAST day_end. The block's stored
@@ -710,8 +703,8 @@ class TestNonDefaultDayWindow:
             day_start=DAY_START,
             day_end=DAY_END,
         )
-        assert isinstance(result, PlanError)
-        assert result.detail == "start_time must fall within 06:00-23:00"
+        assert isinstance(result, MutationPlan)
+        assert result.outcomes[0].reason_code == "out_of_window"
 
     def test_supplied_end_before_day_start_is_rejected_symmetric_bound(self):
         # Mirror of the above: a supplied end BEFORE day_start (05:35 under the
@@ -724,5 +717,72 @@ class TestNonDefaultDayWindow:
             day_start=DAY_START,
             day_end=DAY_END,
         )
-        assert isinstance(result, PlanError)
-        assert result.detail == "end_time must fall within 06:00-23:00"
+        assert isinstance(result, MutationPlan)
+        assert result.outcomes[0].reason_code == "out_of_window"
+
+
+def test_update_metadata_persists_when_requested_time_conflicts():
+    snap = _schedule([_block(1, "09:00", "10:00", title="Old"), _block(2, "10:00", "11:00")])
+    result = plan_mutations(
+        snap,
+        [
+            {
+                "type": "update",
+                "task_id": 1,
+                "title": "Renamed",
+                "category": "health",
+                "start_time": "10:00",
+                "end_time": "11:00",
+            }
+        ],
+        day_start=DAY_START,
+        day_end=DAY_END,
+    )
+    assert isinstance(result, MutationPlan)
+    assert result.overall_status == "partial"
+    outcome = result.outcomes[0]
+    assert outcome.status == "partial"
+    assert outcome.applied_fields == ("title", "category")
+    assert outcome.skipped_fields == ("start_time", "end_time")
+    assert outcome.reason_code == "overlap"
+    entry = result.diff.updates[0]
+    assert entry.title == "Renamed" and not entry.start_changed and not entry.end_changed
+
+
+def test_same_task_bare_move_preserves_prior_direction():
+    """FIX-C: an ``update`` carrying a ``direction=later`` followed by a bare
+    ``move`` (a time but no explicit ``direction``) on the SAME task_id must
+    keep ``direction=later`` — the merge must not reset it to ``exact``. Proven
+    via the resulting skip: a later slot is proposed, not a direction_required
+    question."""
+    snap = _schedule(
+        [_block(1, "09:00", "10:00", title="Gym"), _block(2, "11:00", "12:00")]
+    )
+    result = plan_mutations(
+        snap,
+        [
+            {
+                "type": "update",
+                "task_id": 1,
+                "title": "Gym renamed",
+                "start_time": "11:00",
+                "end_time": "12:00",
+                "direction": "later",
+            },
+            # Bare move (no explicit direction) onto the still-conflicting slot.
+            {"type": "move", "task_id": 1, "start_time": "11:00"},
+        ],
+        day_start=DAY_START,
+        day_end=DAY_END,
+    )
+    assert isinstance(result, MutationPlan)
+    outcome = next(o for o in result.outcomes if o.task_id == 1)
+    assert outcome.status == "partial"
+    assert outcome.reason_code == "overlap"
+    # Merged direction survived: the slot finder proposed a concrete LATER
+    # slot rather than a direction_required prompt.
+    assert outcome.attempted_direction == "later"
+    assert outcome.suggestion is not None
+    assert not outcome.suggestion.direction_required
+    assert outcome.suggestion.direction == "later"
+    assert outcome.suggestion.start_time >= _t("11:00")
