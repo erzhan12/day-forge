@@ -13,22 +13,11 @@ from dataclasses import dataclass
 from typing import Any
 
 from django.core.exceptions import ValidationError
-from schedules.http import VALID_CATEGORIES, parse_time, times_overlap
+from schedules.http import parse_time, times_overlap
 from schedules.validators import validate_five_minute_granularity
-from schedules.window import DEFAULT_WINDOW
+from schedules.window import DEFAULT_WINDOW, ScheduleWindow, clamp_boundary
 
 _UNKNOWN_TASK_DETAIL = "Referenced block no longer exists; it may have been deleted. Please retry."
-
-# add: category/title → day window → granularity → interval → overlap → model
-# move/resize: wrap → day window → granularity → interval → overlap → model
-_RANK_CREATE_SCHEMA = 0
-_RANK_WRAP = 1
-_RANK_DAY_WINDOW = 2
-_RANK_GRANULARITY = 3
-_RANK_INTERVAL = 4
-_RANK_OVERLAP = 5
-_RANK_MODEL = 6
-_RANK_INHERITED = 10
 
 
 @dataclass(frozen=True)
@@ -410,22 +399,6 @@ def _day_bounds(day_start: str, day_end: str) -> tuple[datetime.time, datetime.t
     return parse_time(day_start), parse_time(day_end)
 
 
-def _violation(
-    action_index: int,
-    rank: int,
-    candidate_key: int,
-    detail: str,
-) -> tuple[int, int, int, str]:
-    return (action_index, rank, candidate_key, detail)
-
-
-def _pick_violation(violations: list[tuple[int, int, int, str]]) -> PlanError | None:
-    if not violations:
-        return None
-    action_index, _, _, detail = min(violations)
-    return PlanError(action_index=action_index, detail=detail)
-
-
 def _normalize_actions(
     snapshot: ScheduleSnapshot,
     parsed_actions: Sequence[dict],
@@ -588,231 +561,6 @@ def _build_candidate(
     return candidate
 
 
-def _validate_update(
-    upd: UpdateMutation,
-    day_start_t: datetime.time,
-    day_end_t: datetime.time,
-    candidate_key: int,
-) -> list[tuple[int, int, int, str]]:
-    violations: list[tuple[int, int, int, str]] = []
-    idx = upd.action_index
-    window_label = f"{day_start_t:%H:%M}-{day_end_t:%H:%M}"
-
-    if upd.wrapped and upd.bare_move_derived_end:
-        violations.append(
-            _violation(idx, _RANK_WRAP, candidate_key, "moved block would extend past midnight")
-        )
-
-    if upd.start_supplied and not day_start_t <= upd.new_start <= day_end_t:
-        violations.append(
-            _violation(
-                idx,
-                _RANK_DAY_WINDOW,
-                candidate_key,
-                f"start_time must fall within {window_label}",
-            )
-        )
-    end_changed = upd.end_supplied or upd.bare_move_derived_end
-    if end_changed and not day_start_t <= upd.new_end <= day_end_t:
-        violations.append(
-            _violation(
-                idx,
-                _RANK_DAY_WINDOW,
-                candidate_key,
-                f"end_time must fall within {window_label}",
-            )
-        )
-
-    if upd.start_supplied:
-        try:
-            validate_five_minute_granularity(upd.new_start)
-        except ValidationError as e:
-            violations.append(_violation(idx, _RANK_GRANULARITY, candidate_key, str(e.message)))
-    if upd.end_supplied:
-        try:
-            validate_five_minute_granularity(upd.new_end)
-        except ValidationError as e:
-            violations.append(_violation(idx, _RANK_GRANULARITY, candidate_key, str(e.message)))
-
-    if upd.new_start >= upd.new_end:
-        violations.append(
-            _violation(idx, _RANK_INTERVAL, candidate_key, "start_time must be < end_time")
-        )
-
-    return violations
-
-
-def _validate_create(
-    create: CreateMutation,
-    day_start_t: datetime.time,
-    day_end_t: datetime.time,
-    temp_id: int,
-) -> list[tuple[int, int, int, str]]:
-    violations: list[tuple[int, int, int, str]] = []
-    idx = create.action_index
-    window_label = f"{day_start_t:%H:%M}-{day_end_t:%H:%M}"
-
-    if create.category not in VALID_CATEGORIES:
-        violations.append(
-            _violation(
-                idx,
-                _RANK_CREATE_SCHEMA,
-                temp_id,
-                f"invalid category {create.category!r}",
-            )
-        )
-    if not create.title:
-        violations.append(_violation(idx, _RANK_CREATE_SCHEMA, temp_id, "title must not be empty"))
-
-    if not day_start_t <= create.start_time <= day_end_t:
-        violations.append(
-            _violation(
-                idx,
-                _RANK_DAY_WINDOW,
-                temp_id,
-                f"start_time must fall within {window_label}",
-            )
-        )
-    if not day_start_t <= create.end_time <= day_end_t:
-        violations.append(
-            _violation(
-                idx,
-                _RANK_DAY_WINDOW,
-                temp_id,
-                f"end_time must fall within {window_label}",
-            )
-        )
-
-    for t in (create.start_time, create.end_time):
-        try:
-            validate_five_minute_granularity(t)
-        except ValidationError as e:
-            violations.append(_violation(idx, _RANK_GRANULARITY, temp_id, str(e.message)))
-
-    if create.start_time >= create.end_time:
-        violations.append(_violation(idx, _RANK_INTERVAL, temp_id, "start_time must be < end_time"))
-
-    return violations
-
-
-def _validate_candidate(
-    candidate: dict[int, BlockCandidate],
-    merged_updates: dict[int, UpdateMutation],
-    creates: list[CreateMutation],
-    day_start: str,
-    day_end: str,
-) -> PlanError | None:
-    day_start_t, day_end_t = _day_bounds(day_start, day_end)
-    # Inherited-only integrity violations use min batch action_index; indices
-    # are always 0..n-1 from enumerate, so the envelope fallback is 0.
-    fallback_index = 0
-    violations: list[tuple[int, int, int, str]] = []
-
-    changed_ids = set(merged_updates.keys()) | {-(c.action_index + 1) for c in creates}
-
-    for upd in merged_updates.values():
-        violations.extend(_validate_update(upd, day_start_t, day_end_t, upd.task_id))
-
-    for create in creates:
-        temp_id = -(create.action_index + 1)
-        violations.extend(_validate_create(create, day_start_t, day_end_t, temp_id))
-
-    for block_id in sorted(candidate.keys()):
-        block = candidate[block_id]
-        if block_id in changed_ids:
-            continue
-        if block.start_time >= block.end_time:
-            violations.append(
-                _violation(
-                    fallback_index,
-                    _RANK_INHERITED,
-                    block_id,
-                    "start_time must be < end_time",
-                )
-            )
-
-    candidate_ids = sorted(candidate.keys())
-    for i, id1 in enumerate(candidate_ids):
-        b1 = candidate[id1]
-        for id2 in candidate_ids[i + 1 :]:
-            b2 = candidate[id2]
-            if not times_overlap(b1.start_time, b1.end_time, b2.start_time, b2.end_time):
-                continue
-
-            idx1 = b1.source_action_index
-            idx2 = b2.source_action_index
-            contributing = []
-            if id1 in changed_ids and idx1 is not None:
-                contributing.append(idx1)
-            if id2 in changed_ids and idx2 is not None:
-                contributing.append(idx2)
-
-            if contributing:
-                action_index = min(contributing)
-                rank = _RANK_OVERLAP
-            else:
-                action_index = fallback_index
-                rank = _RANK_INHERITED
-
-            candidate_key = min(id1, id2)
-            violations.append(
-                _violation(
-                    action_index,
-                    rank,
-                    candidate_key,
-                    "block would overlap existing block",
-                )
-            )
-
-    return _pick_violation(violations)
-
-
-def _build_diff(
-    snapshot: ScheduleSnapshot,
-    candidate: dict[int, BlockCandidate],
-    deletes: list[DeleteMutation],
-    merged_updates: dict[int, UpdateMutation],
-    creates: list[CreateMutation],
-) -> MutationDiff:
-    delete_entries = tuple(
-        DeleteDiffEntry(block_id=d.task_id, action_index=d.action_index)
-        for d in sorted(deletes, key=lambda d: d.task_id)
-    )
-
-    snapshot_by_id = {b.id: b for b in snapshot.blocks}
-    update_entries = []
-    for task_id in sorted(merged_updates.keys()):
-        upd = merged_updates[task_id]
-        orig = snapshot_by_id[task_id]
-        if upd.new_start != orig.start_time or upd.new_end != orig.end_time:
-            update_entries.append(
-                UpdateDiffEntry(
-                    block_id=task_id,
-                    start_time=upd.new_start,
-                    end_time=upd.new_end,
-                    action_index=upd.action_index,
-                )
-            )
-
-    create_entries = tuple(
-        CreateDiffEntry(
-            temp_id=-(c.action_index + 1),
-            title=c.title,
-            category=c.category,
-            start_time=c.start_time,
-            end_time=c.end_time,
-            action_index=c.action_index,
-        )
-        for c in sorted(creates, key=lambda c: c.action_index)
-    )
-
-    return MutationDiff(
-        deletes=delete_entries,
-        updates=tuple(update_entries),
-        creates=create_entries,
-    )
-
-
 def plan_mutations(
     snapshot: ScheduleSnapshot,
     parsed_actions: Sequence[dict],
@@ -834,8 +582,6 @@ def plan_mutations(
     candidate = _build_candidate(snapshot, deletes, merged_updates, creates)
     snapshot_by_id = {block.id: block for block in snapshot.blocks}
     window_start, window_end = _day_bounds(day_start, day_end)
-    from schedules.window import ScheduleWindow, clamp_boundary
-
     window = ScheduleWindow(window_start, window_end)
     accepted_changed: set[int] = set()
     rejected: dict[int, tuple[str, tuple[int, ...]]] = {}

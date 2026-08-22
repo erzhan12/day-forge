@@ -1434,3 +1434,21 @@ class TestResolutionAskPrecedence:
         conflict = self._unresolved_conflict(0, 10, 20)
         ask = _build_resolution_ask((conflict,), block_titles, {})
         assert "'Focus'" in ask and "'Standup'" in ask
+
+    def test_out_of_window_move_yields_window_specific_ask(self):
+        # An existing-block move skipped purely for falling outside the day
+        # window (no suggestion / direction / conflict) gets the specific
+        # window message, not the generic "not valid or available" tail.
+        block_titles = {10: "Focus"}
+        out_of_window = ActionOutcome(
+            action_index=0,
+            task_id=10,
+            status="skipped",
+            skipped_fields=("start_time", "end_time"),
+            reason_code="out_of_window",
+        )
+        ask = _build_resolution_ask((out_of_window,), block_titles, {})
+        assert ask == (
+            "That time is outside your schedule window. "
+            "Please give a time within your day."
+        )

@@ -289,7 +289,12 @@ Malformed `messages` (including non-object JSON roots) return `400` **before** `
 
 **Success — apply turn — `200 OK`**
 
-Returned when the model parsed one or more mutations and they were applied atomically.
+Returned when the model parsed one or more mutations and at least one field was
+applied. Application is **partial**, not all-or-nothing: only structurally
+malformed actions abort the whole turn (see Errors). Policy failures
+(window / grid / interval / overlap) skip just the offending block's time work
+while independent metadata on the same or other blocks still persists; each
+per-action result is reported via `outcomes`.
 
 ```json
 {
@@ -298,11 +303,51 @@ Returned when the model parsed one or more mutations and they were applied atomi
   ],
   "explanation": "Added standup at 10:00 for 15 minutes.",
   "ask": null,
-  "applied": true
+  "applied": true,
+  "partial": false,
+  "outcomes": [
+    {
+      "action_index": 0,
+      "task_id": 42,
+      "status": "applied",
+      "applied_fields": ["start_time", "end_time"],
+      "skipped_fields": [],
+      "reason_code": null,
+      "conflicting_task_ids": [],
+      "attempted_direction": null,
+      "suggestion": null
+    }
+  ]
 }
 ```
 
-`blocks` is the full schedule after apply. `applied: true` means mutations ran; `ask` is always `null` on this branch.
+`blocks` is the full schedule after apply.
+
+New envelope fields (feature 0054):
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `partial` | boolean | `true` when at least one action partially applied — some fields applied, some skipped. `false` when every action fully applied (or fully skipped). |
+| `outcomes` | array | One per-action outcome object. See below. |
+
+Each `outcomes[]` entry:
+
+| Key | Type | Notes |
+|-----|------|-------|
+| `action_index` | int | Zero-based index into the model's `parsed_actions`. |
+| `task_id` | int \| null | DB primary key of the affected block, or `null` for a create that never persisted. |
+| `status` | string | `"applied"` (all requested fields landed), `"partial"` (some fields landed, some skipped), or `"skipped"` (nothing landed for this action). |
+| `applied_fields` | array | Field names that persisted (e.g. `title`, `category`, `start_time`, `end_time`). |
+| `skipped_fields` | array | Field names rejected by a policy check. |
+| `reason_code` | string \| null | Why the skip happened (e.g. `out_of_window`, `unresolved_conflict`). `null` when nothing was skipped. |
+| `conflicting_task_ids` | array | Block ids that the skipped time work collided with. |
+| `attempted_direction` | string \| null | `"earlier"` / `"later"` when a directional free-slot search was attempted and found nothing, else `null`. |
+| `suggestion` | object \| null | `null`, or `{ "start_time", "end_time", "direction" }` (a concrete free slot to offer), or `{ "direction_required": true }` (the model must ask the user which direction to search). |
+
+`applied`, `partial`, and `ask` can all be non-default simultaneously: a turn can
+apply some work (`applied: true`), report that a block only partially landed
+(`partial: true`), **and** carry a server-owned follow-up question about the
+skipped time work (`ask` non-null) — the partial-apply case.
 
 **Success — clarifying question — `200 OK`**
 
@@ -335,7 +380,7 @@ Empty `parsed_actions` with `ask: null`. No mutations; status unchanged.
 | Status | `errors` key | Meaning |
 |--------|--------------|---------|
 | `400` | `messages` / `date` / `body` | Transcript shape invalid, path date bad, or body not a JSON object. |
-| `400` | `action_index` + `detail` | AI action failed validation at apply time (overlap, bad time, unknown block ID). Entire batch rolled back. |
+| `400` | `action_index` + `detail` | An action was **structurally** malformed at apply time (unknown block ID, unparseable/missing required field). Only these abort the whole turn — the entire batch is rolled back. Policy failures (window / grid / interval / overlap) do **not** 400; they skip just that block's time work and are reported via `outcomes` on a `200`. |
 | `403` | `detail` | CSRF token missing/invalid. |
 | `409` | `detail` | `schedule_changed` — the concurrent-edit fingerprint guard (feature 0030); only when `parsed_actions` is non-empty. |
 | `413` | `body` | Request body exceeds 100 KB. |
@@ -344,9 +389,9 @@ Empty `parsed_actions` with `ask: null`. No mutations; status unchanged.
 | `503` | `detail` | `LLM_API_KEY` is not configured. |
 | `504` | `detail` | LLM provider timed out (>`LLM_REQUEST_TIMEOUT` seconds). |
 
-Atomicity: mid-batch validation failure rolls back all DB mutations. The `AIInteraction` row is written after a successful LLM call and before apply; failed apply leaves `success=False` with `actions_json` reflecting the model's intent.
+Atomicity: the accepted subset of a turn is applied within a single transaction, so a partial apply is still atomic — either the whole accepted subset lands or (on a **structural** failure) the entire turn rolls back and returns `400`. Policy failures do not roll back the turn; they drop just the offending time work and are reported via `outcomes`. The `AIInteraction` row is written after a successful LLM call and before apply; a structural apply failure leaves `success=False` with `actions_json` reflecting the model's intent.
 
-A successful apply flips `Schedule.status` from `draft` to `active` **only when** at least one action was applied. Clarifying-question, chit-chat, and empty-action turns leave status untouched.
+A successful apply flips `Schedule.status` from `draft` to `active` **only when** at least one field was applied (including a partial apply). Clarifying-question, chit-chat, fully-skipped, and empty-action turns leave status untouched.
 
 **Concurrent-edit guard:** fingerprint captured before the LLM call, re-checked under lock at apply time. Mismatch → `409 {"errors": {"detail": "schedule_changed"}}`. Unrelated to `generate-draft`'s empty-schedule `409`. Clients must refresh schedule state and retry explicitly; the server never auto-retries.
 

@@ -252,7 +252,7 @@ def _build_resolution_ask(
         )
 
     def title_for_id(block_id: int) -> str:
-        return block_titles.get(block_id, create_titles.get(block_id, "that block"))
+        return block_titles.get(block_id, "that block")
 
     # Resolve by fixed precedence, scanning ALL skipped outcomes so the
     # question the user sees is order-invariant (not whichever skipped
@@ -289,6 +289,12 @@ def _build_resolution_ask(
             return (
                 f"{title(outcome)} does not fit at that time. Please give it a "
                 "concrete free start and end time."
+            )
+    for outcome in skipped:
+        if outcome.reason_code == "out_of_window":
+            return (
+                "That time is outside your schedule window. "
+                "Please give a time within your day."
             )
     for outcome in skipped:
         return (
