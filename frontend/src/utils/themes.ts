@@ -72,6 +72,20 @@ export const THEMES: ThemeDefinition[] = [
       sampleHeadingFont: 'Georgia, "Times New Roman", serif',
     },
   },
+  {
+    id: "dark_4a",
+    label: "Dark 4a",
+    description: "Focused dark day column with a compact task rail.",
+    preview: {
+      bgPage: "#17181A",
+      bgPanel: "#1B1D20",
+      accent: "oklch(0.72 0.17 30)",
+      textPrimary: "#ECEAE6",
+      sampleHeading: "Today's plan",
+      sampleHeadingFont:
+        '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+    },
+  },
 ]
 
 export function getTheme(id: ThemeId): ThemeDefinition {

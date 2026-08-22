@@ -23,6 +23,9 @@ import type { Ref } from "vue"
 import { computed, inject, onMounted, onUnmounted, ref, watch } from "vue"
 import type { TimeBlock, UndoAction } from "../types"
 import { useChat } from "../composables/useChat"
+import { useActiveTheme } from "../composables/useActiveTheme"
+import { layoutForTheme } from "../utils/layoutProfile"
+import ChatResultChip from "./ChatResultChip.vue"
 
 type Variant = "dock" | "sidebar"
 
@@ -57,6 +60,8 @@ const inputDisabled = computed(
 )
 
 const input = draftInput
+const activeTheme = useActiveTheme()
+const is4a = computed(() => layoutForTheme(activeTheme.value) === "4a")
 const inputEl = ref<HTMLTextAreaElement | null>(null)
 
 const PLACEHOLDERS = [
@@ -169,6 +174,12 @@ function handleInput(): void {
   autosize()
 }
 
+function useSuggestion(text: string): void {
+  input.value = text
+  inputEl.value?.focus()
+  autosize()
+}
+
 function handleGlobalKeydown(e: KeyboardEvent): void {
   if (e.key !== "/") return
   // Same guard as useUndo.ts: ignore while the user is typing elsewhere.
@@ -226,10 +237,15 @@ onUnmounted(() => {
           'bubble-ask':
             msg.role === 'assistant' && pendingAsk && msg.ask === pendingAsk,
         }"
-      >
-        {{ msg.content }}
-      </div>
+        >
+          {{ msg.content }}
+          <ChatResultChip
+            v-if="is4a && msg.role === 'assistant' && msg.appliedResult"
+            :result="msg.appliedResult"
+          />
+        </div>
     </div>
+    <ChatResultChip v-if="is4a" show-suggestions @suggestion="useSuggestion" />
     <form class="command-row" @submit.prevent="handleSubmit">
       <span
         class="status-dot"
@@ -308,6 +324,12 @@ onUnmounted(() => {
   color: #e5e7eb;
   border-top: 1px solid #1f2937;
   z-index: 30;
+}
+
+:global(html[data-theme="dark_4a"]) .command-bar.variant-dock {
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  border-color: var(--border);
 }
 
 /* Sidebar variant — fills the parent (ChatSidebar) as a flex column. */

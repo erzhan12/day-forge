@@ -33,6 +33,7 @@ vi.mock("../src/composables/usePreferences", () => ({
 const { pagePropsRef, routerReloadSpy, saveThemeSpy } = mocks
 
 import DesignSelector from "../src/components/DesignSelector.vue"
+import { THEMES } from "../src/utils/themes"
 
 beforeEach(() => {
   pagePropsRef.value = { ui_preferences: { theme: "classic" } }
@@ -60,12 +61,12 @@ describe("DesignSelector", () => {
     ).toBe("false")
   })
 
-  it("renders the three theme options as a radio group", () => {
+  it("renders theme options as a radio group", () => {
     const wrapper = mount(DesignSelector)
     const group = wrapper.find('[role="radiogroup"]')
     expect(group.exists()).toBe(true)
     const radios = wrapper.findAll('[role="radio"]')
-    expect(radios).toHaveLength(3)
+    expect(radios).toHaveLength(THEMES.length)
     // Classic is checked from page props.
     expect(
       wrapper
@@ -103,7 +104,7 @@ describe("DesignSelector", () => {
     expect(routerReloadSpy).not.toHaveBeenCalled()
   })
 
-  it("sets aria-disabled on all three cards while save is pending", async () => {
+  it("sets aria-disabled on every card while save is pending", async () => {
     let resolveSave: ((r: ApiResult) => void) | undefined
     saveThemeSpy.mockImplementationOnce(
       () => new Promise<ApiResult>((r) => (resolveSave = r)),
@@ -113,7 +114,7 @@ describe("DesignSelector", () => {
     // Click handler runs synchronously up to `await saveTheme`; allow Vue
     // to flush the resulting reactivity.
     await nextTick()
-    for (const id of ["classic", "strategic", "light_premium"]) {
+    for (const { id } of THEMES) {
       expect(
         wrapper.find(`[data-theme-option="${id}"]`).attributes("aria-disabled"),
       ).toBe("true")
@@ -149,7 +150,7 @@ describe("DesignSelector", () => {
     opts.onSuccess?.()
     opts.onFinish?.()
     await nextTick()
-    for (const id of ["classic", "strategic", "light_premium"]) {
+    for (const { id } of THEMES) {
       expect(
         wrapper.find(`[data-theme-option="${id}"]`).attributes("aria-disabled"),
       ).toBe("false")
@@ -207,7 +208,7 @@ describe("DesignSelector", () => {
     opts.onError?.()
     opts.onFinish?.()
     await nextTick()
-    for (const id of ["classic", "strategic", "light_premium"]) {
+    for (const { id } of THEMES) {
       expect(
         wrapper.find(`[data-theme-option="${id}"]`).attributes("aria-disabled"),
       ).toBe("false")
@@ -230,7 +231,7 @@ describe("DesignSelector", () => {
     ).toBe("true")
     expect(wrapper.text()).toContain("Server error (500)")
     // aria-disabled lifted after the failure.
-    for (const id of ["classic", "strategic", "light_premium"]) {
+    for (const { id } of THEMES) {
       expect(
         wrapper.find(`[data-theme-option="${id}"]`).attributes("aria-disabled"),
       ).toBe("false")

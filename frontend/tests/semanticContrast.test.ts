@@ -137,7 +137,7 @@ function resolveSurface(
 
 // ----- The actual test ------------------------------------------------
 
-const THEMES = ["classic", "strategic", "light_premium"] as const
+const THEMES = ["classic", "strategic", "light_premium", "dark_4a"] as const
 const PAIRS = ["success", "danger", "warning", "info"] as const
 
 // WCAG AA target for normal text (small text is what badges/inline use).

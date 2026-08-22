@@ -24,6 +24,7 @@ class UserPreferences(models.Model):
         CLASSIC = "classic", "Classic"
         STRATEGIC = "strategic", "Strategic"
         LIGHT_PREMIUM = "light_premium", "Light Premium"
+        DARK_4A = "dark_4a", "Dark 4a"
 
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,

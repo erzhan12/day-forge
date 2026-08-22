@@ -187,6 +187,17 @@ def test_patch_sets_theme(auth_client, user):
     assert UserPreferences.objects.get(user=user).theme == "strategic"
 
 
+def test_patch_sets_dark_4a_theme(auth_client, user):
+    resp = auth_client.patch(
+        reverse("user_preferences"),
+        data=json.dumps({"theme": "dark_4a"}),
+        content_type="application/json",
+    )
+    assert resp.status_code == 200
+    assert resp.json() == {"theme": "dark_4a"}
+    assert UserPreferences.objects.get(user=user).theme == "dark_4a"
+
+
 def test_patch_same_value_is_valid_noop(auth_client, user):
     UserPreferences.objects.create(user=user, theme="classic")
     resp = auth_client.patch(

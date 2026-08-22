@@ -32,6 +32,7 @@ vi.mock("@inertiajs/vue3", () => ({
 import {
   _peekLatestRequestId,
   _resetChatStateForTests,
+  clearAppliedResultForUndo,
   useChat,
 } from "../src/composables/useChat"
 import { SCHEDULE_CHANGED_RETRY_MESSAGE } from "../src/utils/aiScheduleConflict"
@@ -129,6 +130,80 @@ describe("useChat", () => {
     expect(chat.isProcessing.value).toBe(false)
   })
 
+  it("stores only the applied schedule diff for the result chip", async () => {
+    const chat = useChat()
+    chat.setActiveDate("2026-05-07")
+    requestJsonMock.mockResolvedValue({
+      ok: true,
+      data: {
+        blocks: [
+          { ...BLOCK, title: "Renamed" },
+          { ...BLOCK, id: 2, title: "Added", start_time: "11:00", end_time: "11:30" },
+        ],
+        applied: true,
+        explanation: "Updated schedule",
+      },
+    })
+
+    await chat.submitTurn("update", snapshotBlocks, vi.fn())
+
+    expect(chat.messages.value.at(-1)?.appliedResult).toEqual([
+      expect.objectContaining({ title: "Renamed", change: "changed" }),
+      expect.objectContaining({ title: "Added", change: "added" }),
+    ])
+  })
+
+  it("does not treat a sort_order-only reorder as an applied chip change", async () => {
+    const chat = useChat()
+    chat.setActiveDate("2026-05-07")
+    requestJsonMock.mockResolvedValue({
+      ok: true,
+      data: {
+        blocks: [{ ...BLOCK, sort_order: 10 }],
+        applied: true,
+        explanation: "Reordered",
+      },
+    })
+
+    await chat.submitTurn("reorder", snapshotBlocks, vi.fn())
+
+    expect(chat.messages.value.at(-1)?.appliedResult).toEqual([])
+  })
+
+  it("clears only the most recent applied chip on AI undo", async () => {
+    const chat = useChat()
+    chat.setActiveDate("2026-05-07")
+    requestJsonMock
+      .mockResolvedValueOnce({
+        ok: true,
+        data: {
+          blocks: [{ ...BLOCK, title: "First" }],
+          applied: true,
+          explanation: "First apply",
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        data: {
+          blocks: [{ ...BLOCK, title: "Second" }],
+          applied: true,
+          explanation: "Second apply",
+        },
+      })
+
+    await chat.submitTurn("first", snapshotBlocks, vi.fn())
+    await chat.submitTurn("second", snapshotBlocks, vi.fn())
+
+    const applied = chat.messages.value.filter((m) => m.appliedResult)
+    expect(applied).toHaveLength(2)
+
+    clearAppliedResultForUndo()
+
+    const remaining = chat.messages.value.filter((m) => m.appliedResult)
+    expect(remaining).toHaveLength(1)
+    expect(remaining[0].appliedResult?.[0]?.title).toBe("First")
+  })
+
   it("URL is derived from activeDate, not from any external argument", async () => {
     const chat = useChat()
     chat.setActiveDate("2026-05-07")
@@ -192,6 +267,7 @@ describe("useChat", () => {
       content: "Should I look for an earlier or later slot?",
       ask: "Should I look for an earlier or later slot?",
     })
+    expect(chat.messages.value.at(-1)?.appliedResult).toBeUndefined()
   })
 
   it("409 schedule_changed shows retry message, reloads, no undo, apiHealthy true", async () => {
@@ -218,6 +294,7 @@ describe("useChat", () => {
       role: "assistant",
       content: SCHEDULE_CHANGED_RETRY_MESSAGE,
     })
+    expect(chat.messages.value[1].appliedResult).toBeUndefined()
     expect(chat.isProcessing.value).toBe(false)
   })
 
@@ -360,7 +437,22 @@ describe("useChat", () => {
       const chat = useChat()
       chat.setActiveDate("2026-05-07")
       chat.messages.value = [
-        { role: "user", content: "x", ask: null, explanation: null, ts: 1 },
+        {
+          role: "assistant",
+          content: "x",
+          ask: null,
+          explanation: null,
+          ts: 1,
+          appliedResult: [
+            {
+              title: "A",
+              start_time: "09:00",
+              end_time: "10:00",
+              category: "work",
+              change: "changed",
+            },
+          ],
+        },
       ]
       chat.pendingAsk.value = "?"
 

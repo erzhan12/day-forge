@@ -1,6 +1,7 @@
 import { ref, computed, onMounted, onUnmounted } from "vue"
 import type { TimeBlock, UndoAction } from "../types"
 import { useSchedule } from "./useSchedule"
+import { clearAppliedResultForUndo } from "./useChat"
 import { type DateSource, readDate } from "../utils/dateSource"
 
 /**
@@ -135,6 +136,7 @@ export function useUndo(
         // toast when they're still viewing the day it applied to; if they
         // navigated away mid-flight, a toast on the new day is misleading.
         if (postAsyncIndex !== -1) undoStack.value.splice(postAsyncIndex, 1)
+        if (action.type === "ai") clearAppliedResultForUndo()
         if (readDate(getCurrentDate) === currentDate) {
           showToast(`Undone: ${action.description}`, false)
         }

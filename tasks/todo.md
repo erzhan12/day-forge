@@ -169,6 +169,18 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
 
 ## Follow-ups (discovered during manual testing)
 
+- [ ] **0055-followup: 4a drag-origin geometry tests.** Feature plan Cycle 3
+  (P1-B) wants `frozenTimelineOriginMinutes` drop-time coverage, a leading
+  compact-stub day, and `watch(layout)` → `cancelDrag`. claude-review PR #156
+  cycle 4 (P2). Deferred: not a cheap inline; needs a dedicated
+  `schedule4aGeometry.test.ts` that drives `useDrag` with a frozen origin.
+
+- [ ] **0055-followup: empty-day rail label.** `ExternalRail4a.progress()` shows
+  `"0 completed this session / 0"` when a committed load has `baseline === 0`.
+  claude-review (PR #156 cycle 3, P3) suggested `"No tasks scheduled"`. Deferred:
+  copy change, not a layout/correctness bug; needs a product call on empty-day
+  wording and a rail test for that branch.
+
 - [ ] **0053-followup: minimum useful day-window size.** `validate_window`
   (`backend/schedules/window.py`) accepts any ordered, 5-min-aligned pair, so a
   degenerate window like `06:00–06:05` passes but makes the scheduler unusable

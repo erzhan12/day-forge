@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest"
 import { applyTheme, isKnownTheme, normalizeTheme } from "../src/utils/theme"
 
 describe("isKnownTheme", () => {
-  it.each(["classic", "strategic", "light_premium"] as const)(
+  it.each(["classic", "strategic", "light_premium", "dark_4a"] as const)(
     "returns true for known theme %s",
     (id) => {
       expect(isKnownTheme(id)).toBe(true)

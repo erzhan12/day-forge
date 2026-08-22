@@ -30,6 +30,15 @@ export interface ChatMessage {
   ask: string | null
   explanation: string | null
   ts: number
+  appliedResult?: AppliedBlockResult[]
+}
+
+export interface AppliedBlockResult {
+  title: string
+  start_time: string
+  end_time: string
+  category: TimeBlock["category"]
+  change: "added" | "changed" | "removed"
 }
 
 const activeDate = ref<string | null>(null)
@@ -62,6 +71,32 @@ interface ChatApiResult extends ApiResult {
     partial?: boolean
     outcomes?: unknown[]
   }
+}
+
+function blockKey(block: TimeBlock): string {
+  // Chip copy omits `sort_order`: a backend reorder of otherwise identical
+  // blocks is not a user-visible mutation in the applied-turn summary.
+  return `${block.id}|${block.title}|${block.start_time}|${block.end_time}|${block.category}|${block.is_completed}`
+}
+
+// `data.blocks` is the entire post-turn schedule, not a list of mutations.
+// Preserve the user-visible diff only, including deletion-only turns.
+function appliedResultFromDiff(snapshot: TimeBlock[], blocks: unknown): AppliedBlockResult[] {
+  if (!Array.isArray(blocks)) return []
+  const after = blocks as TimeBlock[]
+  const beforeById = new Map(snapshot.map((block) => [block.id, block]))
+  const afterById = new Map(after.map((block) => [block.id, block]))
+  const result: AppliedBlockResult[] = []
+  for (const block of after) {
+    const before = beforeById.get(block.id)
+    if (!before || blockKey(before) !== blockKey(block)) {
+      result.push({ title: block.title, start_time: block.start_time, end_time: block.end_time, category: block.category, change: before ? "changed" : "added" })
+    }
+  }
+  for (const block of snapshot) {
+    if (!afterById.has(block.id)) result.push({ title: block.title, start_time: block.start_time, end_time: block.end_time, category: block.category, change: "removed" })
+  }
+  return result
 }
 
 /**
@@ -186,6 +221,10 @@ export function useChat() {
       const explanation =
         typeof data.explanation === "string" ? data.explanation : null
       const applied = data.applied === true
+      const partial = data.partial === true
+      const appliedResult = applied && !partial
+        ? appliedResultFromDiff(snapshot, data.blocks)
+        : undefined
 
       // Prefer ask over explanation in the assistant message's `content`
       // so the next turn's transcript carries the actual question the
@@ -199,6 +238,7 @@ export function useChat() {
           ask,
           explanation,
           ts: Date.now(),
+          appliedResult,
         },
       ]
       pendingAsk.value = ask
@@ -292,4 +332,16 @@ export function _resetChatStateForTests(): void {
 
 export function _peekLatestRequestId(): number {
   return latestRequestId
+}
+
+/** Clear the current applied-turn chip after a successful AI undo. */
+export function clearAppliedResultForUndo(): void {
+  const next = [...messages.value]
+  for (let i = next.length - 1; i >= 0; i--) {
+    if (next[i].appliedResult) {
+      next[i] = { ...next[i], appliedResult: undefined }
+      break
+    }
+  }
+  messages.value = next
 }
