@@ -294,6 +294,7 @@ describe("useChat", () => {
       role: "assistant",
       content: SCHEDULE_CHANGED_RETRY_MESSAGE,
     })
+    expect(chat.messages.value[1].appliedResult).toBeUndefined()
     expect(chat.isProcessing.value).toBe(false)
   })
 
@@ -436,7 +437,22 @@ describe("useChat", () => {
       const chat = useChat()
       chat.setActiveDate("2026-05-07")
       chat.messages.value = [
-        { role: "user", content: "x", ask: null, explanation: null, ts: 1 },
+        {
+          role: "assistant",
+          content: "x",
+          ask: null,
+          explanation: null,
+          ts: 1,
+          appliedResult: [
+            {
+              title: "A",
+              start_time: "09:00",
+              end_time: "10:00",
+              category: "work",
+              change: "changed",
+            },
+          ],
+        },
       ]
       chat.pendingAsk.value = "?"
 
