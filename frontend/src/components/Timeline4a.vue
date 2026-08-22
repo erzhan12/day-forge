@@ -42,7 +42,13 @@ const hourTicks = computed(() => {
   for (let minute = first; minute < axisEndMinutes.value; minute += 60) ticks.push(minute)
   return ticks
 })
-const nowVisible = computed(() => props.nowDate !== null && props.nowMinutes !== null && props.nowMinutes >= axisOriginMinutes.value && props.nowMinutes < axisEndMinutes.value)
+const nowVisible = computed(() =>
+  props.nowDate !== null &&
+  props.nowMinutes !== null &&
+  props.nowDate === props.date &&
+  props.nowMinutes >= axisOriginMinutes.value &&
+  props.nowMinutes < axisEndMinutes.value,
+)
 function topFor(time: string | number): string {
   const minutes = typeof time === "string" ? timeToMinutes(time) : time
   return `${(minutes - axisOriginMinutes.value) * props.pxPerMinute}px`

@@ -74,7 +74,9 @@ interface ChatApiResult extends ApiResult {
 }
 
 function blockKey(block: TimeBlock): string {
-  return `${block.id}|${block.title}|${block.start_time}|${block.end_time}|${block.category}|${block.is_completed}|${block.sort_order}`
+  // Chip copy omits `sort_order`: a backend reorder of otherwise identical
+  // blocks is not a user-visible mutation in the applied-turn summary.
+  return `${block.id}|${block.title}|${block.start_time}|${block.end_time}|${block.category}|${block.is_completed}`
 }
 
 // `data.blocks` is the entire post-turn schedule, not a list of mutations.

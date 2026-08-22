@@ -152,6 +152,23 @@ describe("useChat", () => {
     ])
   })
 
+  it("does not treat a sort_order-only reorder as an applied chip change", async () => {
+    const chat = useChat()
+    chat.setActiveDate("2026-05-07")
+    requestJsonMock.mockResolvedValue({
+      ok: true,
+      data: {
+        blocks: [{ ...BLOCK, sort_order: 10 }],
+        applied: true,
+        explanation: "Reordered",
+      },
+    })
+
+    await chat.submitTurn("reorder", snapshotBlocks, vi.fn())
+
+    expect(chat.messages.value.at(-1)?.appliedResult).toEqual([])
+  })
+
   it("URL is derived from activeDate, not from any external argument", async () => {
     const chat = useChat()
     chat.setActiveDate("2026-05-07")

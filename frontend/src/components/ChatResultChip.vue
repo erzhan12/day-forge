@@ -27,8 +27,8 @@ const CHAT_SUGGESTIONS = [
 </template>
 
 <style scoped>
-.chat-result-chip { display:flex; flex-wrap:wrap; align-items:center; gap:5px; margin:4px 0; color:#eceae6; font:11px/1.35 var(--font-family-body); }
-.result-row { padding:3px 6px; border:1px solid #2f3237; border-radius:999px; background:#1d1f22; }
+.chat-result-chip { display:flex; flex-wrap:wrap; align-items:center; gap:5px; margin:4px 0; color:var(--text-primary); font:11px/1.35 var(--font-family-body); }
+.result-row { padding:3px 6px; border:1px solid var(--border-strong); border-radius:999px; background:var(--bg-schedule-block); }
 .suggestions { display:flex; flex-wrap:wrap; gap:5px; }
-button { border:1px solid #2f3237; border-radius:999px; background:#22313d; color:oklch(0.78 0.09 230); padding:3px 7px; font:inherit; cursor:pointer; }
+button { border:1px solid var(--border-strong); border-radius:999px; background:var(--info-surface); color:oklch(0.78 0.09 230); padding:3px 7px; font:inherit; cursor:pointer; }
 </style>
