@@ -336,7 +336,12 @@ export function _peekLatestRequestId(): number {
 
 /** Clear the current applied-turn chip after a successful AI undo. */
 export function clearAppliedResultForUndo(): void {
-  messages.value = messages.value.map((message) =>
-    message.appliedResult ? { ...message, appliedResult: undefined } : message,
-  )
+  const next = [...messages.value]
+  for (let i = next.length - 1; i >= 0; i--) {
+    if (next[i].appliedResult) {
+      next[i] = { ...next[i], appliedResult: undefined }
+      break
+    }
+  }
+  messages.value = next
 }

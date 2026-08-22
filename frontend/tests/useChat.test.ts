@@ -32,6 +32,7 @@ vi.mock("@inertiajs/vue3", () => ({
 import {
   _peekLatestRequestId,
   _resetChatStateForTests,
+  clearAppliedResultForUndo,
   useChat,
 } from "../src/composables/useChat"
 import { SCHEDULE_CHANGED_RETRY_MESSAGE } from "../src/utils/aiScheduleConflict"
@@ -167,6 +168,40 @@ describe("useChat", () => {
     await chat.submitTurn("reorder", snapshotBlocks, vi.fn())
 
     expect(chat.messages.value.at(-1)?.appliedResult).toEqual([])
+  })
+
+  it("clears only the most recent applied chip on AI undo", async () => {
+    const chat = useChat()
+    chat.setActiveDate("2026-05-07")
+    requestJsonMock
+      .mockResolvedValueOnce({
+        ok: true,
+        data: {
+          blocks: [{ ...BLOCK, title: "First" }],
+          applied: true,
+          explanation: "First apply",
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        data: {
+          blocks: [{ ...BLOCK, title: "Second" }],
+          applied: true,
+          explanation: "Second apply",
+        },
+      })
+
+    await chat.submitTurn("first", snapshotBlocks, vi.fn())
+    await chat.submitTurn("second", snapshotBlocks, vi.fn())
+
+    const applied = chat.messages.value.filter((m) => m.appliedResult)
+    expect(applied).toHaveLength(2)
+
+    clearAppliedResultForUndo()
+
+    const remaining = chat.messages.value.filter((m) => m.appliedResult)
+    expect(remaining).toHaveLength(1)
+    expect(remaining[0].appliedResult?.[0]?.title).toBe("First")
   })
 
   it("URL is derived from activeDate, not from any external argument", async () => {
