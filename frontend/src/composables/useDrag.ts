@@ -281,6 +281,10 @@ export function useDrag(
   // Defaults to the static [06:00, 23:00) constants for callers/tests that
   // predate the configurable window.
   getWindow?: () => ScheduleWindowBounds,
+  // Alternate layouts may use a different vertical scale and an uncompressed
+  // axis origin. Appended to preserve the long-standing positional API.
+  getPxPerMinute?: () => number,
+  getTimelineOriginMinutes?: () => number | null,
 ) {
   const isDragging = ref(false)
   const frozenRenderBounds = ref<RenderBounds | null>(null)
@@ -290,6 +294,8 @@ export function useDrag(
   // idle/tail split boundary while bounds stay frozen (flow-vs-ghost
   // divergence). Never enters drag px-math.
   const frozenNowMinutes = ref<number | null>(null)
+  const frozenPxPerMinute = ref(PX_PER_MINUTE)
+  const frozenTimelineOriginMinutes = ref<number | null>(null)
   const dragBlockId = ref<number | null>(null)
   const ghostTop = ref(0)
   const previewStartTime = ref("")
@@ -329,10 +335,11 @@ export function useDrag(
     const cursorY =
       e.clientY - containerRect.top - containerPaddingTop + containerEl.scrollTop
     const blockTopPx = cursorY - grabOffsetY
-    const minuteOffset = blockTopPx / PX_PER_MINUTE
+    const pxPerMinute = frozenPxPerMinute.value
+    const minuteOffset = blockTopPx / pxPerMinute
 
-    const renderStart =
-      frozenRenderBounds.value?.renderStart ?? DAY_START_MINUTES
+    const renderStart = frozenRenderBounds.value?.renderStart ?? DAY_START_MINUTES
+    const axisOrigin = frozenTimelineOriginMinutes.value ?? renderStart
 
     // Snap in the ABSOLUTE minutes domain, not relative to renderStart:
     // renderStart itself can be off-grid when the first visible block is
@@ -347,9 +354,9 @@ export function useDrag(
       getWindow?.().endMinutes ?? DEFAULT_SCHEDULE_WINDOW.endMinutes
 
     let newStart =
-      Math.round((renderStart + minuteOffset) / SNAP_MINUTES) * SNAP_MINUTES
-    if (newStart < renderStart)
-      newStart = Math.ceil(renderStart / SNAP_MINUTES) * SNAP_MINUTES
+      Math.round((axisOrigin + minuteOffset) / SNAP_MINUTES) * SNAP_MINUTES
+    if (newStart < axisOrigin)
+      newStart = Math.ceil(axisOrigin / SNAP_MINUTES) * SNAP_MINUTES
     if (newStart + blockDuration > dayEndMinutes)
       newStart = dayEndMinutes - blockDuration
     // Window-start floor (feature 0053), applied LAST so the day-end clamp above
@@ -366,7 +373,7 @@ export function useDrag(
     previewStartTime.value = minutesToTime(newStart)
     previewEndTime.value = minutesToTime(newEnd)
     ghostTop.value =
-      containerPaddingTop + (newStart - renderStart) * PX_PER_MINUTE
+      containerPaddingTop + (newStart - axisOrigin) * pxPerMinute
 
     // Resolve conflicts — cascade caps at the user's window end (feature 0053),
     // not the hardcoded 23:00, so a widened window can shift blocks later.
@@ -449,14 +456,20 @@ export function useDrag(
       renderEnd: DAY_END_MINUTES,
     }
     frozenNowMinutes.value = getNow?.() ?? null
+    // Freeze the full gesture coordinate system. Theme persistence can resolve
+    // while a pointer is held; mixing live 2/1.6 scale with start geometry
+    // would commit a different time from the shown ghost.
+    frozenPxPerMinute.value = getPxPerMinute?.() ?? PX_PER_MINUTE
+    frozenTimelineOriginMinutes.value = getTimelineOriginMinutes?.() ?? null
     const renderStart = frozenRenderBounds.value.renderStart
+    const axisOrigin = frozenTimelineOriginMinutes.value ?? renderStart
 
     const startMinutes = clampedStartMinutes
     // Offset between cursor and block top at grab time, in px
     // relative to the schedule-body content area. Reused in
     // updatePreview so the ghost follows the cursor from the same
     // relative position (cursor doesn't teleport to block top).
-    const blockTopPx = (startMinutes - renderStart) * PX_PER_MINUTE
+    const blockTopPx = (startMinutes - axisOrigin) * frozenPxPerMinute.value
     const cursorY =
       event.clientY - containerRect.top - containerPaddingTop + container.scrollTop
     grabOffsetY = cursorY - blockTopPx
@@ -601,6 +614,8 @@ export function useDrag(
     isDragging.value = false
     frozenRenderBounds.value = null
     frozenNowMinutes.value = null
+    frozenPxPerMinute.value = PX_PER_MINUTE
+    frozenTimelineOriginMinutes.value = null
     dragBlockId.value = null
     ghostTop.value = 0
     previewStartTime.value = ""
@@ -621,6 +636,8 @@ export function useDrag(
     isDragging,
     frozenRenderBounds,
     frozenNowMinutes,
+    frozenPxPerMinute,
+    frozenTimelineOriginMinutes,
     dragBlockId,
     ghostTop,
     previewStartTime,

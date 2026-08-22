@@ -120,4 +120,5 @@ function navigate(date: string) {
 .settings-btn:hover {
   background: var(--bg-schedule-gap);
 }
+
 </style>

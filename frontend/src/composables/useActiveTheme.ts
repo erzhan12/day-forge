@@ -25,7 +25,9 @@ import type { ThemeId } from "../types"
 export function useActiveTheme(): ComputedRef<ThemeId> {
   const page = usePage()
   return computed(() => {
-    const propTheme = page.props.ui_preferences?.theme
+    // Lightweight component tests (and a few partial Inertia states) may
+    // supply no props object at all; fall back to the DOM/default theme.
+    const propTheme = page.props?.ui_preferences?.theme
     if (isKnownTheme(propTheme)) return propTheme
     const domTheme =
       typeof document !== "undefined"

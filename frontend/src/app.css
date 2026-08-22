@@ -217,6 +217,51 @@ html[data-theme="light_premium"] {
     "Times New Roman", serif;
 }
 
+/* -- Dark 4a ----------------------------------------------------------- */
+html[data-theme="dark_4a"] {
+  --bg-page: #17181a;
+  --bg-panel: #1b1d20;
+  --bg-elevated: #1c1e21;
+  --bg-input: #1d1f22;
+  --bg-schedule-block: #1d1f22;
+  --bg-schedule-gap: #17181a;
+  --bg-chat-sidebar: #1b1d20;
+
+  --text-primary: #eceae6;
+  --text-secondary: #8e9299;
+  --text-muted: #8e9299;
+  /* Exact spec token. Decorative hour ticks are intentionally exempt from AA. */
+  --text-faint: #6a6e75;
+
+  --border: #26292d;
+  --border-strong: #2f3237;
+
+  --accent: oklch(0.72 0.17 30);
+  --accent-hover: oklch(0.77 0.17 30);
+  --accent-contrast: #17181a;
+
+  --danger-surface: #3a2427;
+  --danger-text: #ffb4ab;
+  --danger-border: #7a4148;
+  --success-surface: #1e382f;
+  --success-text: #91d9b5;
+  --success-border: #416d57;
+  --warning-surface: #3a3320;
+  --warning-text: #f2d58a;
+  --warning-border: #76633a;
+  --info-surface: #22313d;
+  --info-text: #a8d4f5;
+  --info-border: #426176;
+
+  --focus-ring: oklch(0.72 0.17 30 / 0.55);
+  --shadow-card: 0 8px 20px rgba(0, 0, 0, 0.26);
+  --shadow-panel: 0 10px 28px rgba(0, 0, 0, 0.35);
+
+  --font-family-body: "Public Sans", -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-family-display: var(--font-family-body);
+}
+
 /* -- Base ---------------------------------------------------------------- */
 html,
 body {
@@ -241,6 +286,10 @@ html[data-theme="strategic"] body {
   background-attachment: fixed, fixed, fixed;
   background-repeat: no-repeat, no-repeat, repeat;
   min-height: 100vh;
+}
+
+html[data-theme="dark_4a"] body {
+  background: #17181a;
 }
 
 body {

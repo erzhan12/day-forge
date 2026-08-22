@@ -103,7 +103,7 @@ export interface StreakInfo {
 // SYNC ALERT: when adding/renaming a theme id, also update
 // `backend/templates_mgr/models.py:UserPreferences.Theme` and the
 // registry in `frontend/src/utils/themes.ts`.
-export type ThemeId = "classic" | "strategic" | "light_premium"
+export type ThemeId = "classic" | "strategic" | "light_premium" | "dark_4a"
 
 export interface UiPreferences {
   theme: ThemeId

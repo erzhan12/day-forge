@@ -256,7 +256,7 @@ function focusOption(index: number): void {
 
 @media (min-width: 720px) {
   .design-grid {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 

@@ -17,6 +17,7 @@ const KNOWN_THEMES = new Set<ThemeId>([
   "classic",
   "strategic",
   "light_premium",
+  "dark_4a",
 ])
 
 export function isKnownTheme(raw: unknown): raw is ThemeId {

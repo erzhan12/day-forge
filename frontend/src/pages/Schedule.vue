@@ -4,6 +4,7 @@ import { Link, router } from "@inertiajs/vue3"
 import type { TimeBlock as TimeBlockType, Schedule, TravelRule } from "../types"
 import DateNavigator from "../components/DateNavigator.vue"
 import TimeBlock from "../components/TimeBlock.vue"
+import Timeline4a from "../components/Timeline4a.vue"
 import GapSlot from "../components/GapSlot.vue"
 import AddBlockForm from "../components/AddBlockForm.vue"
 import NowLine from "../components/NowLine.vue"
@@ -11,6 +12,7 @@ import UndoToast from "../components/UndoToast.vue"
 import CommandBar from "../components/CommandBar.vue"
 import ChatSidebar from "../components/ChatSidebar.vue"
 import ExternalTasksSidebar from "../components/ExternalTasksSidebar.vue"
+import ExternalRail4a from "../components/ExternalRail4a.vue"
 import DraftBadge from "../components/DraftBadge.vue"
 import RegenerateDraftButton from "../components/RegenerateDraftButton.vue"
 import ShowIndicatorButton from "../components/ShowIndicatorButton.vue"
@@ -33,7 +35,7 @@ import {
   writeExternalTasksSidebarOpen,
 } from "../utils/externalTasksSidebarStorage"
 import {
-  PX_PER_MINUTE, timeToMinutes, findCurrentBlock,
+  timeToMinutes, findCurrentBlock,
   remainingMinutesForBlock, computeRenderBounds, buildBaseDisplayItems,
   spliceNowMarker, nowOffsetPercent as computeNowOffsetPercent,
   type ScheduleDisplayItem, type ScheduleWindowBounds,
@@ -53,6 +55,8 @@ import { useTodoist } from "../composables/useTodoist"
 import { useHabitica } from "../composables/useHabitica"
 import { useExternalSourcePoll } from "../composables/useExternalSourcePoll"
 import { useThemeFromProps } from "../composables/useThemeFromProps"
+import { useActiveTheme } from "../composables/useActiveTheme"
+import { layoutForTheme, pxPerMinuteForLayout } from "../utils/layoutProfile"
 import { useNowMinutes } from "../composables/useNowMinutes"
 import { useSoundNotifications } from "../composables/useSoundNotifications"
 import { useDesktopNotifications } from "../composables/useDesktopNotifications"
@@ -64,6 +68,9 @@ import { matchTravelRule } from "../utils/travelRules"
 import "../app.css"
 
 useThemeFromProps()
+const activeTheme = useActiveTheme()
+const layout = computed(() => layoutForTheme(activeTheme.value))
+const pxPerMinute = computed(() => pxPerMinuteForLayout(layout.value))
 
 const props = withDefaults(
   defineProps<{
@@ -140,6 +147,21 @@ const renderBounds = computed(() =>
   computeRenderBounds(props.blocks, todayNowMinutes.value, scheduleWindow.value),
 )
 
+// 4a uses an uncompressed absolute axis widened to contain every stored
+// block, including legacy blocks beyond the configured working window.
+const timelineOriginMinutes = computed(() =>
+  Math.min(
+    scheduleWindow.value.startMinutes,
+    ...props.blocks.map((block) => timeToMinutes(block.start_time)),
+  ),
+)
+const timelineEndMinutes = computed(() =>
+  Math.max(
+    scheduleWindow.value.endMinutes,
+    ...props.blocks.map((block) => timeToMinutes(block.end_time)),
+  ),
+)
+
 const {
   isDragging, frozenRenderBounds, frozenNowMinutes, dragBlockId, ghostTop,
   previewStartTime, previewEndTime, previewBlocks, shiftedBlockIds, startDrag,
@@ -150,7 +172,16 @@ const {
   () => renderBounds.value,
   () => todayNowMinutes.value,
   () => scheduleWindow.value,
+  () => pxPerMinute.value,
+  () => (layout.value === "4a" ? timelineOriginMinutes.value : null),
 )
+
+// Rendering a live layout against a frozen pointer coordinate system would
+// make a theme change mid-gesture visually misleading. Abort rather than
+// allowing an ambiguous drop.
+watch(layout, () => {
+  if (isDragging.value) cancelDrag()
+})
 
 // Provide to child components
 provide("undo", { pushUndo, snapshotBlocks })
@@ -657,7 +688,7 @@ function ghostClampedDuration(): number {
 }
 const ghostHeight = computed(() => {
   if (!draggedBlock.value) return 0
-  return ghostClampedDuration() * PX_PER_MINUTE
+  return ghostClampedDuration() * pxPerMinute.value
 })
 const ghostIsCompact = computed(() => {
   if (!draggedBlock.value) return false
@@ -691,7 +722,7 @@ const displayList = computed<ScheduleDisplayItem[]>(() => {
 
 function itemHeight(item: ScheduleDisplayItem): string {
   const minutes = item.render_minutes ?? item.duration_minutes
-  return `${minutes * PX_PER_MINUTE}px`
+  return `${minutes * pxPerMinute.value}px`
 }
 
 function nowOffsetPercent(item: ScheduleDisplayItem): string {
@@ -728,7 +759,11 @@ defineExpose({
 </script>
 
 <template>
-  <div class="schedule-page" :style="schedulePageStyle">
+  <div
+    class="schedule-page"
+    :class="{ 'layout-4a': layout === '4a' }"
+    :style="schedulePageStyle"
+  >
     <DateNavigator :date="date">
       <template #status>
         <DraftBadge
@@ -813,7 +848,23 @@ defineExpose({
         </template>
       </div>
 
-      <template v-for="(item, idx) in displayList" :key="idx">
+      <Timeline4a
+        v-if="layout === '4a'"
+        :blocks="effectiveBlocks"
+        :date="date"
+        :schedule-window="schedule_window"
+        :now-minutes="nowMinutes"
+        :now-date="nowDate"
+        :px-per-minute="pxPerMinute"
+        :timeline-origin-minutes="timelineOriginMinutes"
+        :timeline-end-minutes="timelineEndMinutes"
+        :current-block-id="currentBlock?.id ?? null"
+        :current-block-remaining="currentBlockRemaining"
+        :disabled="scheduleDisabled"
+        @add-here="handleAddHere"
+      />
+
+      <template v-if="layout === 'classic'" v-for="(item, idx) in displayList" :key="idx">
         <div
           v-if="item.type === 'block-with-now' && item.block"
           class="schedule-slot"
@@ -902,8 +953,35 @@ defineExpose({
       @dismiss="dismissToast"
     />
 
+    <ExternalRail4a
+      v-if="layout === '4a' && isWide && leftSidebarVisible"
+      v-model:open="externalTasksSidebarOpen"
+      :active-date="date"
+      :show-todoist="todoist.state.statusKnown && todoist.state.connected"
+      :show-habitica="habitica.state.statusKnown && habitica.state.connected"
+      :show-calendars="externalConnected && externalCalendarInSidebar"
+      :todoist-tasks="todoist.state.tasks"
+      :todoist-loading="todoist.state.loading"
+      :todoist-error="todoist.state.error"
+      :habitica-tasks="habitica.state.tasks"
+      :habitica-loading="habitica.state.loading"
+      :habitica-error="habitica.state.error"
+      :events="mergedExternalEvents"
+      :events-loading="externalLoading"
+      :event-errors="externalErrorBanners"
+      :account-errors="googleCalendar.state.accountErrors"
+      :external-connected="externalConnected"
+      :now-minutes="nowMinutes"
+      @todoist-retry="retryTodoistTasks"
+      @todoist-complete="completeTodoistTask"
+      @habitica-retry="retryHabiticaTasks"
+      @habitica-complete="completeHabiticaTask"
+      @refresh="refreshExternalTasks"
+      @retry-external="retryExternalFetch"
+      @add-to-schedule="handleAddToSchedule"
+    />
     <ExternalTasksSidebar
-      v-if="isWide && leftSidebarVisible"
+      v-if="layout === 'classic' && isWide && leftSidebarVisible"
       v-model:open="externalTasksSidebarOpen"
       :show-todoist="todoist.state.statusKnown && todoist.state.connected"
       :show-habitica="habitica.state.statusKnown && habitica.state.connected"
@@ -976,6 +1054,34 @@ defineExpose({
   padding-left: var(--external-tasks-sidebar-width, 0);
 }
 
+/* Center 4a inside the viewport space left after both fixed rails. The legacy
+   content-box padding approach makes the content itself shrink and shifts its
+   midpoint when a rail is open, so 4a uses explicit width/offset geometry. */
+.schedule-page.layout-4a {
+  box-sizing: border-box;
+  width: min(
+    880px,
+    calc(
+      100vw - var(--external-tasks-sidebar-width, 0px) -
+        var(--chat-sidebar-width, 0px)
+    )
+  );
+  max-width: 880px;
+  margin-left: calc(
+    var(--external-tasks-sidebar-width, 0px) +
+      max(
+        0px,
+        (
+            100vw - var(--external-tasks-sidebar-width, 0px) -
+              var(--chat-sidebar-width, 0px) - 880px
+          ) / 2
+      )
+  );
+  margin-right: 0;
+  padding-left: 0;
+  padding-right: 0;
+}
+
 .schedule-body {
   position: relative;
   padding: 8px 16px;
@@ -1032,6 +1138,24 @@ defineExpose({
   color: var(--danger-text);
   border-radius: 8px;
   font-size: 13px;
+}
+
+.schedule-page.layout-4a .draft-error {
+  max-width: 880px;
+}
+
+.schedule-page.layout-4a :deep(.date-navigator) {
+  display: grid;
+  grid-template-columns: 40px minmax(190px, 1fr) auto;
+  gap: 12px;
+}
+
+.schedule-page.layout-4a :deep(.date-display) {
+  align-items: flex-start;
+}
+
+.schedule-page.layout-4a :deep(.date-text) {
+  white-space: nowrap;
 }
 
 .drag-ghost {

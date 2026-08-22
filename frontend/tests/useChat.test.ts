@@ -129,6 +129,29 @@ describe("useChat", () => {
     expect(chat.isProcessing.value).toBe(false)
   })
 
+  it("stores only the applied schedule diff for the result chip", async () => {
+    const chat = useChat()
+    chat.setActiveDate("2026-05-07")
+    requestJsonMock.mockResolvedValue({
+      ok: true,
+      data: {
+        blocks: [
+          { ...BLOCK, title: "Renamed" },
+          { ...BLOCK, id: 2, title: "Added", start_time: "11:00", end_time: "11:30" },
+        ],
+        applied: true,
+        explanation: "Updated schedule",
+      },
+    })
+
+    await chat.submitTurn("update", snapshotBlocks, vi.fn())
+
+    expect(chat.messages.value.at(-1)?.appliedResult).toEqual([
+      expect.objectContaining({ title: "Renamed", change: "changed" }),
+      expect.objectContaining({ title: "Added", change: "added" }),
+    ])
+  })
+
   it("URL is derived from activeDate, not from any external argument", async () => {
     const chat = useChat()
     chat.setActiveDate("2026-05-07")
@@ -192,6 +215,7 @@ describe("useChat", () => {
       content: "Should I look for an earlier or later slot?",
       ask: "Should I look for an earlier or later slot?",
     })
+    expect(chat.messages.value.at(-1)?.appliedResult).toBeUndefined()
   })
 
   it("409 schedule_changed shows retry message, reloads, no undo, apiHealthy true", async () => {
