@@ -262,7 +262,12 @@ def _build_resolution_ask(
     #   > generic-invalid.
     for outcome in skipped:
         suggestion = outcome.suggestion
-        if suggestion and not suggestion.direction_required and suggestion.start_time:
+        if (
+            suggestion
+            and not suggestion.direction_required
+            and suggestion.start_time
+            and suggestion.end_time
+        ):
             return (
                 f"{title(outcome)} conflicts at that time. Move it to "
                 f"{suggestion.start_time:%H:%M}–{suggestion.end_time:%H:%M}?"

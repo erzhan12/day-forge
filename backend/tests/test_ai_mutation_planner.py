@@ -751,6 +751,21 @@ def test_update_metadata_persists_when_requested_time_conflicts():
     assert entry.title == "Renamed" and not entry.start_changed and not entry.end_changed
 
 
+def test_update_title_is_stripped():
+    """FIX-5: an ``update`` title is whitespace-stripped (like ``add``), so a
+    padded ``"  Work  "`` persists as ``"Work"`` in the diff entry."""
+    snap = _schedule([_block(1, "09:00", "10:00", title="Old")])
+    result = plan_mutations(
+        snap,
+        [{"type": "update", "task_id": 1, "title": "  Work  "}],
+        day_start=DAY_START,
+        day_end=DAY_END,
+    )
+    assert isinstance(result, MutationPlan)
+    entry = result.diff.updates[0]
+    assert entry.title == "Work"
+
+
 def test_same_task_bare_move_preserves_prior_direction():
     """FIX-C: an ``update`` carrying a ``direction=later`` followed by a bare
     ``move`` (a time but no explicit ``direction``) on the SAME task_id must

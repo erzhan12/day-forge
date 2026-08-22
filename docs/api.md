@@ -337,8 +337,8 @@ Each `outcomes[]` entry:
 | `action_index` | int | Zero-based index into the model's `parsed_actions`. |
 | `task_id` | int \| null | DB primary key of the affected block, or `null` for a create that never persisted. |
 | `status` | string | `"applied"` (all requested fields landed), `"partial"` (some fields landed, some skipped), or `"skipped"` (nothing landed for this action). |
-| `applied_fields` | array | Field names that persisted (e.g. `title`, `category`, `start_time`, `end_time`). |
-| `skipped_fields` | array | Field names rejected by a policy check. |
+| `applied_fields` | array | Field names that persisted (e.g. `title`, `category`, `start_time`, `end_time`). For `remove` actions this is always `[]` — the action's effect is the deletion of the block itself, not a field change. |
+| `skipped_fields` | array | Field names rejected by a policy check. For `remove` actions this is always `[]` (see `applied_fields`). |
 | `reason_code` | string \| null | Why the skip happened (e.g. `out_of_window`, `unresolved_conflict`). `null` when nothing was skipped. |
 | `conflicting_task_ids` | array | Block ids that the skipped time work collided with. |
 | `attempted_direction` | string \| null | `"earlier"` / `"later"` when a directional free-slot search was attempted and found nothing, else `null`. |

@@ -1395,6 +1395,7 @@ def test_chat_partially_applies_metadata_and_returns_one_resolution_ask(
     assert interaction.success is True and interaction.outcomes_json == payload["outcomes"]
 
 
+@pytest.mark.django_db
 def test_chat_out_of_window_exact_move_yields_window_ask_not_direction(
     auth_client, today_schedule, monkeypatch
 ):
@@ -1437,6 +1438,103 @@ def test_chat_out_of_window_exact_move_yields_window_ask_not_direction(
     assert outcome["suggestion"] is None
     target.refresh_from_db()
     assert target.start_time.strftime("%H:%M") == "09:00"
+
+
+@pytest.mark.django_db
+def test_chat_exact_conflict_then_direction_yields_concrete_suggestion(
+    auth_client, today_schedule, monkeypatch
+):
+    # FIX-4: the primary conflict flow across two turns.
+    #   Turn 1 — an EXACT move that overlaps an existing block, no direction:
+    #     the outcome's suggestion is direction_required (no concrete slot) and
+    #     the ask is the "earlier or later?" question.
+    #   Turn 2 — the same block re-emitted with direction="later": the outcome's
+    #     suggestion is now a concrete start/end and the ask proposes it.
+    target = TimeBlock.objects.create(
+        schedule=today_schedule,
+        title="Focus",
+        start_time="09:00",
+        end_time="10:00",
+        category="work",
+    )
+    TimeBlock.objects.create(
+        schedule=today_schedule,
+        title="Busy",
+        start_time="10:00",
+        end_time="11:00",
+        category="work",
+    )
+
+    # --- Turn 1: exact move into the occupied 10:00–11:00 slot, no direction ---
+    _patch_run_chat(
+        monkeypatch,
+        AIChatResult(
+            "{}",
+            [
+                {
+                    "type": "update",
+                    "task_id": target.id,
+                    "start_time": "10:00",
+                    "end_time": "11:00",
+                }
+            ],
+            "Moved",
+            None,
+        ),
+    )
+    resp1 = _post(auth_client, {"messages": [_user_turn("move focus to 10:00")]})
+    assert resp1.status_code == 200, resp1.content
+    payload1 = resp1.json()
+    assert payload1["applied"] is False
+    suggestion1 = payload1["outcomes"][0]["suggestion"]
+    assert suggestion1 == {"direction_required": True}
+    assert payload1["ask"] == (
+        "That time conflicts. Should I look for an earlier or later slot?"
+    )
+    # The exact-conflict turn must not have moved the block.
+    target.refresh_from_db()
+    assert target.start_time.strftime("%H:%M") == "09:00"
+
+    # --- Turn 2: re-emit the same interval carrying direction="later" ---
+    _patch_run_chat(
+        monkeypatch,
+        AIChatResult(
+            "{}",
+            [
+                {
+                    "type": "update",
+                    "task_id": target.id,
+                    "start_time": "10:00",
+                    "end_time": "11:00",
+                    "direction": "later",
+                }
+            ],
+            "Moved",
+            None,
+        ),
+    )
+    resp2 = _post(
+        auth_client,
+        {
+            "messages": [
+                _user_turn("move focus to 10:00"),
+                _assistant_turn("earlier or later?"),
+                _user_turn("later"),
+            ]
+        },
+    )
+    assert resp2.status_code == 200, resp2.content
+    payload2 = resp2.json()
+    suggestion2 = payload2["outcomes"][0]["suggestion"]
+    # Now a concrete slot, not the direction_required sentinel.
+    assert suggestion2 is not None
+    assert not suggestion2.get("direction_required")
+    assert "start_time" in suggestion2 and "end_time" in suggestion2
+    assert suggestion2["direction"] == "later"
+    # The free slot after Busy (10:00–11:00) is 11:00–12:00.
+    assert suggestion2["start_time"] == "11:00"
+    assert suggestion2["end_time"] == "12:00"
+    assert payload2["ask"] == "Focus conflicts at that time. Move it to 11:00–12:00?"
 
 
 class TestResolutionAskPrecedence:

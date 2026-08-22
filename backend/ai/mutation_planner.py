@@ -8,6 +8,7 @@ from __future__ import annotations
 import datetime
 import hashlib
 import json
+import logging
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -16,6 +17,8 @@ from django.core.exceptions import ValidationError
 from schedules.http import parse_time, times_overlap
 from schedules.validators import validate_five_minute_granularity
 from schedules.window import DEFAULT_WINDOW, ScheduleWindow, clamp_boundary
+
+logger = logging.getLogger(__name__)
 
 _UNKNOWN_TASK_DETAIL = "Referenced block no longer exists; it may have been deleted. Please retry."
 
@@ -483,7 +486,11 @@ def _normalize_actions(
             bare_move_derived_end = prev.bare_move_derived_end
             wrapped_flag = prev.wrapped
 
-        new_title = action.get("title") if kind == "update" else None
+        new_title = (
+            action["title"].strip()
+            if kind == "update" and isinstance(action.get("title"), str)
+            else None
+        )
         new_category = action.get("category") if kind == "update" else None
         # Direction is placement intent tied to THIS action's explicit
         # ``direction`` key. A later same-task action that supplies a time
@@ -739,6 +746,16 @@ def plan_mutations(
                 reject(block_id, "unresolved_conflict", others)
             continue
         break
+    else:
+        # Exhausting the range without a ``break`` means the overlap
+        # fixpoint never converged — the returned plan may still contain a
+        # conflicting pair. Surface it loudly (logged error, not an assert
+        # so production doesn't 500 on an unforeseen edge) rather than
+        # silently returning a possibly-invalid plan.
+        logger.error(
+            "plan_mutations fixpoint did not converge; possible planner bug (schedule=%s)",
+            snapshot.id,
+        )
 
     update_entries: list[UpdateDiffEntry] = []
     outcomes: list[ActionOutcome] = []
