@@ -41,8 +41,7 @@ const todayNowMinutes = computed(() =>
 const compactBounds = computed(() =>
   computeRenderBounds(props.blocks, todayNowMinutes.value, windowBounds.value),
 )
-// 0017 origin-shift: parent should pass renderBounds; fall back to the same
-// formula so an omitted axis still compresses edge gaps.
+// Origin defaults to 0017 renderStart so omitted props still compress edges.
 const axisOriginMinutes = computed(() => props.timelineOriginMinutes ?? compactBounds.value.renderStart)
 const axisEndMinutes = computed(() => props.timelineEndMinutes ?? compactBounds.value.renderEnd)
 const canvasHeight = computed(() => (axisEndMinutes.value - axisOriginMinutes.value) * props.pxPerMinute)
@@ -64,8 +63,7 @@ const hourTicks = computed(() => {
 
 function visualStartMinutes(item: ScheduleDisplayItem): number {
   const start = timeToMinutes(item.start_time)
-  // Compact leading stub's semantic start is the window start, which sits
-  // before the shifted origin — pin it to origin so top stays non-negative.
+  // Pin compact leading stub to origin so top stays non-negative.
   if (item.compact && start < axisOriginMinutes.value) return axisOriginMinutes.value
   return start
 }
@@ -139,8 +137,8 @@ defineExpose({ timelineOriginMinutes: axisOriginMinutes, timelineEndMinutes: axi
 <style scoped>
 .timeline-4a { position:relative; margin-left:var(--timeline-4a-axis-gutter, 42px); border-left:1px solid #26292d; }
 .timeline-item { position:absolute; left:var(--timeline-4a-item-inset, 12px); right:0; }
-.hour-tick { position:absolute; left:-43px; right:0; display:flex; align-items:center; gap:8px; transform:translateY(-50%); color:#6a6e75; font-size:11px; pointer-events:none; }
+.hour-tick { position:absolute; left:calc(-1 * var(--timeline-4a-axis-gutter, 42px) - 1px); right:0; display:flex; align-items:center; gap:8px; transform:translateY(-50%); color:#6a6e75; font-size:11px; pointer-events:none; }
 .hour-tick span { width:33px; text-align:right; }
 .hour-tick i { height:1px; flex:1; background:#212428; }
-.timeline-now { position:absolute; left:-43px; right:0; transform:translateY(-50%); z-index:4; }
+.timeline-now { position:absolute; left:calc(-1 * var(--timeline-4a-axis-gutter, 42px) - 1px); right:0; transform:translateY(-50%); z-index:4; }
 </style>

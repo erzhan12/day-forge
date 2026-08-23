@@ -147,9 +147,7 @@ const renderBounds = computed(() =>
   computeRenderBounds(props.blocks, todayNowMinutes.value, scheduleWindow.value),
 )
 
-// 4a shares classic 0017 origin-shift bounds: edge gaps collapse to a
-// STUB_MINUTES stub while the axis stays linear. computeRenderBounds already
-// unions out-of-window legacy blocks so tops stay non-negative.
+// 4a uses 0017 compact renderBounds, not a full-window axis.
 const timelineOriginMinutes = computed(() => renderBounds.value.renderStart)
 const timelineEndMinutes = computed(() => renderBounds.value.renderEnd)
 
@@ -1170,10 +1168,7 @@ defineExpose({
   overflow: hidden;
 }
 
-/* Ghost is a sibling of Timeline4a, positioned against padded schedule-body.
-   Classic left:16px matches that padding so it overlays full-width blocks.
-   4a blocks sit to the right of the hour gutter + item inset; without this
-   the ghost jumps left of the real block on pointer-down. */
+/* 4a ghost: 16px body padding + gutter + item inset (classic is padding-only). */
 .schedule-page.layout-4a .drag-ghost {
   left: calc(16px + var(--timeline-4a-axis-gutter) + var(--timeline-4a-item-inset));
 }
