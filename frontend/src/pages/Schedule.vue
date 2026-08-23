@@ -147,20 +147,11 @@ const renderBounds = computed(() =>
   computeRenderBounds(props.blocks, todayNowMinutes.value, scheduleWindow.value),
 )
 
-// 4a uses an uncompressed absolute axis widened to contain every stored
-// block, including legacy blocks beyond the configured working window.
-const timelineOriginMinutes = computed(() =>
-  Math.min(
-    scheduleWindow.value.startMinutes,
-    ...props.blocks.map((block) => timeToMinutes(block.start_time)),
-  ),
-)
-const timelineEndMinutes = computed(() =>
-  Math.max(
-    scheduleWindow.value.endMinutes,
-    ...props.blocks.map((block) => timeToMinutes(block.end_time)),
-  ),
-)
+// 4a shares classic 0017 origin-shift bounds: edge gaps collapse to a
+// STUB_MINUTES stub while the axis stays linear. computeRenderBounds already
+// unions out-of-window legacy blocks so tops stay non-negative.
+const timelineOriginMinutes = computed(() => renderBounds.value.renderStart)
+const timelineEndMinutes = computed(() => renderBounds.value.renderEnd)
 
 const {
   isDragging, frozenRenderBounds, frozenNowMinutes, dragBlockId, ghostTop,
@@ -1058,6 +1049,8 @@ defineExpose({
    content-box padding approach makes the content itself shrink and shifts its
    midpoint when a rail is open, so 4a uses explicit width/offset geometry. */
 .schedule-page.layout-4a {
+  --timeline-4a-axis-gutter: 42px;
+  --timeline-4a-item-inset: 12px;
   box-sizing: border-box;
   width: min(
     880px,
@@ -1175,6 +1168,14 @@ defineExpose({
   gap: 6px;
   box-sizing: border-box;
   overflow: hidden;
+}
+
+/* Ghost is a sibling of Timeline4a, positioned against padded schedule-body.
+   Classic left:16px matches that padding so it overlays full-width blocks.
+   4a blocks sit to the right of the hour gutter + item inset; without this
+   the ghost jumps left of the real block on pointer-down. */
+.schedule-page.layout-4a .drag-ghost {
+  left: calc(16px + var(--timeline-4a-axis-gutter) + var(--timeline-4a-item-inset));
 }
 
 .drag-ghost.compact {

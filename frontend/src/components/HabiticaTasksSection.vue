@@ -46,9 +46,6 @@ const emit = defineEmits<{
           :aria-label="`Complete Habitica task: ${task.title}`"
           @change="emit('complete', task.id)"
         />
-        <span class="habitica-type" :class="`habitica-type-${task.type}`">
-          {{ task.type === "daily" ? "Daily" : "Todo" }}
-        </span>
         <span class="habitica-task-title">{{ task.title }}</span>
       </li>
     </ul>
@@ -125,7 +122,7 @@ const emit = defineEmits<{
 
 .habitica-item {
   display: grid;
-  grid-template-columns: auto auto 1fr;
+  grid-template-columns: auto 1fr;
   gap: 8px;
   align-items: center;
   padding: 4px 0;
@@ -138,21 +135,6 @@ const emit = defineEmits<{
   height: 14px;
   margin: 0;
   cursor: pointer;
-}
-
-.habitica-type {
-  min-width: 42px;
-  font-size: 10px;
-  line-height: 1;
-  padding: 3px 5px;
-  border-radius: 4px;
-  text-align: center;
-  color: var(--text-secondary);
-  background: var(--bg-schedule-gap);
-}
-
-.habitica-type-daily {
-  color: var(--accent, #3b82f6);
 }
 
 .habitica-task-title {

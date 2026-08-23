@@ -534,6 +534,14 @@ each connected composable every 60s (`?refresh=1`); pauses when
 `document.hidden`. Task and calendar fan-outs are gated separately so a
 calendar-only tick never polls rail-closed Habitica.
 
+**4a session counter (`ExternalRail4a`):** an empty successful load stores
+baseline `∅` (label `0 completed this session / 0`), not `null`. Replace
+`∅` when rows later appear. A non-empty baseline never shrinks (completing
+the last row can show `1/1`) but **unions newly seen ids** — a task added
+in Todoist after a `1/1` session must become `1/2`, not stay `1/1` with
+the new row visible. Progress remaining follows the live task list while
+`loading` is false (freeze only during an in-flight fetch).
+
 ## Production deploy (feature 0016)
 
 The production deploy lives in `deployment/` and targets
@@ -677,6 +685,15 @@ no Service Worker, no closed-tab alerts.
   `displayList` reads `renderBounds.value` only on the non-drag path — an
   unconditional read would re-layout mid-drag on each 60s tick because
   `renderBounds` now depends on `nowMinutes`.
+- **4a shares the 0017 origin-shift axis, not a full-window uncompressed
+  canvas.** `Schedule.vue` sets `timelineOriginMinutes` / `timelineEndMinutes`
+  from `renderBounds` (which already unions out-of-window blocks). `Timeline4a`
+  sizes compact edge gaps with `render_minutes`, pins a leading stub's visual
+  start at the origin so `top` stays non-negative, and places a pre-origin
+  now-line proportionally inside that stub. Do not revert the 4a origin to
+  `min(window.start, earliest block)` — that restores the empty morning/evening
+  dead space. Drag still maps through `getTimelineOriginMinutes` (frozen at
+  `startDrag`), which is this compact origin.
 - Accepted cosmetic edges (documented in `docs/features/0023_PLAN.md`):
   empty-day pre-06:00 stub labeled "earlier" by `GapSlot`, and trailing-extent
   desync while dragging the last block past frozen-now.

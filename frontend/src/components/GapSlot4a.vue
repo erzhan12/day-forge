@@ -5,6 +5,7 @@ defineProps<{
   startTime: string
   endTime: string
   durationMinutes: number
+  compact?: boolean
   disabled?: boolean
   windowStart: string
 }>()
@@ -20,6 +21,7 @@ const emit = defineEmits<{
       :start-time="startTime"
       :end-time="endTime"
       :duration-minutes="durationMinutes"
+      :compact="compact"
       :disabled="disabled"
       :window-start="windowStart"
       @add-here="emit('add-here', $event)"

@@ -137,4 +137,116 @@ describe("ExternalRail4a session baseline", () => {
     await nextTick()
     expect(progressText()).toBe("0 completed this session / 1")
   })
+
+  it("counts a row that vanishes after refresh as completed this session", async () => {
+    mountRail()
+    await commitTodoistLoad([TASK_A, TASK_B, TASK_C])
+    await commitTodoistLoad([TASK_A, TASK_B])
+    expect(progressText()).toBe("1 completed this session / 3")
+  })
+
+  it("keeps the session denominator when the last remaining task vanishes", async () => {
+    mountRail()
+    await commitTodoistLoad([TASK_A, TASK_B, TASK_C])
+    await commitTodoistLoad([])
+    expect(progressText()).toBe("3 completed this session / 3")
+  })
+
+  it("counts completing the last task without a loading cycle", async () => {
+    mountRail()
+    await commitTodoistLoad([TASK_A, TASK_B, TASK_C])
+    await wrapper!.setProps({ todoistTasks: [] })
+    await nextTick()
+    expect(progressText()).toBe("3 completed this session / 3")
+  })
+
+  it("does not keep an empty-day baseline when tasks later appear", async () => {
+    mountRail()
+    await commitTodoistLoad([])
+    expect(progressText()).toBe("0 completed this session / 0")
+
+    await commitTodoistLoad([TASK_A, TASK_B, TASK_C])
+    expect(progressText()).toBe("0 completed this session / 3")
+
+    await wrapper!.setProps({ todoistTasks: [] })
+    await nextTick()
+    expect(progressText()).toBe("3 completed this session / 3")
+  })
+
+  it("counts an in-app complete once the parent drops the row", async () => {
+    mountRail()
+    await commitTodoistLoad([TASK_A, TASK_B])
+    await wrapper!.findAll('[data-testid="todoist-complete"]')[0].trigger("change")
+    await wrapper!.setProps({ todoistTasks: [TASK_B] })
+    await nextTick()
+    expect(progressText()).toBe("1 completed this session / 2")
+    expect(wrapper!.emitted("todoistComplete")![0]).toEqual(["todo-1"])
+  })
+
+  it("still counts a baseline id that left even if a new task arrives in the same refresh", async () => {
+    mountRail()
+    await commitTodoistLoad([TASK_A, TASK_B])
+    await commitTodoistLoad([TASK_B, TASK_C])
+    expect(progressText()).toBe("1 completed this session / 3")
+  })
+
+  it("grows the denominator when a new task appears after the session was already 1/1", async () => {
+    mountRail()
+    await commitTodoistLoad([TASK_A])
+    await commitTodoistLoad([])
+    expect(progressText()).toBe("1 completed this session / 1")
+
+    await commitTodoistLoad([TASK_B])
+    expect(progressText()).toBe("1 completed this session / 2")
+  })
+
+  it("does not treat an in-flight refresh as wiping the remaining set", async () => {
+    mountRail()
+    await commitTodoistLoad([TASK_A, TASK_B, TASK_C])
+    await wrapper!.setProps({ todoistLoading: true })
+    await nextTick()
+    expect(progressText()).toBe("0 completed this session / 3")
+  })
+
+  it("counts a Habitica daily that disappears after refresh", async () => {
+    const dailyA = { id: "hab-1", title: "Floss", type: "daily" as const, due_date: null, completed: false }
+    const dailyB = { id: "hab-2", title: "Stretch", type: "daily" as const, due_date: null, completed: false }
+    mountRail({ showHabitica: true, showTodoist: false })
+    await wrapper!.setProps({ habiticaLoading: true, habiticaError: null })
+    await nextTick()
+    await wrapper!.setProps({
+      habiticaLoading: false,
+      habiticaTasks: [dailyA, dailyB],
+      habiticaError: null,
+    })
+    await nextTick()
+    expect(wrapper!.get('[data-testid="habitica-session-progress"]').text()).toBe(
+      "0 completed this session / 2",
+    )
+
+    await wrapper!.setProps({ habiticaLoading: true })
+    await nextTick()
+    await wrapper!.setProps({
+      habiticaLoading: false,
+      habiticaTasks: [dailyB],
+      habiticaError: null,
+    })
+    await nextTick()
+    expect(wrapper!.get('[data-testid="habitica-session-progress"]').text()).toBe(
+      "1 completed this session / 2",
+    )
+  })
+})
+
+describe("ExternalRail4a section layout", () => {
+  it("keeps task sections as siblings and pins the calendar last", () => {
+    mountRail({ showHabitica: true, showCalendars: true, externalConnected: true })
+    const content = wrapper!.get(".rail-content")
+    const sections = content.findAll(":scope > section")
+    expect(sections).toHaveLength(3)
+    expect(sections[0].classes()).toContain("task-section")
+    expect(sections[1].classes()).toContain("task-section")
+    expect(sections[2].classes()).toContain("calendar-section")
+    expect(content.element.lastElementChild).toBe(sections[2].element)
+  })
 })

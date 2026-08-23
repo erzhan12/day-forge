@@ -281,8 +281,9 @@ export function useDrag(
   // Defaults to the static [06:00, 23:00) constants for callers/tests that
   // predate the configurable window.
   getWindow?: () => ScheduleWindowBounds,
-  // Alternate layouts may use a different vertical scale and an uncompressed
-  // axis origin. Appended to preserve the long-standing positional API.
+  // Alternate layouts may use a different vertical scale and a separate
+  // axis origin (4a uses 0017 compact renderStart). Appended to preserve
+  // the long-standing positional API.
   getPxPerMinute?: () => number,
   getTimelineOriginMinutes?: () => number | null,
 ) {
