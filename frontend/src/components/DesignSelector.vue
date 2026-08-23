@@ -135,7 +135,7 @@ function focusOption(index: number): void {
 
 <template>
   <section class="design-section" aria-labelledby="design-heading">
-    <h2 id="design-heading" class="section-title">Design</h2>
+    <h3 id="design-heading" class="section-title">Design</h3>
     <p class="section-subtitle">
       Choose the visual style for the entire app. Changes apply immediately and
       persist across devices.

@@ -112,15 +112,14 @@ try {
   await login(page, { waitForUsername: true })
 
   console.log("→ Settings: connect Todoist…")
-  await page.goto(`${BASE}/settings/`, { waitUntil: "networkidle" })
+  await page.goto(`${BASE}/settings/#integrations`, { waitUntil: "networkidle" })
   await page.waitForSelector("text=Todoist")
-  const tokenInput = page.locator(
-    'section:has(h2:text("Todoist")) input[type="password"]',
-  )
+  const todoistSettings = page.locator('[data-testid="settings-integration-todoist"]')
+  const tokenInput = todoistSettings.locator('input[type="password"]')
   await tokenInput.fill(API_TOKEN)
   await Promise.all([
     page.waitForSelector("text=Connected to Todoist"),
-    page.click('section:has(h2:text("Todoist")) button:has-text("Connect")'),
+    todoistSettings.locator('button:has-text("Connect")').click(),
   ])
 
   console.log(`→ Schedule ${today}: wait for the panel…`)

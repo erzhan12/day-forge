@@ -15,7 +15,7 @@ function onChange(event: Event) {
 
 <template>
   <section class="sound-section" aria-labelledby="sound-heading">
-    <h2 id="sound-heading" class="section-title">Sound notifications</h2>
+    <h3 id="sound-heading" class="section-title">Sound notifications</h3>
     <p class="section-subtitle">
       Play a short chime when a block reaches its start time and another when
       it reaches its end time. Off by default; the setting is saved on this

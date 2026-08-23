@@ -111,7 +111,7 @@ function formatTime(iso: string): string {
     >
       <template v-if="acctErr.error === 'reconnect_required'">
         <span>{{ acctErr.email }} needs reconnecting.</span>
-        <a class="ee-reconnect" href="/settings/">Reconnect</a>
+        <a class="ee-reconnect" href="/settings/#integrations">Reconnect</a>
       </template>
       <template v-else>
         <span>{{ acctErr.email }} is temporarily unavailable.</span>

@@ -150,7 +150,7 @@ describe("ExternalEventsPanel", () => {
     expect(banner.text()).toContain("bob@gmail.com")
     const reconnect = banner.find(".ee-reconnect")
     expect(reconnect.exists()).toBe(true)
-    expect(reconnect.attributes("href")).toBe("/settings/")
+    expect(reconnect.attributes("href")).toBe("/settings/#integrations")
     // List still renders alongside the per-account banner.
     expect(wrapper.findAll('[data-testid="external-event"]')).toHaveLength(1)
   })

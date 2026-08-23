@@ -179,9 +179,8 @@ function categoryLabel(category: TravelRule["category"]): string {
 
 <template>
   <section class="travel-rules-list">
-    <!-- No internal heading: Settings.vue owns the "Travel-time rules"
-         subsection-title, matching the Apple/Google Calendar subsections
-         this list sits among. -->
+    <!-- No internal heading: SettingsTemplatesRulesPanel.vue owns the
+         "Travel-time rules" subsection title. -->
     <p class="hint-text">
       Match event titles by keyword or a source calendar name. Keyword rules
       always match before calendar-only rules, regardless of row order. Use the

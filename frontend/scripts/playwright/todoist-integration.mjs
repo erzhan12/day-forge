@@ -82,13 +82,14 @@ try {
   }
 
   console.log("→ Settings: connect Todoist…")
-  await page.goto(`${BASE}/settings/`, { waitUntil: "networkidle" })
+  await page.goto(`${BASE}/settings/#integrations`, { waitUntil: "networkidle" })
   await page.waitForSelector('text=Todoist')
-  const tokenInput = page.locator('section:has(h2:text("Todoist")) input[type="password"]')
+  const todoistSettings = page.locator('[data-testid="settings-integration-todoist"]')
+  const tokenInput = todoistSettings.locator('input[type="password"]')
   await tokenInput.fill(API_TOKEN)
   await Promise.all([
     page.waitForSelector('text=Connected to Todoist'),
-    page.click('section:has(h2:text("Todoist")) button:has-text("Connect")'),
+    todoistSettings.locator('button:has-text("Connect")').click(),
   ])
 
   console.log(`→ Schedule: panel visible after connect (${today})…`)
@@ -115,8 +116,10 @@ try {
   console.log(`   tasks on panel: ${taskCount}`)
 
   console.log("→ Settings: disconnect…")
-  await page.goto(`${BASE}/settings/`, { waitUntil: "networkidle" })
-  await page.click('section:has(h2:text("Todoist")) button:has-text("Disconnect")')
+  await page.goto(`${BASE}/settings/#integrations`, { waitUntil: "networkidle" })
+  await page
+    .locator('[data-testid="settings-integration-todoist"] button:has-text("Disconnect")')
+    .click()
   await page.waitForSelector('text=API token')
 
   console.log("→ Schedule: panel hidden after disconnect…")

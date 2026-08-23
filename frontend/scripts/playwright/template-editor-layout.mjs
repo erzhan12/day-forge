@@ -1,11 +1,11 @@
 // Reproduction script for the TemplateEditor blocks-table layout bug.
 //
 // What it does: logs in as the ``playwright`` test user, opens
-// ``/settings/``, creates a weekday template, adds one block, then
+// ``/settings/#templates-rules``, creates a weekday template, adds one block, then
 // measures the rendered widths of the Title input vs Start / End /
 // Category controls. The bug from the manual Phase 5 test:
 //
-//   * Side-by-side weekday/weekend cards halve the page width.
+//   * The old side-by-side weekday/weekend cards halved the page width.
 //   * The blocks ``<table>`` defaults to ``table-layout: auto``, which
 //     distributes by intrinsic content width.
 //   * ``<input type="time">`` and ``<select>`` carry built-in
@@ -50,12 +50,14 @@ mkdirSync(HERE, { recursive: true })
 // 80px is the rough lower bound where you can still type a couple of
 // characters and see them. The bug renders Title at ~25-35px.
 const TITLE_MIN_USABLE_PX = 80
+const DESKTOP_CARD_MIN_PX = 700
+const DESKTOP_CARD_MAX_PX = 780
 
 // A few viewport widths spanning the relevant breakpoints:
 //   * 600 — narrow desktop / split-screen, 1-column layout
 //   * 900 — laptop-narrow, just above the old 720px breakpoint
-//   * 1280 — typical laptop, 2-column layout active
-//   * 1920 — wide desktop, 2-column with extra room
+//   * 1280 — typical laptop, topic shell + full-width single-column card
+//   * 1920 — wide desktop, topic shell still caps the main column near 760px
 const VIEWPORTS = [
   { label: "narrow-600", width: 600 },
   { label: "laptop-900", width: 900 },
@@ -66,7 +68,7 @@ const VIEWPORTS = [
 const browser = await chromium.launch({ headless: true })
 
 async function openSettingsAndAddBlock(page) {
-  await page.goto(`${BASE}/settings/`, { waitUntil: "networkidle" })
+  await page.goto(`${BASE}/settings/#templates-rules`, { waitUntil: "networkidle" })
   // Click "Create template" under the weekday slot (first one — the
   // template-grid renders weekday on the left).
   await page.locator('button:has-text("Create template")').first().click()
@@ -111,7 +113,7 @@ async function measureLayout(page) {
   })
 }
 
-function diagnose(measurements) {
+function diagnose(measurements, viewportWidth) {
   const titleCol = measurements.columns.find((c) => c.header === "Title")
   if (!titleCol || titleCol.inputWidthPx === null) {
     return { ok: false, reason: "Title column not found in measurements" }
@@ -120,6 +122,17 @@ function diagnose(measurements) {
     return {
       ok: false,
       reason: `Title input is ${titleCol.inputWidthPx}px wide (< ${TITLE_MIN_USABLE_PX}px usable threshold)`,
+      titleWidth: titleCol.inputWidthPx,
+    }
+  }
+  if (
+    viewportWidth >= 1024 &&
+    (measurements.cardWidthPx < DESKTOP_CARD_MIN_PX ||
+      measurements.cardWidthPx > DESKTOP_CARD_MAX_PX)
+  ) {
+    return {
+      ok: false,
+      reason: `Desktop card is ${measurements.cardWidthPx}px wide (expected one main-column card near 760px)`,
       titleWidth: titleCol.inputWidthPx,
     }
   }
@@ -140,7 +153,7 @@ async function runOneViewport({ label, width }) {
       `template-editor-layout-${label}.png`,
     )
     await page.screenshot({ path: screenshotPath, fullPage: false })
-    const verdict = diagnose(measurements)
+    const verdict = diagnose(measurements, width)
     return { label, width, measurements, screenshotPath, verdict }
   } finally {
     await context.close()

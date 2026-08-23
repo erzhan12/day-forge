@@ -44,7 +44,7 @@ async function save() {
 
 <template>
   <section class="day-window-editor" aria-label="Day window">
-    <h2 class="section-title">Day window</h2>
+    <h3 class="section-title">Day window</h3>
     <p class="section-subtitle">Choose the hours used for scheduling and timeline gaps.</p>
     <div class="inputs">
       <label>Start <input v-model="start" type="time" step="300" :disabled="saving" /></label>

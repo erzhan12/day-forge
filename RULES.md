@@ -788,7 +788,7 @@ no Service Worker, no closed-tab alerts.
 
 ## Playwright smoke harness (feature 0039)
 
-- The 21 browser smoke scripts live in `frontend/scripts/playwright/` and share
+- The 19 browser smoke scripts live in `frontend/scripts/playwright/` and share
   `test-utils.mjs`. Every script calls its GET-based `preflight()` before DB
   setup; a HEAD probe is invalid because Django's login view only permits GET
   and POST. Reuse `login`, the appropriate failure helper, named wait constants,

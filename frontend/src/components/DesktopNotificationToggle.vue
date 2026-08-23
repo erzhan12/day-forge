@@ -23,7 +23,7 @@ async function onChange(event: Event) {
 
 <template>
   <section class="desktop-section" aria-labelledby="desktop-heading">
-    <h2 id="desktop-heading" class="section-title">Desktop notifications</h2>
+    <h3 id="desktop-heading" class="section-title">Desktop notifications</h3>
     <p class="section-subtitle">
       Show a browser desktop notification when a block reaches its start time
       and another when it reaches its end time, while the schedule is open.
