@@ -64,6 +64,22 @@ def test_ui_preferences_payload_serializes_dto_shape():
     }
 
 
+def test_prefs_to_dict_matches_ui_preferences_payload_shape(user):
+    # `_prefs_to_dict` (PATCH response) and `ui_preferences_payload`
+    # (GET + Inertia props) are parallel serializers. Pin their key sets
+    # equal so adding a `UiPreferences` field to one without the other
+    # fails the suite immediately instead of silently diverging PATCH from
+    # GET/Inertia.
+    from templates_mgr.api import _prefs_to_dict
+
+    row, _ = UserPreferences.objects.get_or_create(
+        user=user, defaults={"theme": "classic"}
+    )
+    patch_shape = _prefs_to_dict(row)
+    payload_shape = ui_preferences_payload(get_user_preferences(user))
+    assert set(patch_shape) == set(payload_shape)
+
+
 def test_backend_chat_suggestion_constants_are_pinned():
     assert preferences_module.DEFAULT_CHAT_SUGGESTIONS == DEFAULT_CHAT_SUGGESTIONS
     assert preferences_module.MAX_CHAT_SUGGESTIONS == 8

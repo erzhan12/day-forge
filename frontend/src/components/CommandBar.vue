@@ -252,7 +252,7 @@ onUnmounted(() => {
       v-if="is4a && suggestions.length > 0"
       show-suggestions
       :suggestions="suggestions"
-      @suggestion="useSuggestion"
+      @suggestion="(text: string) => void useSuggestion(text)"
     />
     <form class="command-row" @submit.prevent="handleSubmit">
       <span
