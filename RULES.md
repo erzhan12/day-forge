@@ -214,7 +214,7 @@ Any new authenticated Inertia page MUST do both of:
 ```python
 # backend/<app>/views.py
 from inertia import render as inertia_render
-from templates_mgr.preferences import get_user_preferences
+from templates_mgr.preferences import get_user_preferences, ui_preferences_payload
 
 @login_required
 def my_new_page_view(request):
@@ -225,10 +225,9 @@ def my_new_page_view(request):
         "MyNewPage",
         {
             # ...your page's own props...
-            "ui_preferences": {
-                "theme": prefs.theme,
-                "chat_suggestions": list(prefs.chat_suggestions),
-            },
+            # Use the canonical serializer so new UiPreferences fields flow
+            # automatically — never hand-build this dict.
+            "ui_preferences": ui_preferences_payload(prefs),
         },
         template_data={"initial_theme": prefs.theme},
     )

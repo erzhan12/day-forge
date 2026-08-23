@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue"
+import { computed, onUnmounted, ref, watch } from "vue"
 import { router } from "@inertiajs/vue3"
 
 import { useChatSuggestions } from "../../composables/useChatSuggestions"
@@ -18,6 +18,14 @@ interface SuggestionRow {
 const suggestions = useChatSuggestions()
 const { saveChatSuggestions } = usePreferences()
 let nextRowId = 1
+
+// Guard the in-flight reload callbacks: if the user navigates away from
+// Settings while the post-save `router.reload` is pending, its callbacks
+// must not mutate state on the unmounted component.
+const mounted = ref(true)
+onUnmounted(() => {
+  mounted.value = false
+})
 
 function rowsFrom(values: readonly string[]): SuggestionRow[] {
   return values.map((text) => ({ id: nextRowId++, text }))
@@ -69,6 +77,7 @@ function moveRow(index: number, offset: -1 | 1): void {
   if (target < 0 || target >= rows.value.length) return
   const [row] = rows.value.splice(index, 1)
   rows.value.splice(target, 0, row)
+  errorMessage.value = ""
   statusMessage.value = ""
 }
 
@@ -133,18 +142,21 @@ async function persist(replacement?: readonly string[]): Promise<void> {
     only: ["ui_preferences"],
     onSuccess: () => {
       reloadHandled = true
+      if (!mounted.value) return
       savedSnapshot.value = [...payload]
       rows.value = rowsFrom(payload)
       statusMessage.value = "Suggestions saved."
     },
     onError: (errors) => {
       reloadHandled = true
+      if (!mounted.value) return
       errorMessage.value = firstError(
         errors,
         "Suggestions were saved, but the page could not refresh.",
       )
     },
     onFinish: () => {
+      if (!mounted.value) return
       if (!reloadHandled) {
         errorMessage.value =
           "Suggestions were saved, but the page could not refresh."
