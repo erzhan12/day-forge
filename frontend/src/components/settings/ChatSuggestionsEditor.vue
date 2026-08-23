@@ -73,6 +73,11 @@ function moveRow(index: number, offset: -1 | 1): void {
 }
 
 function validatedDraft(): string[] | null {
+  if (rows.value.length > MAX_CHAT_SUGGESTIONS) {
+    errorMessage.value =
+      `Choose ${MAX_CHAT_SUGGESTIONS} suggestions or fewer.`
+    return null
+  }
   const values: string[] = []
   for (const row of rows.value) {
     const trimmed = row.text.trim()

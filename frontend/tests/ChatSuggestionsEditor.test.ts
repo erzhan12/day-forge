@@ -124,6 +124,26 @@ describe("ChatSuggestionsEditor", () => {
     expect(wrapper.text()).toContain("120 characters")
   })
 
+  it("blocks saving an edited legacy list over eight rows", async () => {
+    mocks.pageProps.value = {
+      ui_preferences: {
+        chat_suggestions: Array.from(
+          { length: MAX_CHAT_SUGGESTIONS + 1 },
+          (_, index) => `Legacy prompt ${index + 1}`,
+        ),
+      },
+    }
+    const wrapper = mountEditor()
+    await inputs(wrapper)[0].setValue("Edited legacy prompt")
+
+    await wrapper.get('[data-testid="save-chat-suggestions"]').trigger("click")
+    await flushPromises()
+
+    expect(mocks.save).not.toHaveBeenCalled()
+    expect(wrapper.get('[data-testid="chat-suggestions-error"]').text())
+      .toContain("8 suggestions or fewer")
+  })
+
   it.each(["", "   ", "x".repeat(121)])(
     "blocks invalid non-empty rows without a request: %j",
     async (value) => {
