@@ -488,6 +488,8 @@ def _prefs_response(payload: dict, status: int = 200) -> JsonResponse:
 def _prefs_to_dict(prefs: UserPreferences) -> dict:
     """Serialize a ``UserPreferences`` row using the same normalization
     rule as the read-side DTO. Used by ``PATCH`` after a write."""
+    # Keep in sync with ui_preferences_payload in preferences.py — both
+    # must emit all UiPreferences fields.
     return {
         "theme": normalize_theme(prefs.theme),
         "chat_suggestions": normalize_chat_suggestions(
