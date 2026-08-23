@@ -132,6 +132,25 @@ describe("SettingsIntegrationsPanel", () => {
     expect(wrapper.get('input[type="url"]').attributes("placeholder"))
       .toBe("https://caldav.icloud.com/")
   })
+
+  it("renders the placement toggle outside the Google provider block", () => {
+    const wrapper = mount(SettingsIntegrationsPanel, {
+      props: integrationProps(),
+      global: {
+        stubs: {
+          ExternalCalendarPlacementToggle: {
+            template: '<div data-testid="placement-toggle" />',
+          },
+        },
+      },
+    })
+    expect(
+      wrapper.get('[data-testid="settings-integration-google"]')
+        .find('[data-testid="placement-toggle"]')
+        .exists(),
+    ).toBe(false)
+    expect(wrapper.get('[data-testid="placement-toggle"]').exists()).toBe(true)
+  })
 })
 
 describe("SettingsTemplatesRulesPanel", () => {

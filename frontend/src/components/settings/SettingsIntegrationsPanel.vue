@@ -185,7 +185,6 @@ defineProps<{
       >
         Connect Google Calendar
       </button>
-      <ExternalCalendarPlacementToggle />
     </div>
 
     <div class="integration-block" data-testid="settings-integration-todoist">
@@ -304,6 +303,7 @@ defineProps<{
         {{ habiticaBusy ? "Disconnecting..." : "Disconnect" }}
       </button>
     </div>
+    <ExternalCalendarPlacementToggle />
   </section>
 </template>
 

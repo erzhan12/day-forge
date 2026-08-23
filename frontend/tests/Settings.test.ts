@@ -26,10 +26,12 @@ vi.mock("../src/composables/useCalendarAccount", () => ({
   }),
 }))
 
+const { fetchAccounts } = vi.hoisted(() => ({ fetchAccounts: vi.fn() }))
+
 vi.mock("../src/composables/useGoogleAccount", () => ({
   useGoogleAccount: () => ({
     state: reactive({ accounts: [], loading: false, error: null }),
-    fetchAccounts: vi.fn(),
+    fetchAccounts,
     connect: vi.fn(),
     disconnect: vi.fn().mockResolvedValue({ ok: true }),
     _internals: { operationInFlight: ref(false) },
@@ -103,6 +105,7 @@ afterEach(() => {
   wrapper?.unmount()
   wrapper = null
   vi.unstubAllGlobals()
+  vi.restoreAllMocks()
   vi.clearAllMocks()
 })
 
@@ -272,6 +275,27 @@ describe("Settings topic shell", () => {
       .toContain("Google connection was cancelled.")
     expect(replaceSpy).toHaveBeenCalledTimes(1)
     expect(replaceSpy.mock.calls[0][2]).toBe("/settings/#integrations")
+    expect(pushSpy).not.toHaveBeenCalled()
+  })
+
+  it("lands Google OAuth success on Integrations and refetches accounts", async () => {
+    stubMatchMedia(true)
+    window.history.replaceState({}, "", "/settings/?google=connected")
+    const replaceSpy = vi.spyOn(window.history, "replaceState")
+    const pushSpy = vi.spyOn(window.history, "pushState")
+    wrapper = mountSettings()
+    await nextTick()
+
+    expect(window.location.hash).toBe("#integrations")
+    expect(window.location.search).toBe("")
+    expect(wrapper.get('[data-settings-topic="integrations"]').attributes("hidden"))
+      .toBeUndefined()
+    expect(wrapper.get('[data-testid="settings-integration-google"]').text())
+      .toContain("Google Calendar connected.")
+    expect(fetchAccounts).toHaveBeenCalledTimes(2)
+    expect(replaceSpy).toHaveBeenCalledTimes(1)
+    expect(replaceSpy.mock.calls[0][2]).toBe("/settings/#integrations")
+    expect(String(replaceSpy.mock.calls[0][2])).not.toContain("google=")
     expect(pushSpy).not.toHaveBeenCalled()
   })
 })
