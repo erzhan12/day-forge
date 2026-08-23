@@ -45,6 +45,11 @@ def test_helper_creates_default_row_on_first_access(user):
     assert dto.theme == "classic"
     assert list(dto.chat_suggestions) == DEFAULT_CHAT_SUGGESTIONS
     assert UserPreferences.objects.filter(user=user).exists()
+    # The created row stores NULL, not a materialized copy of the defaults,
+    # so the row keeps tracking DEFAULT_CHAT_SUGGESTIONS until the user
+    # explicitly customizes. A create-path that persisted the defaults would
+    # otherwise pass every other assertion here.
+    assert UserPreferences.objects.get(user=user).chat_suggestions is None
 
 
 def test_ui_preferences_payload_serializes_dto_shape():
@@ -404,6 +409,23 @@ def test_patch_empty_suggestions_is_valid_and_stays_empty(auth_client, user):
     assert auth_client.get(reverse("user_preferences")).json()[
         "chat_suggestions"
     ] == []
+
+
+def test_patch_accepts_120_code_point_emoji_boundary(auth_client, user):
+    # The cap is Python str length (Unicode code points), so exactly 120
+    # astral emoji is accepted even though it is 240 UTF-16 code units — the
+    # backend must not measure UTF-16 units. Pins the documented boundary
+    # opposite the "x" * 121 rejection case.
+    emoji = "😀" * 120
+    assert len(emoji) == 120
+    resp = auth_client.patch(
+        reverse("user_preferences"),
+        data=json.dumps({"chat_suggestions": [emoji]}),
+        content_type="application/json",
+    )
+    assert resp.status_code == 200
+    assert resp.json()["chat_suggestions"] == [emoji]
+    assert UserPreferences.objects.get(user=user).chat_suggestions == [emoji]
 
 
 def test_patch_combined_theme_and_suggestions(auth_client, user):
