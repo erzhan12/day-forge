@@ -22,14 +22,7 @@ const emit = defineEmits<{
 }>()
 const open = defineModel<boolean>("open", { required: true })
 
-// Provider arrays hold remaining rows only. Capture the denominator IDs on
-// the date's first *committed* load — not the idle `loading: false` default
-// (`useTodoist` / `useHabitica` start that way) and not the stale list
-// still showing after an `activeDate` change. Session completions are the
-// baseline IDs missing from the last successful remaining list, so a close
-// in Todoist/Habitica (picked up on poll) counts the same as a Day Forge
-// click. Freeze remaining while a fetch is in flight so a refresh cannot
-// look like "everything completed".
+// Remaining = last committed ids (not click-only); freeze that set while loading.
 const todoistBaselineIds = ref<Set<string> | null>(null)
 const habiticaBaselineIds = ref<Set<string> | null>(null)
 const todoistRemainingIds = ref<Set<string>>(new Set())
@@ -48,8 +41,7 @@ function resetProviderOnDateChange(
   baselineIds.value = null
   remainingIds.value = new Set()
   if (loading) {
-    // Already in-flight: Vue will not re-fire the loading:true watcher, so
-    // accept that request's commit instead of latching awaitingCommit.
+    // In-flight: Vue won't re-fire loading:true, so accept that commit.
     sawLoad.value = true
     awaitingCommit.value = false
   } else {
@@ -80,15 +72,11 @@ function captureBaseline(
   remainingIds.value = ids
   const baseline = baselineIds.value
   if (baseline === null) {
-    // `ids.size > 0` covers a warm mount (theme switch after tasks already
-    // fetched). `sawLoad` covers the empty-day commit (`ids.size === 0`).
+    // Warm mount (`ids`) or empty-day commit after `sawLoad`.
     if (sawLoad.value || ids.size > 0) baselineIds.value = new Set(ids)
     return
   }
-  // Empty-day `∅` must not freeze the denominator at 0 if the next list
-  // has rows. A non-empty baseline never shrinks (so 1/1 stays after the
-  // last row vanishes) but *does* union newly seen ids — otherwise a
-  // task added in Todoist after a 1/1 session keeps showing 1/1.
+  // `∅` can grow; a non-empty baseline never shrinks, only unions new ids.
   if (baseline.size === 0) {
     if (ids.size > 0) baselineIds.value = new Set(ids)
     return
