@@ -335,9 +335,10 @@ describe("useFocusIndicator", () => {
     expect(css).toMatch(/background:\s*Canvas/)
     expect(css).toMatch(/background:\s*currentColor/)
     expect(css).toMatch(/border:\s*1px solid currentColor/)
-    // Privacy / 0049: must not dump the app stylesheet.
+    // 0049: inject a dedicated sheet — do not clone app.css (imports or filename).
     expect(css).not.toMatch(/\.time-block/)
-    expect(css).not.toMatch(/Standup with Bob/)
+    expect(css).not.toMatch(/@import/)
+    expect(css).not.toMatch(/app\.css/)
 
     expect(win.document.querySelector(".fi-bar")).not.toBeNull()
     expect(win.document.querySelector(".fi-complete")).not.toBeNull()
