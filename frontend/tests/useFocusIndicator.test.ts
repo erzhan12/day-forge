@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { flushPromises } from "@vue/test-utils"
 import { defineComponent, h, nextTick, ref } from "vue"
 import { useFocusIndicator } from "../src/composables/useFocusIndicator"
+import FocusIndicatorView from "../src/components/FocusIndicatorView.vue"
 
 // A minimal component that renders aria-valuenow from a prop, so we can prove
 // the PiP view stays reactive after open.
@@ -302,6 +303,47 @@ describe("useFocusIndicator", () => {
     await flushPromises()
     expect(fi.isOpen.value).toBe(true)
 
+    fi.cleanup()
+  })
+
+  it("injects the view layout stylesheet into the PiP document (not only html/body chrome)", async () => {
+    const win = makeFakeWindow()
+    installFakePip(win)
+    const fi = useFocusIndicator({
+      component: FocusIndicatorView,
+      props: () => ({
+        active: true,
+        progressPercent: 83,
+        completing: false,
+        errorState: false,
+        disabled: false,
+      }),
+    })
+    await fi.open()
+    await flushPromises()
+
+    const css = [...win.document.querySelectorAll("style")]
+      .map((el) => el.textContent ?? "")
+      .join("\n")
+
+    expect(css).toMatch(/\.fi-bar/)
+    expect(css).toMatch(/height:\s*12px/)
+    expect(css).toMatch(/\.fi-fill/)
+    expect(css).toMatch(/\.fi-complete/)
+    expect(css).toMatch(/background:\s*transparent/)
+    expect(css).toMatch(/color:\s*CanvasText/)
+    expect(css).toMatch(/background:\s*Canvas/)
+    expect(css).toMatch(/background:\s*currentColor/)
+    expect(css).toMatch(/border:\s*1px solid currentColor/)
+    // Privacy / 0049: must not dump the app stylesheet.
+    expect(css).not.toMatch(/\.time-block/)
+    expect(css).not.toMatch(/Standup with Bob/)
+
+    expect(win.document.querySelector(".fi-bar")).not.toBeNull()
+    expect(win.document.querySelector(".fi-complete")).not.toBeNull()
+    expect(win.document.querySelector(".fi-fill")?.getAttribute("style")).toContain(
+      "83%",
+    )
     fi.cleanup()
   })
 })

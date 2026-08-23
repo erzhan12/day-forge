@@ -835,6 +835,13 @@ no Service Worker, no closed-tab alerts.
   gate is the integration test (`scheduleFocusIndicator.test.ts`) asserting the
   REAL mounted PiP `document.body` + `document.title` contain no sentinel block
   strings.
+- **PiP view CSS must be injected into the PiP document.** Document
+  Picture-in-Picture is a separate `Document`. Vue SFC `<style scoped>` is
+  injected into the opener by Vite and does not apply inside the PiP. Any
+  widget mounted with `createApp(…).mount()` in `pipWindow.document` must
+  include its visual rules in the `<style>` string injected into
+  `pipWindow.document.head` (`PIP_STYLES` in `useFocusIndicator.ts`). Do not
+  clone `app.css`.
 - **Transient activation.** `requestWindow()` must be called synchronously from
   the header button's user gesture (`useFocusIndicator.open()`); it returns a
   `Promise<Window>`. A `pendingOpen` flag guards rapid double-clicks; an `epoch`

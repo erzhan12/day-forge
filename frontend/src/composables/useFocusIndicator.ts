@@ -7,12 +7,83 @@ const PIP_TITLE = "Focus"
 const PIP_OPEN_ERROR = "Could not open indicator. Please try again."
 const PIP_OPEN_ERROR_DURATION_MS = 5_000
 
-// The PiP document is a separate Document with no app stylesheet; give it its
-// own minimal scoped styles rather than cloning the whole app CSS.
+// The PiP document is a separate Document with no app stylesheet. Inject the
+// view's layout rules here rather than cloning app.css — Vue scoped CSS never
+// reaches a foreign Document.
 const PIP_STYLES = `
   :root { color-scheme: light dark; }
   html, body { margin: 0; height: 100%; }
-  body { display: flex; align-items: center; }
+  body { display: flex; align-items: center; color: CanvasText; background: Canvas; }
+  .focus-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0 12px;
+    font-family: system-ui, sans-serif;
+  }
+  .fi-bar {
+    flex: 1;
+    height: 12px;
+    border-radius: 6px;
+    background: rgba(128, 128, 128, 0.3);
+    overflow: hidden;
+  }
+  .fi-fill {
+    height: 100%;
+    background: currentColor;
+    transition: width 0.25s ease;
+  }
+  .focus-indicator[data-state="error"] {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+  }
+  .fi-complete {
+    flex: none;
+    min-width: 28px;
+    min-height: 24px;
+    border: 1px solid currentColor;
+    border-radius: 4px;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+  }
+  .fi-complete:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+  .fi-complete:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+  }
+  .fi-retry {
+    flex: none;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .fi-neutral {
+    flex: 1;
+    text-align: center;
+    opacity: 0.6;
+  }
+  .fi-sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .fi-fill { transition: none; }
+  }
 `
 
 interface FocusIndicatorConfig {

@@ -1,3 +1,6 @@
+<!-- Visual styles live in PIP_STYLES (useFocusIndicator). Document PiP is a
+     foreign Document; Vue/Vite scoped CSS is injected only into the opener
+     page and would never apply here. -->
 <script setup lang="ts">
 import { computed } from "vue"
 
@@ -55,78 +58,3 @@ function onComplete() {
     </template>
   </div>
 </template>
-
-<style scoped>
-.focus-indicator {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  box-sizing: border-box;
-  padding: 0 12px;
-  font-family: system-ui, sans-serif;
-}
-.fi-bar {
-  flex: 1;
-  height: 12px;
-  border-radius: 6px;
-  background: rgba(128, 128, 128, 0.3);
-  overflow: hidden;
-}
-.fi-fill {
-  height: 100%;
-  background: currentColor;
-  transition: width 0.25s ease;
-}
-/* Generic (non-category) styling; state cue is the border, not color alone. */
-.focus-indicator[data-state="error"] {
-  outline: 2px solid currentColor;
-  outline-offset: 2px;
-}
-.fi-complete {
-  flex: none;
-  min-width: 28px;
-  min-height: 24px;
-  border: 1px solid currentColor;
-  border-radius: 4px;
-  background: transparent;
-  cursor: pointer;
-  font-size: 14px;
-  line-height: 1;
-}
-.fi-complete:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-.fi-complete:focus-visible {
-  outline: 2px solid currentColor;
-  outline-offset: 2px;
-}
-.fi-retry {
-  flex: none;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.fi-neutral {
-  flex: 1;
-  text-align: center;
-  opacity: 0.6;
-}
-.fi-sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-@media (prefers-reduced-motion: reduce) {
-  .fi-fill {
-    transition: none;
-  }
-}
-</style>
