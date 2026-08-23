@@ -29,7 +29,7 @@ injection test is the load-bearing check).
 
 ## External review trail (ext-code-review)
 
-Engines: OpenAI Codex (`gpt-5.6-sol`), read-only. Cursor agent skipped
+Engines: OpenAI Codex CLI (`codex exec`, read-only). Cursor agent skipped
 (user asked `only codex`). Plan: `docs/features/0058_PLAN.md`.
 
 Previously-rejected findings carried in: none.

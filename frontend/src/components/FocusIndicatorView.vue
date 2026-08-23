@@ -1,6 +1,4 @@
-<!-- Visual styles live in PIP_STYLES (useFocusIndicator). Document PiP is a
-     foreign Document; Vue/Vite scoped CSS is injected only into the opener
-     page and would never apply here. -->
+<!-- Styles come from PIP_STYLES in useFocusIndicator.ts — scoped CSS never reaches the PiP Document. -->
 <script setup lang="ts">
 import { computed } from "vue"
 
