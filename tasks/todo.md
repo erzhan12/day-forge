@@ -169,6 +169,26 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
 
 ## Follow-ups (discovered during manual testing)
 
+- [ ] **0056-followup: Readonly form props on Integrations panel.** claude-review
+  (PR #158 cycle 2, P2) asked to type `calendarForm` / `todoistForm` /
+  `habiticaForm` as `Readonly<…>` so the child cannot take ownership. Deferred:
+  `v-model` on nested fields may not type-check the way the bot claimed, and
+  the line number it cited (1046) is not in the file.
+
+- [ ] **0056-followup: loosen sticky-nav Playwright pixel band.** claude-review
+  (PR #158 cycle 2, P2) flagged `navTop < 18 || navTop > 32` in
+  `settings-topic-navigation.mjs` as zoom/scale-fragile. Deferred: needs a
+  real browser pass to pick a viewport-relative bound that still proves sticky.
+
+- [ ] **0056-followup: skip scrollIntoView on OAuth topic assignment.**
+  claude-review (PR #158 cycle 2, P2) wants a `shouldScroll` flag mirroring
+  `keyboardIntent`. Deferred: extra composable state for a one-shot landing
+  that is already at the top of the page.
+
+- [ ] **0056-followup: comment template-editor-layout card-width constants.**
+  claude-review (PR #158 cycle 2, P3) asked to tie `DESKTOP_CARD_MIN_PX` /
+  `MAX_PX` to `.settings-main { max-width: 760px }`.
+
 - [ ] **0055-followup: 4a drag-origin geometry tests.** Feature plan Cycle 3
   (P1-B) wants `frozenTimelineOriginMinutes` drop-time coverage, a leading
   compact-stub day, and `watch(layout)` → `cancelDrag`. claude-review PR #156
