@@ -66,7 +66,7 @@ describe("TodoistTasksPanel", () => {
     expect(wrapper.emitted("retry")).toBeTruthy()
   })
 
-  it("renders a list of tasks with the correct P1-P4 priority flag", () => {
+  it("renders a list of tasks without a priority flag", () => {
     const wrapper = mount(TodoistTasksPanel, {
       props: {
         tasks: [TASK_P1, TASK_P2, TASK_P3, TASK_P4],
@@ -78,21 +78,10 @@ describe("TodoistTasksPanel", () => {
     expect(items).toHaveLength(4)
 
     expect(items[0].text()).toContain("Ship the release")
-    expect(items[0].find(".todoist-priority-dot").classes()).toContain(
-      "todoist-priority-P1",
-    )
     expect(items[1].text()).toContain("Review the PR")
-    expect(items[1].find(".todoist-priority-dot").classes()).toContain(
-      "todoist-priority-P2",
-    )
     expect(items[2].text()).toContain("Water the plants")
-    expect(items[2].find(".todoist-priority-dot").classes()).toContain(
-      "todoist-priority-P3",
-    )
     expect(items[3].text()).toContain("Read a book")
-    expect(items[3].find(".todoist-priority-dot").classes()).toContain(
-      "todoist-priority-P4",
-    )
+    expect(wrapper.find(".todoist-priority-dot").exists()).toBe(false)
   })
 
   it("does not render a project chip, due-time, or open-in-Todoist link", () => {

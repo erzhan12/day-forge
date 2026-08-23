@@ -36,12 +36,6 @@ const emit = defineEmits<{
           :aria-label="`Complete task: ${task.title}`"
           @change="emit('complete', task.id)"
         />
-        <span
-          class="todoist-priority-dot"
-          :class="`todoist-priority-${task.ui_priority}`"
-          :title="task.ui_priority"
-          aria-hidden="true"
-        ></span>
         <span class="todoist-task-title">{{ task.title }}</span>
       </li>
     </ul>
@@ -111,8 +105,7 @@ const emit = defineEmits<{
 
 .todoist-item {
   display: grid;
-  /* checkbox + priority dot + title */
-  grid-template-columns: auto auto 1fr;
+  grid-template-columns: auto 1fr;
   gap: 8px;
   align-items: center;
   padding: 4px 0;
@@ -126,30 +119,6 @@ const emit = defineEmits<{
   margin: 0;
   cursor: pointer;
   flex-shrink: 0;
-}
-
-.todoist-priority-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--text-muted);
-  flex-shrink: 0;
-}
-
-.todoist-priority-P1 {
-  background: var(--danger-text);
-}
-
-.todoist-priority-P2 {
-  background: var(--warning-text, #d9822b);
-}
-
-.todoist-priority-P3 {
-  background: var(--accent, #3b82f6);
-}
-
-.todoist-priority-P4 {
-  background: var(--text-muted);
 }
 
 .todoist-task-title {
