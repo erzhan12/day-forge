@@ -16,6 +16,7 @@ from django.test import Client, TransactionTestCase
 from django.urls import reverse
 from django.utils import timezone
 from schedules.models import Schedule, TimeBlock
+from templates_mgr import preferences as preferences_module
 from templates_mgr.models import UserPreferences
 from templates_mgr.preferences import (
     UserPreferencesDTO,
@@ -24,6 +25,12 @@ from templates_mgr.preferences import (
 )
 
 pytestmark = pytest.mark.django_db
+
+DEFAULT_CHAT_SUGGESTIONS = [
+    "Plan my remaining day",
+    "Add a focused work block",
+    "Make room for a break",
+]
 
 
 # ---------------------------------------------------------------------------
@@ -35,7 +42,104 @@ def test_helper_creates_default_row_on_first_access(user):
     assert not UserPreferences.objects.filter(user=user).exists()
     dto = get_user_preferences(user)
     assert dto.theme == "classic"
+    assert list(dto.chat_suggestions) == DEFAULT_CHAT_SUGGESTIONS
     assert UserPreferences.objects.filter(user=user).exists()
+
+
+def test_backend_chat_suggestion_constants_are_pinned():
+    assert preferences_module.DEFAULT_CHAT_SUGGESTIONS == DEFAULT_CHAT_SUGGESTIONS
+    assert preferences_module.MAX_CHAT_SUGGESTIONS == 8
+    assert preferences_module.MAX_CHAT_SUGGESTION_LENGTH == 120
+
+
+def test_helper_null_suggestions_resolve_to_defaults(user):
+    UserPreferences.objects.create(
+        user=user, theme="classic", chat_suggestions=None
+    )
+    dto = get_user_preferences(user)
+    assert list(dto.chat_suggestions) == DEFAULT_CHAT_SUGGESTIONS
+    assert UserPreferences.objects.get(user=user).chat_suggestions is None
+
+
+def test_helper_preserves_saved_order(user):
+    saved = ["Third", "First", "Second"]
+    UserPreferences.objects.create(
+        user=user, theme="classic", chat_suggestions=saved
+    )
+    assert list(get_user_preferences(user).chat_suggestions) == saved
+
+
+def test_helper_preserves_saved_empty_list(user):
+    UserPreferences.objects.create(
+        user=user, theme="classic", chat_suggestions=[]
+    )
+    assert list(get_user_preferences(user).chat_suggestions) == []
+
+
+@pytest.mark.parametrize(
+    "malformed",
+    [
+        pytest.param("not-a-list", id="string"),
+        pytest.param({"prompt": "x"}, id="object"),
+        pytest.param(["valid", 7], id="non-string-entry"),
+    ],
+)
+def test_helper_malformed_suggestions_fall_back_without_writing(
+    user, malformed
+):
+    UserPreferences.objects.create(
+        user=user, theme="classic", chat_suggestions=malformed
+    )
+    dto = get_user_preferences(user)
+    assert list(dto.chat_suggestions) == DEFAULT_CHAT_SUGGESTIONS
+    assert UserPreferences.objects.get(user=user).chat_suggestions == malformed
+
+
+def test_helper_suggestions_are_tuple_copy_not_jsonfield_alias(user):
+    saved = ["Original"]
+    row = UserPreferences.objects.create(
+        user=user, theme="classic", chat_suggestions=saved
+    )
+    dto = get_user_preferences(user)
+    assert isinstance(dto.chat_suggestions, tuple)
+    row.chat_suggestions.append("Mutated later")
+    assert dto.chat_suggestions == ("Original",)
+
+
+@pytest.mark.parametrize(
+    "saved",
+    [
+        pytest.param([f"Prompt {i}" for i in range(9)], id="over-count"),
+        pytest.param(["x" * 121], id="over-length"),
+    ],
+)
+def test_helper_returns_structurally_valid_over_cap_values_without_writing(
+    user, saved
+):
+    UserPreferences.objects.create(
+        user=user, theme="classic", chat_suggestions=saved
+    )
+    dto = get_user_preferences(user)
+    assert list(dto.chat_suggestions) == saved
+    assert UserPreferences.objects.get(user=user).chat_suggestions == saved
+
+
+@pytest.mark.parametrize(
+    ("saved", "expected"),
+    [
+        pytest.param(["", "x"], ["x"], id="drop-empty"),
+        pytest.param(["   "], [], id="whitespace-only-is-empty-list"),
+    ],
+)
+def test_helper_trims_and_drops_empty_entries_without_writing(
+    user, saved, expected
+):
+    UserPreferences.objects.create(
+        user=user, theme="classic", chat_suggestions=saved
+    )
+    dto = get_user_preferences(user)
+    assert list(dto.chat_suggestions) == expected
+    assert UserPreferences.objects.get(user=user).chat_suggestions == saved
 
 
 def test_helper_returns_frozen_dto_not_orm_instance(user):
@@ -158,7 +262,10 @@ def test_method_not_allowed_405_has_no_cache_control_header(auth_client):
 def test_get_first_call_returns_default_classic(auth_client):
     resp = auth_client.get(reverse("user_preferences"))
     assert resp.status_code == 200
-    assert resp.json() == {"theme": "classic"}
+    assert resp.json() == {
+        "theme": "classic",
+        "chat_suggestions": DEFAULT_CHAT_SUGGESTIONS,
+    }
     assert resp.headers["Cache-Control"] == "private, no-store"
 
 
@@ -166,8 +273,24 @@ def test_get_returns_saved_theme(auth_client, user):
     UserPreferences.objects.create(user=user, theme="strategic")
     resp = auth_client.get(reverse("user_preferences"))
     assert resp.status_code == 200
-    assert resp.json() == {"theme": "strategic"}
+    assert resp.json() == {
+        "theme": "strategic",
+        "chat_suggestions": DEFAULT_CHAT_SUGGESTIONS,
+    }
     assert resp.headers["Cache-Control"] == "private, no-store"
+
+
+def test_get_returns_saved_ordered_suggestions(auth_client, user):
+    saved = ["Second", "First"]
+    UserPreferences.objects.create(
+        user=user, theme="classic", chat_suggestions=saved
+    )
+    resp = auth_client.get(reverse("user_preferences"))
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "theme": "classic",
+        "chat_suggestions": saved,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -182,7 +305,10 @@ def test_patch_sets_theme(auth_client, user):
         content_type="application/json",
     )
     assert resp.status_code == 200
-    assert resp.json() == {"theme": "strategic"}
+    assert resp.json() == {
+        "theme": "strategic",
+        "chat_suggestions": DEFAULT_CHAT_SUGGESTIONS,
+    }
     assert resp.headers["Cache-Control"] == "private, no-store"
     assert UserPreferences.objects.get(user=user).theme == "strategic"
 
@@ -194,7 +320,10 @@ def test_patch_sets_dark_4a_theme(auth_client, user):
         content_type="application/json",
     )
     assert resp.status_code == 200
-    assert resp.json() == {"theme": "dark_4a"}
+    assert resp.json() == {
+        "theme": "dark_4a",
+        "chat_suggestions": DEFAULT_CHAT_SUGGESTIONS,
+    }
     assert UserPreferences.objects.get(user=user).theme == "dark_4a"
 
 
@@ -208,7 +337,10 @@ def test_patch_same_value_is_valid_noop(auth_client, user):
     # Same-value PATCH must succeed (200), NOT route through the
     # "No editable fields supplied" 400 branch.
     assert resp.status_code == 200
-    assert resp.json() == {"theme": "classic"}
+    assert resp.json() == {
+        "theme": "classic",
+        "chat_suggestions": DEFAULT_CHAT_SUGGESTIONS,
+    }
 
 
 def test_patch_heals_corrupted_row(auth_client, user):
@@ -223,6 +355,120 @@ def test_patch_heals_corrupted_row(auth_client, user):
     assert resp.status_code == 200
     # The raw DB row must be healed — written back to a valid value.
     assert UserPreferences.objects.get(user=user).theme == "classic"
+
+
+def test_patch_chat_suggestions_round_trip_trims_and_preserves_order(
+    auth_client, user
+):
+    resp = auth_client.patch(
+        reverse("user_preferences"),
+        data=json.dumps(
+            {"chat_suggestions": ["  Second  ", "First", "  Third"]}
+        ),
+        content_type="application/json",
+    )
+    assert resp.status_code == 200
+    expected = ["Second", "First", "Third"]
+    assert resp.json() == {
+        "theme": "classic",
+        "chat_suggestions": expected,
+    }
+    assert UserPreferences.objects.get(user=user).chat_suggestions == expected
+    assert auth_client.get(reverse("user_preferences")).json()[
+        "chat_suggestions"
+    ] == expected
+
+
+def test_patch_empty_suggestions_is_valid_and_stays_empty(auth_client, user):
+    resp = auth_client.patch(
+        reverse("user_preferences"),
+        data=json.dumps({"chat_suggestions": []}),
+        content_type="application/json",
+    )
+    assert resp.status_code == 200
+    assert resp.json()["chat_suggestions"] == []
+    assert UserPreferences.objects.get(user=user).chat_suggestions == []
+    assert auth_client.get(reverse("user_preferences")).json()[
+        "chat_suggestions"
+    ] == []
+
+
+def test_patch_combined_theme_and_suggestions(auth_client, user):
+    resp = auth_client.patch(
+        reverse("user_preferences"),
+        data=json.dumps(
+            {"theme": "dark_4a", "chat_suggestions": ["  Focus now  "]}
+        ),
+        content_type="application/json",
+    )
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "theme": "dark_4a",
+        "chat_suggestions": ["Focus now"],
+    }
+
+
+def test_theme_only_patch_preserves_saved_suggestions(auth_client, user):
+    UserPreferences.objects.create(
+        user=user, theme="classic", chat_suggestions=["Keep me"]
+    )
+    resp = auth_client.patch(
+        reverse("user_preferences"),
+        data=json.dumps({"theme": "strategic"}),
+        content_type="application/json",
+    )
+    assert resp.status_code == 200
+    assert resp.json()["chat_suggestions"] == ["Keep me"]
+    assert UserPreferences.objects.get(user=user).chat_suggestions == ["Keep me"]
+
+
+def test_theme_only_patch_with_null_suggestions_returns_defaults(
+    auth_client, user
+):
+    UserPreferences.objects.create(
+        user=user, theme="classic", chat_suggestions=None
+    )
+    resp = auth_client.patch(
+        reverse("user_preferences"),
+        data=json.dumps({"theme": "strategic"}),
+        content_type="application/json",
+    )
+    assert resp.status_code == 200
+    assert resp.json()["chat_suggestions"] == DEFAULT_CHAT_SUGGESTIONS
+    assert resp.headers["Cache-Control"] == "private, no-store"
+    assert UserPreferences.objects.get(user=user).chat_suggestions is None
+
+
+def test_suggestions_only_patch_preserves_theme(auth_client, user):
+    UserPreferences.objects.create(
+        user=user, theme="strategic", chat_suggestions=None
+    )
+    resp = auth_client.patch(
+        reverse("user_preferences"),
+        data=json.dumps({"chat_suggestions": ["Focus"]}),
+        content_type="application/json",
+    )
+    assert resp.status_code == 200
+    assert resp.json()["theme"] == "strategic"
+    assert UserPreferences.objects.get(user=user).theme == "strategic"
+
+
+def test_restore_defaults_is_idempotent_replace_not_append(auth_client, user):
+    UserPreferences.objects.create(
+        user=user, theme="classic", chat_suggestions=["Custom"]
+    )
+    for _ in range(2):
+        resp = auth_client.patch(
+            reverse("user_preferences"),
+            data=json.dumps({"chat_suggestions": DEFAULT_CHAT_SUGGESTIONS}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 200
+        assert resp.json()["chat_suggestions"] == DEFAULT_CHAT_SUGGESTIONS
+    assert (
+        UserPreferences.objects.get(user=user).chat_suggestions
+        == DEFAULT_CHAT_SUGGESTIONS
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -264,6 +510,67 @@ def test_patch_non_string_theme_returns_structured_400(auth_client, payload):
     assert resp.status_code == 400
     assert resp.json() == {"errors": {"theme": "Invalid theme."}}
     assert resp.headers["Cache-Control"] == "private, no-store"
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        pytest.param("bare string", id="bare-string"),
+        pytest.param(None, id="null"),
+        pytest.param({"prompt": "nested"}, id="object"),
+        pytest.param(42, id="integer"),
+    ],
+)
+def test_patch_non_array_suggestions_returns_400(auth_client, value):
+    resp = auth_client.patch(
+        reverse("user_preferences"),
+        data=json.dumps({"chat_suggestions": value}),
+        content_type="application/json",
+    )
+    assert resp.status_code == 400
+    assert "chat_suggestions" in resp.json()["errors"]
+    assert resp.headers["Cache-Control"] == "private, no-store"
+
+
+@pytest.mark.parametrize(
+    "suggestions",
+    [
+        pytest.param(["valid", 42], id="non-string"),
+        pytest.param([["nested"]], id="nested-list"),
+        pytest.param([{"prompt": "nested"}], id="nested-object"),
+        pytest.param(["   "], id="whitespace-only"),
+        pytest.param(["x" * 121], id="over-length"),
+        pytest.param([str(i) for i in range(9)], id="over-count"),
+    ],
+)
+def test_patch_invalid_suggestion_entries_return_400(
+    auth_client, suggestions
+):
+    resp = auth_client.patch(
+        reverse("user_preferences"),
+        data=json.dumps({"chat_suggestions": suggestions}),
+        content_type="application/json",
+    )
+    assert resp.status_code == 400
+    assert "chat_suggestions" in resp.json()["errors"]
+    assert resp.headers["Cache-Control"] == "private, no-store"
+
+
+def test_combined_invalid_payload_writes_neither_field(auth_client, user):
+    UserPreferences.objects.create(
+        user=user, theme="classic", chat_suggestions=["Original"]
+    )
+    resp = auth_client.patch(
+        reverse("user_preferences"),
+        data=json.dumps(
+            {"theme": "strategic", "chat_suggestions": ["   "]}
+        ),
+        content_type="application/json",
+    )
+    assert resp.status_code == 400
+    row = UserPreferences.objects.get(user=user)
+    assert row.theme == "classic"
+    assert row.chat_suggestions == ["Original"]
 
 
 def test_patch_oversized_body_returns_413_with_cache_control(auth_client):
@@ -338,7 +645,10 @@ def test_patch_unknown_field_alongside_valid_theme_is_accepted(auth_client):
     # Forward-compatible: unknown keys silently ignored when at least one
     # recognized field is present (matches rule_detail PATCH semantics).
     assert resp.status_code == 200
-    assert resp.json() == {"theme": "strategic"}
+    assert resp.json() == {
+        "theme": "strategic",
+        "chat_suggestions": DEFAULT_CHAT_SUGGESTIONS,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -355,12 +665,41 @@ def test_preferences_isolated_per_user(db):
     client = Client()
     client.login(username="alice", password="pw")
     resp = client.get(reverse("user_preferences"))
-    assert resp.json() == {"theme": "strategic"}
+    assert resp.json() == {
+        "theme": "strategic",
+        "chat_suggestions": DEFAULT_CHAT_SUGGESTIONS,
+    }
 
     client2 = Client()
     client2.login(username="bob", password="pw")
     resp = client2.get(reverse("user_preferences"))
-    assert resp.json() == {"theme": "light_premium"}
+    assert resp.json() == {
+        "theme": "light_premium",
+        "chat_suggestions": DEFAULT_CHAT_SUGGESTIONS,
+    }
+
+
+def test_suggestions_are_isolated_per_user(db):
+    alice = User.objects.create_user(username="suggest-alice", password="pw")
+    bob = User.objects.create_user(username="suggest-bob", password="pw")
+    UserPreferences.objects.create(
+        user=alice, theme="classic", chat_suggestions=["Alice only"]
+    )
+    UserPreferences.objects.create(
+        user=bob, theme="classic", chat_suggestions=["Bob only"]
+    )
+    client = Client()
+    client.login(username="suggest-alice", password="pw")
+    resp = client.patch(
+        reverse("user_preferences"),
+        data=json.dumps({"chat_suggestions": ["Alice updated"]}),
+        content_type="application/json",
+    )
+    assert resp.status_code == 200
+    assert UserPreferences.objects.get(user=alice).chat_suggestions == [
+        "Alice updated"
+    ]
+    assert UserPreferences.objects.get(user=bob).chat_suggestions == ["Bob only"]
 
 
 def test_patch_does_not_leak_across_users(db):
@@ -395,26 +734,44 @@ def test_patch_does_not_leak_across_users(db):
 
 
 def test_schedule_view_includes_ui_preferences_prop(auth_client, user):
-    UserPreferences.objects.create(user=user, theme="strategic")
+    UserPreferences.objects.create(
+        user=user,
+        theme="strategic",
+        chat_suggestions=["Schedule prompt"],
+    )
     today = timezone.localdate().isoformat()
     resp = auth_client.get(
         f"/schedule/{today}/", HTTP_X_INERTIA="true"
     )
     assert resp.status_code == 200
     page = resp.json()
-    assert page["props"]["ui_preferences"] == {"theme": "strategic"}
+    assert page["props"]["ui_preferences"] == {
+        "theme": "strategic",
+        "chat_suggestions": ["Schedule prompt"],
+    }
 
 
 def test_settings_view_includes_ui_preferences_prop(auth_client, user):
-    UserPreferences.objects.create(user=user, theme="light_premium")
+    UserPreferences.objects.create(
+        user=user,
+        theme="light_premium",
+        chat_suggestions=["Settings prompt"],
+    )
     resp = auth_client.get(reverse("settings"), HTTP_X_INERTIA="true")
     assert resp.status_code == 200
     page = resp.json()
-    assert page["props"]["ui_preferences"] == {"theme": "light_premium"}
+    assert page["props"]["ui_preferences"] == {
+        "theme": "light_premium",
+        "chat_suggestions": ["Settings prompt"],
+    }
 
 
 def test_analytics_view_includes_ui_preferences_prop(auth_client, user):
-    UserPreferences.objects.create(user=user, theme="strategic")
+    UserPreferences.objects.create(
+        user=user,
+        theme="strategic",
+        chat_suggestions=["Analytics prompt"],
+    )
     past = timezone.localdate() - datetime.timedelta(days=1)
     schedule = Schedule.objects.create(user=user, date=past)
     TimeBlock.objects.create(
@@ -429,7 +786,10 @@ def test_analytics_view_includes_ui_preferences_prop(auth_client, user):
     )
     assert resp.status_code == 200
     page = resp.json()
-    assert page["props"]["ui_preferences"] == {"theme": "strategic"}
+    assert page["props"]["ui_preferences"] == {
+        "theme": "strategic",
+        "chat_suggestions": ["Analytics prompt"],
+    }
 
 
 # ---------------------------------------------------------------------------

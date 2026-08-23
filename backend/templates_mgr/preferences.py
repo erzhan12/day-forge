@@ -14,17 +14,28 @@ from dataclasses import dataclass
 
 from templates_mgr.models import UserPreferences
 
+# SYNC ALERT: mirror these defaults and limits in the Phase 2 frontend utility
+# `frontend/src/utils/chatSuggestions.ts`.
+DEFAULT_CHAT_SUGGESTIONS = [
+    "Plan my remaining day",
+    "Add a focused work block",
+    "Make room for a break",
+]
+MAX_CHAT_SUGGESTIONS = 8
+MAX_CHAT_SUGGESTION_LENGTH = 120
+
 
 @dataclass(frozen=True)
 class UserPreferencesDTO:
     """Read-only DTO returned by :func:`get_user_preferences`.
 
-    ``theme`` is guaranteed to be one of the recognized theme ids — call
-    sites can pass it directly into page props or API responses without
-    re-validating.
+    ``theme`` is guaranteed to be recognized. ``chat_suggestions`` is an
+    immutable tuple copy of the normalized JSON list, so callers cannot
+    mutate the ORM value through the frozen DTO.
     """
 
     theme: str
+    chat_suggestions: tuple[str, ...]
 
 
 _VALID_THEMES = frozenset(UserPreferences.Theme.values)
@@ -39,6 +50,15 @@ def normalize_theme(raw: str) -> str:
     if raw in _VALID_THEMES:
         return raw
     return UserPreferences.Theme.CLASSIC
+
+
+def normalize_chat_suggestions(raw) -> list[str]:
+    """Resolve stored suggestions for display without writing the database."""
+    if not isinstance(raw, list) or not all(
+        isinstance(item, str) for item in raw
+    ):
+        return list(DEFAULT_CHAT_SUGGESTIONS)
+    return [trimmed for item in raw if (trimmed := item.strip())]
 
 
 def get_user_preferences(user) -> UserPreferencesDTO:
@@ -61,4 +81,9 @@ def get_user_preferences(user) -> UserPreferencesDTO:
         user=user,
         defaults={"theme": UserPreferences.Theme.CLASSIC},
     )
-    return UserPreferencesDTO(theme=normalize_theme(prefs.theme))
+    return UserPreferencesDTO(
+        theme=normalize_theme(prefs.theme),
+        chat_suggestions=tuple(
+            normalize_chat_suggestions(prefs.chat_suggestions)
+        ),
+    )

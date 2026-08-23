@@ -137,7 +137,10 @@ def schedule_view(request, date):
             "external_tasks_poll_interval": (
                 settings.EXTERNAL_TASKS_POLL_INTERVAL_SECONDS
             ),
-            "ui_preferences": {"theme": prefs.theme},
+            "ui_preferences": {
+                "theme": prefs.theme,
+                "chat_suggestions": list(prefs.chat_suggestions),
+            },
             "schedule_window": {"start": window.start_str, "end": window.end_str},
         },
         template_data={"initial_theme": prefs.theme},

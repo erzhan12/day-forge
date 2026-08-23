@@ -537,29 +537,37 @@ they both commit or neither does.
 
 ## User Preferences
 
-Per-user UI preferences (theme, future settings). Each user has exactly one preferences row, created on first authenticated access. Distinct from `/api/templates/` (schedule templates) despite the shared `templates_mgr` app.
+Per-user UI preferences (theme and AI quick-input suggestions). Each user has exactly one preferences row, created on first authenticated access. Distinct from `/api/templates/` (schedule templates) despite the shared `templates_mgr` app.
 
-All responses from `GET` and `PATCH` set `Cache-Control: private, no-store` — including 400/413 error responses, which is exercised by tests. The bodies of success responses are per-user state (the saved theme); the bodies of error responses are fixed strings (`"Invalid theme."`, `"Invalid JSON."`, etc.) that do NOT echo the client-supplied value. A misconfigured CDN/proxy must never cache any path regardless, so the helper applies the header uniformly. (The header is NOT attached to 405/302 responses produced by Django's `@require_http_methods` / `@login_required` decorators before the view runs; those bodies are empty or a redirect Location, with no per-user state leak surface.)
+All responses from `GET` and `PATCH` set `Cache-Control: private, no-store` — including 400/413 error responses, which is exercised by tests. Success bodies contain per-user state; error bodies contain fixed validation strings and do NOT echo client-supplied values. A misconfigured CDN/proxy must never cache any path regardless, so the helper applies the header uniformly. (The header is NOT attached to 405/302 responses produced by Django's `@require_http_methods` / `@login_required` decorators before the view runs; those bodies are empty or a redirect Location, with no per-user state leak surface.)
 
 ### `GET /api/user/preferences/`
 
-Returns the current user's preferences. Creates a default row (theme `"classic"`) if none exists.
+Returns the current user's preferences. Creates a default row (theme `"classic"`, unset suggestions) if none exists. Unset or structurally malformed persisted suggestions resolve to the three defaults shown below without rewriting the row; a saved empty array remains empty.
 
 ```json
-{"theme": "classic"}
+{
+  "theme": "classic",
+  "chat_suggestions": [
+    "Plan my remaining day",
+    "Add a focused work block",
+    "Make room for a break"
+  ]
+}
 ```
 
-`theme` is always one of `classic`, `strategic`, `light_premium`. An invalid persisted value (e.g. retired theme id, fixture typo) is normalized to `classic` on read **without** rewriting the DB row.
+`theme` is always one of `classic`, `strategic`, `light_premium`, or `dark_4a`. An invalid persisted value (e.g. retired theme id, fixture typo) is normalized to `classic` on read **without** rewriting the DB row.
 
 ### `PATCH /api/user/preferences/`
 
-Partial update. Currently only `theme` is editable.
+Partially updates theme and/or AI quick-input suggestions.
 
 **Body**
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `theme` | string | `classic`, `strategic`, or `light_premium`. |
+| `theme` | string | `classic`, `strategic`, `light_premium`, or `dark_4a`. |
+| `chat_suggestions` | array of strings | At most 8 entries. Each entry is trimmed, must remain non-empty, and may contain at most 120 Unicode code points. Order and duplicates are preserved. `[]` intentionally hides all suggestions; `null` is rejected. |
 
 Unknown keys are silently ignored (forward-compatibility — matches the `/api/rules/{pk}/` PATCH pattern). A body containing zero recognized fields returns `400` with `errors.body = "No editable fields supplied."`; this is reserved for that case only — a PATCH with the same value as the persisted theme is a valid `200` no-op.
 
@@ -569,6 +577,7 @@ Unknown keys are silently ignored (forward-compatibility — matches the `/api/r
 |--------|--------------|---------|
 | `400` | `body` | Invalid JSON, non-object body, or no recognized fields supplied. |
 | `400` | `theme` | Value is not one of the allowed theme ids. |
+| `400` | `chat_suggestions` | Value is not an array, has more than 8 entries, or contains a non-string, empty-after-trim, or over-120-code-point entry. |
 | `413` | `body` | Request body exceeds 100 KB. |
 
 Unauthenticated requests follow the conventions header — Django's `@login_required` returns a `302` redirect to `/accounts/login/`, NOT a JSON `401`.
@@ -577,7 +586,7 @@ Unauthenticated requests follow the conventions header — Django's `@login_requ
 
 ## Schedule Settings
 
-Per-user schedule **day window** (the working-day bounds that constrain manual, AI, template, and calendar-placement times). One row per user, created on first authenticated access with the default `06:00–23:00`. Lives in the `schedules` app (a scheduling-domain rule), intentionally separate from the theme-only `/api/user/preferences/`.
+Per-user schedule **day window** (the working-day bounds that constrain manual, AI, template, and calendar-placement times). One row per user, created on first authenticated access with the default `06:00–23:00`. Lives in the `schedules` app (a scheduling-domain rule), intentionally separate from the UI preferences at `/api/user/preferences/`.
 
 `GET` and `PATCH` set `Cache-Control: private, no-store` on every response, including error responses (same rationale as User Preferences).
 

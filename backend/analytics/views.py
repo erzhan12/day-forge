@@ -170,7 +170,10 @@ def analytics_view(request, date):
             },
             "blocks": [_block_to_dict(b) for b in blocks],
             "date": parsed_date.isoformat(),
-            "ui_preferences": {"theme": prefs.theme},
+            "ui_preferences": {
+                "theme": prefs.theme,
+                "chat_suggestions": list(prefs.chat_suggestions),
+            },
             "schedule_window": {"start": window.start_str, "end": window.end_str},
         },
         template_data={"initial_theme": prefs.theme},

@@ -61,7 +61,10 @@ def settings_view(request):
             # GET /api/calendar/travel-rules/ response can't drift on a
             # field change.
             "travel_rules": [serialize_travel_rule(r) for r in travel_rules],
-            "ui_preferences": {"theme": prefs.theme},
+            "ui_preferences": {
+                "theme": prefs.theme,
+                "chat_suggestions": list(prefs.chat_suggestions),
+            },
             "schedule_window": {"start": window.start_str, "end": window.end_str},
         },
         template_data={"initial_theme": prefs.theme},

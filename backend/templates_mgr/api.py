@@ -31,7 +31,13 @@ from schedules.http import (
 from schedules.window import DEFAULT_WINDOW, ScheduleWindow, get_schedule_window
 
 from templates_mgr.models import Rule, Template, UserPreferences
-from templates_mgr.preferences import get_user_preferences
+from templates_mgr.preferences import (
+    MAX_CHAT_SUGGESTION_LENGTH,
+    MAX_CHAT_SUGGESTIONS,
+    get_user_preferences,
+    normalize_chat_suggestions,
+    normalize_theme,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -481,9 +487,12 @@ def _prefs_response(payload: dict, status: int = 200) -> JsonResponse:
 def _prefs_to_dict(prefs: UserPreferences) -> dict:
     """Serialize a ``UserPreferences`` row using the same normalization
     rule as the read-side DTO. Used by ``PATCH`` after a write."""
-    from templates_mgr.preferences import normalize_theme
-
-    return {"theme": normalize_theme(prefs.theme)}
+    return {
+        "theme": normalize_theme(prefs.theme),
+        "chat_suggestions": normalize_chat_suggestions(
+            prefs.chat_suggestions
+        ),
+    }
 
 
 @login_required
@@ -496,7 +505,12 @@ def user_preferences(request):
     """
     if request.method == "GET":
         prefs = get_user_preferences(request.user)
-        return _prefs_response({"theme": prefs.theme})
+        return _prefs_response(
+            {
+                "theme": prefs.theme,
+                "chat_suggestions": list(prefs.chat_suggestions),
+            }
+        )
 
     oversized = reject_oversized_body(request)
     if oversized is not None:
@@ -532,6 +546,70 @@ def user_preferences(request):
                 {"errors": {"theme": "Invalid theme."}}, status=400
             )
         cleaned["theme"] = theme
+
+    if "chat_suggestions" in data:
+        suggestions = data["chat_suggestions"]
+        if not isinstance(suggestions, list):
+            return _prefs_response(
+                {
+                    "errors": {
+                        "chat_suggestions": "Must be a JSON array."
+                    }
+                },
+                status=400,
+            )
+        if len(suggestions) > MAX_CHAT_SUGGESTIONS:
+            return _prefs_response(
+                {
+                    "errors": {
+                        "chat_suggestions": (
+                            f"Cannot contain more than "
+                            f"{MAX_CHAT_SUGGESTIONS} suggestions."
+                        )
+                    }
+                },
+                status=400,
+            )
+
+        normalized_suggestions = []
+        for suggestion in suggestions:
+            if not isinstance(suggestion, str):
+                return _prefs_response(
+                    {
+                        "errors": {
+                            "chat_suggestions": (
+                                "Every suggestion must be a string."
+                            )
+                        }
+                    },
+                    status=400,
+                )
+            trimmed = suggestion.strip()
+            if not trimmed:
+                return _prefs_response(
+                    {
+                        "errors": {
+                            "chat_suggestions": (
+                                "Suggestions cannot be empty."
+                            )
+                        }
+                    },
+                    status=400,
+                )
+            if len(trimmed) > MAX_CHAT_SUGGESTION_LENGTH:
+                return _prefs_response(
+                    {
+                        "errors": {
+                            "chat_suggestions": (
+                                f"Suggestions cannot exceed "
+                                f"{MAX_CHAT_SUGGESTION_LENGTH} characters."
+                            )
+                        }
+                    },
+                    status=400,
+                )
+            normalized_suggestions.append(trimmed)
+        cleaned["chat_suggestions"] = normalized_suggestions
 
     if not cleaned:
         return _prefs_response(

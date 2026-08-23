@@ -206,7 +206,7 @@ When in doubt: **a written rejection on the PR > silent ignoring > complying wit
 
 Any new authenticated Inertia page MUST do both of:
 
-1. **Backend**: the view passes `ui_preferences={"theme": prefs.theme}` in its Inertia props AND `template_data={"initial_theme": prefs.theme}` to `inertia_render`. Resolve `prefs` exactly once per request via `templates_mgr.preferences.get_user_preferences(request.user)`. Without `template_data`, `base.html` falls back to the `'classic'` default and Strategic users see a Classic-light flash on the first paint.
+1. **Backend**: the view passes `ui_preferences={"theme": prefs.theme, "chat_suggestions": list(prefs.chat_suggestions)}` in its Inertia props AND `template_data={"initial_theme": prefs.theme}` to `inertia_render`. Resolve `prefs` exactly once per request via `templates_mgr.preferences.get_user_preferences(request.user)`. Omitting `chat_suggestions` silently makes that page's client resolver fall back to defaults; omitting `template_data` makes `base.html` fall back to the `'classic'` default and Strategic users see a Classic-light flash on the first paint.
 2. **Frontend**: the page component calls `useThemeFromProps()` (`frontend/src/composables/useThemeFromProps.ts`) once in its `setup()` block. Without it, partial Inertia reloads that include `ui_preferences` do not propagate to `<html data-theme>`.
 
 ### Concrete wiring example
@@ -225,7 +225,10 @@ def my_new_page_view(request):
         "MyNewPage",
         {
             # ...your page's own props...
-            "ui_preferences": {"theme": prefs.theme},
+            "ui_preferences": {
+                "theme": prefs.theme,
+                "chat_suggestions": list(prefs.chat_suggestions),
+            },
         },
         template_data={"initial_theme": prefs.theme},
     )

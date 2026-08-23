@@ -3,12 +3,12 @@ from django.db import models
 
 
 class UserPreferences(models.Model):
-    """Per-user UI preferences (theme, future settings).
+    """Per-user UI preferences (theme and chat suggestions).
 
     Co-located in ``templates_mgr`` for v1 since there is no dedicated
     users/preferences app and `/settings/` already routes here. If
-    preferences grow beyond UI theme, split into a dedicated app (see
-    feature 0010 plan for the cleanup path).
+    preferences grow beyond these bounded UI settings, split into a
+    dedicated app (see feature 0010 plan for the cleanup path).
 
     Schema notes:
       * ``user`` is a ``OneToOneField`` which Django implements as a
@@ -36,6 +36,10 @@ class UserPreferences(models.Model):
     theme = models.CharField(
         max_length=32, choices=Theme.choices, default=Theme.CLASSIC
     )
+    # SYNC ALERT: defaults and limits for this field live in
+    # `templates_mgr/preferences.py`; mirror them in the Phase 2 frontend
+    # utility `frontend/src/utils/chatSuggestions.ts`.
+    chat_suggestions = models.JSONField(null=True, blank=True, default=None)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
