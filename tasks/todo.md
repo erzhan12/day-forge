@@ -169,6 +169,20 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
 
 ## Follow-ups (discovered during manual testing)
 
+- [ ] **0059-followup: Serializer-parity polish (PR #160 cycle-4, non-blocking).**
+  Two P3 nits from claude-review, deferred as convergence-tail polish (bot
+  APPROVED 4x; zero P0/P1 across all cycles): (1) add a docstring sentence on
+  `_prefs_to_dict` (`backend/templates_mgr/api.py`) explaining why it takes a
+  freshly-saved ORM row and cannot reuse `get_user_preferences` +
+  `ui_preferences_payload`, so its intentional normalization divergence reads
+  as deliberate; (2) tighten `chat_suggestions?: unknown` →
+  `chat_suggestions?: string[]` in `frontend/src/types/index.ts` (the runtime
+  guard in `resolveChatSuggestions` already handles stale/partial props, so the
+  `unknown` buys no runtime safety while suppressing compile-time checks).
+  The cycle-4 P2 (value-equality in `test_prefs_to_dict_matches_ui_preferences_payload_shape`)
+  was rejected as redundant — the NULL-row PATCH-response value path is already
+  covered by `test_theme_only_patch_with_null_suggestions_returns_defaults`.
+
 - [ ] **0056-followup: Readonly form props on Integrations panel.** claude-review
   (PR #158 cycle 2, P2) asked to type `calendarForm` / `todoistForm` /
   `habiticaForm` as `Readonly<…>` so the child cannot take ownership. Deferred:
