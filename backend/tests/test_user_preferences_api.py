@@ -22,6 +22,7 @@ from templates_mgr.preferences import (
     UserPreferencesDTO,
     get_user_preferences,
     normalize_theme,
+    ui_preferences_payload,
 )
 
 pytestmark = pytest.mark.django_db
@@ -44,6 +45,18 @@ def test_helper_creates_default_row_on_first_access(user):
     assert dto.theme == "classic"
     assert list(dto.chat_suggestions) == DEFAULT_CHAT_SUGGESTIONS
     assert UserPreferences.objects.filter(user=user).exists()
+
+
+def test_ui_preferences_payload_serializes_dto_shape():
+    dto = UserPreferencesDTO(
+        theme="strategic",
+        chat_suggestions=("First", "Second"),
+    )
+
+    assert ui_preferences_payload(dto) == {
+        "theme": "strategic",
+        "chat_suggestions": ["First", "Second"],
+    }
 
 
 def test_backend_chat_suggestion_constants_are_pinned():

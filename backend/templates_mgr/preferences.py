@@ -38,6 +38,14 @@ class UserPreferencesDTO:
     chat_suggestions: tuple[str, ...]
 
 
+def ui_preferences_payload(prefs: UserPreferencesDTO) -> dict:
+    """Serialize the normalized read-side DTO for API and Inertia output."""
+    return {
+        "theme": prefs.theme,
+        "chat_suggestions": list(prefs.chat_suggestions),
+    }
+
+
 _VALID_THEMES = frozenset(UserPreferences.Theme.values)
 
 

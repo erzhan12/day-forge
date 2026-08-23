@@ -10,7 +10,10 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
 from inertia import render as inertia_render
 from templates_mgr.models import Template
-from templates_mgr.preferences import get_user_preferences
+from templates_mgr.preferences import (
+    get_user_preferences,
+    ui_preferences_payload,
+)
 
 from schedules.models import Schedule, TimeBlock
 from schedules.window import get_schedule_window
@@ -137,10 +140,7 @@ def schedule_view(request, date):
             "external_tasks_poll_interval": (
                 settings.EXTERNAL_TASKS_POLL_INTERVAL_SECONDS
             ),
-            "ui_preferences": {
-                "theme": prefs.theme,
-                "chat_suggestions": list(prefs.chat_suggestions),
-            },
+            "ui_preferences": ui_preferences_payload(prefs),
             "schedule_window": {"start": window.start_str, "end": window.end_str},
         },
         template_data={"initial_theme": prefs.theme},

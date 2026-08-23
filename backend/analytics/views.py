@@ -33,7 +33,10 @@ from inertia import render as inertia_render
 from schedules.http import reject_oversized_body
 from schedules.models import Schedule, TimeBlock
 from schedules.window import get_schedule_window
-from templates_mgr.preferences import get_user_preferences
+from templates_mgr.preferences import (
+    get_user_preferences,
+    ui_preferences_payload,
+)
 
 from analytics.models import DailyReview
 from analytics.services import compute_streak, recompute_review_from_schedule
@@ -170,10 +173,7 @@ def analytics_view(request, date):
             },
             "blocks": [_block_to_dict(b) for b in blocks],
             "date": parsed_date.isoformat(),
-            "ui_preferences": {
-                "theme": prefs.theme,
-                "chat_suggestions": list(prefs.chat_suggestions),
-            },
+            "ui_preferences": ui_preferences_payload(prefs),
             "schedule_window": {"start": window.start_str, "end": window.end_str},
         },
         template_data={"initial_theme": prefs.theme},

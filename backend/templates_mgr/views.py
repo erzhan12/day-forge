@@ -6,7 +6,10 @@ from inertia import render as inertia_render
 from schedules.window import get_schedule_window
 
 from templates_mgr.models import Rule, Template
-from templates_mgr.preferences import get_user_preferences
+from templates_mgr.preferences import (
+    get_user_preferences,
+    ui_preferences_payload,
+)
 
 
 @ensure_csrf_cookie
@@ -61,10 +64,7 @@ def settings_view(request):
             # GET /api/calendar/travel-rules/ response can't drift on a
             # field change.
             "travel_rules": [serialize_travel_rule(r) for r in travel_rules],
-            "ui_preferences": {
-                "theme": prefs.theme,
-                "chat_suggestions": list(prefs.chat_suggestions),
-            },
+            "ui_preferences": ui_preferences_payload(prefs),
             "schedule_window": {"start": window.start_str, "end": window.end_str},
         },
         template_data={"initial_theme": prefs.theme},

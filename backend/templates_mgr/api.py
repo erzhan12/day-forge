@@ -37,6 +37,7 @@ from templates_mgr.preferences import (
     get_user_preferences,
     normalize_chat_suggestions,
     normalize_theme,
+    ui_preferences_payload,
 )
 
 logger = logging.getLogger(__name__)
@@ -505,12 +506,7 @@ def user_preferences(request):
     """
     if request.method == "GET":
         prefs = get_user_preferences(request.user)
-        return _prefs_response(
-            {
-                "theme": prefs.theme,
-                "chat_suggestions": list(prefs.chat_suggestions),
-            }
-        )
+        return _prefs_response(ui_preferences_payload(prefs))
 
     oversized = reject_oversized_body(request)
     if oversized is not None:
