@@ -10,6 +10,18 @@ vi.mock("@inertiajs/vue3", () => ({
     },
   }),
   router: { reload: vi.fn() },
+  usePage: () => ({
+    props: {
+      ui_preferences: {
+        theme: "classic",
+        chat_suggestions: [
+          "Plan my remaining day",
+          "Add a focused work block",
+          "Make room for a break",
+        ],
+      },
+    },
+  }),
 }))
 
 vi.mock("../src/composables/useThemeFromProps", () => ({
@@ -110,6 +122,17 @@ afterEach(() => {
 })
 
 describe("Settings topic shell", () => {
+  it("mounts the AI Assistant editor inside a stable section", () => {
+    stubMatchMedia(true)
+    window.history.replaceState({}, "", "/settings/#ai-assistant")
+    wrapper = mountSettings()
+
+    expect(wrapper.get('[data-testid="settings-ai-chat-suggestions"]').exists())
+      .toBe(true)
+    expect(wrapper.findAll('[data-testid="chat-suggestion-input"]'))
+      .toHaveLength(3)
+  })
+
   it("renders desktop hash navigation and only the selected panel", () => {
     stubMatchMedia(true)
     wrapper = mountSettings()

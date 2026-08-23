@@ -18,5 +18,13 @@ export function usePreferences() {
     return requestJson("/api/user/preferences/", "PATCH", { theme })
   }
 
-  return { saveTheme }
+  async function saveChatSuggestions(
+    suggestions: string[],
+  ): Promise<ApiResult> {
+    return requestJson("/api/user/preferences/", "PATCH", {
+      chat_suggestions: suggestions,
+    })
+  }
+
+  return { saveTheme, saveChatSuggestions }
 }

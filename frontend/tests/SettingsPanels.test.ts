@@ -2,6 +2,27 @@ import { describe, expect, it, vi } from "vitest"
 import { defineComponent, h } from "vue"
 import { mount } from "@vue/test-utils"
 
+const aiMocks = vi.hoisted(() => ({
+  reload: vi.fn(),
+  save: vi.fn(),
+}))
+
+vi.mock("@inertiajs/vue3", () => ({
+  usePage: () => ({
+    props: {
+      ui_preferences: {
+        chat_suggestions: ["Plan", "Focus", "Break"],
+      },
+    },
+  }),
+  router: { reload: aiMocks.reload },
+}))
+
+vi.mock("../src/composables/usePreferences", () => ({
+  usePreferences: () => ({ saveChatSuggestions: aiMocks.save }),
+}))
+
+import SettingsAiAssistantPanel from "../src/components/settings/SettingsAiAssistantPanel.vue"
 import SettingsIntegrationsPanel from "../src/components/settings/SettingsIntegrationsPanel.vue"
 import SettingsTemplatesRulesPanel from "../src/components/settings/SettingsTemplatesRulesPanel.vue"
 
@@ -45,6 +66,18 @@ function integrationProps(overrides: Record<string, unknown> = {}) {
     ...overrides,
   }
 }
+
+describe("SettingsAiAssistantPanel", () => {
+  it("renders the stable AI suggestions section with ordered editor inputs", () => {
+    const wrapper = mount(SettingsAiAssistantPanel)
+    const section = wrapper.get('[data-testid="settings-ai-chat-suggestions"]')
+    expect(
+      section.findAll('[data-testid="chat-suggestion-input"]')
+        .map((input) => input.element.value),
+    ).toEqual(["Plan", "Focus", "Break"])
+    expect(section.text()).toContain("dark_4a")
+  })
+})
 
 describe("SettingsIntegrationsPanel", () => {
   it("keeps all integration blocks and migrated form styles", () => {
