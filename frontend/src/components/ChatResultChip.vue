@@ -1,19 +1,26 @@
 <script setup lang="ts">
 import type { AppliedBlockResult } from "../composables/useChat"
 
-withDefaults(defineProps<{ result?: AppliedBlockResult[]; showSuggestions?: boolean }>(), { showSuggestions: false })
+withDefaults(
+  defineProps<{
+    result?: AppliedBlockResult[]
+    showSuggestions?: boolean
+    suggestions?: string[]
+  }>(),
+  {
+    showSuggestions: false,
+    suggestions: () => [],
+  },
+)
 const emit = defineEmits<{ suggestion: [text: string] }>()
-
-// Deliberately static: prompts are affordances, never an AI response.
-const CHAT_SUGGESTIONS = [
-  "Plan my remaining day",
-  "Add a focused work block",
-  "Make room for a break",
-] as const
 </script>
 
 <template>
-  <div class="chat-result-chip" data-testid="chat-result-chip">
+  <div
+    v-if="result?.length || (showSuggestions && suggestions.length)"
+    class="chat-result-chip"
+    data-testid="chat-result-chip"
+  >
     <template v-if="result && result.length">
       <strong>Applied</strong>
       <span v-for="(block, index) in result" :key="index" class="result-row">
@@ -21,7 +28,7 @@ const CHAT_SUGGESTIONS = [
       </span>
     </template>
     <div v-if="showSuggestions" class="suggestions" aria-label="Suggested AI prompts">
-      <button v-for="suggestion in CHAT_SUGGESTIONS" :key="suggestion" type="button" @click="emit('suggestion', suggestion)">{{ suggestion }}</button>
+      <button v-for="(suggestion, index) in suggestions" :key="index" type="button" @click="emit('suggestion', suggestion)">{{ suggestion }}</button>
     </div>
   </div>
 </template>

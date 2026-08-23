@@ -4,7 +4,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { mount, VueWrapper } from "@vue/test-utils"
-import { nextTick, ref } from "vue"
+import { nextTick, reactive, ref } from "vue"
 import { clearLocalStorage } from "./helpers/storage"
 
 const setActiveDate = vi.fn()
@@ -24,6 +24,20 @@ const messages = ref<
     ts: number
   }[]
 >([])
+const page = reactive<{
+  props: {
+    ui_preferences: {
+      theme: string
+      chat_suggestions?: string[]
+    }
+  }
+}>({
+  props: {
+    ui_preferences: {
+      theme: "classic",
+    },
+  },
+})
 
 vi.mock("../src/composables/useChat", () => ({
   useChat: () => ({
@@ -39,7 +53,12 @@ vi.mock("../src/composables/useChat", () => ({
   }),
 }))
 
+vi.mock("@inertiajs/vue3", () => ({
+  usePage: () => page,
+}))
+
 import CommandBar from "../src/components/CommandBar.vue"
+import { DEFAULT_CHAT_SUGGESTIONS } from "../src/utils/chatSuggestions"
 
 const BLOCK_A = {
   id: 1,
@@ -80,6 +99,9 @@ describe("CommandBar (chat dock)", () => {
     apiHealthy.value = true
     draftInput.value = ""
     messages.value = []
+    page.props.ui_preferences = {
+      theme: "classic",
+    }
   })
 
   afterEach(() => {
@@ -94,6 +116,127 @@ describe("CommandBar (chat dock)", () => {
     mountBar()
     expect(setActiveDate).toHaveBeenCalledWith("2026-04-18")
   })
+
+  describe.each(["dock", "sidebar"] as const)(
+    "configurable suggestions (%s)",
+    (variant) => {
+      const customSuggestions = [
+        "Move lunch later",
+        "Protect focus time",
+        "Review tomorrow",
+      ]
+
+      function mount4a(suggestions?: string[]) {
+        page.props.ui_preferences = {
+          theme: "dark_4a",
+          ...(suggestions === undefined ? {} : { chat_suggestions: suggestions }),
+        }
+        return mountBar({ variant })
+      }
+
+      it("renders saved custom suggestions in persisted order", () => {
+        const w = mount4a(customSuggestions)
+        expect(
+          w.findAll(".suggestions button").map((button) => button.text()),
+        ).toEqual(customSuggestions)
+      })
+
+      it("renders no suggestion chip wrapper for a saved empty list", () => {
+        const w = mount4a([])
+        expect(w.find(".suggestions").exists()).toBe(false)
+        expect(w.find('[data-testid="chat-result-chip"]').exists()).toBe(false)
+      })
+
+      it("falls back to defaults when suggestions are missing", () => {
+        const w = mount4a()
+        expect(
+          w.findAll(".suggestions button").map((button) => button.text()),
+        ).toEqual([...DEFAULT_CHAT_SUGGESTIONS])
+      })
+
+      it("prefills and focuses without submitting", async () => {
+        const w = mount4a(customSuggestions)
+        const textarea = w.find("textarea.command-input")
+          .element as HTMLTextAreaElement
+        const focusSpy = vi.spyOn(textarea, "focus")
+
+        await w.findAll(".suggestions button")[1].trigger("click")
+        await nextTick()
+
+        expect(textarea.value).toBe("Protect focus time")
+        expect(focusSpy).toHaveBeenCalled()
+        expect(submitTurn).not.toHaveBeenCalled()
+      })
+
+      it("autosizes after a long suggestion is flushed to the textarea", async () => {
+        const longSuggestion =
+          "Protect a long uninterrupted focus block and move every flexible task around it"
+        const w = mount4a([longSuggestion])
+        const textarea = w.find("textarea.command-input")
+          .element as HTMLTextAreaElement
+        Object.defineProperty(textarea, "scrollHeight", {
+          configurable: true,
+          get: () => (textarea.value === longSuggestion ? 260 : 20),
+        })
+
+        await w.find(".suggestions button").trigger("click")
+        await nextTick()
+
+        expect(textarea.style.height).toBe(variant === "dock" ? "200px" : "260px")
+      })
+
+      it("keeps custom suggestions when the date changes", async () => {
+        const w = mount4a(customSuggestions)
+        await w.setProps({ date: "2026-04-19" })
+
+        expect(setActiveDate).toHaveBeenLastCalledWith("2026-04-19")
+        expect(
+          w.findAll(".suggestions button").map((button) => button.text()),
+        ).toEqual(customSuggestions)
+      })
+
+      it("keeps custom suggestions when the thread is cleared", async () => {
+        messages.value = [
+          {
+            role: "user",
+            content: "hello",
+            ask: null,
+            explanation: null,
+            ts: 1,
+          },
+        ]
+        const w = mount4a(customSuggestions)
+        await w.find('[data-testid="chat-clear"]').trigger("click")
+
+        expect(clearThread).toHaveBeenCalledOnce()
+        expect(
+          w.findAll(".suggestions button").map((button) => button.text()),
+        ).toEqual(customSuggestions)
+      })
+
+      it("restores the same custom suggestions after a reactive theme change", async () => {
+        const w = mount4a(customSuggestions)
+        page.props.ui_preferences.theme = "classic"
+        await nextTick()
+        expect(w.find(".suggestions").exists()).toBe(false)
+
+        page.props.ui_preferences.theme = "dark_4a"
+        await nextTick()
+        expect(
+          w.findAll(".suggestions button").map((button) => button.text()),
+        ).toEqual(customSuggestions)
+      })
+
+      it("hides suggestions outside dark_4a", () => {
+        page.props.ui_preferences = {
+          theme: "strategic",
+          chat_suggestions: customSuggestions,
+        }
+        const w = mountBar({ variant })
+        expect(w.find(".suggestions").exists()).toBe(false)
+      })
+    },
+  )
 
   describe("placeholder rotation", () => {
     // TODO: import from CommandBar.vue once the SFC exports it (tasks/todo.md)

@@ -20,10 +20,11 @@
 //   * `/` (when focus is outside form fields) moves focus into the textarea
 
 import type { Ref } from "vue"
-import { computed, inject, onMounted, onUnmounted, ref, watch } from "vue"
+import { computed, inject, nextTick, onMounted, onUnmounted, ref, watch } from "vue"
 import type { TimeBlock, UndoAction } from "../types"
 import { useChat } from "../composables/useChat"
 import { useActiveTheme } from "../composables/useActiveTheme"
+import { useChatSuggestions } from "../composables/useChatSuggestions"
 import { layoutForTheme } from "../utils/layoutProfile"
 import ChatResultChip from "./ChatResultChip.vue"
 
@@ -62,6 +63,7 @@ const inputDisabled = computed(
 const input = draftInput
 const activeTheme = useActiveTheme()
 const is4a = computed(() => layoutForTheme(activeTheme.value) === "4a")
+const suggestions = useChatSuggestions()
 const inputEl = ref<HTMLTextAreaElement | null>(null)
 
 const PLACEHOLDERS = [
@@ -174,9 +176,10 @@ function handleInput(): void {
   autosize()
 }
 
-function useSuggestion(text: string): void {
+async function useSuggestion(text: string): Promise<void> {
   input.value = text
   inputEl.value?.focus()
+  await nextTick()
   autosize()
 }
 
@@ -245,7 +248,12 @@ onUnmounted(() => {
           />
         </div>
     </div>
-    <ChatResultChip v-if="is4a" show-suggestions @suggestion="useSuggestion" />
+    <ChatResultChip
+      v-if="is4a && suggestions.length > 0"
+      show-suggestions
+      :suggestions="suggestions"
+      @suggestion="useSuggestion"
+    />
     <form class="command-row" @submit.prevent="handleSubmit">
       <span
         class="status-dot"

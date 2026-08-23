@@ -39,17 +39,34 @@ describe("ChatResultChip", () => {
     omitted.unmount()
   })
 
-  it("renders the three static suggestions and emits the clicked text", async () => {
-    const wrapper = mount(ChatResultChip, { props: { showSuggestions: true } })
+  it("renders supplied suggestions in order and emits the exact clicked text", async () => {
+    const suggestions = ["Move lunch later", "Protect focus time"]
+    const wrapper = mount(ChatResultChip, {
+      props: { showSuggestions: true, suggestions },
+    })
     const buttons = wrapper.findAll(".suggestions button")
-    expect(buttons).toHaveLength(3)
-    expect(buttons.map((button) => button.text())).toEqual([
-      "Plan my remaining day",
-      "Add a focused work block",
-      "Make room for a break",
-    ])
+    expect(buttons.map((button) => button.text())).toEqual(suggestions)
 
     await buttons[1].trigger("click")
-    expect(wrapper.emitted("suggestion")).toEqual([["Add a focused work block"]])
+    expect(wrapper.emitted("suggestion")).toEqual([["Protect focus time"]])
+  })
+
+  it("renders duplicate suggestions as independent clickable buttons", async () => {
+    const wrapper = mount(ChatResultChip, {
+      props: { showSuggestions: true, suggestions: ["same", "same"] },
+    })
+    const buttons = wrapper.findAll(".suggestions button")
+    expect(buttons).toHaveLength(2)
+
+    await buttons[0].trigger("click")
+    await buttons[1].trigger("click")
+    expect(wrapper.emitted("suggestion")).toEqual([["same"], ["same"]])
+  })
+
+  it("renders no suggestion wrapper for an empty supplied list", () => {
+    const wrapper = mount(ChatResultChip, {
+      props: { showSuggestions: true, suggestions: [] },
+    })
+    expect(wrapper.find('[data-testid="chat-result-chip"]').exists()).toBe(false)
   })
 })
