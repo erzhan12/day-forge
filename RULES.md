@@ -15,6 +15,20 @@ This is a living document — update it as new patterns emerge.
 - The `test` job in `.github/workflows/deploy.yml` runs `npm audit --omit=dev --audit-level=high` after `npm ci` — a fail-closed gate blocking any deploy whose prod dependency graph carries a high/critical advisory.
 - **Emergency bypass** (a backend-only hotfix blocked by an unresolvable frontend advisory): trigger a manual `workflow_dispatch` run with `skip_prod_audit=true`. It leaves an Actions audit trail and re-engages automatically on the next push. Full usage is in the inline comment above the audit step. Open a follow-up to patch the dep afterward.
 
+## CI: GitHub Actions SHA pinning (feature 0060, issue #140)
+
+- **Every `uses:` in `.github/workflows/*.yml` MUST be pinned to a full 40-hex commit SHA**, never a movable tag (`@v4`), with a trailing `# vX.Y.Z` comment recording the human-readable version. Movable tags are a supply-chain risk (upstream can repoint the tag to malicious code). `anthropics/claude-code-action` is the highest-value pin — it has repo-write + secrets access.
+- **Resolve a pin** with the GitHub API, then verify the SHA is real before writing it:
+  ```bash
+  sha=$(gh api "repos/<owner>/<repo>/commits/<tag>" --jq .sha)
+  [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "resolve failed"; exit 1; }
+  ```
+  For a floating major (e.g. `@v1`) with no precise `vX.Y.Z` tag peeling to `$sha`, pin the SHA anyway and comment `# v1 (no precise release tag at this SHA)`.
+- **Repeated actions share ONE identical SHA+comment** — all `actions/checkout` occurrences, both `anthropics/claude-code-action`. A divergent pin is a review-fail.
+- **Full verifier** (identity multiset guard, diff-scope, YAML) lives in `docs/features/0060_PLAN.md` §1. When touching workflow pins, re-run it: it must end `uses=N pinned=N status=0`.
+- **Dependabot** (`.github/dependabot.yml`) auto-bumps pins weekly and preserves the SHA+comment format. `anthropics/*` is isolated into its own group so a privileged-action bump can't be rubber-stamped alongside routine `actions/*`/`docker/*` updates.
+- **Dependabot `groups.<name>` accepts only** `patterns` / `exclude-patterns` / `dependency-type` / `update-types`. `labels` and `reviewers` are **update-block-level** keys, NOT group keys — the claude-review bot mis-suggested them as per-group; both were rejected (and `reviewers` is deprecated in favour of CODEOWNERS).
+
 ## Unified External Tasks Sidebar
 
 - `ExternalTasksSidebar` is the single left task rail. It renders one static section per connected source, emits source-specific retry/complete events, and has one global silent Refresh button. Do not route a Habitica task through Todoist handlers.
