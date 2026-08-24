@@ -314,9 +314,7 @@ describe("useFocusIndicator", () => {
       props: () => ({
         active: true,
         progressPercent: 83,
-        completing: false,
         errorState: false,
-        disabled: false,
       }),
     })
     await fi.open()
@@ -360,9 +358,7 @@ describe("useFocusIndicator", () => {
       props: () => ({
         active: true,
         progressPercent: 83,
-        completing: false,
         errorState: false,
-        disabled: false,
       }),
     })
     await fi.open()
