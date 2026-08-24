@@ -17,7 +17,6 @@ import DraftBadge from "../components/DraftBadge.vue"
 import RegenerateDraftButton from "../components/RegenerateDraftButton.vue"
 import ShowIndicatorButton from "../components/ShowIndicatorButton.vue"
 import FocusIndicatorView from "../components/FocusIndicatorView.vue"
-import { useBlockCompletion } from "../composables/useBlockCompletion"
 import { useFocusIndicator } from "../composables/useFocusIndicator"
 import {
   activeUnfinishedBlock,
@@ -586,45 +585,9 @@ const currentBlockRemaining = computed(() =>
 )
 
 // --- Focus indicator: always-on-top PiP progress (feature 0049 / issue #131) ---
-// Shared completion controller — its OWN instance (per-call-site factory), routing
-// through the same module as TimeBlock's checkbox so the two cannot diverge.
-const focusCompletion = useBlockCompletion({
-  updateBlock,
-  undo: { pushUndo, snapshotBlocks },
-  isDisabled: () => scheduleDisabled.value,
-})
-
-// Raw active block (pre-suppression) — the identity the reset watch keys on.
-const rawActiveBlock = computed(() =>
+const indicatorActiveBlock = computed(() =>
   activeUnfinishedBlock(effectiveBlocks.value, nowMinutes.value, nowDate.value),
 )
-
-// Bridges the gap between `saving` clearing and the async router.reload landing:
-// the just-completed block is suppressed until the next `props.blocks` update.
-const justCompletedId = ref<number | null>(null)
-watch(
-  () => props.blocks,
-  () => {
-    // The imminent reload (success) OR a competing undo restore has landed —
-    // let the natural is_completed gate own neutrality from here.
-    justCompletedId.value = null
-  },
-)
-// Reset the controller when the RAW active identity changes (PiP analogue of
-// TimeBlock's block.id watcher) so a prior block's saving/error never sticks.
-watch(
-  () => rawActiveBlock.value?.id ?? null,
-  () => {
-    focusCompletion.reset()
-    justCompletedId.value = null
-  },
-)
-
-const indicatorActiveBlock = computed(() => {
-  const b = rawActiveBlock.value
-  if (b === null || b.id === justCompletedId.value) return null
-  return b
-})
 // Computed once per tick, read by both indicatorActive and indicatorPercent.
 const indicatorProgressRatio = computed(() => {
   const b = indicatorActiveBlock.value
@@ -635,23 +598,19 @@ const indicatorActive = computed(() => indicatorProgressRatio.value !== null)
 const indicatorPercent = computed(() =>
   progressPercentFromRatio(indicatorProgressRatio.value),
 )
-
-async function handleIndicatorComplete() {
+const indicatorRemaining = computed(() => {
   const b = indicatorActiveBlock.value
-  if (b === null) return
-  const outcome = await focusCompletion.complete(b, props.date)
-  if (outcome === "success") justCompletedId.value = b.id
-}
+  if (b === null || nowMinutes.value === null) return null
+  return remainingMinutesForBlock(b, nowMinutes.value)
+})
 
 const focusIndicator = useFocusIndicator({
   component: FocusIndicatorView,
   props: () => ({
     active: indicatorActive.value,
     progressPercent: indicatorPercent.value,
-    completing: focusCompletion.saving.value,
-    errorState: focusCompletion.errorState.value,
-    disabled: scheduleDisabled.value,
-    onComplete: handleIndicatorComplete,
+    remainingMinutes: indicatorRemaining.value,
+    errorState: false,
   }),
 })
 const focusIndicatorSupported = focusIndicator.supported
@@ -739,11 +698,8 @@ defineExpose({
   // Focus-indicator seam (feature 0049) — asserted by the integration test;
   // not a parent-facing API.
   focusIndicator,
-  focusCompletion,
   indicatorActive,
   indicatorPercent,
-  handleIndicatorComplete,
-  justCompletedId,
 })
 </script>
 

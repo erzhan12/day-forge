@@ -35,7 +35,7 @@ function mountTimeline(overrides: Record<string, unknown> = {}) {
       scheduleWindow: { start: "06:00", end: "23:00" },
       nowMinutes: 10 * 60,
       nowDate: "2026-08-22",
-      pxPerMinute: 1.6,
+      pxPerMinute: 2,
       disabled: false,
       ...overrides,
     },
@@ -56,25 +56,25 @@ describe("Timeline4a now-line", () => {
 })
 
 describe("Timeline4a absolute axis", () => {
-  it("positions a block from the axis origin at 1.6 px/min, not flow layout", () => {
+  it("positions a block from the axis origin at 2 px/min, not flow layout", () => {
     mountTimeline({
       timelineOriginMinutes: 6 * 60,
       timelineEndMinutes: 23 * 60,
-      pxPerMinute: 1.6,
+      pxPerMinute: 2,
     })
     const item = wrapper!.get(".time-block-4a").element.parentElement as HTMLElement
-    expect(item.style.top).toBe(`${(9 * 60 - 6 * 60) * 1.6}px`)
-    expect(item.style.height).toBe(`${60 * 1.6}px`)
+    expect(item.style.top).toBe(`${(9 * 60 - 6 * 60) * 2}px`)
+    expect(item.style.height).toBe(`${60 * 2}px`)
   })
 
   it("sizes the canvas from axis end minus origin", () => {
     mountTimeline({
       timelineOriginMinutes: 6 * 60,
       timelineEndMinutes: 23 * 60,
-      pxPerMinute: 1.6,
+      pxPerMinute: 2,
     })
     expect(wrapper!.get('[data-testid="timeline-4a"]').element.style.height).toBe(
-      `${(23 * 60 - 6 * 60) * 1.6}px`,
+      `${(23 * 60 - 6 * 60) * 2}px`,
     )
   })
 
@@ -83,7 +83,7 @@ describe("Timeline4a absolute axis", () => {
       blocks: [{ ...BLOCK, start_time: "05:00", end_time: "06:00" }],
       timelineOriginMinutes: 5 * 60,
       timelineEndMinutes: 23 * 60,
-      pxPerMinute: 1.6,
+      pxPerMinute: 2,
     })
     const item = wrapper!.get(".time-block-4a").element.parentElement as HTMLElement
     expect(Number.parseFloat(item.style.top)).toBeGreaterThanOrEqual(0)
@@ -116,7 +116,7 @@ function gapItem(index: number): HTMLElement {
 }
 
 describe("Timeline4a edge stubs (0017)", () => {
-  const px = 1.6
+  const px = 2
 
   it("collapses the leading gap to a 30-minute stub above a late first block", () => {
     const bounds = computeRenderBounds([AFTERNOON], null, DEFAULT_SCHEDULE_WINDOW)

@@ -329,22 +329,55 @@ describe("useFocusIndicator", () => {
     expect(css).toMatch(/\.fi-bar/)
     expect(css).toMatch(/height:\s*12px/)
     expect(css).toMatch(/\.fi-fill/)
-    expect(css).toMatch(/\.fi-complete/)
-    expect(css).toMatch(/background:\s*transparent/)
+    expect(css).toMatch(/\.fi-remaining/)
+    expect(css).toMatch(/tabular-nums/)
     expect(css).toMatch(/color:\s*CanvasText/)
     expect(css).toMatch(/background:\s*Canvas/)
     expect(css).toMatch(/background:\s*currentColor/)
-    expect(css).toMatch(/border:\s*1px solid currentColor/)
     // 0049: inject a dedicated sheet — do not clone app.css (imports or filename).
     expect(css).not.toMatch(/\.time-block/)
     expect(css).not.toMatch(/@import/)
     expect(css).not.toMatch(/app\.css/)
 
     expect(win.document.querySelector(".fi-bar")).not.toBeNull()
-    expect(win.document.querySelector(".fi-complete")).not.toBeNull()
+    expect(win.document.querySelector(".fi-complete")).toBeNull()
     expect(win.document.querySelector(".fi-fill")?.getAttribute("style")).toContain(
       "83%",
     )
+    fi.cleanup()
+  })
+
+  it("makes the PiP mount host fill the window so .fi-bar can flex instead of collapsing to 0px", async () => {
+    // Chrome Document PiP is a flex body. The Vue mount node is an unstyled
+    // wrapper; without width:100%/flex:1 it shrink-wraps to its contents
+    // and .fi-bar { flex: 1 } receives 0px. Playwright measured this
+    // in a real Chrome PiP: aria-valuenow=83, fill inline width 83%, bar
+    // getBoundingClientRect().width === 0.
+    const win = makeFakeWindow()
+    installFakePip(win)
+    const fi = useFocusIndicator({
+      component: FocusIndicatorView,
+      props: () => ({
+        active: true,
+        progressPercent: 83,
+        completing: false,
+        errorState: false,
+        disabled: false,
+      }),
+    })
+    await fi.open()
+    await flushPromises()
+
+    const css = [...win.document.querySelectorAll("style")]
+      .map((el) => el.textContent ?? "")
+      .join("\n")
+
+    expect(win.document.body.firstElementChild?.classList.contains("fi-root")).toBe(
+      true,
+    )
+    expect(css).toMatch(/html,\s*body\s*\{[^}]*width:\s*100%/)
+    expect(css).toMatch(/\.fi-root\s*\{[^}]*width:\s*100%/)
+    expect(css).toMatch(/\.fi-root\s*\{[^}]*flex:\s*1/)
     fi.cleanup()
   })
 })

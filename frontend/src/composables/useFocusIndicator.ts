@@ -1,6 +1,6 @@
 import { type App, type Component, createApp, getCurrentInstance, h, onUnmounted, ref } from "vue"
 
-const PIP_WIDTH = 240
+const PIP_WIDTH = 280
 const PIP_HEIGHT = 60
 // Generic, block-agnostic — never the block title (privacy invariant).
 const PIP_TITLE = "Focus"
@@ -12,8 +12,9 @@ const PIP_OPEN_ERROR_DURATION_MS = 5_000
 // reaches a foreign Document.
 const PIP_STYLES = `
   :root { color-scheme: light dark; }
-  html, body { margin: 0; height: 100%; }
+  html, body { margin: 0; width: 100%; height: 100%; }
   body { display: flex; align-items: center; color: CanvasText; background: Canvas; }
+  .fi-root { width: 100%; flex: 1; min-width: 0; }
   .focus-indicator {
     display: flex;
     align-items: center;
@@ -25,10 +26,18 @@ const PIP_STYLES = `
   }
   .fi-bar {
     flex: 1;
+    min-width: 0;
     height: 12px;
     border-radius: 6px;
     background: rgba(128, 128, 128, 0.3);
     overflow: hidden;
+  }
+  .fi-remaining {
+    flex: none;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    opacity: 0.85;
   }
   .fi-fill {
     height: 100%;
@@ -36,26 +45,6 @@ const PIP_STYLES = `
     transition: width 0.25s ease;
   }
   .focus-indicator[data-state="error"] {
-    outline: 2px solid currentColor;
-    outline-offset: 2px;
-  }
-  .fi-complete {
-    flex: none;
-    min-width: 28px;
-    min-height: 24px;
-    border: 1px solid currentColor;
-    border-radius: 4px;
-    background: transparent;
-    color: inherit;
-    cursor: pointer;
-    font-size: 14px;
-    line-height: 1;
-  }
-  .fi-complete:disabled {
-    opacity: 0.5;
-    cursor: default;
-  }
-  .fi-complete:focus-visible {
     outline: 2px solid currentColor;
     outline-offset: 2px;
   }
@@ -184,6 +173,7 @@ export function useFocusIndicator(config: FocusIndicatorConfig) {
       style.textContent = PIP_STYLES
       win.document.head.appendChild(style)
       const rootEl = win.document.createElement("div")
+      rootEl.className = "fi-root"
       win.document.body.appendChild(rootEl)
       // Render function re-reads config.props() each render → the shared refs it
       // dereferences are tracked, so the PiP repaints on every reactive change.

@@ -2,13 +2,12 @@
  * Slice 6 integration: the focus indicator wired into Schedule.vue.
  *
  * Covers the wiring the piece-level unit tests can't: active-block derivation
- * from the live now-signal, the integration privacy gate over the REAL PiP
- * document (body + title), onComplete → shared controller, the just-completed
- * suppression, and disabled passthrough.
+ * from the live now-signal, and the integration privacy gate over the REAL PiP
+ * document (body + title). Completing a block stays on the timeline checkbox.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { flushPromises, mount, VueWrapper } from "@vue/test-utils"
-import { nextTick, reactive, ref, type Ref } from "vue"
+import { reactive, ref, type Ref } from "vue"
 
 vi.mock("@inertiajs/vue3", () => ({
   router: { reload: vi.fn(), visit: vi.fn(), post: vi.fn() },
@@ -275,6 +274,8 @@ describe("Schedule.vue focus indicator", () => {
     await flushPromises()
     expect(win.document.querySelector('[role="progressbar"]')).not.toBeNull()
     const html = win.document.body.innerHTML
+    // Derived countdown is allowed; clock times / title / category / date are not.
+    expect(win.document.body.textContent).toContain("30m left")
     for (const s of PRIVATE) expect(html).not.toContain(s)
     const headHtml = win.document.head.innerHTML
     for (const s of PRIVATE) expect(headHtml).not.toContain(s)
@@ -282,86 +283,12 @@ describe("Schedule.vue focus indicator", () => {
     for (const s of PRIVATE) expect(win.document.title).not.toContain(s)
   })
 
-  it("completing via the indicator calls the shared controller and folds the block to neutral", async () => {
-    mountPage([makeBlock({ id: 42 })])
-    await flushPromises()
-    await vm().handleIndicatorComplete()
-    await flushPromises()
-    expect(scheduleUpdateBlock).toHaveBeenCalledWith(
-      42,
-      { is_completed: true },
-      expect.objectContaining({ signal: expect.any(AbortSignal) }),
-    )
-    expect(vm().justCompletedId).toBe(42)
-    expect(vm().indicatorActive).toBe(false)
-  })
-
-  it("passes the schedule-disabled state through to the indicator props", async () => {
-    const win = makeFakeWindow()
-    installFakePip(win)
-    isGeneratingDraft.value = true // → scheduleDisabled
-    mountPage([makeBlock()])
-    await flushPromises()
-    await vm().focusIndicator.open()
-    await flushPromises()
-    const btn = win.document.querySelector("button.fi-complete") as HTMLButtonElement | null
-    expect(btn).not.toBeNull()
-    expect(btn!.disabled).toBe(true)
-  })
-
-  it("handleIndicatorComplete is a no-op when there is no active block", async () => {
-    nowMinutes.value = 660 // past the 09:00–10:00 block → no active block
-    mountPage([makeBlock()])
+  it("is inactive for a completed current block and re-activates when that block is restored incomplete", async () => {
+    mountPage([makeBlock({ id: 7, is_completed: true })])
     await flushPromises()
     expect(vm().indicatorActive).toBe(false)
-    await vm().handleIndicatorComplete()
-    await flushPromises()
-    expect(scheduleUpdateBlock).not.toHaveBeenCalled()
-  })
-
-  it("resets the controller when the active block identity changes mid-completion (C3)", async () => {
-    let resolveUpdate: ((v: { ok: boolean }) => void) | null = null
-    scheduleUpdateBlock.mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          resolveUpdate = resolve
-        }),
-    )
-    mountPage([makeBlock({ id: 5 })])
-    await flushPromises()
-    // Start a completion that stays in-flight.
-    const p = vm().handleIndicatorComplete()
-    await flushPromises()
-    expect(vm().focusCompletion.saving.value).toBe(true)
-
-    // Active identity changes mid-flight: advance the clock past the block's end
-    // so rawActiveBlock becomes null → the reset watch fires.
-    nowMinutes.value = 620
-    await nextTick()
-    await nextTick()
-    expect(vm().focusCompletion.saving.value).toBe(false)
-    expect(vm().focusCompletion.errorState.value).toBe(false)
-    expect(vm().indicatorActive).toBe(false)
-
-    // The superseded chain resolves without touching state or pushing undo.
-    resolveUpdate!({ ok: true })
-    await p
-    await flushPromises()
-    expect(pushUndo).not.toHaveBeenCalled()
-    expect(vm().focusCompletion.saving.value).toBe(false)
-  })
-
-  it("re-activates the indicator when a completed block is undone (props.blocks update clears suppression)", async () => {
-    mountPage([makeBlock({ id: 7 })])
-    await flushPromises()
-    await vm().handleIndicatorComplete()
-    await flushPromises()
-    expect(vm().justCompletedId).toBe(7)
-    expect(vm().indicatorActive).toBe(false)
-    // Undo restore lands: props.blocks replaced (block still incomplete + current).
     await wrapper!.setProps({ blocks: [makeBlock({ id: 7, is_completed: false })] })
     await flushPromises()
-    expect(vm().justCompletedId).toBeNull()
     expect(vm().indicatorActive).toBe(true)
   })
 })

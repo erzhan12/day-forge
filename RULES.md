@@ -701,6 +701,10 @@ no Service Worker, no closed-tab alerts.
   `displayList` reads `renderBounds.value` only on the non-drag path — an
   unconditional read would re-layout mid-drag on each 60s tick because
   `renderBounds` now depends on `nowMinutes`.
+- **4a uses the same vertical scale as classic / Light Premium** (`2` px/min,
+  a 60-minute block is 120px). Feature 0055 originally used `1.6` for 4a;
+  that made every 4a block 20% shorter than Light Premium. `pxPerMinuteForLayout`
+  still exists so drag can freeze the scale, but both profiles return `2`.
 - **4a shares the 0017 origin-shift axis, not a full-window uncompressed
   canvas.** `Schedule.vue` sets `timelineOriginMinutes` / `timelineEndMinutes`
   from `renderBounds` (which already unions out-of-window blocks). `Timeline4a`
@@ -829,28 +833,30 @@ no Service Worker, no closed-tab alerts.
 
 - **Shared completion controller — never re-inline.** `useBlockCompletion.ts`
   owns the block-completion network/retry/backoff/generation-guard/abort/silent
-  -undo logic. BOTH the timeline checkbox (`TimeBlock.vue`) and the PiP Complete
-  action (`Schedule.vue`) route through it. It is a **per-call-site factory, NOT
-  a singleton**: each call returns its own `{ saving, errorState, setCompleted,
-  complete, reset, dispose }`. `TimeBlock` creates one per row (N rows → N
-  instances); `Schedule` creates exactly one for the PiP. A singleton would
-  collapse per-row `saving`/`generation` and regress the abort-on-list-reshape
-  invariant (issue #21). `TimeBlock` keeps its own optimistic `displayedCompleted`
-  + local `errorMessage` string ("Failed to update" copy, pinned by
-  `TimeBlock.test.ts`); the controller's `errorState` boolean is the PiP surface
-  only. `setCompleted` resolves `"success" | "failure" | "superseded"`; revert
-  the optimistic flip only on `"failure"`, never `"superseded"`. `reset()`
-  (identity change) aborts + clears `saving`/`errorState`; `dispose()` (unmount)
-  aborts + bumps generation only. Composables guard `onUnmounted` with
-  `getCurrentInstance()` so they're unit-testable by direct call.
-- **PiP privacy invariant.** Never put block title/category/date/times into the
-  PiP document — DOM, `aria-*`, `data-testid`, error copy, or `document.title`
-  (which is the generic constant `"Focus"`). `FocusIndicatorView.vue` props are
-  ONLY `active/progressPercent/completing/errorState/disabled` — so the
-  isolated-view privacy test is necessary-but-not-sufficient; the load-bearing
-  gate is the integration test (`scheduleFocusIndicator.test.ts`) asserting the
-  REAL mounted PiP `document.body` + `document.title` contain no sentinel block
-  strings.
+  -undo logic. The timeline checkbox (`TimeBlock.vue`) routes through it. It is
+  a **per-call-site factory, NOT a singleton**: each call returns its own
+  `{ saving, errorState, setCompleted, complete, reset, dispose }`. `TimeBlock`
+  creates one per row (N rows → N instances). The PiP indicator is
+  display-only (progress + remaining minutes) and does **not** complete
+  blocks. A singleton would collapse per-row `saving`/`generation` and regress
+  the abort-on-list-reshape invariant (issue #21). `TimeBlock` keeps its own
+  optimistic `displayedCompleted` + local `errorMessage` string ("Failed to
+  update" copy, pinned by `TimeBlock.test.ts`). `setCompleted` resolves
+  `"success" | "failure" | "superseded"`; revert the optimistic flip only on
+  `"failure"`, never `"superseded"`. `reset()` (identity change) aborts +
+  clears `saving`/`errorState`; `dispose()` (unmount) aborts + bumps
+  generation only. Composables guard `onUnmounted` with `getCurrentInstance()`
+  so they're unit-testable by direct call.
+- **PiP privacy invariant.** Never put block title/category/date/clock-times
+  into the PiP document — DOM, `aria-*`, `data-testid`, error copy, or
+  `document.title` (the generic constant `"Focus"`). A derived remaining-
+  minutes countdown (`"23m left"`, same `formatRemainingMinutes` as the
+  timeline badge) is allowed. `FocusIndicatorView.vue` props are
+  `active/progressPercent/remainingMinutes/errorState`. The isolated-view
+  privacy test is necessary-but-not-sufficient; the load-bearing gate is the
+  integration test (`scheduleFocusIndicator.test.ts`) asserting the REAL
+  mounted PiP `document.body` + `document.title` contain no sentinel
+  title/category/date/clock-time strings.
 - **PiP view CSS must be injected into the PiP document.** Document
   Picture-in-Picture is a separate `Document`. Vue SFC `<style scoped>` is
   injected into the opener by Vite and does not apply inside the PiP. Any
@@ -858,6 +864,13 @@ no Service Worker, no closed-tab alerts.
   include its visual rules in the `<style>` string injected into
   `pipWindow.document.head` (`PIP_STYLES` in `useFocusIndicator.ts`). Do not
   clone `app.css`.
+- **PiP mount host must fill the window.** PiP `body` is `display: flex`. The
+  Vue mount node is a flex item; without `width: 100%; flex: 1` it shrink-wraps
+  to the remaining-minutes label and `.fi-bar { flex: 1 }` gets **0px** — progress is
+  in the DOM (`aria-valuenow`, fill inline width) but the track is invisible.
+  Keep class `fi-root` on the mount element and in `PIP_STYLES`. Do not rely
+  on `.focus-indicator { width: 100% }` alone (percentage of a shrink-wrapped
+  parent is still shrink-wrapped).
 - **Transient activation.** `requestWindow()` must be called synchronously from
   the header button's user gesture (`useFocusIndicator.open()`); it returns a
   `Promise<Window>`. A `pendingOpen` flag guards rapid double-clicks; an `epoch`

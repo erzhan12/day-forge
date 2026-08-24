@@ -7,5 +7,9 @@ export function layoutForTheme(themeId: ThemeId): LayoutProfile {
 }
 
 export function pxPerMinuteForLayout(layout: LayoutProfile): number {
-  return layout === "4a" ? 1.6 : 2
+  switch (layout) {
+    case "4a":
+    case "classic":
+      return 2
+  }
 }

@@ -9,8 +9,8 @@ describe("layout profiles", () => {
     expect(layoutForTheme("light_premium")).toBe("classic")
   })
 
-  it("uses the design-specific time scale", () => {
-    expect(pxPerMinuteForLayout("4a")).toBe(1.6)
+  it("uses the same time scale for 4a and classic", () => {
+    expect(pxPerMinuteForLayout("4a")).toBe(2)
     expect(pxPerMinuteForLayout("classic")).toBe(2)
   })
 })

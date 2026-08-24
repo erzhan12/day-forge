@@ -458,7 +458,7 @@ export function useDrag(
     }
     frozenNowMinutes.value = getNow?.() ?? null
     // Freeze the full gesture coordinate system. Theme persistence can resolve
-    // while a pointer is held; mixing live 2/1.6 scale with start geometry
+    // while a pointer is held; mixing a live scale with start geometry
     // would commit a different time from the shown ghost.
     frozenPxPerMinute.value = getPxPerMinute?.() ?? PX_PER_MINUTE
     frozenTimelineOriginMinutes.value = getTimelineOriginMinutes?.() ?? null

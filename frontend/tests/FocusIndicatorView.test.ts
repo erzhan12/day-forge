@@ -10,9 +10,7 @@ function mountView(props: Record<string, unknown> = {}) {
     props: {
       active: true,
       progressPercent: 42,
-      completing: false,
       errorState: false,
-      disabled: false,
       ...props,
     },
   })
@@ -28,35 +26,33 @@ describe("FocusIndicatorView", () => {
     expect(bar.attributes("aria-valuenow")).toBe("42")
   })
 
-  it("renders an icon-only Complete button with a generic accessible name", () => {
+  it("shows remaining minutes after the bar, matching the timeline badge", () => {
+    const w = mountView({ remainingMinutes: 23 })
+    const label = w.find(".fi-remaining")
+    expect(label.exists()).toBe(true)
+    expect(label.text()).toBe("23m left")
+    const html = w.html()
+    expect(html.indexOf("fi-bar")).toBeLessThan(html.indexOf("fi-remaining"))
+    expect(w.find("button").exists()).toBe(false)
+    for (const s of PRIVATE) expect(html).not.toContain(s)
+  })
+
+  it("formats hour-plus remaining the same as the timeline badge", () => {
+    expect(mountView({ remainingMinutes: 90 }).find(".fi-remaining").text()).toBe(
+      "1h 30m left",
+    )
+  })
+
+  it("hides remaining minutes when inactive", () => {
+    const w = mountView({ active: false, remainingMinutes: 23 })
+    expect(w.find(".fi-remaining").exists()).toBe(false)
+  })
+
+  it("does not render a Complete control", () => {
     const w = mountView({ active: true })
-    const btn = w.find("button")
-    expect(btn.exists()).toBe(true)
-    expect(btn.attributes("aria-label")).toBe("Complete current block")
-    // No text that identifies the block.
+    expect(w.find("button").exists()).toBe(false)
+    expect(w.find(".fi-complete").exists()).toBe(false)
     for (const s of PRIVATE) expect(w.html()).not.toContain(s)
-  })
-
-  it("emits 'complete' on click when enabled", async () => {
-    const w = mountView({ active: true, disabled: false, completing: false })
-    await w.find("button").trigger("click")
-    expect(w.emitted("complete")).toHaveLength(1)
-  })
-
-  it("natively disables Complete and does not emit when disabled", async () => {
-    const w = mountView({ active: true, disabled: true })
-    const btn = w.find("button")
-    expect(btn.attributes("disabled")).toBeDefined()
-    await btn.trigger("click")
-    expect(w.emitted("complete")).toBeUndefined()
-  })
-
-  it("disables Complete while completing (no duplicate emit)", async () => {
-    const w = mountView({ active: true, completing: true })
-    const btn = w.find("button")
-    expect(btn.attributes("disabled")).toBeDefined()
-    await btn.trigger("click")
-    expect(w.emitted("complete")).toBeUndefined()
   })
 
   it("renders neutral (no bar, no Complete) when inactive", () => {
@@ -65,10 +61,10 @@ describe("FocusIndicatorView", () => {
     expect(w.find("button").exists()).toBe(false)
   })
 
-  it("in error state keeps the bar + re-enabled Complete and shows a generic retry affordance", () => {
-    const w = mountView({ active: true, errorState: true, completing: false })
+  it("in error state keeps the bar and shows a generic retry affordance", () => {
+    const w = mountView({ active: true, errorState: true })
     expect(w.find('[role="progressbar"]').exists()).toBe(true)
-    expect(w.find("button").attributes("disabled")).toBeUndefined()
+    expect(w.find("button").exists()).toBe(false)
     const retry = w.find(".fi-retry")
     expect(retry.exists()).toBe(true)
     expect(retry.text()).toBe("Retry")
