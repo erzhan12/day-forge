@@ -11,5 +11,9 @@ export function pxPerMinuteForLayout(layout: LayoutProfile): number {
     case "4a":
     case "classic":
       return 2
+    default: {
+      const _exhaustive: never = layout
+      return _exhaustive
+    }
   }
 }

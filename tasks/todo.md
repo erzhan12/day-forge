@@ -169,6 +169,13 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
 
 ## Follow-ups (discovered during manual testing)
 
+- [ ] **PiP `errorState` is dead (PR #166, P3).** `Schedule.vue` hardcodes
+  `errorState: false` into `useFocusIndicator`, so `FocusIndicatorView`'s
+  error prop, `.fi-retry`, and the matching `PIP_STYLES` rules are unreachable
+  in the live app. Either wire a real error signal or remove the prop/CSS/template
+  branch. Deferred: display-only PiP has no failure path today; cleanup is
+  cosmetic and spans view + styles + tests.
+
 - [ ] **0059-followup: Serializer-parity polish (PR #160 cycle-4, non-blocking).**
   Two P3 nits from claude-review, deferred as convergence-tail polish (bot
   APPROVED 4x; zero P0/P1 across all cycles): (1) add a docstring sentence on

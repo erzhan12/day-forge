@@ -2,8 +2,9 @@
  * Slice 6 integration: the focus indicator wired into Schedule.vue.
  *
  * Covers the wiring the piece-level unit tests can't: active-block derivation
- * from the live now-signal, and the integration privacy gate over the REAL PiP
- * document (body + title). Completing a block stays on the timeline checkbox.
+ * from the live now-signal, remaining-minutes countdown in the PiP body, and
+ * the integration privacy gate over the REAL PiP document (body + title).
+ * Completing a block stays on the timeline checkbox.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { flushPromises, mount, VueWrapper } from "@vue/test-utils"
