@@ -7,6 +7,16 @@ updates:
     commit-message:
       prefix: "chore(ci)"
     groups:
-      github-actions:
+      # Routine first-party/infra actions batch together.
+      stdlib-actions:
         patterns:
-          - "*"
+          - "actions/*"
+          - "docker/*"
+          - "astral-sh/*"
+          - "webfactory/*"
+      # The AI action has repo-write + secrets access (#140); isolate its
+      # bumps into their own PR so they can't be rubber-stamped alongside
+      # routine updates.
+      claude-action:
+        patterns:
+          - "anthropics/*"
