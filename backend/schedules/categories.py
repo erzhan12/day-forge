@@ -7,6 +7,7 @@ from analytics.models import DailyReview
 from calendar_sync.models import TravelRule
 from django.contrib.auth.models import User
 from django.db import IntegrityError, OperationalError, transaction
+from django.db.models import Q
 from templates_mgr.models import Template
 
 from schedules.category_palette import PALETTE, SEED_CATEGORIES
@@ -183,7 +184,16 @@ def delete_category(user, category):
         if changed:
             Template.objects.bulk_update(changed, ["blocks"])
         TravelRule.objects.filter(user=user, category=target.slug).update(category=sink.slug)
-        reviews = list(DailyReview.objects.select_for_update().filter(schedule__user=user))
+        # Only reviews whose maps actually mention the deleted slug need
+        # remapping — lock and load those, not the user's whole review history.
+        reviews = list(
+            DailyReview.objects.select_for_update()
+            .filter(schedule__user=user)
+            .filter(
+                Q(planned_minutes_by_category__has_key=target.slug)
+                | Q(completed_minutes_by_category__has_key=target.slug)
+            )
+        )
         for review in reviews:
             updates = {}
             for field in ("planned_minutes_by_category", "completed_minutes_by_category"):

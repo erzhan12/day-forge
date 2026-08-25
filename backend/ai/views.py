@@ -667,11 +667,13 @@ def _apply_actions_sync(
 
         categories = ordered_categories(locked_schedule.user)
         allowed_categories = {category.slug for category in categories}
-        # Revalidate model output against the live catalog before persistence.
-        from ai.schemas import validate_action_shape
-
+        # Revalidate ONLY the category against the live catalog before
+        # persistence — the full action shape was already validated upstream;
+        # this pass exists solely to catch a slug deleted mid-request, so it
+        # must not mis-report a non-category failure as "invalid category".
         for index, action in enumerate(result.parsed_actions):
-            if validate_action_shape(action, allowed_categories):
+            category = action.get("category")
+            if isinstance(category, str) and category not in allowed_categories:
                 raise _Rollback(_action_error(index, "invalid category"))
         window = get_schedule_window(locked_schedule.user)
         plan_result = plan_mutations(

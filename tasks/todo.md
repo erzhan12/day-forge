@@ -881,3 +881,18 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
   for five seconds and Schedule wires the state through. Composable, component,
   and page integration tests cover rejection, timed dismissal, and successful
   retry.
+
+### 0063 categories — PR #172 claude-review deferrals
+- **P2 [TESTING] Playwright smoke for Settings → Categories.** No E2E script exercises
+  the categories CRUD + delete-remap write path (the feature's highest-risk surface).
+  Add `frontend/scripts/playwright/settings-categories.mjs` following the existing
+  script pattern: log in, open Settings → Categories, add a category, rename it, pick a
+  color, reorder, delete (assert remap-to-sink), asserting state after each step.
+  Deferred: E2E tooling needs the full dev stack + seeding harness — its own change,
+  not a unit-test edit. Backend + component unit coverage for these paths is already
+  thorough (`test_categories.py`, `SettingsCategoriesPanel.test.ts`).
+- **P3 [DOCS] Expand category endpoints in `docs/api.md`.** The `PATCH` / `DELETE` /
+  swap category-catalog endpoints are documented as one prose paragraph alongside the
+  `POST`. Give each its own method+path header, field table, and success/error examples
+  to match the per-endpoint style used elsewhere in the file (e.g.
+  `POST /api/schedules/{date}/blocks/`). Non-blocking documentation formatting.
