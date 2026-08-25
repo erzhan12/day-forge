@@ -22,6 +22,7 @@ from django.utils import timezone as django_tz
 
 try:  # ``requests`` is a transitive caldav dep, but be defensive
     from requests.exceptions import Timeout as _RequestsTimeout
+
     _TIMEOUT_EXC: tuple[type[BaseException], ...] = (TimeoutError, _RequestsTimeout)
 except Exception:  # pragma: no cover
     _TIMEOUT_EXC = (TimeoutError,)
@@ -32,6 +33,7 @@ logger = logging.getLogger(__name__)
 
 
 # ----- Typed exception hierarchy -----------------------------------------
+
 
 class CalDAVError(Exception):
     """Base for all CalDAV service-layer errors."""
@@ -50,6 +52,7 @@ class CalDAVProviderError(CalDAVError):
 
 
 # ----- verify_credentials ------------------------------------------------
+
 
 def verify_credentials(apple_id: str, password: str, base_url: str) -> None:
     """Open a DAV client and prove the credentials work.
@@ -81,6 +84,7 @@ def verify_credentials(apple_id: str, password: str, base_url: str) -> None:
 
 # ----- fetch_events_for_date ---------------------------------------------
 
+
 def _day_window(target_date: date) -> tuple[dt, dt]:
     """``[start, end)`` in the project timezone, then handed to DAV.
 
@@ -99,9 +103,7 @@ def _to_utc(value):
     """Promote naive datetimes to settings.TIME_ZONE, then convert to UTC."""
     if isinstance(value, dt):
         if django_tz.is_naive(value):
-            value = django_tz.make_aware(
-                value, django_tz.get_current_timezone()
-            )
+            value = django_tz.make_aware(value, django_tz.get_current_timezone())
         return value.astimezone(datetime.UTC)
     # ``date`` (all-day) — synthesize midnight in project TZ then UTC.
     naive = dt.combine(value, datetime.time.min)
@@ -129,11 +131,7 @@ def _normalize_vevent(vevent, calendar_name: str) -> NormalizedEvent | None:
             # RFC 5545 §3.6.1: when neither DTEND nor DURATION is
             # specified, all-day events span exactly one day, and
             # timed events have zero duration (instantaneous).
-            dtend = (
-                dtstart + datetime.timedelta(days=1)
-                if _is_all_day(dtstart)
-                else dtstart
-            )
+            dtend = dtstart + datetime.timedelta(days=1) if _is_all_day(dtstart) else dtstart
         all_day = _is_all_day(dtstart)
         start_utc = _to_utc(dtstart)
         end_utc = _to_utc(dtend)
@@ -197,7 +195,8 @@ def _expand_events(events_iter: Iterable, start: dt, end: dt) -> list:
             # ImportError) propagate so real defects surface.
             logger.warning(
                 "Failed to parse caldav.Event (%s: %s); skipping",
-                type(e).__name__, e,
+                type(e).__name__,
+                e,
             )
             continue
         try:
@@ -205,7 +204,8 @@ def _expand_events(events_iter: Iterable, start: dt, end: dt) -> list:
         except (ValueError, AttributeError, KeyError, TypeError) as e:
             logger.warning(
                 "recurring_ical_events expansion failed (%s: %s); skipping",
-                type(e).__name__, e,
+                type(e).__name__,
+                e,
             )
             continue
         out.extend(occurrences)
@@ -238,9 +238,7 @@ def fetch_events_for_date(account, target_date: date) -> list[NormalizedEvent]:
         for calendar in principal.calendars():
             calendar_name = _calendar_display_name(calendar)
             try:
-                raw_events = calendar.date_search(
-                    start=start, end=end, expand=True
-                )
+                raw_events = calendar.date_search(start=start, end=end, expand=True)
             except AuthorizationError:
                 raise
             except _TIMEOUT_EXC:
@@ -272,7 +270,7 @@ def fetch_events_for_date(account, target_date: date) -> list[NormalizedEvent]:
         raise CalDAVTimeoutError("CalDAV request timed out") from e
     except DAVError as e:
         raise CalDAVProviderError("CalDAV provider error") from e
-    except (CalDAVError, ImproperlyConfigured):
+    except CalDAVError, ImproperlyConfigured:
         # ImproperlyConfigured carries actionable ops detail (e.g. key
         # rotation invalidating stored ciphertext) — let it propagate
         # so the view can map it to a config-shaped 500 instead of a

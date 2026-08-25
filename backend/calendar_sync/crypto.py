@@ -15,15 +15,13 @@ def _fernet() -> Fernet:
     if not key:
         raise ImproperlyConfigured(
             "CALDAV_ENCRYPTION_KEY is not set. Generate one with "
-            "`python -c \"from cryptography.fernet import Fernet; "
-            "print(Fernet.generate_key().decode())\"` and add it to .env."
+            '`python -c "from cryptography.fernet import Fernet; '
+            'print(Fernet.generate_key().decode())"` and add it to .env.'
         )
     try:
         return Fernet(key.encode() if isinstance(key, str) else key)
     except (ValueError, TypeError) as e:
-        raise ImproperlyConfigured(
-            "CALDAV_ENCRYPTION_KEY is not a valid Fernet key."
-        ) from e
+        raise ImproperlyConfigured("CALDAV_ENCRYPTION_KEY is not a valid Fernet key.") from e
 
 
 def encrypt_password(plaintext: str) -> bytes:

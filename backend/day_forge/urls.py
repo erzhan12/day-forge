@@ -7,6 +7,7 @@ from django.urls import path
 from gcal_sync import views as gcal_views
 from habitica_sync import views as habitica_views
 from schedules import api as schedules_api
+from schedules import category_api
 from schedules import settings_api as schedule_settings_api
 from schedules import views as schedules_views
 from templates_mgr import api as templates_api
@@ -81,6 +82,9 @@ urlpatterns = [
         templates_api.user_preferences,
         name="user_preferences",
     ),
+    path("api/user/categories/", category_api.categories_collection, name="categories_collection"),
+    path("api/user/categories/swap/", category_api.categories_swap, name="categories_swap"),
+    path("api/user/categories/<int:pk>/", category_api.category_detail, name="category_detail"),
     # API: AI
     path(
         "api/ai/schedules/<str:date>/generate-draft/",

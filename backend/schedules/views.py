@@ -15,6 +15,7 @@ from templates_mgr.preferences import (
     ui_preferences_payload,
 )
 
+from schedules.categories import ordered_categories, serialize_category
 from schedules.models import Schedule, TimeBlock
 from schedules.window import get_schedule_window
 
@@ -25,9 +26,7 @@ _LOGIN_TEMPLATE_DATA = {"initial_theme": "strategic"}
 
 
 def _render_login(request, props: dict):
-    return inertia_render(
-        request, "Login", props, template_data=_LOGIN_TEMPLATE_DATA
-    )
+    return inertia_render(request, "Login", props, template_data=_LOGIN_TEMPLATE_DATA)
 
 
 def root_redirect(request):
@@ -49,9 +48,7 @@ def login_view(request):
         try:
             body = json.loads(request.body)
         except json.JSONDecodeError:
-            return _render_login(
-                request, {"errors": {"non_field": "Invalid request body."}}
-            )
+            return _render_login(request, {"errors": {"non_field": "Invalid request body."}})
         username = body.get("username", "")
         password = body.get("password", "")
     else:
@@ -62,9 +59,7 @@ def login_view(request):
         login(request, user)
         today = datetime.date.today().isoformat()
         return redirect("schedule", date=today)
-    return _render_login(
-        request, {"errors": {"non_field": "Invalid credentials"}}
-    )
+    return _render_login(request, {"errors": {"non_field": "Invalid credentials"}})
 
 
 @require_http_methods(["POST"])
@@ -82,12 +77,8 @@ def schedule_view(request, date):
     except ValueError:
         return HttpResponseBadRequest("Invalid date format. Use YYYY-MM-DD.")
 
-    schedule, created = Schedule.objects.get_or_create(
-        user=request.user, date=parsed_date
-    )
-    blocks = TimeBlock.objects.filter(schedule=schedule).order_by(
-        "start_time", "sort_order"
-    )
+    schedule, created = Schedule.objects.get_or_create(user=request.user, date=parsed_date)
+    blocks = TimeBlock.objects.filter(schedule=schedule).order_by("start_time", "sort_order")
 
     blocks_data = [
         {
@@ -103,12 +94,11 @@ def schedule_view(request, date):
     ]
 
     slot_type = Template.slot_type_for_date(parsed_date)
-    template_exists = Template.objects.filter(
-        user=request.user, type=slot_type
-    ).exists()
+    template_exists = Template.objects.filter(user=request.user, type=slot_type).exists()
     api_key_set = bool(settings.LLM_API_KEY and settings.LLM_API_KEY.strip())
     prefs = get_user_preferences(request.user)
     window = get_schedule_window(request.user)
+    categories = ordered_categories(request.user)
 
     return inertia_render(
         request,
@@ -120,6 +110,7 @@ def schedule_view(request, date):
                 "status": schedule.status,
             },
             "blocks": blocks_data,
+            "categories": [serialize_category(category) for category in categories],
             "date": str(parsed_date),
             # One-shot signal: the auto-draft trigger only fires on the
             # request that *created* the Schedule row. The frontend
@@ -137,9 +128,7 @@ def schedule_view(request, date):
             "slot_type": slot_type,
             # Seconds between background external-task refreshes while the
             # left task rail is open; ``0`` disables polling.
-            "external_tasks_poll_interval": (
-                settings.EXTERNAL_TASKS_POLL_INTERVAL_SECONDS
-            ),
+            "external_tasks_poll_interval": (settings.EXTERNAL_TASKS_POLL_INTERVAL_SECONDS),
             "ui_preferences": ui_preferences_payload(prefs),
             "schedule_window": {"start": window.start_str, "end": window.end_str},
         },

@@ -8,6 +8,7 @@ The unique ``(user, type)`` constraint on ``Template`` is enforced at the
 DB layer; both POST and PUT wrap saves in ``transaction.atomic()`` and
 catch ``IntegrityError`` to surface a structured 409 instead of a 500.
 """
+
 import datetime
 import json
 import logging
@@ -18,8 +19,8 @@ from django.db import IntegrityError, transaction
 from django.db.models import Max
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
+from schedules.categories import ordered_categories, sink_category
 from schedules.http import (
-    VALID_CATEGORIES,
     is_plain_int,
     parse_swap_body,
     parse_time_or_error,
@@ -54,6 +55,7 @@ MAX_RULES_PER_USER = 100
 MIN_PRIORITY = -1_000_000
 MAX_PRIORITY = 1_000_000
 
+
 def _err(field: str, message: str, status: int = 400) -> JsonResponse:
     return JsonResponse({"errors": {field: message}}, status=status)
 
@@ -77,7 +79,7 @@ def _rule_to_dict(r: Rule) -> dict:
 
 
 def validate_template_blocks(
-    blocks, window: ScheduleWindow = DEFAULT_WINDOW
+    blocks, window: ScheduleWindow = DEFAULT_WINDOW, categories=None
 ) -> list[str]:
     """Validate the ``blocks`` JSON array on a Template.
 
@@ -108,8 +110,10 @@ def validate_template_blocks(
             errors.append(f"block[{i}]: title is required")
         elif len(title) > 255:
             errors.append(f"block[{i}]: title too long")
-        category = entry.get("category", "other")
-        if category not in VALID_CATEGORIES:
+        category = entry.get("category", sink_category(categories).slug if categories else "other")
+        if not isinstance(category, str) or (
+            categories is not None and category not in {row.slug for row in categories}
+        ):
             errors.append(f"block[{i}]: invalid category {category!r}")
         start_str = entry.get("start_time")
         end_str = entry.get("end_time")
@@ -127,9 +131,7 @@ def validate_template_blocks(
         if not (window.day_start <= start <= window.day_end) or not (
             window.day_start <= end <= window.day_end
         ):
-            errors.append(
-                f"block[{i}]: times must fall within {window.start_str}-{window.end_str}"
-            )
+            errors.append(f"block[{i}]: times must fall within {window.start_str}-{window.end_str}")
         if start >= end:
             errors.append(f"block[{i}]: start_time must be before end_time")
             continue
@@ -148,7 +150,9 @@ def validate_template_blocks(
     return errors
 
 
-def _parse_template_payload(data, window: ScheduleWindow) -> tuple[dict, JsonResponse | None]:
+def _parse_template_payload(
+    data, window: ScheduleWindow, categories=None
+) -> tuple[dict, JsonResponse | None]:
     """Validate the create/update body. Returns ``(cleaned, None)`` on
     success, or ``({}, JsonResponse)`` with a 400 on failure."""
     if not isinstance(data, dict):
@@ -158,25 +162,24 @@ def _parse_template_payload(data, window: ScheduleWindow) -> tuple[dict, JsonRes
     if not isinstance(name, str) or not name.strip():
         return {}, _err("name", "Name is required.")
     if len(name) > MAX_TEMPLATE_NAME_LEN:
-        return {}, _err(
-            "name", f"Name too long (max {MAX_TEMPLATE_NAME_LEN} characters)."
-        )
+        return {}, _err("name", f"Name too long (max {MAX_TEMPLATE_NAME_LEN} characters).")
 
     type_ = data.get("type")
     if type_ not in {Template.Type.WEEKDAY, Template.Type.WEEKEND}:
         return {}, _err("type", "Type must be 'weekday' or 'weekend'.")
 
     blocks = data.get("blocks", [])
-    block_errors = validate_template_blocks(blocks, window)
+    block_errors = validate_template_blocks(blocks, window, categories)
     if block_errors:
-        return {}, JsonResponse(
-            {"errors": {"blocks": block_errors}}, status=400
-        )
+        return {}, JsonResponse({"errors": {"blocks": block_errors}}, status=400)
 
-    return (
-        {"name": name.strip(), "type": type_, "blocks": blocks},
-        None,
-    )
+    # Persist an explicit sink slug for old/manual payloads that omitted the
+    # field, so downstream draft generation never needs a legacy fallback.
+    normalized_blocks = [dict(block) for block in blocks]
+    fallback = sink_category(categories).slug if categories else "other"
+    for block in normalized_blocks:
+        block.setdefault("category", fallback)
+    return ({"name": name.strip(), "type": type_, "blocks": normalized_blocks}, None)
 
 
 def _parse_rule_create_payload(data) -> tuple[dict, JsonResponse | None]:
@@ -187,9 +190,7 @@ def _parse_rule_create_payload(data) -> tuple[dict, JsonResponse | None]:
     if not isinstance(text, str) or not text.strip():
         return {}, _err("text", "Rule text is required.")
     if len(text) > MAX_RULE_TEXT_LEN:
-        return {}, _err(
-            "text", f"Rule text too long (max {MAX_RULE_TEXT_LEN} characters)."
-        )
+        return {}, _err("text", f"Rule text too long (max {MAX_RULE_TEXT_LEN} characters).")
 
     cleaned: dict = {"text": text.strip()}
     if "is_active" in data:
@@ -219,9 +220,7 @@ def _parse_rule_patch_payload(data) -> tuple[dict, JsonResponse | None]:
         if not isinstance(text, str) or not text.strip():
             return {}, _err("text", "Rule text cannot be empty.")
         if len(text) > MAX_RULE_TEXT_LEN:
-            return {}, _err(
-                "text", f"Rule text too long (max {MAX_RULE_TEXT_LEN} characters)."
-            )
+            return {}, _err("text", f"Rule text too long (max {MAX_RULE_TEXT_LEN} characters).")
         cleaned["text"] = text.strip()
     if "is_active" in data:
         if not isinstance(data["is_active"], bool):
@@ -253,9 +252,7 @@ def _parse_rule_patch_payload(data) -> tuple[dict, JsonResponse | None]:
 def templates_collection(request):
     if request.method == "GET":
         items = Template.objects.filter(user=request.user).order_by("type")
-        return JsonResponse(
-            {"templates": [_template_to_dict(t) for t in items]}
-        )
+        return JsonResponse({"templates": [_template_to_dict(t) for t in items]})
 
     oversized = reject_oversized_body(request)
     if oversized is not None:
@@ -266,23 +263,24 @@ def templates_collection(request):
     except json.JSONDecodeError:
         return _err("body", "Invalid JSON.")
 
-    cleaned, err = _parse_template_payload(data, get_schedule_window(request.user))
+    categories = ordered_categories(request.user)
+    cleaned, err = _parse_template_payload(data, get_schedule_window(request.user), categories)
     if err is not None:
         return err
 
     try:
         with transaction.atomic():
+            # Validate again in the write transaction after a possible delete.
+            if validate_template_blocks(
+                cleaned["blocks"],
+                get_schedule_window(request.user),
+                ordered_categories(request.user),
+            ):
+                return _err("blocks", "Invalid category.")
             tpl = Template.objects.create(user=request.user, **cleaned)
     except IntegrityError:
         return JsonResponse(
-            {
-                "errors": {
-                    "type": (
-                        f"Template for this {cleaned['type']} slot already "
-                        f"exists."
-                    )
-                }
-            },
+            {"errors": {"type": (f"Template for this {cleaned['type']} slot already exists.")}},
             status=409,
         )
     return JsonResponse(_template_to_dict(tpl), status=201)
@@ -310,26 +308,26 @@ def template_detail(request, pk):
     except json.JSONDecodeError:
         return _err("body", "Invalid JSON.")
 
-    cleaned, err = _parse_template_payload(data, get_schedule_window(request.user))
+    categories = ordered_categories(request.user)
+    cleaned, err = _parse_template_payload(data, get_schedule_window(request.user), categories)
     if err is not None:
         return err
 
     try:
         with transaction.atomic():
+            if validate_template_blocks(
+                cleaned["blocks"],
+                get_schedule_window(request.user),
+                ordered_categories(request.user),
+            ):
+                return _err("blocks", "Invalid category.")
             tpl.name = cleaned["name"]
             tpl.type = cleaned["type"]
             tpl.blocks = cleaned["blocks"]
             tpl.save()
     except IntegrityError:
         return JsonResponse(
-            {
-                "errors": {
-                    "type": (
-                        f"Template for this {cleaned['type']} slot already "
-                        f"exists."
-                    )
-                }
-            },
+            {"errors": {"type": (f"Template for this {cleaned['type']} slot already exists.")}},
             status=409,
         )
     return JsonResponse(_template_to_dict(tpl))
@@ -347,9 +345,7 @@ def _compact_rule_priorities(user: User) -> None:
 
     Callers must hold the user's row lock for the enclosing transaction.
     """
-    rules = list(
-        Rule.objects.filter(user=user).order_by("-priority", "id")
-    )
+    rules = list(Rule.objects.filter(user=user).order_by("-priority", "id"))
     changed = []
     for priority, rule in zip(range(len(rules) - 1, -1, -1), rules):
         if rule.priority != priority:
@@ -393,9 +389,9 @@ def rules_collection(request):
             # so the immediately-following _compact_rule_priorities()
             # assigns it N-1 (top). Dropping it to 0 would tie the row and
             # let the `id` tiebreak sink it to the bottom before compaction.
-            max_priority = Rule.objects.filter(user=request.user).aggregate(
-                Max("priority")
-            )["priority__max"]
+            max_priority = Rule.objects.filter(user=request.user).aggregate(Max("priority"))[
+                "priority__max"
+            ]
             cleaned["priority"] = 0 if max_priority is None else max_priority + 1
         rule = Rule.objects.create(user=request.user, **cleaned)
         # Normalise all rules to 0..N-1 regardless of explicit vs. auto
@@ -492,9 +488,7 @@ def _prefs_to_dict(prefs: UserPreferences) -> dict:
     # must emit all UiPreferences fields.
     return {
         "theme": normalize_theme(prefs.theme),
-        "chat_suggestions": normalize_chat_suggestions(
-            prefs.chat_suggestions
-        ),
+        "chat_suggestions": normalize_chat_suggestions(prefs.chat_suggestions),
     }
 
 
@@ -514,9 +508,7 @@ def user_preferences(request):
     if oversized is not None:
         # ``reject_oversized_body`` returns a raw 413 JsonResponse; rebuild
         # it through the cache-header helper so the proxy invariant holds.
-        return _prefs_response(
-            {"errors": {"body": "Request body too large."}}, status=413
-        )
+        return _prefs_response({"errors": {"body": "Request body too large."}}, status=413)
 
     try:
         data = json.loads(request.body)
@@ -540,20 +532,14 @@ def user_preferences(request):
         # an unhandled 500 with no Cache-Control header. Pre-check the
         # type to keep the failure path inside `_prefs_response`.
         if not isinstance(theme, str) or theme not in _VALID_THEMES:
-            return _prefs_response(
-                {"errors": {"theme": "Invalid theme."}}, status=400
-            )
+            return _prefs_response({"errors": {"theme": "Invalid theme."}}, status=400)
         cleaned["theme"] = theme
 
     if "chat_suggestions" in data:
         suggestions = data["chat_suggestions"]
         if not isinstance(suggestions, list):
             return _prefs_response(
-                {
-                    "errors": {
-                        "chat_suggestions": "Must be a JSON array."
-                    }
-                },
+                {"errors": {"chat_suggestions": "Must be a JSON array."}},
                 status=400,
             )
         if len(suggestions) > MAX_CHAT_SUGGESTIONS:
@@ -561,8 +547,7 @@ def user_preferences(request):
                 {
                     "errors": {
                         "chat_suggestions": (
-                            f"Cannot contain more than "
-                            f"{MAX_CHAT_SUGGESTIONS} suggestions."
+                            f"Cannot contain more than {MAX_CHAT_SUGGESTIONS} suggestions."
                         )
                     }
                 },
@@ -573,25 +558,13 @@ def user_preferences(request):
         for suggestion in suggestions:
             if not isinstance(suggestion, str):
                 return _prefs_response(
-                    {
-                        "errors": {
-                            "chat_suggestions": (
-                                "Every suggestion must be a string."
-                            )
-                        }
-                    },
+                    {"errors": {"chat_suggestions": ("Every suggestion must be a string.")}},
                     status=400,
                 )
             trimmed = suggestion.strip()
             if not trimmed:
                 return _prefs_response(
-                    {
-                        "errors": {
-                            "chat_suggestions": (
-                                "Suggestions cannot be empty."
-                            )
-                        }
-                    },
+                    {"errors": {"chat_suggestions": ("Suggestions cannot be empty.")}},
                     status=400,
                 )
             if len(trimmed) > MAX_CHAT_SUGGESTION_LENGTH:
@@ -610,9 +583,7 @@ def user_preferences(request):
         cleaned["chat_suggestions"] = normalized_suggestions
 
     if not cleaned:
-        return _prefs_response(
-            {"errors": {"body": "No editable fields supplied."}}, status=400
-        )
+        return _prefs_response({"errors": {"body": "No editable fields supplied."}}, status=400)
 
     # Always write recognized fields (no "skip if unchanged" optimization)
     # so that a corrupted ``theme`` row is healed on the next PATCH —

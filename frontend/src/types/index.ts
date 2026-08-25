@@ -3,7 +3,7 @@ export interface TimeBlock {
   title: string
   start_time: string // "HH:MM"
   end_time: string // "HH:MM"
-  category: "work" | "personal" | "health" | "other"
+  category: string
   is_completed: boolean
   sort_order: number
 }
@@ -37,7 +37,7 @@ export interface TemplateBlock {
   title: string
   start_time: string // "HH:MM"
   end_time: string // "HH:MM"
-  category: "work" | "personal" | "health" | "other"
+  category: string
 }
 
 export interface Template {
@@ -64,13 +64,24 @@ export interface TravelRule {
   calendar_name: string
   travel_there_minutes: number
   travel_back_minutes: number
-  category: "" | "work" | "personal" | "health" | "other"
+  category: string
   order: number
 }
 
 // Keyed off the existing TimeBlock category union so adding/renaming a
 // category surfaces a compile error wherever this type is consumed.
-export type CategoryMinutes = Record<TimeBlock["category"], number>
+export type CategoryMinutes = Record<string, number>
+
+export type CategoryColorId = "blue" | "violet" | "emerald" | "gray" | "amber" | "rose" | "cyan" | "indigo"
+export interface UserCategory {
+  id: number
+  slug: string
+  label: string
+  color_id: CategoryColorId
+  sort_order: number
+  is_sink: boolean
+  is_new_block_default: boolean
+}
 
 // Discriminator for the sound-notification feature (issue #56): which
 // boundary of a block was crossed. Shared by the fired-Set key and the

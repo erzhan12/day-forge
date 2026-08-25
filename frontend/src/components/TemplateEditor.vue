@@ -4,12 +4,14 @@
 // for templates). Sort order in the rendered list is by start_time
 // ascending; the array is sorted client-side before saving.
 import { computed, ref, watch } from "vue"
-import type { Template, TemplateBlock } from "../types"
+import type { Template, TemplateBlock, UserCategory } from "../types"
 import { useTemplates } from "../composables/useTemplates"
+import { defaultCategory, orderedCategories } from "../utils/categories"
 
 const props = defineProps<{
   template: Template | null
   slotType: "weekday" | "weekend"
+  categories?: UserCategory[]
 }>()
 const emit = defineEmits<{
   (e: "saved"): void
@@ -63,7 +65,7 @@ function addBlock() {
     title: "",
     start_time: "09:00",
     end_time: "10:00",
-    category: "work",
+    category: defaultCategory(props.categories ?? [])?.slug ?? "work",
   })
 }
 
@@ -216,10 +218,7 @@ async function confirmDelete() {
               </td>
               <td>
                 <select v-model="b.category" class="input">
-                  <option value="work">Work</option>
-                  <option value="personal">Personal</option>
-                  <option value="health">Health</option>
-                  <option value="other">Other</option>
+                  <option v-for="item in orderedCategories(props.categories ?? [])" :key="item.id" :value="item.slug">{{ item.label }}</option>
                 </select>
               </td>
               <td>

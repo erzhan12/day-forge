@@ -8,6 +8,7 @@ held to a strict schema at the network layer, every response is
 revalidated here before it can touch the DB. These validators are the
 primary enforcement, not a belt-and-suspenders check.
 """
+
 import datetime
 import re
 
@@ -52,9 +53,7 @@ def validate_action_shape(action, allowed_categories) -> list[str]:
 
     action_type = action.get("type")
     if action_type not in ALLOWED_ACTION_TYPES:
-        return [
-            f"type must be one of {sorted(ALLOWED_ACTION_TYPES)}, got {action_type!r}"
-        ]
+        return [f"type must be one of {sorted(ALLOWED_ACTION_TYPES)}, got {action_type!r}"]
 
     for field in _REQUIRED_FIELDS[action_type]:
         if field not in action:
@@ -67,8 +66,7 @@ def validate_action_shape(action, allowed_categories) -> list[str]:
     if action_type in {"move", "resize"}:
         if "start_time" not in action and "end_time" not in action:
             errors.append(
-                f"{action_type} action requires at least one of "
-                "'start_time' or 'end_time'"
+                f"{action_type} action requires at least one of 'start_time' or 'end_time'"
             )
 
     if action_type == "update":
@@ -79,19 +77,18 @@ def validate_action_shape(action, allowed_categories) -> list[str]:
                 "'start_time' or 'end_time'"
             )
         if "direction" in action:
-            if (
-                not isinstance(action["direction"], str)
-                or action["direction"] not in {"later", "earlier", "exact"}
-            ):
+            if not isinstance(action["direction"], str) or action["direction"] not in {
+                "later",
+                "earlier",
+                "exact",
+            }:
                 errors.append("direction must be one of ['earlier', 'exact', 'later']")
             # ``direction`` is placement intent for a TIME change. A
             # metadata-only update carrying ``direction`` but no time field is
             # a meaningless patch — the planner only reads direction alongside
             # a supplied start/end. Reject it at the schema layer.
             elif "start_time" not in action and "end_time" not in action:
-                errors.append(
-                    "direction requires an accompanying 'start_time' or 'end_time'"
-                )
+                errors.append("direction requires an accompanying 'start_time' or 'end_time'")
 
     # ``direction`` is only meaningful on an ``update`` (the planner reads
     # ``action.get('direction')`` on updates only). Reject it on any other
@@ -122,14 +119,16 @@ def validate_action_shape(action, allowed_categories) -> list[str]:
         if time_field in action and not _is_hhmm(action[time_field]):
             errors.append(f"{time_field} must be HH:MM")
 
-    if "category" in action and action["category"] not in allowed_categories:
-        errors.append(
-            f"category must be one of {sorted(allowed_categories)}"
-        )
+    if "category" in action and (
+        not isinstance(action["category"], str) or action["category"] not in allowed_categories
+    ):
+        errors.append(f"category must be one of {sorted(allowed_categories)}")
 
     # For add, both times are required and must form a valid window.
-    if action_type == "add" and _is_hhmm(action.get("start_time", "")) and _is_hhmm(
-        action.get("end_time", "")
+    if (
+        action_type == "add"
+        and _is_hhmm(action.get("start_time", ""))
+        and _is_hhmm(action.get("end_time", ""))
     ):
         start = datetime.datetime.strptime(action["start_time"], "%H:%M").time()
         end = datetime.datetime.strptime(action["end_time"], "%H:%M").time()
@@ -157,17 +156,13 @@ def validate_response_envelope(parsed) -> list[str]:
     if not isinstance(actions, list):
         errors.append("'actions' must be an array")
     elif len(actions) > MAX_ACTIONS_PER_COMMAND:
-        errors.append(
-            f"too many actions ({len(actions)} > {MAX_ACTIONS_PER_COMMAND})"
-        )
+        errors.append(f"too many actions ({len(actions)} > {MAX_ACTIONS_PER_COMMAND})")
 
     explanation = parsed.get("explanation", "")
     if not isinstance(explanation, str):
         errors.append("'explanation' must be a string")
     elif len(explanation) > settings.LLM_MAX_EXPLANATION_CHARS:
-        errors.append(
-            f"'explanation' must be <= {settings.LLM_MAX_EXPLANATION_CHARS} chars"
-        )
+        errors.append(f"'explanation' must be <= {settings.LLM_MAX_EXPLANATION_CHARS} chars")
 
     return errors
 
@@ -193,17 +188,13 @@ def validate_chat_response_envelope(parsed) -> list[str]:
     if not isinstance(actions, list):
         errors.append("'actions' must be an array")
     elif len(actions) > MAX_ACTIONS_PER_COMMAND:
-        errors.append(
-            f"too many actions ({len(actions)} > {MAX_ACTIONS_PER_COMMAND})"
-        )
+        errors.append(f"too many actions ({len(actions)} > {MAX_ACTIONS_PER_COMMAND})")
 
     explanation = parsed.get("explanation", "")
     if not isinstance(explanation, str):
         errors.append("'explanation' must be a string")
     elif len(explanation) > settings.LLM_MAX_EXPLANATION_CHARS:
-        errors.append(
-            f"'explanation' must be <= {settings.LLM_MAX_EXPLANATION_CHARS} chars"
-        )
+        errors.append(f"'explanation' must be <= {settings.LLM_MAX_EXPLANATION_CHARS} chars")
 
     if "ask" not in parsed:
         errors.append("'ask' is required (use null when not asking)")
@@ -216,9 +207,7 @@ def validate_chat_response_envelope(parsed) -> list[str]:
         elif ask == "":
             errors.append("'ask' must be null or a non-empty string")
         elif len(ask) > settings.LLM_CHAT_MAX_ASK_CHARS:
-            errors.append(
-                f"'ask' must be <= {settings.LLM_CHAT_MAX_ASK_CHARS} chars"
-            )
+            errors.append(f"'ask' must be <= {settings.LLM_CHAT_MAX_ASK_CHARS} chars")
 
     # Mutually exclusive: ask set ⇒ no actions; actions set ⇒ ask null.
     if isinstance(actions, list) and "ask" in parsed:
@@ -253,8 +242,7 @@ def validate_draft_response(parsed, allowed_categories) -> list[str]:
             continue
         if action.get("type") != "add":
             errors.append(
-                f"action[{idx}]: drafts only accept 'add' actions, "
-                f"got {action.get('type')!r}"
+                f"action[{idx}]: drafts only accept 'add' actions, got {action.get('type')!r}"
             )
             continue
         per_errs = validate_action_shape(action, allowed_categories)

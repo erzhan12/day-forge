@@ -48,9 +48,10 @@ def warn_ineffective_cache_with_calendar_sync(app_configs, **kwargs):
     # Defer the import until the check runs so the app registry is ready.
     try:
         from calendar_sync.models import CalDAVAccount
+
         if not CalDAVAccount.objects.exists():
             return warnings
-    except (OperationalError, ProgrammingError):
+    except OperationalError, ProgrammingError:
         # Pre-migrate state: the table doesn't exist yet. Stay silent so
         # ``manage.py migrate`` can run on a fresh database.
         return warnings
@@ -104,8 +105,8 @@ def error_caldav_encryption_key_missing_in_production(app_configs, **kwargs):
                 "ImproperlyConfigured at request time.",
                 hint=(
                     "Generate a key with "
-                    "`python -c \"from cryptography.fernet import Fernet; "
-                    "print(Fernet.generate_key().decode())\"` and set "
+                    '`python -c "from cryptography.fernet import Fernet; '
+                    'print(Fernet.generate_key().decode())"` and set '
                     "CALDAV_ENCRYPTION_KEY in your production environment."
                 ),
                 id="calendar_sync.E001",
@@ -116,6 +117,7 @@ def error_caldav_encryption_key_missing_in_production(app_configs, **kwargs):
     # Local import so the check module stays import-light when the key
     # is unset (most dev cases).
     from cryptography.fernet import Fernet
+
     try:
         Fernet(key.encode() if isinstance(key, str) else key)
     except (ValueError, TypeError) as e:
@@ -127,8 +129,8 @@ def error_caldav_encryption_key_missing_in_production(app_configs, **kwargs):
                 "with ImproperlyConfigured.",
                 hint=(
                     "Regenerate the key with "
-                    "`python -c \"from cryptography.fernet import Fernet; "
-                    "print(Fernet.generate_key().decode())\"` and replace "
+                    '`python -c "from cryptography.fernet import Fernet; '
+                    'print(Fernet.generate_key().decode())"` and replace '
                     "CALDAV_ENCRYPTION_KEY in your production environment."
                 ),
                 id="calendar_sync.E001",

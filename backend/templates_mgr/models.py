@@ -33,9 +33,7 @@ class UserPreferences(models.Model):
     )
     # max_length=32 leaves headroom for future theme ids without a schema
     # migration; the longest current value (light_premium) is 13 chars.
-    theme = models.CharField(
-        max_length=32, choices=Theme.choices, default=Theme.CLASSIC
-    )
+    theme = models.CharField(max_length=32, choices=Theme.choices, default=Theme.CLASSIC)
     # SYNC ALERT: defaults and limits for this field live in
     # `templates_mgr/preferences.py`; mirror them in the Phase 2 frontend
     # utility `frontend/src/utils/chatSuggestions.ts`.
@@ -69,9 +67,7 @@ class Template(models.Model):
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(
-                fields=["user", "type"], name="unique_user_template_type"
-            ),
+            models.UniqueConstraint(fields=["user", "type"], name="unique_user_template_type"),
         ]
 
     def __str__(self):

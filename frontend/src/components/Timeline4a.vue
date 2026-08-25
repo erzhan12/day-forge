@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue"
-import type { TimeBlock, ScheduleWindow } from "../types"
+import type { TimeBlock, ScheduleWindow, UserCategory } from "../types"
 import {
   buildBaseDisplayItems,
   computeRenderBounds,
@@ -26,6 +26,7 @@ const props = defineProps<{
   currentBlockId?: number | null
   currentBlockRemaining?: number | null
   disabled: boolean
+  categories: UserCategory[]
 }>()
 
 const windowBounds = computed((): ScheduleWindowBounds => ({
@@ -127,7 +128,7 @@ defineExpose({ timelineOriginMinutes: axisOriginMinutes, timelineEndMinutes: axi
       <span>{{ minutesToTime(tick) }}</span><i />
     </div>
     <div v-for="(item, index) in items" :key="`${item.type}:${item.start_time}:${index}`" class="timeline-item" :style="{ top: itemTop(item), height: itemHeight(item) }">
-      <TimeBlock4a v-if="item.type === 'block' && item.block" :block="item.block" :date="date" :is-current="item.block.id === currentBlockId" :remaining-minutes="item.block.id === currentBlockId ? currentBlockRemaining : null" />
+      <TimeBlock4a v-if="item.type === 'block' && item.block" :block="item.block" :date="date" :categories="categories" :is-current="item.block.id === currentBlockId" :remaining-minutes="item.block.id === currentBlockId ? currentBlockRemaining : null" />
       <GapSlot4a v-else-if="item.type === 'gap'" :start-time="item.start_time" :end-time="item.end_time" :duration-minutes="item.duration_minutes" :compact="item.compact" :window-start="scheduleWindow.start" :disabled="disabled" @add-here="emit('add-here', $event)" />
     </div>
     <NowLine4a v-if="nowVisible" class="timeline-now" :style="{ top: nowLineTop }" />

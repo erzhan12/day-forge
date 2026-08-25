@@ -1,4 +1,5 @@
 """JSON endpoint for the coupled per-user schedule window."""
+
 import json
 
 from django.contrib.auth.decorators import login_required
@@ -36,9 +37,7 @@ def schedule_settings(request):
             {"errors": {"body": "Request body must be a JSON object."}}, status=400
         )
     missing = {
-        field: f"{field} is required."
-        for field in ("day_start", "day_end")
-        if field not in data
+        field: f"{field} is required." for field in ("day_start", "day_end") if field not in data
     }
     if missing:
         return _settings_response({"errors": missing}, status=400)
@@ -48,9 +47,7 @@ def schedule_settings(request):
     if window is None:
         # Unreachable today (validate_window returns either an error dict or a
         # window), but an assert would be stripped under `python -O`.
-        return _settings_response(
-            {"errors": {"detail": "Internal validation error."}}, status=500
-        )
+        return _settings_response({"errors": {"detail": "Internal validation error."}}, status=500)
     # Create straight into the target window via ``defaults`` so a first-time
     # PATCH never persists the 06:00/23:00 model defaults in a separate write
     # that a concurrent reader could observe between the two saves.

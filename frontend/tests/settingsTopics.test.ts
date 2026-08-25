@@ -7,9 +7,10 @@ import {
 } from "../src/utils/settingsTopics"
 
 describe("settingsTopics", () => {
-  it("defines the six ordered settings topics", () => {
+  it("defines the seven ordered settings topics", () => {
     expect(SETTINGS_TOPICS).toEqual([
       { id: "appearance", label: "Appearance", hash: "appearance" },
+      { id: "categories", label: "Categories", hash: "categories" },
       { id: "schedule", label: "Schedule", hash: "schedule" },
       { id: "ai-assistant", label: "AI Assistant", hash: "ai-assistant" },
       { id: "notifications", label: "Notifications", hash: "notifications" },

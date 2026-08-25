@@ -1,7 +1,6 @@
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
-from schedules.models import TimeBlock
 
 from calendar_sync import crypto
 
@@ -69,9 +68,7 @@ class TravelRule(models.Model):
     travel_back_minutes = models.PositiveIntegerField(default=0)
     # Empty string means "no override" — the created block falls back to
     # the ``other`` category.
-    category = models.CharField(
-        max_length=10, choices=TimeBlock.Category.choices, blank=True, default=""
-    )
+    category = models.CharField(max_length=32, blank=True, default="")
     order = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -81,12 +78,8 @@ class TravelRule(models.Model):
 
     def clean(self) -> None:
         super().clean()
-        if not (self.keyword or "").strip() and not (
-            self.calendar_name or ""
-        ).strip():
-            raise ValidationError(
-                "At least one of keyword or calendar name is required."
-            )
+        if not (self.keyword or "").strip() and not (self.calendar_name or "").strip():
+            raise ValidationError("At least one of keyword or calendar name is required.")
 
     def __str__(self) -> str:
         return (

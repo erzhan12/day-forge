@@ -10,6 +10,7 @@ Keep this module import-light: only ``schedules.models`` and
 ``schedules.validators``. Anything from ``schedules.api`` would introduce
 a circular import.
 """
+
 import datetime
 import json
 
@@ -19,10 +20,11 @@ from django.db import transaction
 from django.db.models import Model
 from django.http import JsonResponse
 
-from schedules.models import TimeBlock
 from schedules.validators import validate_five_minute_granularity
 
-VALID_CATEGORIES = {c.value for c in TimeBlock.Category}
+# Deprecated compatibility export for older third-party imports. New request
+# paths must load a user's catalog through ``schedules.categories``.
+VALID_CATEGORIES = {"work", "personal", "health", "other"}
 MAX_SORT_ORDER = 10_000
 # Tight body-size cap for batch endpoints. Django already enforces
 # ``DATA_UPLOAD_MAX_MEMORY_SIZE`` (2.5 MB default) in middleware, but a
@@ -216,10 +218,7 @@ def validate_sort_order(value, block_id=None):
         return JsonResponse(
             {
                 "errors": {
-                    "sort_order": (
-                        f"sort_order must be between 0 and {MAX_SORT_ORDER}"
-                        f"{suffix}."
-                    )
+                    "sort_order": (f"sort_order must be between 0 and {MAX_SORT_ORDER}{suffix}.")
                 }
             },
             status=400,

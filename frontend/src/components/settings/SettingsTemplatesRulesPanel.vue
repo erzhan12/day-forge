@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Rule, Template, TravelRule } from "../../types"
+import type { Rule, Template, TravelRule, UserCategory } from "../../types"
 import RulesList from "../RulesList.vue"
 import TemplateEditor from "../TemplateEditor.vue"
 import TravelRulesList from "../TravelRulesList.vue"
@@ -9,6 +9,7 @@ defineProps<{
   weekendTemplate: Template | null
   rules: Rule[]
   travelRules: TravelRule[]
+  categories?: UserCategory[]
 }>()
 
 const emit = defineEmits<{
@@ -35,12 +36,14 @@ const emit = defineEmits<{
         <TemplateEditor
           :template="weekdayTemplate"
           slot-type="weekday"
+          :categories="categories"
           @saved="emit('saved')"
           @deleted="emit('deleted')"
         />
         <TemplateEditor
           :template="weekendTemplate"
           slot-type="weekend"
+          :categories="categories"
           @saved="emit('saved')"
           @deleted="emit('deleted')"
         />
@@ -63,7 +66,7 @@ const emit = defineEmits<{
         your schedule, matched by title keyword or source calendar name.
         Keyword rules always take precedence over calendar-only rules.
       </p>
-      <TravelRulesList :rules="travelRules" @changed="emit('travel-changed')" />
+      <TravelRulesList :rules="travelRules" :categories="categories" @changed="emit('travel-changed')" />
     </div>
   </section>
 </template>

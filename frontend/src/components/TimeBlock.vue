@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, inject, watch } from "vue"
 import type { Ref } from "vue"
-import type { TimeBlock, UndoAction } from "../types"
+import type { TimeBlock, UndoAction, UserCategory } from "../types"
 import { useSchedule } from "../composables/useSchedule"
 import { useBlockCompletion } from "../composables/useBlockCompletion"
 import { getCategoryColor } from "../utils/categoryColors"
@@ -18,6 +18,7 @@ const props = withDefaults(
     date: string
     isCurrent?: boolean
     remainingMinutes?: number | null
+    categories?: UserCategory[]
   }>(),
   {
     isCurrent: false,
@@ -223,7 +224,7 @@ async function handleDelete() {
       dragging: drag?.isDragging.value && drag?.dragBlockId.value === block.id,
       shifting: drag?.shiftedBlockIds.value.has(block.id),
     }"
-    :style="{ borderLeftColor: getCategoryColor(block.category, activeTheme) }"
+    :style="{ borderLeftColor: getCategoryColor(block.category, activeTheme, props.categories) }"
   >
     <div
       class="drag-handle"

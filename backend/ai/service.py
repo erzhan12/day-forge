@@ -36,6 +36,7 @@ The views in ``backend/ai/views.py`` map the exception taxonomy below to
 HTTP status codes; tests monkeypatch ``_get_client()`` so they never hit
 the network.
 """
+
 import asyncio
 import json
 import logging
@@ -143,9 +144,9 @@ class AIDraftResult:
 # Under ASGI (Phase 7) the process has one event loop for its lifetime
 # and this cache will hold exactly one entry — full httpx connection
 # pooling, same as the original singleton intent.
-_clients_by_loop: weakref.WeakKeyDictionary[
-    asyncio.AbstractEventLoop, AsyncOpenAI
-] = weakref.WeakKeyDictionary()
+_clients_by_loop: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, AsyncOpenAI] = (
+    weakref.WeakKeyDictionary()
+)
 
 
 def _get_client() -> AsyncOpenAI:
@@ -185,7 +186,7 @@ def _get_client() -> AsyncOpenAI:
 
 
 async def run_draft(
-    schedule, template, history_schedules, rules, now
+    schedule, template, history_schedules, rules, now, categories=None
 ) -> AIDraftResult:
     """Call the LLM to generate a draft schedule.
 
@@ -195,12 +196,11 @@ async def run_draft(
     shape a whole day from history), and ``validate_draft_response`` which
     additionally rejects any non-``add`` action.
     """
+    categories = categories if categories is not None else getattr(schedule, "_categories", None)
     if not settings.LLM_API_KEY or not settings.LLM_API_KEY.strip():
         raise AIUnavailableError("LLM_API_KEY is not configured")
 
-    user_message = build_draft_user_message(
-        schedule, template, history_schedules, rules, now
-    )
+    user_message = build_draft_user_message(schedule, template, history_schedules, rules, now)
     # Optional capture for the Phase 6 Test 7 e2e script. Overwrites the
     # target file on EVERY draft call when LLM_DRAFT_CAPTURE_PROMPT_PATH
     # is non-empty — purely test infrastructure, see
@@ -220,9 +220,7 @@ async def run_draft(
     if settings.LLM_DRAFT_CAPTURE_PROMPT_PATH:
         try:
             flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW
-            fd = os.open(
-                settings.LLM_DRAFT_CAPTURE_PROMPT_PATH, flags, 0o600
-            )
+            fd = os.open(settings.LLM_DRAFT_CAPTURE_PROMPT_PATH, flags, 0o600)
             with os.fdopen(fd, "w") as _f:
                 _f.write(user_message)
         except OSError as e:
@@ -245,7 +243,9 @@ async def run_draft(
                 {
                     "role": "system",
                     "content": build_system_prompt_draft(
-                        getattr(schedule, "_schedule_window", DEFAULT_WINDOW)
+                        getattr(schedule, "_schedule_window", DEFAULT_WINDOW),
+                        [(c.slug, c.label) for c in (categories or [])] or None,
+                        next((c.slug for c in (categories or []) if c.is_sink), "other"),
                     ),
                 },
                 {"role": "user", "content": user_message},
@@ -269,13 +269,13 @@ async def run_draft(
     try:
         parsed = json.loads(raw)
     except json.JSONDecodeError as e:
-        raise AIParseError(
-            f"AI returned invalid JSON: {e}", raw_response_text=raw
-        ) from e
+        raise AIParseError(f"AI returned invalid JSON: {e}", raw_response_text=raw) from e
 
-    from schedules.models import TimeBlock  # local import: avoid app-load cycles
-
-    allowed_categories = {c.value for c in TimeBlock.Category}
+    allowed_categories = (
+        {c.slug for c in categories}
+        if categories is not None
+        else {"work", "personal", "health", "other"}
+    )
     errors = validate_draft_response(parsed, allowed_categories)
     if errors:
         raise AIParseError(
@@ -290,7 +290,7 @@ async def run_draft(
     )
 
 
-async def run_chat(messages, schedule, blocks, rules, now) -> AIChatResult:
+async def run_chat(messages, schedule, blocks, rules, now, categories=None) -> AIChatResult:
     """Multi-turn chat (feature 0007).
 
     ``messages`` is the FULL client-supplied transcript ordered
@@ -311,6 +311,7 @@ async def run_chat(messages, schedule, blocks, rules, now) -> AIChatResult:
     escalation surface where a tampered client could inject a fake
     ``assistant`` turn that biases the model into destructive actions.
     """
+    categories = categories if categories is not None else getattr(schedule, "_categories", None)
     if not settings.LLM_API_KEY or not settings.LLM_API_KEY.strip():
         raise AIUnavailableError("LLM_API_KEY is not configured")
 
@@ -318,9 +319,7 @@ async def run_chat(messages, schedule, blocks, rules, now) -> AIChatResult:
     # malformed reaching this far as an internal contract violation rather
     # than a user-visible 400.
     if not messages or messages[-1].get("role") != "user":
-        raise AIInvalidInputError(
-            "messages must end with a user turn (view should enforce)"
-        )
+        raise AIInvalidInputError("messages must end with a user turn (view should enforce)")
 
     schedule_context = build_chat_user_message(schedule, blocks, now, rules)
     prior_transcript = serialise_prior_turns(messages[:-1])
@@ -330,7 +329,9 @@ async def run_chat(messages, schedule, blocks, rules, now) -> AIChatResult:
         {
             "role": "system",
             "content": build_system_prompt_chat(
-                getattr(schedule, "_schedule_window", DEFAULT_WINDOW)
+                getattr(schedule, "_schedule_window", DEFAULT_WINDOW),
+                [(c.slug, c.label) for c in (categories or [])] or None,
+                next((c.slug for c in (categories or []) if c.is_sink), "other"),
             ),
         },
         # Schedule context + the flattened prior transcript live in a
@@ -368,21 +369,20 @@ async def run_chat(messages, schedule, blocks, rules, now) -> AIChatResult:
     try:
         parsed = json.loads(raw)
     except json.JSONDecodeError as e:
-        raise AIParseError(
-            f"AI returned invalid JSON: {e}", raw_response_text=raw
-        ) from e
+        raise AIParseError(f"AI returned invalid JSON: {e}", raw_response_text=raw) from e
 
     envelope_errors = validate_chat_response_envelope(parsed)
     if envelope_errors:
         raise AIParseError(
-            "AI chat response failed envelope validation: "
-            + "; ".join(envelope_errors),
+            "AI chat response failed envelope validation: " + "; ".join(envelope_errors),
             raw_response_text=raw,
         )
 
-    from schedules.models import TimeBlock  # local import: avoid app-load cycles
-
-    allowed_categories = {c.value for c in TimeBlock.Category}
+    allowed_categories = (
+        {c.slug for c in categories}
+        if categories is not None
+        else {"work", "personal", "health", "other"}
+    )
     per_action_errors = []
     for idx, action in enumerate(parsed["actions"]):
         errs = validate_action_shape(action, allowed_categories)
@@ -390,8 +390,7 @@ async def run_chat(messages, schedule, blocks, rules, now) -> AIChatResult:
             per_action_errors.append(f"action[{idx}]: {', '.join(errs)}")
     if per_action_errors:
         raise AIParseError(
-            "AI chat response failed action validation: "
-            + "; ".join(per_action_errors),
+            "AI chat response failed action validation: " + "; ".join(per_action_errors),
             raw_response_text=raw,
         )
 

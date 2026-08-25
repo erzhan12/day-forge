@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed } from "vue"
-import type { CategoryMinutes, TimeBlock } from "../types"
+import type { CategoryMinutes, UserCategory } from "../types"
 import { getCategoryColor } from "../utils/categoryColors"
 import { useActiveTheme } from "../composables/useActiveTheme"
 import { timeToMinutes } from "../utils/scheduleTime"
+import { orderedCategories } from "../utils/categories"
 
 // Reactive dep so the rows computed re-runs when the user switches
 // themes (shared with TimeBlock / SkippedTasks; see composable).
@@ -14,13 +15,14 @@ const props = defineProps<{
   completed: CategoryMinutes
   windowStart?: string
   windowEnd?: string
+  categories?: UserCategory[]
 }>()
 
 // Render in a stable order so the layout doesn't reshuffle as values
 // change. The keys come from the existing TimeBlock category union; if
 // a category is added, this list (and the type) need to be updated
 // together.
-const categoryOrder: TimeBlock["category"][] = ["work", "personal", "health", "other"]
+const categoryOrder = computed(() => orderedCategories(props.categories ?? []))
 
 // Day-window minutes (06:00–23:00 = 1020 by default) — the reference
 // the planned bars are normalised against. Phase 6 plan: planned width
@@ -29,11 +31,11 @@ const categoryOrder: TimeBlock["category"][] = ["work", "personal", "health", "o
 const dayWindowMinutes = computed(() => timeToMinutes(props.windowEnd ?? "23:00") - timeToMinutes(props.windowStart ?? "06:00"))
 
 const totalPlanned = computed(() =>
-  categoryOrder.reduce((sum, key) => sum + (props.planned[key] || 0), 0),
+  categoryOrder.value.reduce((sum, key) => sum + (props.planned[key.slug] || 0), 0),
 )
 
 interface Row {
-  key: TimeBlock["category"]
+  key: string
   label: string
   planned: number
   completed: number
@@ -52,18 +54,18 @@ const rows = computed<Row[]>(() => {
   // the same resolved color and a future theme change re-derives them
   // together.
   const theme = activeTheme.value
-  return categoryOrder.map((key) => {
-    const planned = props.planned[key] || 0
-    const completed = props.completed[key] || 0
+  return categoryOrder.value.map((key) => {
+    const planned = props.planned[key.slug] || 0
+    const completed = props.completed[key.slug] || 0
     return {
-      key,
-      label: key.charAt(0).toUpperCase() + key.slice(1),
+      key: key.slug,
+      label: key.label,
       planned,
       completed,
       plannedPct: Math.min(100, (planned / dayWindowMinutes.value) * 100),
       completedPctOfPlanned:
         planned > 0 ? Math.min(100, (completed / planned) * 100) : 0,
-      color: getCategoryColor(key, theme),
+      color: getCategoryColor(key.slug, theme, props.categories),
     }
   })
 })

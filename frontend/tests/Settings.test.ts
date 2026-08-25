@@ -138,7 +138,7 @@ describe("Settings topic shell", () => {
     wrapper = mountSettings()
 
     const nav = wrapper.get('nav[aria-label="Settings topics"]')
-    expect(nav.findAll('a[href^="#"]')).toHaveLength(6)
+    expect(nav.findAll('a[href^="#"]')).toHaveLength(7)
     expect(nav.get('a[href="#appearance"]').attributes("aria-current")).toBe(
       "page",
     )
@@ -153,6 +153,7 @@ describe("Settings topic shell", () => {
     wrapper = mountSettings()
     const ids = [
       "appearance",
+      "categories",
       "schedule",
       "ai-assistant",
       "notifications",
@@ -196,7 +197,7 @@ describe("Settings topic shell", () => {
     expect(wrapper.find('nav[aria-label="Settings topics"]').exists()).toBe(false)
     const select = wrapper.get("#settings-topic-select")
     expect(wrapper.get('label[for="settings-topic-select"]').text()).toBe("Topic")
-    expect(select.findAll("option")).toHaveLength(6)
+    expect(select.findAll("option")).toHaveLength(7)
     await select.setValue("templates-rules")
     await nextTick()
 

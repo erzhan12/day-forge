@@ -4,6 +4,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import F, Q
+from django.db.models.functions import Lower, Trim
 
 from schedules.validators import validate_five_minute_granularity
 
@@ -60,10 +61,14 @@ class Schedule(models.Model):
         the current DB state at lock-acquisition time, so it correctly
         re-flips the row regardless of what the Python instance thinks.
         """
-        updated = type(self).objects.filter(
-            pk=self.pk,
-            status__in=[self.Status.DRAFT, self.Status.REVIEWED],
-        ).update(status=self.Status.ACTIVE)
+        updated = (
+            type(self)
+            .objects.filter(
+                pk=self.pk,
+                status__in=[self.Status.DRAFT, self.Status.REVIEWED],
+            )
+            .update(status=self.Status.ACTIVE)
+        )
         if updated:
             # Sync in-memory copy so any caller that re-reads ``self.status``
             # without a refetch sees the new value.
@@ -85,10 +90,14 @@ class Schedule(models.Model):
         cognitive load and prevents future call sites from accidentally
         bypassing the lock.
         """
-        updated = type(self).objects.filter(
-            pk=self.pk,
-            status=self.Status.ACTIVE,
-        ).update(status=self.Status.REVIEWED)
+        updated = (
+            type(self)
+            .objects.filter(
+                pk=self.pk,
+                status=self.Status.ACTIVE,
+            )
+            .update(status=self.Status.REVIEWED)
+        )
         if updated:
             self.status = self.Status.REVIEWED
             return True
@@ -154,18 +163,46 @@ class UserScheduleSettings(models.Model):
         return f"{self.user} schedule window ({self.day_start}-{self.day_end})"
 
 
-class TimeBlock(models.Model):
-    class Category(models.TextChoices):
-        WORK = "work", "Work"
-        PERSONAL = "personal", "Personal"
-        HEALTH = "health", "Health"
-        OTHER = "other", "Other"
+class Category(models.Model):
+    """A user's immutable category slug and editable display metadata."""
 
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="categories"
+    )
+    slug = models.CharField(max_length=32)
+    label = models.CharField(max_length=64)
+    color_id = models.CharField(max_length=16)
+    sort_order = models.IntegerField(default=0)
+    is_sink = models.BooleanField(default=False)
+    is_new_block_default = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["sort_order", "id"]
+        constraints = [
+            models.UniqueConstraint(fields=["user", "slug"], name="unique_user_category_slug"),
+            models.UniqueConstraint(
+                Lower(Trim("label")), "user", name="unique_user_category_label_ci"
+            ),
+            models.UniqueConstraint(
+                fields=["user"], condition=Q(is_sink=True), name="one_sink_category_per_user"
+            ),
+            models.UniqueConstraint(
+                fields=["user"],
+                condition=Q(is_new_block_default=True),
+                name="one_default_category_per_user",
+            ),
+            models.CheckConstraint(
+                condition=Q(is_sink=False) | Q(slug="other"), name="sink_category_uses_other_slug"
+            ),
+        ]
+
+
+class TimeBlock(models.Model):
     schedule = models.ForeignKey(Schedule, related_name="time_blocks", on_delete=models.CASCADE)
     title = models.CharField(max_length=255)
     start_time = models.TimeField(validators=[validate_five_minute_granularity])
     end_time = models.TimeField(validators=[validate_five_minute_granularity])
-    category = models.CharField(max_length=10, choices=Category.choices, default=Category.OTHER)
+    category = models.CharField(max_length=32, default="other")
     is_completed = models.BooleanField(default=False)
     sort_order = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)

@@ -66,9 +66,7 @@ def _account_status_payload(account: CalDAVAccount | None) -> dict:
         "apple_id": account.apple_id,
         "base_url": account.base_url,
         "last_verified_at": (
-            account.last_verified_at.isoformat()
-            if account.last_verified_at
-            else None
+            account.last_verified_at.isoformat() if account.last_verified_at else None
         ),
         "default_base_url": settings.CALDAV_DEFAULT_BASE_URL,
     }
@@ -128,9 +126,7 @@ def account(request: HttpRequest) -> JsonResponse:
         return rate_limited_response()
 
     try:
-        service.verify_credentials(
-            cleaned["apple_id"], cleaned["password"], base_url
-        )
+        service.verify_credentials(cleaned["apple_id"], cleaned["password"], base_url)
     except service.CalDAVError as e:
         return _service_error_response(e)
 

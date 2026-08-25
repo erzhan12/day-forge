@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from "vue"
 import { Link, router } from "@inertiajs/vue3"
-import type { Rule, ScheduleWindow, Template, TravelRule } from "../types"
+import type { Rule, ScheduleWindow, Template, TravelRule, UserCategory } from "../types"
+import SettingsCategoriesPanel from "../components/settings/SettingsCategoriesPanel.vue"
 import SettingsAiAssistantPanel from "../components/settings/SettingsAiAssistantPanel.vue"
 import SettingsAppearancePanel from "../components/settings/SettingsAppearancePanel.vue"
 import SettingsIntegrationsPanel from "../components/settings/SettingsIntegrationsPanel.vue"
@@ -27,6 +28,7 @@ const props = defineProps<{
   templates: Template[]
   rules: Rule[]
   travel_rules: TravelRule[]
+  categories?: UserCategory[]
   schedule_window: ScheduleWindow
 }>()
 
@@ -321,6 +323,12 @@ async function handleHabiticaDisconnect(): Promise<void> {
             />
           </div>
           <div
+            v-show="activeTopic === 'categories'"
+            data-settings-topic="categories"
+            :hidden="activeTopic !== 'categories'"
+            :inert="activeTopic === 'categories' ? undefined : true"
+          ><SettingsCategoriesPanel :categories="categories ?? []" /></div>
+          <div
             v-show="activeTopic === 'templates-rules'"
             data-settings-topic="templates-rules"
             :hidden="activeTopic !== 'templates-rules'"
@@ -331,6 +339,7 @@ async function handleHabiticaDisconnect(): Promise<void> {
               :weekend-template="weekendTemplate"
               :rules="localRules"
               :travel-rules="localTravelRules"
+              :categories="categories"
               @saved="refreshTemplates"
               @deleted="refreshTemplates"
               @rules-changed="refreshRules"

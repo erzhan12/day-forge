@@ -9,8 +9,8 @@ from django.db import transaction
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
+from schedules.categories import default_category, ordered_categories, sink_category, validate_slug
 from schedules.http import (
-    VALID_CATEGORIES,
     block_to_dict,
     is_plain_int,
     parse_time,
@@ -87,50 +87,37 @@ def create_block(request, date):
     # ``create_block_from_event``).
     for field in ("start_time", "end_time"):
         if field not in data:
-            return JsonResponse(
-                {"errors": {field: f"{field} is required."}}, status=400
-            )
+            return JsonResponse({"errors": {field: f"{field} is required."}}, status=400)
         if not isinstance(data[field], str):
-            return JsonResponse(
-                {"errors": {field: f"{field} must be a string."}}, status=400
-            )
+            return JsonResponse({"errors": {field: f"{field} must be a string."}}, status=400)
     if "title" in data and not isinstance(data["title"], str):
-        return JsonResponse(
-            {"errors": {"title": "Title must be a string."}}, status=400
-        )
+        return JsonResponse({"errors": {"title": "Title must be a string."}}, status=400)
     if "category" in data and not isinstance(data["category"], str):
-        return JsonResponse(
-            {"errors": {"category": "Category must be a string."}}, status=400
-        )
+        return JsonResponse({"errors": {"category": "Category must be a string."}}, status=400)
 
     start, end, err = _validate_block_times(data["start_time"], data["end_time"])
     if err is not None:
         return err
     window = get_schedule_window(request.user)
-    clamped = clamp_boundary(
-        start, end, window, clamp_start=True, clamp_end=True
-    )
+    clamped = clamp_boundary(start, end, window, clamp_start=True, clamp_end=True)
     if clamped is None:
         return _outside_window_response(window)
     start, end = clamped
 
     title = data.get("title", "").strip()
     if not title:
-        return JsonResponse(
-            {"errors": {"title": "Title is required."}}, status=400
-        )
+        return JsonResponse({"errors": {"title": "Title is required."}}, status=400)
     if len(title) > 255:
         return JsonResponse(
             {"errors": {"title": "Title too long (max 255 characters)."}}, status=400
         )
 
-    category = data.get("category", "other")
-    if category not in VALID_CATEGORIES:
-        choices = ", ".join(sorted(VALID_CATEGORIES))
-        return JsonResponse(
-            {"errors": {"category": f"Invalid category. Choose from: {choices}."}},
-            status=400,
-        )
+    categories = ordered_categories(request.user)
+    category = data.get("category", default_category(categories).slug)
+    try:
+        category = validate_slug(category, categories)
+    except ValueError as exc:
+        return JsonResponse({"errors": {"category": str(exc)}}, status=400)
 
     schedule, _ = Schedule.objects.get_or_create(user=request.user, date=parsed_date)
 
@@ -139,17 +126,24 @@ def create_block(request, date):
     # serializes via its DB-level write lock.
     try:
         with transaction.atomic():
+            # Revalidate after entering the write transaction: a deleted slug
+            # cannot be reintroduced by a request that started earlier.
+            category = validate_slug(category, ordered_categories(request.user))
             # Parent-row lock serializes with ``_apply_draft_sync`` (which
             # also locks the Schedule row) so a concurrent draft apply on an
             # empty day can't race past the in-lock emptiness check while we
             # insert. Locking only overlapping TimeBlock rows acquires zero
             # locks on an empty schedule — see ``ai.views._apply_draft_sync``.
             Schedule.objects.select_for_update().get(pk=schedule.pk)
-            overlap = TimeBlock.objects.filter(
-                schedule=schedule,
-                start_time__lt=end,
-                end_time__gt=start,
-            ).select_for_update().exists()
+            overlap = (
+                TimeBlock.objects.filter(
+                    schedule=schedule,
+                    start_time__lt=end,
+                    end_time__gt=start,
+                )
+                .select_for_update()
+                .exists()
+            )
             if overlap:
                 return JsonResponse(
                     {"errors": {"time": "This block overlaps with an existing block."}},
@@ -166,6 +160,10 @@ def create_block(request, date):
             block.save()
     except ValidationError as e:
         return JsonResponse({"errors": e.message_dict}, status=400)
+    except ValueError as exc:
+        # The in-transaction revalidation rejects a slug deleted mid-request;
+        # surface it as a clean 400, not a 500.
+        return JsonResponse({"errors": {"category": str(exc)}}, status=400)
 
     schedule.mark_active_on_edit()
     return JsonResponse(_block_to_dict(block), status=201)
@@ -207,21 +205,13 @@ def create_block_from_event(request, date):
     # or unhashable category (``in``-set → TypeError) would otherwise 500.
     for field in ("start_time", "end_time"):
         if field not in data:
-            return JsonResponse(
-                {"errors": {field: f"{field} is required."}}, status=400
-            )
+            return JsonResponse({"errors": {field: f"{field} is required."}}, status=400)
         if not isinstance(data[field], str):
-            return JsonResponse(
-                {"errors": {field: f"{field} must be a string."}}, status=400
-            )
+            return JsonResponse({"errors": {field: f"{field} must be a string."}}, status=400)
     if "title" in data and not isinstance(data["title"], str):
-        return JsonResponse(
-            {"errors": {"title": "Title must be a string."}}, status=400
-        )
+        return JsonResponse({"errors": {"title": "Title must be a string."}}, status=400)
     if "category" in data and not isinstance(data["category"], str):
-        return JsonResponse(
-            {"errors": {"category": "Category must be a string."}}, status=400
-        )
+        return JsonResponse({"errors": {"category": "Category must be a string."}}, status=400)
 
     # No ``validate_five_minute_or_error`` — off-grid times are the point.
     start, err = _parse_time_or_error("start_time", data["start_time"])
@@ -236,43 +226,43 @@ def create_block_from_event(request, date):
     if err is not None:
         return err
     window = get_schedule_window(request.user)
-    clamped = clamp_boundary(
-        start, end, window, clamp_start=True, clamp_end=True
-    )
+    clamped = clamp_boundary(start, end, window, clamp_start=True, clamp_end=True)
     if clamped is None:
         return _outside_window_response(window)
     start, end = clamped
 
     title = data.get("title", "").strip()
     if not title:
-        return JsonResponse(
-            {"errors": {"title": "Title is required."}}, status=400
-        )
+        return JsonResponse({"errors": {"title": "Title is required."}}, status=400)
     if len(title) > 255:
         return JsonResponse(
             {"errors": {"title": "Title too long (max 255 characters)."}}, status=400
         )
 
-    category = data.get("category", "other")
-    if category not in VALID_CATEGORIES:
-        choices = ", ".join(sorted(VALID_CATEGORIES))
-        return JsonResponse(
-            {"errors": {"category": f"Invalid category. Choose from: {choices}."}},
-            status=400,
-        )
+    categories = ordered_categories(request.user)
+    category = data.get("category", sink_category(categories).slug)
+    try:
+        category = validate_slug(category, categories)
+    except ValueError as exc:
+        return JsonResponse({"errors": {"category": str(exc)}}, status=400)
 
     schedule, _ = Schedule.objects.get_or_create(user=request.user, date=parsed_date)
 
     try:
         with transaction.atomic():
+            category = validate_slug(category, ordered_categories(request.user))
             # Same locked-insert pattern as ``create_block`` — see the
             # comments there for the draft-apply serialization rationale.
             Schedule.objects.select_for_update().get(pk=schedule.pk)
-            overlap = TimeBlock.objects.filter(
-                schedule=schedule,
-                start_time__lt=end,
-                end_time__gt=start,
-            ).select_for_update().exists()
+            overlap = (
+                TimeBlock.objects.filter(
+                    schedule=schedule,
+                    start_time__lt=end,
+                    end_time__gt=start,
+                )
+                .select_for_update()
+                .exists()
+            )
             if overlap:
                 return JsonResponse(
                     {"errors": {"time": "This block overlaps with an existing block."}},
@@ -291,6 +281,9 @@ def create_block_from_event(request, date):
             block.save()
     except ValidationError as e:
         return JsonResponse({"errors": e.message_dict}, status=400)
+    except ValueError as exc:
+        # In-transaction revalidation: a slug deleted mid-request → clean 400.
+        return JsonResponse({"errors": {"category": str(exc)}}, status=400)
 
     schedule.mark_active_on_edit()
     return JsonResponse(_block_to_dict(block), status=201)
@@ -351,14 +344,10 @@ def block_detail(request, pk):
         pending["end_time"] = parsed
     if "title" in data:
         if not isinstance(data["title"], str):
-            return JsonResponse(
-                {"errors": {"title": "Title must be a string."}}, status=400
-            )
+            return JsonResponse({"errors": {"title": "Title must be a string."}}, status=400)
         title = data["title"].strip()
         if not title:
-            return JsonResponse(
-                {"errors": {"title": "Title cannot be empty."}}, status=400
-            )
+            return JsonResponse({"errors": {"title": "Title cannot be empty."}}, status=400)
         if len(title) > 255:
             return JsonResponse(
                 {"errors": {"title": "Title too long (max 255 characters)."}},
@@ -377,15 +366,11 @@ def block_detail(request, pk):
         # (list/dict) would otherwise raise TypeError → 500 (mirrors
         # ``create_block``).
         if not isinstance(data["category"], str):
-            return JsonResponse(
-                {"errors": {"category": "Category must be a string."}}, status=400
-            )
-        if data["category"] not in VALID_CATEGORIES:
-            choices = ", ".join(sorted(VALID_CATEGORIES))
-            return JsonResponse(
-                {"errors": {"category": f"Invalid category. Choose from: {choices}."}},
-                status=400,
-            )
+            return JsonResponse({"errors": {"category": "Category must be a string."}}, status=400)
+        try:
+            validate_slug(data["category"], ordered_categories(request.user))
+        except ValueError as exc:
+            return JsonResponse({"errors": {"category": str(exc)}}, status=400)
         pending["category"] = data["category"]
     if "sort_order" in data:
         err = _validate_sort_order(data["sort_order"])
@@ -399,6 +384,13 @@ def block_detail(request, pk):
     try:
         with transaction.atomic():
             locked_schedule = Schedule.objects.select_for_update().get(pk=schedule_id)
+            if "category" in pending:
+                try:
+                    pending["category"] = validate_slug(
+                        pending["category"], ordered_categories(request.user)
+                    )
+                except ValueError as exc:
+                    return JsonResponse({"errors": {"category": str(exc)}}, status=400)
 
             if time_change:
                 # Close the PATCH-vs-PATCH TOCTOU race: two concurrent
@@ -419,9 +411,7 @@ def block_detail(request, pk):
                 )
                 block = next((b for b in schedule_blocks if b.pk == pk), None)
                 if block is None:
-                    return JsonResponse(
-                        {"errors": {"detail": "Not found."}}, status=404
-                    )
+                    return JsonResponse({"errors": {"detail": "Not found."}}, status=404)
             else:
                 try:
                     block = (
@@ -430,9 +420,7 @@ def block_detail(request, pk):
                         .get()
                     )
                 except TimeBlock.DoesNotExist:
-                    return JsonResponse(
-                        {"errors": {"detail": "Not found."}}, status=404
-                    )
+                    return JsonResponse({"errors": {"detail": "Not found."}}, status=404)
 
             stored_start, stored_end = block.start_time, block.end_time
 
@@ -475,18 +463,18 @@ def block_detail(request, pk):
                 err = _validate_time_range(block.start_time, block.end_time)
                 if err is not None:
                     return err
-                overlap = TimeBlock.objects.filter(
-                    schedule_id=schedule_id,
-                    start_time__lt=block.end_time,
-                    end_time__gt=block.start_time,
-                ).exclude(pk=block.pk).exists()
+                overlap = (
+                    TimeBlock.objects.filter(
+                        schedule_id=schedule_id,
+                        start_time__lt=block.end_time,
+                        end_time__gt=block.start_time,
+                    )
+                    .exclude(pk=block.pk)
+                    .exists()
+                )
                 if overlap:
                     return JsonResponse(
-                        {
-                            "errors": {
-                                "time": "This block overlaps with an existing block."
-                            }
-                        },
+                        {"errors": {"time": "This block overlaps with an existing block."}},
                         status=400,
                     )
 
@@ -561,10 +549,7 @@ def reorder_blocks(request):
         return JsonResponse(
             {
                 "errors": {
-                    "updates": (
-                        f"Cannot update more than {MAX_REORDER_UPDATES} "
-                        f"blocks at once."
-                    )
+                    "updates": (f"Cannot update more than {MAX_REORDER_UPDATES} blocks at once.")
                 }
             },
             status=400,
@@ -587,18 +572,14 @@ def reorder_blocks(request):
     # Check for duplicate IDs
     ids = [u["id"] for u in updates]
     if len(ids) != len(set(ids)):
-        return JsonResponse(
-            {"errors": {"updates": "Duplicate block IDs in request."}}, status=400
-        )
+        return JsonResponse({"errors": {"updates": "Duplicate block IDs in request."}}, status=400)
 
     update_map = {u["id"]: u for u in updates}
     requested_ids = set(ids)
 
     # Ownership-filtered preflight: resolve only rows owned by the caller.
     # Missing and foreign ids must be indistinguishable 404s.
-    owned_blocks = list(
-        TimeBlock.objects.filter(id__in=ids, schedule__user=request.user)
-    )
+    owned_blocks = list(TimeBlock.objects.filter(id__in=ids, schedule__user=request.user))
     owned_ids = {b.id for b in owned_blocks}
     if owned_ids != requested_ids:
         return JsonResponse(
@@ -609,11 +590,7 @@ def reorder_blocks(request):
     owned_schedule_ids = {b.schedule_id for b in owned_blocks}
     if len(owned_schedule_ids) > 1:
         return JsonResponse(
-            {
-                "errors": {
-                    "updates": "All blocks must belong to the same schedule."
-                }
-            },
+            {"errors": {"updates": "All blocks must belong to the same schedule."}},
             status=400,
         )
 
@@ -632,7 +609,9 @@ def reorder_blocks(request):
                     status=400,
                 )
         _, _, err = _validate_block_times(
-            entry["start_time"], entry["end_time"], block_id=uid,
+            entry["start_time"],
+            entry["end_time"],
+            block_id=uid,
             enforce_granularity=False,
         )
         if err is not None:
@@ -647,9 +626,7 @@ def reorder_blocks(request):
         with transaction.atomic():
             locked_schedule = Schedule.objects.select_for_update().get(pk=schedule_id)
             schedule_blocks = list(
-                TimeBlock.objects.filter(schedule_id=schedule_id)
-                .select_for_update()
-                .order_by("id")
+                TimeBlock.objects.filter(schedule_id=schedule_id).select_for_update().order_by("id")
             )
 
             blocks_by_id = {b.id: b for b in schedule_blocks}
@@ -678,7 +655,8 @@ def reorder_blocks(request):
                     # blocks, feature 0026) were already persisted as
                     # valid; a *new* off-grid time still 400s.
                     changed = [
-                        t for t, stored in (
+                        t
+                        for t, stored in (
                             (new_start, b.start_time),
                             (new_end, b.end_time),
                         )
@@ -715,11 +693,7 @@ def reorder_blocks(request):
             for i in range(len(candidates) - 1):
                 if candidates[i][1] > candidates[i + 1][0]:
                     return JsonResponse(
-                        {
-                            "errors": {
-                                "time": "Reorder would cause overlapping blocks."
-                            }
-                        },
+                        {"errors": {"time": "Reorder would cause overlapping blocks."}},
                         status=400,
                     )
 
@@ -736,12 +710,11 @@ def reorder_blocks(request):
         return JsonResponse({"errors": e.message_dict}, status=400)
 
     # Return full block list for the schedule
-    result_blocks = TimeBlock.objects.filter(schedule=schedule).order_by(
-        "start_time", "sort_order"
-    )
+    result_blocks = TimeBlock.objects.filter(schedule=schedule).order_by("start_time", "sort_order")
     logger.info(
         "reorder_blocks: %d updates, %.3fs",
-        len(updates), time.monotonic() - t0,
+        len(updates),
+        time.monotonic() - t0,
     )
     return JsonResponse(
         {"blocks": [_block_to_dict(b) for b in result_blocks]},
@@ -773,12 +746,14 @@ def restore_blocks(request, date):
 
     blocks_data = data.get("blocks")
     if not isinstance(blocks_data, list):
-        return JsonResponse(
-            {"errors": {"blocks": "A list of blocks is required."}}, status=400
-        )
+        return JsonResponse({"errors": {"blocks": "A list of blocks is required."}}, status=400)
 
     # Validate each block entry
     validated = []
+    # The per-user catalog is invariant for the whole request — load it once,
+    # not once per restored block (avoids an N+1 on this mutation path).
+    categories = ordered_categories(request.user)
+    sink_slug = sink_category(categories).slug
     for i, entry in enumerate(blocks_data):
         if not isinstance(entry, dict):
             return JsonResponse(
@@ -797,9 +772,7 @@ def restore_blocks(request, date):
                 {"errors": {"title": f"Title is required (block {i})."}}, status=400
             )
         if len(title) > 255:
-            return JsonResponse(
-                {"errors": {"title": f"Title too long (block {i})."}}, status=400
-            )
+            return JsonResponse({"errors": {"title": f"Title too long (block {i})."}}, status=400)
 
         # Times
         for field in ("start_time", "end_time"):
@@ -812,25 +785,22 @@ def restore_blocks(request, date):
         # granularity check; format, range, and the snapshot-overlap
         # check below all stay.
         start, end, err = _validate_block_times(
-            entry["start_time"], entry["end_time"], block_id=i,
+            entry["start_time"],
+            entry["end_time"],
+            block_id=i,
             enforce_granularity=False,
         )
         if err is not None:
             return err
 
         # Category
-        category = entry.get("category", "other")
+        category = entry.get("category", sink_slug)
         if not isinstance(category, str):
             return JsonResponse(
                 {"errors": {"category": f"Category must be a string (block {i})."}},
                 status=400,
             )
-        if category not in VALID_CATEGORIES:
-            choices = ", ".join(sorted(VALID_CATEGORIES))
-            return JsonResponse(
-                {"errors": {"category": f"Invalid category (block {i}). Choose from: {choices}."}},
-                status=400,
-            )
+        category = validate_slug(category, categories, unknown_to_sink=True)
 
         # is_completed
         is_completed = entry.get("is_completed", False)
@@ -846,22 +816,22 @@ def restore_blocks(request, date):
         if err is not None:
             return err
 
-        validated.append({
-            "title": title,
-            "start_time": start,
-            "end_time": end,
-            "category": category,
-            "is_completed": is_completed,
-            "sort_order": sort_order,
-        })
+        validated.append(
+            {
+                "title": title,
+                "start_time": start,
+                "end_time": end,
+                "category": category,
+                "is_completed": is_completed,
+                "sort_order": sort_order,
+            }
+        )
 
     # Check for overlaps in the candidate set
     validated.sort(key=lambda v: (v["start_time"], v["sort_order"]))
     for i in range(len(validated) - 1):
         if validated[i]["end_time"] > validated[i + 1]["start_time"]:
-            return JsonResponse(
-                {"errors": {"time": "Restored blocks would overlap."}}, status=400
-            )
+            return JsonResponse({"errors": {"time": "Restored blocks would overlap."}}, status=400)
 
     # Every per-block field was already validated above, so any bad-input
     # request has 400'd before reaching this point — meaning the DB is still
@@ -904,18 +874,23 @@ def restore_blocks(request, date):
             # this lock while re-checking emptiness, so restore must queue
             # behind it (and vice versa) on PostgreSQL.
             Schedule.objects.select_for_update().get(pk=schedule.pk)
+            # Re-fold categories against a fresh catalog inside the write
+            # transaction: a category deleted between the pre-validation above
+            # and here must land on the sink, not resurrect the deleted slug.
+            fresh = ordered_categories(request.user)
+            for block in instances:
+                block.category = validate_slug(block.category, fresh, unknown_to_sink=True)
             TimeBlock.objects.filter(schedule=schedule).delete()
             if instances:
                 TimeBlock.objects.bulk_create(instances)
     except ValidationError as e:
         return JsonResponse({"errors": e.message_dict}, status=400)
 
-    result_blocks = TimeBlock.objects.filter(schedule=schedule).order_by(
-        "start_time", "sort_order"
-    )
+    result_blocks = TimeBlock.objects.filter(schedule=schedule).order_by("start_time", "sort_order")
     logger.info(
         "restore_blocks: %d blocks, %.3fs",
-        len(validated), time.monotonic() - t0,
+        len(validated),
+        time.monotonic() - t0,
     )
     return JsonResponse(
         {"blocks": [_block_to_dict(b) for b in result_blocks]},

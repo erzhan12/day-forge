@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { ref, watch } from "vue"
-import type { TravelRule } from "../types"
+import type { TravelRule, UserCategory } from "../types"
 import { useTravelRules } from "../composables/useTravelRules"
+import { orderedCategories, effectiveCategory } from "../utils/categories"
 
 const MAX_TRAVEL_MINUTES = 600
 
 const props = defineProps<{
   rules: TravelRule[]
+  categories?: UserCategory[]
 }>()
 const emit = defineEmits<{
   (e: "changed"): void
@@ -173,7 +175,7 @@ async function confirmDelete(rule: TravelRule) {
 }
 
 function categoryLabel(category: TravelRule["category"]): string {
-  return category === "" ? "other (default)" : category
+  return category === "" ? "No override" : effectiveCategory(category, props.categories ?? [])?.label ?? category
 }
 </script>
 
@@ -226,11 +228,8 @@ function categoryLabel(category: TravelRule["category"]): string {
         />
       </label>
       <select v-model="newCategory" class="input" aria-label="Category">
-        <option value="">other (default)</option>
-        <option value="work">work</option>
-        <option value="personal">personal</option>
-        <option value="health">health</option>
-        <option value="other">other</option>
+        <option value="">No override</option>
+        <option v-for="item in orderedCategories(props.categories ?? [])" :key="item.id" :value="item.slug">{{ item.label }}</option>
       </select>
       <button type="submit" class="primary-btn" :disabled="submitting">
         Add rule
@@ -298,11 +297,8 @@ function categoryLabel(category: TravelRule["category"]): string {
               />
             </label>
             <select v-model="editCategory" class="input" aria-label="Category">
-              <option value="">other (default)</option>
-              <option value="work">work</option>
-              <option value="personal">personal</option>
-              <option value="health">health</option>
-              <option value="other">other</option>
+              <option value="">No override</option>
+              <option v-for="item in orderedCategories(props.categories ?? [])" :key="item.id" :value="item.slug">{{ item.label }}</option>
             </select>
           </div>
           <div class="edit-actions">

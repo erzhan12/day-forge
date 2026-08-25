@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import type { Ref } from "vue"
 import { computed, ref, watch, inject } from "vue"
-import type { TimeBlock, UndoAction } from "../types"
+import type { TimeBlock, UndoAction, UserCategory } from "../types"
 import { useSchedule } from "../composables/useSchedule"
+import { defaultCategory, orderedCategories } from "../utils/categories"
 
 const props = defineProps<{
   date: string
   initialStartTime?: string
   initialEndTime?: string
+  categories?: UserCategory[]
 }>()
 
 const { createBlock } = useSchedule(() => props.date)
@@ -23,7 +25,7 @@ const isDisabled = computed(() => Boolean(scheduleDisabled?.value))
 const title = ref("")
 const startTime = ref(props.initialStartTime ?? "09:00")
 const endTime = ref(props.initialEndTime ?? "10:00")
-const category = ref<"work" | "personal" | "health" | "other">("work")
+const category = ref<string>(defaultCategory(props.categories ?? [])?.slug ?? "work")
 const showForm = ref(false)
 const submitting = ref(false)
 const errorMessage = ref("")
@@ -36,6 +38,7 @@ watch(
     if (s || e) showForm.value = true
   },
 )
+watch(() => props.categories, (categories) => { if (categories?.length) category.value = defaultCategory(categories)?.slug ?? category.value }, { immediate: true })
 
 async function handleSubmit() {
   if (isDisabled.value) return
@@ -119,10 +122,7 @@ function cancel() {
         <label>
           Category
           <select v-model="category" class="input">
-            <option value="work">Work</option>
-            <option value="personal">Personal</option>
-            <option value="health">Health</option>
-            <option value="other">Other</option>
+            <option v-for="item in orderedCategories(props.categories ?? [])" :key="item.id" :value="item.slug">{{ item.label }}</option>
           </select>
         </label>
       </div>

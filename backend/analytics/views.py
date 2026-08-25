@@ -19,6 +19,7 @@ Three views:
 * ``update_review_notes`` — ``PATCH /api/analytics/reviews/<pk>/notes/``.
   Notes are the only field editable post-review.
 """
+
 import datetime
 import json
 import logging
@@ -30,6 +31,7 @@ from django.http import Http404, HttpResponseBadRequest, JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 from inertia import render as inertia_render
+from schedules.categories import ordered_categories, serialize_category, sink_category
 from schedules.http import reject_oversized_body
 from schedules.models import Schedule, TimeBlock
 from schedules.window import get_schedule_window
@@ -81,6 +83,19 @@ def _review_to_dict(review: DailyReview) -> dict:
     }
 
 
+def _normalized_category_minutes(values, categories):
+    """Fold stale persisted keys into the current sink without mutating history."""
+    allowed = {category.slug for category in categories}
+    sink = sink_category(categories).slug
+    result = {category.slug: 0 for category in categories}
+    for slug, minutes in (values or {}).items():
+        numeric = (
+            minutes if isinstance(minutes, (int, float)) and not isinstance(minutes, bool) else 0
+        )
+        result[slug if slug in allowed else sink] += numeric
+    return result
+
+
 def _streak_payload(user) -> dict:
     return {
         "current": compute_streak(user),
@@ -95,9 +110,7 @@ def _parse_date(date: str):
     try:
         return datetime.date.fromisoformat(date), None
     except ValueError:
-        return None, JsonResponse(
-            {"errors": {"date": "Invalid date format."}}, status=400
-        )
+        return None, JsonResponse({"errors": {"date": "Invalid date format."}}, status=400)
 
 
 @login_required
@@ -140,13 +153,14 @@ def analytics_view(request, date):
     if schedule is None:
         raise Http404("No schedule for this date.")
 
+    categories = ordered_categories(request.user)
     if schedule.status == Schedule.Status.REVIEWED:
         review = DailyReview.objects.filter(schedule=schedule).first()
         if review is None:
             # Back-compat one-shot recompute for pre-Phase-6 reviewed rows.
-            review = recompute_review_from_schedule(schedule)
+            review = recompute_review_from_schedule(schedule, categories=categories)
     else:
-        review = recompute_review_from_schedule(schedule)
+        review = recompute_review_from_schedule(schedule, categories=categories)
 
     # Cache the in-scope ``schedule`` on the review instance so
     # ``_review_to_dict`` doesn't issue an extra SELECT for the parent
@@ -154,10 +168,16 @@ def analytics_view(request, date):
     # the back-compat lookup and the recompute path return a review
     # whose ``schedule`` FK is not pre-fetched.
     review.schedule = schedule
-
-    blocks = list(
-        schedule.time_blocks.all().order_by("start_time", "sort_order")
+    # Reviewed snapshots are immutable, but category deletion may make keys
+    # stale. Fold for presentation so their minutes remain visible as sink.
+    review.planned_minutes_by_category = _normalized_category_minutes(
+        review.planned_minutes_by_category, categories
     )
+    review.completed_minutes_by_category = _normalized_category_minutes(
+        review.completed_minutes_by_category, categories
+    )
+
+    blocks = list(schedule.time_blocks.all().order_by("start_time", "sort_order"))
     prefs = get_user_preferences(request.user)
     window = get_schedule_window(request.user)
     return inertia_render(
@@ -172,6 +192,7 @@ def analytics_view(request, date):
                 "status": schedule.status,
             },
             "blocks": [_block_to_dict(b) for b in blocks],
+            "categories": [serialize_category(category) for category in categories],
             "date": parsed_date.isoformat(),
             "ui_preferences": ui_preferences_payload(prefs),
             "schedule_window": {"start": window.start_str, "end": window.end_str},
@@ -187,21 +208,13 @@ def _validate_notes(value, *, required: bool):
     are optional on the active→reviewed flip)."""
     if value is None:
         if required:
-            return None, JsonResponse(
-                {"errors": {"notes": "notes is required."}}, status=400
-            )
+            return None, JsonResponse({"errors": {"notes": "notes is required."}}, status=400)
         return None, None
     if not isinstance(value, str):
-        return None, JsonResponse(
-            {"errors": {"notes": "notes must be a string."}}, status=400
-        )
+        return None, JsonResponse({"errors": {"notes": "notes must be a string."}}, status=400)
     if len(value) > NOTES_MAX_CHARS:
         return None, JsonResponse(
-            {
-                "errors": {
-                    "notes": f"notes must be ≤ {NOTES_MAX_CHARS} characters."
-                }
-            },
+            {"errors": {"notes": f"notes must be ≤ {NOTES_MAX_CHARS} characters."}},
             status=400,
         )
     return value, None
@@ -222,9 +235,7 @@ def mark_reviewed(request, date):
     if err is not None:
         return err
 
-    schedule = Schedule.objects.filter(
-        user=request.user, date=parsed_date
-    ).first()
+    schedule = Schedule.objects.filter(user=request.user, date=parsed_date).first()
     if schedule is None:
         return JsonResponse({"errors": {"detail": "Not found."}}, status=404)
 
@@ -234,10 +245,7 @@ def mark_reviewed(request, date):
         return JsonResponse(
             {
                 "errors": {
-                    "detail": (
-                        "Cannot review a draft schedule — make at least one "
-                        "edit first."
-                    )
+                    "detail": ("Cannot review a draft schedule — make at least one edit first.")
                 }
             },
             status=400,
@@ -262,9 +270,7 @@ def mark_reviewed(request, date):
         # this schedule (block_detail, mark_reviewed, AI chat, etc.)
         # behind one queue.
         locked = (
-            Schedule.objects.select_for_update()
-            .prefetch_related("time_blocks")
-            .get(pk=schedule.pk)
+            Schedule.objects.select_for_update().prefetch_related("time_blocks").get(pk=schedule.pk)
         )
 
         # Re-check status under the lock. Closes the
@@ -282,10 +288,7 @@ def mark_reviewed(request, date):
             return JsonResponse(
                 {
                     "errors": {
-                        "detail": (
-                            "Cannot review a draft schedule — make at least "
-                            "one edit first."
-                        )
+                        "detail": ("Cannot review a draft schedule — make at least one edit first.")
                     }
                 },
                 status=400,
@@ -300,18 +303,14 @@ def mark_reviewed(request, date):
             try:
                 data = json.loads(request.body)
             except json.JSONDecodeError:
-                return JsonResponse(
-                    {"errors": {"body": "Invalid JSON."}}, status=400
-                )
+                return JsonResponse({"errors": {"body": "Invalid JSON."}}, status=400)
             if not isinstance(data, dict):
                 return JsonResponse(
                     {"errors": {"body": "Request body must be a JSON object."}},
                     status=400,
                 )
 
-        notes_value, notes_err = _validate_notes(
-            data.get("notes"), required=False
-        )
+        notes_value, notes_err = _validate_notes(data.get("notes"), required=False)
         if notes_err is not None:
             return notes_err
 

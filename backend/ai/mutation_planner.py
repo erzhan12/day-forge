@@ -426,7 +426,7 @@ def _normalize_actions(
         kind = action["type"]
         if kind == "add":
             title = action["title"].strip()
-            category = action.get("category", "other")
+            category = action["category"]
             creates.append(
                 CreateMutation(
                     action_index=action_index,

@@ -9,9 +9,11 @@
 // silently produces invalid CSS if the value is `var(--cat-focus)`.
 // Per-theme overrides (see below) must remain hex strings.
 
-import type { TimeBlock } from "../types"
+import type { TimeBlock, UserCategory } from "../types"
 import type { ThemeId } from "../types"
 import { isKnownTheme } from "./theme"
+import { categoryPalette } from "./categoryPalette"
+import { effectiveCategory } from "./categories"
 
 type Category = TimeBlock["category"]
 
@@ -66,7 +68,11 @@ function activeThemeId(): ThemeId {
  * attribute, so the function reflects the current selection without
  * needing to thread the theme through every call site.
  */
-export function getCategoryColor(category: Category, theme?: ThemeId): string {
+export function getCategoryColor(category: string, theme?: ThemeId, categories?: UserCategory[]): string {
+  if (categories?.length) {
+    const effective = effectiveCategory(category, categories)
+    if (effective) return categoryPalette[effective.color_id]
+  }
   const id = theme ?? activeThemeId()
-  return categoryOverrides[id]?.[category] ?? categoryColors[category]
+  return categoryOverrides[id]?.[category as Category] ?? categoryColors[category as Category] ?? "#6B7280"
 }

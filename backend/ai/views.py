@@ -16,8 +16,8 @@ from django.db import transaction
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
+from schedules.categories import ordered_categories
 from schedules.http import (
-    VALID_CATEGORIES,
     block_to_dict,
     parse_time,
     reject_oversized_body,
@@ -297,10 +297,7 @@ def _build_resolution_ask(
             )
     for outcome in skipped:
         if outcome.reason_code == "out_of_window":
-            return (
-                "That time is outside your schedule window. "
-                "Please give a time within your day."
-            )
+            return "That time is outside your schedule window. Please give a time within your day."
     # ``skipped`` is guaranteed non-empty (the early ``if not skipped`` guard),
     # so fall back to the first outcome's generic message.
     return (
@@ -385,13 +382,18 @@ def _apply_add(
     action: dict[str, Any],
     action_index: int,
     window: ScheduleWindow = DEFAULT_WINDOW,
+    categories=None,
 ) -> JsonResponse | None:
     title = action["title"].strip()
     # ``category`` is required by ``schemas.validate_action_shape``; the
     # ``get(..., "other")`` fallback is defence-in-depth if the schema check
     # is ever relaxed or bypassed.
-    category = action.get("category", "other")
-    if category not in VALID_CATEGORIES:
+    category = action.get("category")
+    if (
+        categories is None
+        or not isinstance(category, str)
+        or category not in {c.slug for c in categories}
+    ):
         return _action_error(action_index, f"invalid category {category!r}")
     start = parse_time(action["start_time"])
     end = parse_time(action["end_time"])
@@ -663,6 +665,14 @@ def _apply_actions_sync(
                 )
             )
 
+        categories = ordered_categories(locked_schedule.user)
+        allowed_categories = {category.slug for category in categories}
+        # Revalidate model output against the live catalog before persistence.
+        from ai.schemas import validate_action_shape
+
+        for index, action in enumerate(result.parsed_actions):
+            if validate_action_shape(action, allowed_categories):
+                raise _Rollback(_action_error(index, "invalid category"))
         window = get_schedule_window(locked_schedule.user)
         plan_result = plan_mutations(
             locked_context.schedule,
@@ -703,6 +713,7 @@ def _apply_draft_sync(schedule: Schedule, result: AIDraftResult) -> None:
                 )
             )
         blocks_by_id: dict = {}
+        categories = ordered_categories(locked_schedule.user)
         # Resolve the window once under the lock — not per action (N+1).
         window = get_schedule_window(locked_schedule.user)
         for idx, action in enumerate(result.parsed_actions):
@@ -712,6 +723,7 @@ def _apply_draft_sync(schedule: Schedule, result: AIDraftResult) -> None:
                 action,
                 idx,
                 window,
+                categories,
             )
             if err is not None:
                 raise _Rollback(err)
@@ -801,6 +813,7 @@ async def ai_generate_draft(request, date):
     now = timezone.localtime()
     try:
         schedule._schedule_window = await sync_to_async(get_schedule_window)(user)
+        schedule._categories = await sync_to_async(ordered_categories, thread_sensitive=True)(user)
         result = await run_draft(schedule, template, history, rules, now)
     except AIError as e:
         raw = getattr(e, "raw_response_text", "") or str(e)
@@ -1031,6 +1044,7 @@ async def ai_chat(request, date):
 
     try:
         schedule._schedule_window = await sync_to_async(get_schedule_window)(user)
+        schedule._categories = await sync_to_async(ordered_categories, thread_sensitive=True)(user)
         result = await run_chat(messages, schedule, current_blocks, rules, now)
     except AIError as e:
         await _log_chat_failure(schedule, last_user_msg, messages, e)

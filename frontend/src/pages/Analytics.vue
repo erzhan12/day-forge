@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from "vue"
 import { Link } from "@inertiajs/vue3"
-import type { DailyReview, Schedule, StreakInfo, TimeBlock, ScheduleWindow } from "../types"
+import type { DailyReview, Schedule, StreakInfo, TimeBlock, ScheduleWindow, UserCategory } from "../types"
 import CompletionBar from "../components/CompletionBar.vue"
 import CategoryBreakdown from "../components/CategoryBreakdown.vue"
 import StreakCounter from "../components/StreakCounter.vue"
@@ -20,6 +20,7 @@ const props = withDefaults(defineProps<{
   blocks: TimeBlock[]
   date: string
   schedule_window?: ScheduleWindow
+  categories: UserCategory[]
 }>(), {
   schedule_window: () => ({ start: "06:00", end: "23:00" }),
 })
@@ -125,8 +126,9 @@ async function onMarkReviewed() {
         :completed="review.completed_minutes_by_category"
         :window-start="schedule_window.start"
         :window-end="schedule_window.end"
+        :categories="categories"
       />
-      <SkippedTasks :blocks="blocks" :date="date" />
+      <SkippedTasks :blocks="blocks" :date="date" :categories="categories" />
       <section class="notes-card">
         <h3>Notes</h3>
         <textarea

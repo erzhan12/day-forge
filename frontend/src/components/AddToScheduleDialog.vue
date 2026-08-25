@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import type { Ref } from "vue"
 import { computed, inject, ref } from "vue"
-import type { TimeBlock, TravelRule, UndoAction } from "../types"
+import type { TimeBlock, TravelRule, UndoAction, UserCategory } from "../types"
+import { sinkCategory, orderedCategories } from "../utils/categories"
 import type { NormalizedEvent } from "../types/calendar"
 import { useSchedule } from "../composables/useSchedule"
 import { computeEventBlockTimes } from "../utils/travelRules"
@@ -25,6 +26,7 @@ const props = defineProps<{
   // The user's configurable day window (feature 0053). The visible-hours
   // warning and skip messaging derive from this, not the static 06:00–23:00.
   window?: ScheduleWindowBounds
+  categories?: UserCategory[]
 }>()
 const emit = defineEmits<{
   (e: "close"): void
@@ -48,8 +50,16 @@ const isDisabled = computed(() => Boolean(scheduleDisabled?.value))
 // 0/0/"other" values are the no-rule defaults only.
 const travelThere = ref(props.matchedRule?.travel_there_minutes ?? 0)
 const travelBack = ref(props.matchedRule?.travel_back_minutes ?? 0)
+// Resolve the matched rule's override through the live catalog: a non-empty
+// but now-unknown (dangling) slug — or the empty "no override" — falls back to
+// the sink, so the <select> always has a matching option and Confirm never
+// submits a slug the backend would 400.
+const knownSlugs = new Set(orderedCategories(props.categories ?? []).map((c) => c.slug))
+const ruleCategory = props.matchedRule?.category
 const category = ref<TimeBlock["category"]>(
-  props.matchedRule?.category || "other",
+  ruleCategory && knownSlugs.has(ruleCategory)
+    ? ruleCategory
+    : sinkCategory(props.categories ?? [])?.slug || "other",
 )
 
 const submitting = ref(false)
@@ -200,10 +210,7 @@ async function handleConfirm() {
         <label class="ats-field">
           Category
           <select v-model="category" class="ats-input">
-            <option value="work">Work</option>
-            <option value="personal">Personal</option>
-            <option value="health">Health</option>
-            <option value="other">Other</option>
+            <option v-for="item in orderedCategories(props.categories ?? [])" :key="item.id" :value="item.slug">{{ item.label }}</option>
           </select>
         </label>
       </div>

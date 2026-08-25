@@ -10,6 +10,7 @@ so that:
 3. Callers always receive a frozen DTO, not the ORM instance — eliminates
    write-on-read hazards if a caller later does ``.save()`` on the result.
 """
+
 from dataclasses import dataclass
 
 from templates_mgr.models import UserPreferences
@@ -62,9 +63,7 @@ def normalize_theme(raw: str) -> str:
 
 def normalize_chat_suggestions(raw) -> list[str]:
     """Resolve stored suggestions for display without writing the database."""
-    if not isinstance(raw, list) or not all(
-        isinstance(item, str) for item in raw
-    ):
+    if not isinstance(raw, list) or not all(isinstance(item, str) for item in raw):
         return list(DEFAULT_CHAT_SUGGESTIONS)
     return [trimmed for item in raw if (trimmed := item.strip())]
 
@@ -91,7 +90,5 @@ def get_user_preferences(user) -> UserPreferencesDTO:
     )
     return UserPreferencesDTO(
         theme=normalize_theme(prefs.theme),
-        chat_suggestions=tuple(
-            normalize_chat_suggestions(prefs.chat_suggestions)
-        ),
+        chat_suggestions=tuple(normalize_chat_suggestions(prefs.chat_suggestions)),
     )

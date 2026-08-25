@@ -1,5 +1,6 @@
 export type SettingsTopicId =
   | "appearance"
+  | "categories"
   | "schedule"
   | "ai-assistant"
   | "notifications"
@@ -14,6 +15,7 @@ export interface SettingsTopic {
 
 export const SETTINGS_TOPICS: readonly SettingsTopic[] = [
   { id: "appearance", label: "Appearance", hash: "appearance" },
+  { id: "categories", label: "Categories", hash: "categories" },
   { id: "schedule", label: "Schedule", hash: "schedule" },
   { id: "ai-assistant", label: "AI Assistant", hash: "ai-assistant" },
   { id: "notifications", label: "Notifications", hash: "notifications" },

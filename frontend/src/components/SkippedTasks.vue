@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, toRef } from "vue"
-import type { TimeBlock } from "../types"
+import type { TimeBlock, UserCategory } from "../types"
 import { getCategoryColor } from "../utils/categoryColors"
 import { useActiveTheme } from "../composables/useActiveTheme"
 import { todayString } from "../utils/date"
@@ -9,6 +9,7 @@ import { useNowMinutes } from "../composables/useNowMinutes"
 const props = defineProps<{
   blocks: TimeBlock[]
   date: string
+  categories?: UserCategory[]
 }>()
 
 const activeTheme = useActiveTheme()
@@ -39,7 +40,7 @@ const skipped = computed<TimeBlock[]>(() => {
       <li v-for="b in skipped" :key="b.id" class="skipped-row">
         <span
           class="swatch"
-          :style="{ background: getCategoryColor(b.category, activeTheme) }"
+          :style="{ background: getCategoryColor(b.category, activeTheme, props.categories) }"
           aria-hidden="true"
         />
         <span class="time">{{ b.start_time }}–{{ b.end_time }}</span>

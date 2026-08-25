@@ -444,5 +444,5 @@ If the OpenAI API is unavailable, the app remains fully functional for manual ed
 - Should the AI proactively suggest schedule improvements, or only respond to commands?
 - Should there be a weekly planning view in addition to daily?
 - How many days of history should the AI context include? (Currently: 7 days. May need tuning.)
-- Should categories be user-customizable or fixed to 4?
+- Categories are user-customizable per account: immutable slugs preserve stored data while labels, palette colors, ordering, sink status, and the new-block default are catalog metadata. The seeded `other` category is the non-deletable sink.
 - Should completed tasks visually dim/strikethrough, or keep full visibility?

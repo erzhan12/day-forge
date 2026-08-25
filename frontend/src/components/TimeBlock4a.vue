@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import type { TimeBlock } from "../types"
+import type { TimeBlock, UserCategory } from "../types"
 import TimeBlockClassic from "./TimeBlock.vue"
-import { categoryColors4a } from "../utils/categoryColors4a"
+import { getCategoryColor } from "../utils/categoryColors"
 
 const props = withDefaults(
   defineProps<{
@@ -9,6 +9,7 @@ const props = withDefaults(
     date: string
     isCurrent?: boolean
     remainingMinutes?: number | null
+    categories?: UserCategory[]
   }>(),
   { isCurrent: false, remainingMinutes: null },
 )
@@ -17,7 +18,7 @@ const props = withDefaults(
 <template>
   <div
     class="time-block-4a"
-    :style="{ '--category-color': categoryColors4a[block.category] }"
+    :style="{ '--category-color': getCategoryColor(block.category, undefined, props.categories) }"
   >
     <!-- The functional block is deliberately reused: its completion retry,
          edit/delete, identity-reset and drag behavior stay identical. -->
@@ -26,6 +27,7 @@ const props = withDefaults(
       :date="props.date"
       :is-current="props.isCurrent"
       :remaining-minutes="props.remainingMinutes"
+      :categories="props.categories"
     />
   </div>
 </template>

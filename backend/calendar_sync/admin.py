@@ -11,8 +11,14 @@ class CalDAVAccountAdmin(admin.ModelAdmin):
     # ``readonly_fields`` so the ciphertext is never rendered. The admin
     # is for ops visibility only — password rotation goes through the
     # Settings UI (POST /api/calendar/account/).
-    readonly_fields = ("user", "apple_id", "base_url", "last_verified_at",
-                       "created_at", "updated_at")
+    readonly_fields = (
+        "user",
+        "apple_id",
+        "base_url",
+        "last_verified_at",
+        "created_at",
+        "updated_at",
+    )
     fields = readonly_fields
 
     def has_add_permission(self, request):
@@ -25,8 +31,13 @@ class CalDAVAccountAdmin(admin.ModelAdmin):
 @admin.register(TravelRule)
 class TravelRuleAdmin(admin.ModelAdmin):
     list_display = (
-        "user", "keyword", "travel_there_minutes", "travel_back_minutes",
-        "calendar_name", "category", "order",
+        "user",
+        "keyword",
+        "travel_there_minutes",
+        "travel_back_minutes",
+        "calendar_name",
+        "category",
+        "order",
     )
     list_select_related = ("user",)
     ordering = ("user", "order", "id")

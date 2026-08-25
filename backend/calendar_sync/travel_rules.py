@@ -7,14 +7,15 @@ Every query is scoped by ``request.user``. Cross-user PK access returns
 Validation mirrors ``templates_mgr.api._parse_rule_create_payload`` /
 ``_parse_rule_patch_payload``.
 """
+
 import json
 
 from django.contrib.auth.decorators import login_required
 from django.db.models import Max
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
+from schedules.categories import ordered_categories
 from schedules.http import (
-    VALID_CATEGORIES,
     is_plain_int,
     parse_swap_body,
     reject_oversized_body,
@@ -54,9 +55,7 @@ def _clean_keyword(value) -> tuple[str | None, JsonResponse | None]:
         return None, _err("keyword", "keyword must be a string.")
     keyword = value.strip()
     if len(keyword) > MAX_KEYWORD_LEN:
-        return None, _err(
-            "keyword", f"Keyword too long (max {MAX_KEYWORD_LEN} characters)."
-        )
+        return None, _err("keyword", f"Keyword too long (max {MAX_KEYWORD_LEN} characters).")
     return keyword, None
 
 
@@ -67,15 +66,12 @@ def _clean_calendar_name(value) -> tuple[str | None, JsonResponse | None]:
     if len(calendar_name) > MAX_CALENDAR_NAME_LEN:
         return None, _err(
             "calendar_name",
-            "Calendar name too long "
-            f"(max {MAX_CALENDAR_NAME_LEN} characters).",
+            f"Calendar name too long (max {MAX_CALENDAR_NAME_LEN} characters).",
         )
     return calendar_name, None
 
 
-def _validate_match_constraint(
-    keyword: str, calendar_name: str
-) -> JsonResponse | None:
+def _validate_match_constraint(keyword: str, calendar_name: str) -> JsonResponse | None:
     if not keyword and not calendar_name:
         # Non-field sentinel: the error belongs to neither field individually
         # (a client sending only calendar_name shouldn't see it under "keyword").
@@ -90,21 +86,18 @@ def _clean_minutes(field: str, value) -> tuple[int | None, JsonResponse | None]:
     if not is_plain_int(value):
         return None, _err(field, f"{field} must be an integer.")
     if not (0 <= value <= MAX_TRAVEL_MINUTES):
-        return None, _err(
-            field, f"{field} must be between 0 and {MAX_TRAVEL_MINUTES}."
-        )
+        return None, _err(field, f"{field} must be between 0 and {MAX_TRAVEL_MINUTES}.")
     return value, None
 
 
-def _clean_category(value) -> tuple[str | None, JsonResponse | None]:
+def _clean_category(value, categories=None) -> tuple[str | None, JsonResponse | None]:
     # "" means "no override"; the created block defaults to "other".
     # `isinstance` guard first — an unhashable value would raise TypeError
     # on the `in`-set check (same footgun as user_preferences.theme).
-    if not isinstance(value, str) or (value != "" and value not in VALID_CATEGORIES):
-        choices = ", ".join(sorted(VALID_CATEGORIES))
-        return None, _err(
-            "category", f'Invalid category. Choose from: {choices}, or "".'
-        )
+    allowed = {row.slug for row in categories or []}
+    if not isinstance(value, str) or (value != "" and value not in allowed):
+        choices = ", ".join(sorted(allowed))
+        return None, _err("category", f'Invalid category. Choose from: {choices}, or "".')
     return value, None
 
 
@@ -112,13 +105,11 @@ def _clean_order(value) -> tuple[int | None, JsonResponse | None]:
     if not is_plain_int(value):
         return None, _err("order", "order must be an integer.")
     if not (MIN_ORDER <= value <= MAX_ORDER):
-        return None, _err(
-            "order", f"order must be between {MIN_ORDER} and {MAX_ORDER}."
-        )
+        return None, _err("order", f"order must be between {MIN_ORDER} and {MAX_ORDER}.")
     return value, None
 
 
-def _parse_create_payload(data) -> tuple[dict, JsonResponse | None]:
+def _parse_create_payload(data, categories=None) -> tuple[dict, JsonResponse | None]:
     if not isinstance(data, dict):
         return {}, _err("body", "Request body must be a JSON object.")
 
@@ -134,9 +125,7 @@ def _parse_create_payload(data) -> tuple[dict, JsonResponse | None]:
             return {}, err
         cleaned["calendar_name"] = calendar_name
 
-    err = _validate_match_constraint(
-        cleaned.get("keyword", ""), cleaned.get("calendar_name", "")
-    )
+    err = _validate_match_constraint(cleaned.get("keyword", ""), cleaned.get("calendar_name", ""))
     if err is not None:
         return {}, err
 
@@ -147,7 +136,7 @@ def _parse_create_payload(data) -> tuple[dict, JsonResponse | None]:
                 return {}, err
             cleaned[field] = value
     if "category" in data:
-        value, err = _clean_category(data["category"])
+        value, err = _clean_category(data["category"], categories)
         if err is not None:
             return {}, err
         cleaned["category"] = value
@@ -160,7 +149,7 @@ def _parse_create_payload(data) -> tuple[dict, JsonResponse | None]:
 
 
 def _parse_patch_payload(
-    data, rule: TravelRule
+    data, rule: TravelRule, categories=None
 ) -> tuple[dict, JsonResponse | None]:
     if not isinstance(data, dict):
         return {}, _err("body", "Request body must be a JSON object.")
@@ -183,7 +172,7 @@ def _parse_patch_payload(
                 return {}, err
             cleaned[field] = value
     if "category" in data:
-        value, err = _clean_category(data["category"])
+        value, err = _clean_category(data["category"], categories)
         if err is not None:
             return {}, err
         cleaned["category"] = value
@@ -221,7 +210,8 @@ def travel_rules_collection(request):
     except json.JSONDecodeError:
         return _err("body", "Invalid JSON.")
 
-    cleaned, err = _parse_create_payload(data)
+    categories = ordered_categories(request.user)
+    cleaned, err = _parse_create_payload(data, categories)
     if err is not None:
         return err
 
@@ -230,23 +220,19 @@ def travel_rules_collection(request):
     # store 101 rows. Self-limiting — each request inserts one row and the
     # next create is rejected — so it never grows unbounded. Not an atomic
     # guarantee; don't rely on this as a hard invariant.
-    if (
-        TravelRule.objects.filter(user=request.user).count()
-        >= MAX_TRAVEL_RULES_PER_USER
-    ):
+    if TravelRule.objects.filter(user=request.user).count() >= MAX_TRAVEL_RULES_PER_USER:
         return _err(
             "travel_rules",
-            f"You have reached the maximum of {MAX_TRAVEL_RULES_PER_USER} "
-            f"travel rules.",
+            f"You have reached the maximum of {MAX_TRAVEL_RULES_PER_USER} travel rules.",
         )
 
     if "order" not in cleaned:
         # Born-distinct order: with a bare default=0 every new rule would
         # tie at 0 and the swap-based reorder in TravelRulesList.vue would
         # be a no-op between equal values.
-        max_order = TravelRule.objects.filter(user=request.user).aggregate(
-            Max("order")
-        )["order__max"]
+        max_order = TravelRule.objects.filter(user=request.user).aggregate(Max("order"))[
+            "order__max"
+        ]
         # Clamp to MAX_ORDER so an omitted order can never store a value that
         # the explicit-order validator above would reject on a later PATCH.
         #
@@ -279,13 +265,7 @@ def travel_rules_swap(request):
     )
     if swapped is None:
         return JsonResponse({"errors": {"detail": "Not found."}}, status=404)
-    return JsonResponse(
-        {
-            "travel_rules": [
-                serialize_travel_rule(rule) for rule in swapped
-            ]
-        }
-    )
+    return JsonResponse({"travel_rules": [serialize_travel_rule(rule) for rule in swapped]})
 
 
 @login_required
@@ -310,7 +290,7 @@ def travel_rule_detail(request, pk):
     except json.JSONDecodeError:
         return _err("body", "Invalid JSON.")
 
-    cleaned, err = _parse_patch_payload(data, rule)
+    cleaned, err = _parse_patch_payload(data, rule, ordered_categories(request.user))
     if err is not None:
         return err
 

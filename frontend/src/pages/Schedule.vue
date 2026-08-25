@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, provide, toRef, watch } from "vue"
 import { Link, router } from "@inertiajs/vue3"
-import type { TimeBlock as TimeBlockType, Schedule, TravelRule } from "../types"
+import type { TimeBlock as TimeBlockType, Schedule, TravelRule, UserCategory } from "../types"
 import DateNavigator from "../components/DateNavigator.vue"
 import TimeBlock from "../components/TimeBlock.vue"
 import Timeline4a from "../components/Timeline4a.vue"
@@ -75,6 +75,7 @@ const props = withDefaults(
   defineProps<{
     schedule: Schedule
     blocks: TimeBlockType[]
+    categories: UserCategory[]
     date: string
     auto_draft_pending?: boolean
     has_template_for_type?: boolean
@@ -758,6 +759,7 @@ defineExpose({
       :date="date"
       :initial-start-time="prefillStart"
       :initial-end-time="prefillEnd"
+      :categories="categories"
     />
 
     <div
@@ -806,6 +808,7 @@ defineExpose({
         :current-block-id="currentBlock?.id ?? null"
         :current-block-remaining="currentBlockRemaining"
         :disabled="scheduleDisabled"
+        :categories="categories"
         @add-here="handleAddHere"
       />
 
@@ -820,6 +823,7 @@ defineExpose({
             :date="date"
             :is-current="item.block?.id === currentBlock?.id"
             :remaining-minutes="item.block?.id === currentBlock?.id ? currentBlockRemaining : null"
+            :categories="categories"
           />
           <NowLine
             class="now-overlay"
@@ -857,6 +861,7 @@ defineExpose({
             :date="date"
             :is-current="item.block?.id === currentBlock?.id"
             :remaining-minutes="item.block?.id === currentBlock?.id ? currentBlockRemaining : null"
+            :categories="categories"
           />
         </div>
 
@@ -966,6 +971,7 @@ defineExpose({
       :date="date"
       :rules-unavailable="travelRulesError"
       :window="scheduleWindow"
+      :categories="categories"
       @close="closeAddDialog"
     />
     <ChatSidebar

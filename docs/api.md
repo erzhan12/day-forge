@@ -16,6 +16,14 @@ JSON endpoints for managing schedules and time blocks. Page routes (`/`, `/sched
 
 ## Endpoints
 
+### Category catalog
+
+`GET /api/user/categories/` lazily returns the authenticated user's ordered catalog. A first read seeds Work (`work`, blue, default), Personal (`personal`, violet), Health (`health`, emerald), and Other (`other`, gray sink).
+
+`POST /api/user/categories/` accepts `{ "label", "color_id" }`; labels are trimmed and case-insensitively unique, with immutable ASCII slugs generated from them. The shared palette IDs are `blue`, `violet`, `emerald`, `gray`, `amber`, `rose`, `cyan`, and `indigo`; up to eight categories are allowed.
+
+`PATCH /api/user/categories/{id}/` changes `label`, `color_id`, or promotes the row by posting `{ "is_new_block_default": true }`. `slug` and `is_sink` are immutable. `POST /api/user/categories/swap/` accepts `{ "a": id, "b": id }`. `DELETE /api/user/categories/{id}/` refuses the sink and atomically remaps the deleted slug to the sink across blocks, templates, travel overrides, and review maps.
+
 ### `POST /api/schedules/{date}/blocks/`
 
 Create a time block on the schedule for the given date, owned by the authenticated user. If the user has no schedule for that date, one is created.
@@ -33,7 +41,7 @@ Create a time block on the schedule for the given date, owned by the authenticat
 | `title` | string | yes | 1–255 chars after `strip()`. |
 | `start_time` | string | yes | `HH:MM`, 5-minute increments, `< end_time`. |
 | `end_time` | string | yes | `HH:MM`, 5-minute increments, `> start_time`. |
-| `category` | string | no | One of `work`, `personal`, `health`, `other`. Default `other`. |
+| `category` | string | no | A slug from the authenticated user's category catalog. Omitted manual creates use that catalog's new-block default. |
 
 **Success — `201 Created`**
 
@@ -77,7 +85,7 @@ The frontend computes the final local `HH:MM` pair (event local time ± travel-t
 | `title` | string | yes | 1–255 chars after `strip()`. Non-string → `400`. |
 | `start_time` | string | yes | `HH:MM`, any minute value, `< end_time`. |
 | `end_time` | string | yes | `HH:MM`, any minute value, `> start_time`. |
-| `category` | string | no | One of `work`, `personal`, `health`, `other`. Default `other`. |
+| `category` | string | no | A slug from the authenticated user's category catalog. From-event creates with no override use the sink. |
 
 The raw request body is capped at **100 KB** (`413` before JSON parsing). Non-object JSON roots and non-string field values return structured `400`s.
 

@@ -63,12 +63,18 @@ class TestRestoreBlocks:
         # Other schedule's block still exists
         assert TimeBlock.objects.filter(schedule=other_sched).count() == 1
 
-    def test_restore_invalid_category_rejected(self, auth_client, schedule):
+    def test_restore_unknown_category_folds_to_sink(self, auth_client, schedule):
+        # Feature 0063: restore replays previously-valid state, so an unknown
+        # *string* slug (e.g. a category the user has since deleted) folds to
+        # the sink rather than 400 — otherwise a stale undo would fail forever.
+        # A non-string category still 400s (see test_non_string_category_returns_400_not_500).
         resp = _post_restore(auth_client, "2026-04-07", [
             {"title": "X", "start_time": "08:00", "end_time": "09:00", "category": "invalid",
              "is_completed": False, "sort_order": 0},
         ])
-        assert resp.status_code == 400
+        assert resp.status_code == 200
+        assert resp.json()["blocks"][0]["category"] == "other"
+        assert TimeBlock.objects.get(title="X").category == "other"
 
     def test_non_string_category_returns_400_not_500(self, auth_client, user):
         # Fresh date — no pre-existing Schedule. Non-hashable list category

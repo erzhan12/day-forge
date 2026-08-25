@@ -16,11 +16,13 @@ Public surface:
 * ``compute_streak(user, *, today=None) -> int`` — calendar-walk
   backward from yesterday. Gap day = break, zero-block schedule = skip.
 """
+
 import datetime
 
 from django.conf import settings
 from django.utils import timezone
-from schedules.models import Schedule, TimeBlock
+from schedules.categories import ordered_categories, sink_category
+from schedules.models import Schedule
 
 from analytics.models import DailyReview
 
@@ -29,14 +31,13 @@ def _duration_minutes(start: datetime.time, end: datetime.time) -> int:
     """``end - start`` in minutes. Both are naive ``datetime.time`` so we
     promote to a fixed datetime before subtracting."""
     base = datetime.date.min
-    delta = (
-        datetime.datetime.combine(base, end)
-        - datetime.datetime.combine(base, start)
-    )
+    delta = datetime.datetime.combine(base, end) - datetime.datetime.combine(base, start)
     return int(delta.total_seconds() // 60)
 
 
-def compute_review_stats(schedule: Schedule, *, now=None) -> dict:
+def compute_review_stats(
+    schedule: Schedule, *, now=None, categories=None, ratio_only=False
+) -> dict:
     """Aggregate one schedule's block list into ``DailyReview`` writable
     fields.
 
@@ -65,17 +66,31 @@ def compute_review_stats(schedule: Schedule, *, now=None) -> dict:
     skipped_count = 0
     # Initialise both maps with every category at zero so the JSON shape
     # is stable for the frontend (no missing keys).
-    planned_by_cat: dict[str, int] = {c.value: 0 for c in TimeBlock.Category}
-    completed_by_cat: dict[str, int] = {c.value: 0 for c in TimeBlock.Category}
+    # The streak fallback intentionally supplies no catalog and only needs
+    # counts/rate; avoiding a per-day catalog query keeps it constant-cost.
+    if categories is None and not ratio_only:
+        categories = ordered_categories(schedule.user)
+    if categories is None:
+        planned_by_cat: dict[str, int] = {}
+        completed_by_cat: dict[str, int] = {}
+        known, sink = set(), None
+    else:
+        known = {category.slug for category in categories}
+        sink = sink_category(categories).slug
+        planned_by_cat = {category.slug: 0 for category in categories}
+        completed_by_cat = {category.slug: 0 for category in categories}
 
     for block in schedule.time_blocks.all():
         duration = _duration_minutes(block.start_time, block.end_time)
         planned_count += 1
-        planned_by_cat[block.category] += duration
+        if sink is not None:
+            effective = block.category if block.category in known else sink
+            planned_by_cat[effective] += duration
 
         if block.is_completed:
             completed_count += 1
-            completed_by_cat[block.category] += duration
+            if sink is not None:
+                completed_by_cat[effective] += duration
             continue
 
         # Uncompleted — apply the today-aware skip rule.
@@ -99,9 +114,7 @@ def compute_review_stats(schedule: Schedule, *, now=None) -> dict:
     }
 
 
-def recompute_review_from_schedule(
-    schedule: Schedule, *, now=None
-) -> DailyReview:
+def recompute_review_from_schedule(schedule: Schedule, *, now=None, categories=None) -> DailyReview:
     """Refresh (or create) the ``DailyReview`` row from current blocks.
 
     ``notes`` is intentionally NOT in ``defaults`` so a recompute
@@ -109,10 +122,10 @@ def recompute_review_from_schedule(
     advances on every call (``auto_now``) so the view layer can pin
     "frozen-vs-fresh" idempotency in tests.
     """
-    stats = compute_review_stats(schedule, now=now)
-    review, _ = DailyReview.objects.update_or_create(
-        schedule=schedule, defaults=stats
+    stats = compute_review_stats(
+        schedule, now=now, categories=categories or ordered_categories(schedule.user)
     )
+    review, _ = DailyReview.objects.update_or_create(schedule=schedule, defaults=stats)
     return review
 
 
@@ -150,9 +163,7 @@ def compute_streak(user, *, today=None) -> int:
 
     window_start = today - datetime.timedelta(days=window)
     schedules = (
-        Schedule.objects.filter(
-            user=user, date__gte=window_start, date__lt=today
-        )
+        Schedule.objects.filter(user=user, date__gte=window_start, date__lt=today)
         .select_related("daily_review")
         .prefetch_related("time_blocks")
     )
@@ -173,7 +184,7 @@ def compute_streak(user, *, today=None) -> int:
         if review is not None:
             rate = review.completion_rate
         else:
-            stats = compute_review_stats(schedule)
+            stats = compute_review_stats(schedule, ratio_only=True)
             rate = (
                 stats["completed_count"] / stats["planned_count"]
                 if stats["planned_count"]
