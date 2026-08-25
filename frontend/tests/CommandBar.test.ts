@@ -58,6 +58,7 @@ vi.mock("@inertiajs/vue3", () => ({
 }))
 
 import CommandBar from "../src/components/CommandBar.vue"
+import ChatResultChip from "../src/components/ChatResultChip.vue"
 import { DEFAULT_CHAT_SUGGESTIONS } from "../src/utils/chatSuggestions"
 
 const BLOCK_A = {
@@ -126,12 +127,15 @@ describe("CommandBar (chat dock)", () => {
         "Review tomorrow",
       ]
 
-      function mount4a(suggestions?: string[]) {
+      function mount4a(
+        suggestions?: string[],
+        overrides: Record<string, unknown> = {},
+      ) {
         page.props.ui_preferences = {
           theme: "dark_4a",
           ...(suggestions === undefined ? {} : { chat_suggestions: suggestions }),
         }
-        return mountBar({ variant })
+        return mountBar({ variant, ...overrides })
       }
 
       it("renders saved custom suggestions in persisted order", () => {
@@ -154,21 +158,115 @@ describe("CommandBar (chat dock)", () => {
         ).toEqual([...DEFAULT_CHAT_SUGGESTIONS])
       })
 
-      it("prefills and focuses without submitting", async () => {
-        const w = mount4a(customSuggestions)
-        const textarea = w.find("textarea.command-input")
-          .element as HTMLTextAreaElement
-        const focusSpy = vi.spyOn(textarea, "focus")
+      it("submits a selected suggestion immediately", async () => {
+        const pushUndo = vi.fn()
+        const w = mount4a(customSuggestions, { pushUndo })
 
         await w.findAll(".suggestions button")[1].trigger("click")
         await nextTick()
 
-        expect(textarea.value).toBe("Protect focus time")
-        expect(focusSpy).toHaveBeenCalled()
-        expect(submitTurn).not.toHaveBeenCalled()
+        expect(submitTurn).toHaveBeenCalledTimes(1)
+        expect(submitTurn).toHaveBeenCalledWith(
+          "Protect focus time",
+          makeSnapshot,
+          pushUndo,
+        )
+        expect(
+          (w.find("textarea.command-input").element as HTMLTextAreaElement).value,
+        ).toBe("")
+        expect(w.findAll(".suggestions button")).toHaveLength(
+          customSuggestions.length,
+        )
       })
 
-      it("autosizes after a long suggestion is flushed to the textarea", async () => {
+      it("discards an unsent draft when a suggestion is selected", async () => {
+        const w = mount4a(customSuggestions)
+        await w.find("textarea.command-input").setValue("Keep this draft")
+
+        await w.findAll(".suggestions button")[0].trigger("click")
+        await nextTick()
+
+        expect(submitTurn).toHaveBeenCalledTimes(1)
+        expect(submitTurn).toHaveBeenCalledWith(
+          "Move lunch later",
+          makeSnapshot,
+          expect.any(Function),
+        )
+        expect(draftInput.value).toBe("")
+        expect(
+          (w.find("textarea.command-input").element as HTMLTextAreaElement).value,
+        ).toBe("")
+      })
+
+      it("disables suggestions while processing", async () => {
+        const w = mount4a(customSuggestions)
+        await w.find("textarea.command-input").setValue("Keep this draft")
+        isProcessing.value = true
+        await nextTick()
+
+        const buttons = w.findAll(".suggestions button")
+        expect(buttons).toHaveLength(customSuggestions.length)
+        buttons.forEach((button) => {
+          expect(button.attributes("disabled")).toBeDefined()
+        })
+      })
+
+      it("disables suggestions while the schedule is disabled", () => {
+        page.props.ui_preferences = {
+          theme: "dark_4a",
+          chat_suggestions: customSuggestions,
+        }
+        const w = mount(CommandBar, {
+          props: {
+            date: "2026-04-18",
+            snapshotBlocks: makeSnapshot,
+            pushUndo: vi.fn(),
+            variant,
+          },
+          global: { provide: { scheduleDisabled: ref(true) } },
+          attachTo: document.body,
+        })
+        wrapper = w
+
+        const buttons = w.findAll(".suggestions button")
+        expect(buttons).toHaveLength(customSuggestions.length)
+        buttons.forEach((button) => {
+          expect(button.attributes("disabled")).toBeDefined()
+        })
+      })
+
+      it("does not replace a draft when a disabled suggestion is emitted", () => {
+        page.props.ui_preferences = {
+          theme: "dark_4a",
+          chat_suggestions: customSuggestions,
+        }
+        draftInput.value = "Keep this draft"
+        const w = mount(CommandBar, {
+          props: {
+            date: "2026-04-18",
+            snapshotBlocks: makeSnapshot,
+            pushUndo: vi.fn(),
+            variant,
+          },
+          global: { provide: { scheduleDisabled: ref(true) } },
+          attachTo: document.body,
+        })
+        wrapper = w
+
+        const buttons = w.findAll(".suggestions button")
+        expect(buttons).toHaveLength(customSuggestions.length)
+        const suggestionChip = w
+          .findAllComponents(ChatResultChip)
+          .find((chip) => chip.props("showSuggestions") === true)
+        expect(suggestionChip).toBeDefined()
+
+        suggestionChip!.vm.$emit("suggestion", customSuggestions[0])
+
+        expect(submitTurn).not.toHaveBeenCalled()
+        expect(draftInput.value).toBe("Keep this draft")
+      })
+
+      it("restores minimum textarea height after submitting a long suggestion", async () => {
         const longSuggestion =
           "Protect a long uninterrupted focus block and move every flexible task around it"
         const w = mount4a([longSuggestion])
@@ -176,13 +274,14 @@ describe("CommandBar (chat dock)", () => {
           .element as HTMLTextAreaElement
         Object.defineProperty(textarea, "scrollHeight", {
           configurable: true,
-          get: () => (textarea.value === longSuggestion ? 260 : 20),
+          get: () => 20,
         })
 
         await w.find(".suggestions button").trigger("click")
         await nextTick()
 
-        expect(textarea.style.height).toBe(variant === "dock" ? "200px" : "260px")
+        expect(textarea.value).toBe("")
+        expect(textarea.style.height).toBe(variant === "dock" ? "20px" : "120px")
       })
 
       it("keeps custom suggestions when the date changes", async () => {

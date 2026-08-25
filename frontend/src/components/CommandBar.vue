@@ -20,7 +20,7 @@
 //   * `/` (when focus is outside form fields) moves focus into the textarea
 
 import type { Ref } from "vue"
-import { computed, inject, nextTick, onMounted, onUnmounted, ref, watch } from "vue"
+import { computed, inject, onMounted, onUnmounted, ref, watch } from "vue"
 import type { TimeBlock, UndoAction } from "../types"
 import { useChat } from "../composables/useChat"
 import { useActiveTheme } from "../composables/useActiveTheme"
@@ -176,11 +176,10 @@ function handleInput(): void {
   autosize()
 }
 
-async function useSuggestion(text: string): Promise<void> {
+async function submitSuggestion(text: string): Promise<void> {
+  if (inputDisabled.value) return
   input.value = text
-  inputEl.value?.focus()
-  await nextTick()
-  autosize()
+  await handleSubmit()
 }
 
 function handleGlobalKeydown(e: KeyboardEvent): void {
@@ -252,7 +251,8 @@ onUnmounted(() => {
       v-if="is4a && suggestions.length > 0"
       show-suggestions
       :suggestions="suggestions"
-      @suggestion="(text: string) => void useSuggestion(text)"
+      :disabled="inputDisabled"
+      @suggestion="(text: string) => void submitSuggestion(text)"
     />
     <form class="command-row" @submit.prevent="handleSubmit">
       <span

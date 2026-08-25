@@ -6,10 +6,12 @@ withDefaults(
     result?: AppliedBlockResult[]
     showSuggestions?: boolean
     suggestions?: string[]
+    disabled?: boolean
   }>(),
   {
     showSuggestions: false,
     suggestions: () => [],
+    disabled: false,
   },
 )
 const emit = defineEmits<{ suggestion: [text: string] }>()
@@ -28,7 +30,15 @@ const emit = defineEmits<{ suggestion: [text: string] }>()
       </span>
     </template>
     <div v-if="showSuggestions" class="suggestions" aria-label="Suggested AI prompts">
-      <button v-for="(suggestion, index) in suggestions" :key="index" type="button" @click="emit('suggestion', suggestion)">{{ suggestion }}</button>
+      <button
+        v-for="(suggestion, index) in suggestions"
+        :key="index"
+        type="button"
+        :disabled="disabled"
+        @click="emit('suggestion', suggestion)"
+      >
+        {{ suggestion }}
+      </button>
     </div>
   </div>
 </template>
@@ -38,4 +48,5 @@ const emit = defineEmits<{ suggestion: [text: string] }>()
 .result-row { padding:3px 6px; border:1px solid var(--border-strong); border-radius:999px; background:var(--bg-schedule-block); }
 .suggestions { display:flex; flex-wrap:wrap; gap:5px; }
 button { border:1px solid var(--border-strong); border-radius:999px; background:var(--info-surface); color:oklch(0.78 0.09 230); padding:3px 7px; font:inherit; cursor:pointer; }
+button:disabled { cursor:not-allowed; opacity:0.55; }
 </style>

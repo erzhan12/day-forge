@@ -51,6 +51,19 @@ describe("ChatResultChip", () => {
     expect(wrapper.emitted("suggestion")).toEqual([["Protect focus time"]])
   })
 
+  it("natively disables every supplied suggestion when disabled", () => {
+    const suggestions = ["Move lunch later", "Protect focus time"]
+    const wrapper = mount(ChatResultChip, {
+      props: { showSuggestions: true, suggestions, disabled: true },
+    })
+    const buttons = wrapper.findAll(".suggestions button")
+
+    expect(buttons).toHaveLength(suggestions.length)
+    buttons.forEach((button) => {
+      expect(button.attributes("disabled")).toBeDefined()
+    })
+  })
+
   it("renders duplicate suggestions as independent clickable buttons", async () => {
     const wrapper = mount(ChatResultChip, {
       props: { showSuggestions: true, suggestions: ["same", "same"] },
