@@ -369,6 +369,9 @@ class TestCreateBlock:
 
     @pytest.mark.django_db
     def test_oversized_body_returns_413(self, auth_client, schedule):
+        blocks_before = TimeBlock.objects.filter(schedule=schedule).count()
+        status_before = schedule.status
+
         resp = auth_client.post(
             "/api/schedules/2026-04-07/blocks/",
             json.dumps({
@@ -381,6 +384,11 @@ class TestCreateBlock:
         )
         assert resp.status_code == 413
         assert resp.json()["errors"]["body"] == "Request body too large."
+
+        # Rejection must not create a block or flip the schedule's status.
+        assert TimeBlock.objects.filter(schedule=schedule).count() == blocks_before
+        schedule.refresh_from_db()
+        assert schedule.status == status_before
 
 
 class TestBlockDetail:
