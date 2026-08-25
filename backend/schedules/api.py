@@ -319,10 +319,20 @@ def block_detail(request, pk):
         return JsonResponse({"ok": True})
 
     # PATCH
+    oversized = _reject_oversized_body(request)
+    if oversized is not None:
+        return oversized
+
     try:
         data = json.loads(request.body)
     except json.JSONDecodeError:
         return JsonResponse({"errors": {"body": "Invalid JSON."}}, status=400)
+
+    if not isinstance(data, dict):
+        return JsonResponse(
+            {"errors": {"body": "Request body must be a JSON object."}},
+            status=400,
+        )
 
     # Stage all incoming changes in `pending` before touching the DB. Any
     # parse / type / range error returns 400 *before* we enter the atomic

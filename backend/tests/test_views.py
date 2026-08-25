@@ -384,6 +384,21 @@ class TestCreateBlock:
 
 
 class TestBlockDetail:
+    @staticmethod
+    def _mutation_snapshot(time_block):
+        """Persisted state which PATCH rejection must leave untouched."""
+        time_block.refresh_from_db()
+        time_block.schedule.refresh_from_db()
+        return (
+            time_block.title,
+            time_block.start_time,
+            time_block.end_time,
+            time_block.category,
+            time_block.is_completed,
+            time_block.sort_order,
+            time_block.schedule.status,
+        )
+
     @pytest.mark.django_db
     def test_update_title(self, auth_client, time_block):
         resp = auth_client.patch(
@@ -422,6 +437,41 @@ class TestBlockDetail:
         )
         assert resp.status_code == 400
         assert "errors" in resp.json()
+
+    @pytest.mark.django_db
+    @pytest.mark.parametrize(
+        "payload", [[], None, "oops", 123, True, False, "start_time"]
+    )
+    def test_patch_non_object_json_rejected_without_mutation(
+        self, auth_client, time_block, payload
+    ):
+        before = self._mutation_snapshot(time_block)
+
+        resp = auth_client.patch(
+            f"/api/blocks/{time_block.pk}/",
+            json.dumps(payload),
+            content_type="application/json",
+        )
+
+        assert resp.status_code == 400
+        assert resp.json() == {
+            "errors": {"body": "Request body must be a JSON object."}
+        }
+        assert self._mutation_snapshot(time_block) == before
+
+    @pytest.mark.django_db
+    def test_patch_oversized_body_rejected_without_mutation(self, auth_client, time_block):
+        before = self._mutation_snapshot(time_block)
+
+        resp = auth_client.patch(
+            f"/api/blocks/{time_block.pk}/",
+            json.dumps({"title": "x" * 200_000}),
+            content_type="application/json",
+        )
+
+        assert resp.status_code == 413
+        assert resp.json() == {"errors": {"body": "Request body too large."}}
+        assert self._mutation_snapshot(time_block) == before
 
     @pytest.mark.django_db
     def test_delete_nonexistent_returns_404(self, auth_client):

@@ -116,7 +116,7 @@ Non-time PATCHes (title, category, `is_completed`, `sort_order`) tolerate stored
 
 | Status | `errors` key | Meaning |
 |--------|--------------|---------|
-| `400` | `body` | Request body is not valid JSON. |
+| `400` | `body` | Request body is not valid JSON or is not a JSON object. |
 | `400` | `title` | Not a string, empty after strip, or > 255 chars. |
 | `400` | `start_time` / `end_time` | Not in `HH:MM` format. |
 | `400` | `category` | Not a string, or not one of the allowed choices. |
@@ -124,6 +124,7 @@ Non-time PATCHes (title, category, `is_completed`, `sort_order`) tolerate stored
 | `400` | `time` | Resulting `start >= end`, or overlaps another block. |
 | `403` | `detail` | CSRF token missing/invalid. |
 | `404` | `detail` | No block with that `pk`, **or** the block belongs to another user. Cross-user access deliberately returns 404 rather than 403 to avoid leaking the existence of block IDs outside the caller's own schedule. |
+| `413` | `body` | Request body exceeds 100 KB (checked before JSON parsing). |
 
 ---
 
