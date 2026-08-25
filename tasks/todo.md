@@ -896,3 +896,21 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
   `POST`. Give each its own method+path header, field table, and success/error examples
   to match the per-endpoint style used elsewhere in the file (e.g.
   `POST /api/schedules/{date}/blocks/`). Non-blocking documentation formatting.
+
+### 0063 categories — PR #172 cycle-2 deferrals
+- **P2 [SECURITY] Rate-limit category mutation endpoints.** Add per-user per-hour
+  fixed-window counters (POST/PATCH/DELETE on `/api/user/categories/*`) mirroring
+  `CALDAV_CONNECT_RATE_LIMIT_PER_HOUR` / `TODOIST_CONNECT_RATE_LIMIT_PER_HOUR`
+  (`connect_rl:category:<user_id>` in `CACHES['default']`) plus a `schedules.W002`-style
+  ineffective-cache-backend check. Its own change (new env var + system check + tests),
+  analogous to how the connect limiters shipped as separate features. Auth-gated per-user
+  CRUD, so not a correctness blocker.
+- **P2 [QUALITY] `validate_template_blocks(categories=None)` skips membership.** The
+  `categories is not None and category not in {...}` short-circuit lets any slug pass when
+  `categories` is None. Audit all call sites (esp. seed_templates) to confirm the live
+  catalog is always passed, then either drop the `is not None` guard or raise on None.
+- **P2 [PERFORMANCE] Double `ordered_categories` on `create_block`/`block_detail`.**
+  Pre-transaction validation and the in-transaction TOCTOU re-fetch each query the catalog.
+  The in-transaction read must stay fresh (it's the authoritative re-check), but the
+  pre-transaction 400 could reuse a passed-in snapshot. Minor (≤8 rows, one query); optimize
+  only if it shows on a profile.

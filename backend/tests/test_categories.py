@@ -413,6 +413,29 @@ class TestValidateSlug:
         assert validate_slug("health", ordered_categories(user)) == "health"
 
 
+@pytest.mark.django_db
+class TestCatalogInvariantGuards:
+    def test_sink_category_raises_on_missing_sink(self):
+        rows = [
+            Category(slug="work", label="Work", color_id="blue", is_sink=False),
+            Category(slug="focus", label="Focus", color_id="rose", is_sink=False),
+        ]
+        with pytest.raises(RuntimeError):
+            sink_category(rows)
+
+    def test_default_category_raises_on_missing_default(self):
+        rows = [
+            Category(slug="other", label="Other", color_id="gray", is_sink=True,
+                     is_new_block_default=False),
+        ]
+        with pytest.raises(RuntimeError):
+            default_category(rows)
+
+    def test_category_str(self, user):
+        row = ordered_categories(user)[0]
+        assert str(row) == f"{user}:work"
+
+
 # --------------------------------------------------------------------------- #
 # Analytics unknown-slug fold
 # --------------------------------------------------------------------------- #

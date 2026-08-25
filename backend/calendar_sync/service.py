@@ -270,7 +270,7 @@ def fetch_events_for_date(account, target_date: date) -> list[NormalizedEvent]:
         raise CalDAVTimeoutError("CalDAV request timed out") from e
     except DAVError as e:
         raise CalDAVProviderError("CalDAV provider error") from e
-    except CalDAVError, ImproperlyConfigured:
+    except (CalDAVError, ImproperlyConfigured):
         # ImproperlyConfigured carries actionable ops detail (e.g. key
         # rotation invalidating stored ciphertext) — let it propagate
         # so the view can map it to a config-shaped 500 instead of a

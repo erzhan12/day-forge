@@ -51,7 +51,7 @@ def warn_ineffective_cache_with_calendar_sync(app_configs, **kwargs):
 
         if not CalDAVAccount.objects.exists():
             return warnings
-    except OperationalError, ProgrammingError:
+    except (OperationalError, ProgrammingError):
         # Pre-migrate state: the table doesn't exist yet. Stay silent so
         # ``manage.py migrate`` can run on a fresh database.
         return warnings

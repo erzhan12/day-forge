@@ -39,7 +39,10 @@ def ordered_categories(user):
                 if rows:
                     return rows
                 raise
-    return []
+    # Unreachable: every attempt returns or the final attempt re-raises. Make the
+    # invariant explicit so a future refactor can't silently return an empty
+    # catalog (every caller assumes at least the four seeded rows).
+    raise RuntimeError("ordered_categories: seeding failed after 3 attempts")
 
 
 def serialize_category(category):
@@ -62,11 +65,17 @@ def catalog_by_slug(categories):
 
 
 def sink_category(categories):
-    return next(category for category in categories if category.is_sink)
+    sink = next((category for category in categories if category.is_sink), None)
+    if sink is None:
+        raise RuntimeError("Category catalog has no sink row.")
+    return sink
 
 
 def default_category(categories):
-    return next(category for category in categories if category.is_new_block_default)
+    default = next((category for category in categories if category.is_new_block_default), None)
+    if default is None:
+        raise RuntimeError("Category catalog has no new-block-default row.")
+    return default
 
 
 def validate_slug(value, categories, *, unknown_to_sink=False):

@@ -196,6 +196,9 @@ class Category(models.Model):
             ),
         ]
 
+    def __str__(self):
+        return f"{self.user}:{self.slug}"
+
 
 class TimeBlock(models.Model):
     schedule = models.ForeignKey(Schedule, related_name="time_blocks", on_delete=models.CASCADE)
