@@ -1,18 +1,5 @@
 import { router } from "@inertiajs/vue3"
-
-async function request(url: string, method: string, body?: object) {
-  const response = await fetch(url, {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-      "x-xsrf-token": decodeURIComponent(
-        document.cookie.match(/XSRF-TOKEN=([^;]+)/)?.[1] ?? "",
-      ),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  })
-  return { ok: response.ok, data: await response.json() }
-}
+import { requestJson } from "./useHttp"
 
 export function useCategories() {
   // After ordinary mutations only the catalog changes; after a delete the
@@ -24,12 +11,12 @@ export function useCategories() {
 
   return {
     create: (label: string, color_id: string) =>
-      request("/api/user/categories/", "POST", { label, color_id }),
-    update: (id: number, data: object) =>
-      request(`/api/user/categories/${id}/`, "PATCH", data),
-    remove: (id: number) => request(`/api/user/categories/${id}/`, "DELETE"),
+      requestJson("/api/user/categories/", "POST", { label, color_id }),
+    update: (id: number, data: Record<string, unknown>) =>
+      requestJson(`/api/user/categories/${id}/`, "PATCH", data),
+    remove: (id: number) => requestJson(`/api/user/categories/${id}/`, "DELETE"),
     swap: (a: number, b: number) =>
-      request("/api/user/categories/swap/", "POST", { a, b }),
+      requestJson("/api/user/categories/swap/", "POST", { a, b }),
     refresh,
   }
 }

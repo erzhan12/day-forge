@@ -88,7 +88,7 @@ describe("SettingsCategoriesPanel", () => {
   })
 
   it("surfaces an inline error when the API rejects an add", async () => {
-    api.create.mockResolvedValueOnce({ ok: false, data: { errors: { category: "Nope" } } })
+    api.create.mockResolvedValueOnce({ ok: false, errors: { category: "Nope" } })
     const wrapper = mount(SettingsCategoriesPanel, { props: { categories: SEED } })
     await wrapper.find("form").trigger("submit")
     await Promise.resolve()

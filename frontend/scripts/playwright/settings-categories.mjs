@@ -167,8 +167,8 @@ try {
   // ── 6. Delete ─────────────────────────────────────────────────────────
   page.on("dialog", (dialog) => dialog.accept())
 
-  const beforeDelete = await findRow(panel, "Smoke Test")
-  if (!beforeDelete) throw new Error("Smoke Test row not found for delete step")
+  const beforeDelete = await findRow(panel, "Smoke Test Renamed")
+  if (!beforeDelete) throw new Error("Smoke Test Renamed row not found for delete step")
 
   const deleteBtn = beforeDelete.row.locator("button", { hasText: "Delete" })
   await Promise.all([

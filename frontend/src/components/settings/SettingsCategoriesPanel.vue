@@ -21,16 +21,16 @@ async function add() {
     newColor.value = "blue"
     api.refresh()
   } else {
-    error.value = result.data.errors?.category ?? "Could not add category"
+    error.value = (result.errors?.category as string) ?? "Could not add category"
   }
 }
 
-async function update(id: number, data: object) {
+async function update(id: number, data: Record<string, unknown>) {
   const result = await api.update(id, data)
   if (result.ok) {
     api.refresh()
   } else {
-    error.value = result.data.errors?.category ?? "Could not save category"
+    error.value = (result.errors?.category as string) ?? "Could not save category"
   }
 }
 
@@ -40,7 +40,7 @@ async function remove(category: UserCategory) {
   if (result.ok) {
     api.refresh(true)
   } else {
-    error.value = result.data.errors?.category ?? "Could not delete"
+    error.value = (result.errors?.category as string) ?? "Could not delete"
   }
 }
 
