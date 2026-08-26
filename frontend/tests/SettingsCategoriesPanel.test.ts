@@ -5,10 +5,10 @@ import { mount } from "@vue/test-utils"
 // test drives the component's own logic (ordering, sink/default markers, cap,
 // delete confirmation) without a backend.
 const api = {
-  create: vi.fn(async () => ({ ok: true, data: {} })),
-  update: vi.fn(async () => ({ ok: true, data: {} })),
-  remove: vi.fn(async () => ({ ok: true, data: {} })),
-  swap: vi.fn(async () => ({ ok: true, data: {} })),
+  create: vi.fn(async () => ({ ok: true })),
+  update: vi.fn(async () => ({ ok: true })),
+  remove: vi.fn(async () => ({ ok: true })),
+  swap: vi.fn(async () => ({ ok: true })),
   refresh: vi.fn(),
 }
 vi.mock("../src/composables/useCategories", () => ({ useCategories: () => api }))
@@ -93,5 +93,25 @@ describe("SettingsCategoriesPanel", () => {
     await wrapper.find("form").trigger("submit")
     await Promise.resolve()
     expect(wrapper.find(".error-text").text()).toBe("Nope")
+  })
+
+  it("surfaces an inline error when the API rejects an update", async () => {
+    api.update.mockResolvedValueOnce({ ok: false, errors: { category: "Save failed" } })
+    const wrapper = mount(SettingsCategoriesPanel, { props: { categories: SEED } })
+    const input = wrapper.findAll(".category-row")[0].find("input")
+    await input.setValue("Work Edited")
+    await input.trigger("change")
+    await Promise.resolve()
+    expect(wrapper.find(".error-text").text()).toBe("Save failed")
+  })
+
+  it("surfaces an inline error when the API rejects a delete", async () => {
+    api.remove.mockResolvedValueOnce({ ok: false, errors: { category: "Delete failed" } })
+    const wrapper = mount(SettingsCategoriesPanel, { props: { categories: SEED } })
+    const deleteBtn = wrapper.findAll(".category-row")[1].findAll("button")
+      .find((b) => b.text() === "Delete")!
+    await deleteBtn.trigger("click")
+    await Promise.resolve()
+    expect(wrapper.find(".error-text").text()).toBe("Delete failed")
   })
 })

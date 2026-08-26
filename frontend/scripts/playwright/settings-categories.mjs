@@ -146,22 +146,23 @@ try {
   // ── 5. Reorder (↑) ────────────────────────────────────────────────────
   const indexBefore = afterRename.index
   const upBtn = afterRename.row.locator("button", { hasText: "↑" })
-  if (!(await upBtn.isDisabled())) {
-    await Promise.all([
-      page.waitForResponse((r) =>
-        r.url().includes("/api/user/categories/swap/") && r.request().method() === "POST",
-      ),
-      upBtn.click(),
-    ])
-    await page.waitForTimeout(WAIT_FOR_INERTIA_SETTLE_MS)
+  if (await upBtn.isDisabled()) {
+    throw new Error("Up button unexpectedly disabled on a non-first row")
+  }
+  await Promise.all([
+    page.waitForResponse((r) =>
+      r.url().includes("/api/user/categories/swap/") && r.request().method() === "POST",
+    ),
+    upBtn.click(),
+  ])
+  await page.waitForTimeout(WAIT_FOR_INERTIA_SETTLE_MS)
 
-    const afterSwap = await findRow(panel, "Smoke Test Renamed")
-    if (!afterSwap) throw new Error("Row missing after reorder")
-    if (afterSwap.index >= indexBefore) {
-      throw new Error(
-        `Row did not move up: was ${indexBefore}, now ${afterSwap.index}`,
-      )
-    }
+  const afterSwap = await findRow(panel, "Smoke Test Renamed")
+  if (!afterSwap) throw new Error("Row missing after reorder")
+  if (afterSwap.index >= indexBefore) {
+    throw new Error(
+      `Row did not move up: was ${indexBefore}, now ${afterSwap.index}`,
+    )
   }
 
   // ── 6. Delete ─────────────────────────────────────────────────────────
