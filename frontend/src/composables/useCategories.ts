@@ -5,7 +5,9 @@ async function request(url: string, method: string, body?: object) {
     method,
     headers: {
       "Content-Type": "application/json",
-      "X-CSRFToken": document.cookie.match(/csrftoken=([^;]+)/)?.[1] ?? "",
+      "x-xsrf-token": decodeURIComponent(
+        document.cookie.match(/XSRF-TOKEN=([^;]+)/)?.[1] ?? "",
+      ),
     },
     body: body ? JSON.stringify(body) : undefined,
   })

@@ -1,6 +1,6 @@
 # Playwright smoke harness
 
-These 19 scripts exercise Day Forge through a real browser. They are smoke
+These 20 scripts exercise Day Forge through a real browser. They are smoke
 scenarios rather than an isolated test suite: several call the configured LLM
 or Todoist account, and all use the shared `playwright` Django user.
 
@@ -81,6 +81,7 @@ than a currency estimate because the configured model can change.
 | `compact-timeline-stubs` | 0 | 5–15s |
 | `draft-prompt-history-suffix` | 1 draft | 30–120s; prompt capture required |
 | `regenerate-422-fallback` | 0 from its explicit 422 request | 10–60s; see auto-draft caveat below |
+| `settings-categories` | 0 | 10–25s |
 | `settings-topic-navigation` | 0 | 10–20s |
 | `skipped-tasks-today-aware` | 0 | 5–20s |
 | `template-editor-layout` | 0 | 15–40s; writes local screenshots |
