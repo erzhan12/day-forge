@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { mount } from "@vue/test-utils"
+import { mount, flushPromises } from "@vue/test-utils"
 
 // The panel's API composable talks to fetch + Inertia's router; mock it so the
 // test drives the component's own logic (ordering, sink/default markers, cap,
@@ -99,9 +99,11 @@ describe("SettingsCategoriesPanel", () => {
     api.update.mockResolvedValueOnce({ ok: false, errors: { category: "Save failed" } })
     const wrapper = mount(SettingsCategoriesPanel, { props: { categories: SEED } })
     const input = wrapper.findAll(".category-row")[0].find("input")
-    await input.setValue("Work Edited")
+    // Set value directly so the @change handler reads it; avoid setValue which
+    // also fires a change event and would consume the one-time mock early.
+    ;(input.element as HTMLInputElement).value = "Work Edited"
     await input.trigger("change")
-    await Promise.resolve()
+    await flushPromises()
     expect(wrapper.find(".error-text").text()).toBe("Save failed")
   })
 
@@ -113,5 +115,27 @@ describe("SettingsCategoriesPanel", () => {
     await deleteBtn.trigger("click")
     await Promise.resolve()
     expect(wrapper.find(".error-text").text()).toBe("Delete failed")
+  })
+
+  it("surfaces an inline error when the API rejects a swap", async () => {
+    api.swap.mockResolvedValueOnce({ ok: false, errors: { category: "Swap failed" } })
+    const wrapper = mount(SettingsCategoriesPanel, { props: { categories: SEED } })
+    const upBtn = wrapper.findAll(".category-row")[1].findAll("button")
+      .find((b) => b.text() === "↑")!
+    await upBtn.trigger("click")
+    await Promise.resolve()
+    expect(wrapper.find(".error-text").text()).toBe("Swap failed")
+  })
+
+  it("clears a stale error when the next action succeeds", async () => {
+    api.create.mockResolvedValueOnce({ ok: false, errors: { category: "Bad" } })
+    const wrapper = mount(SettingsCategoriesPanel, { props: { categories: SEED } })
+    await wrapper.find("form").trigger("submit")
+    await Promise.resolve()
+    expect(wrapper.find(".error-text").text()).toBe("Bad")
+    // Second submit succeeds — error banner must clear.
+    await wrapper.find("form").trigger("submit")
+    await Promise.resolve()
+    expect(wrapper.find(".error-text").exists()).toBe(false)
   })
 })

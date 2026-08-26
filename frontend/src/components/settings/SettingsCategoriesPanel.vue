@@ -14,23 +14,30 @@ const label = ref("")
 const newColor = ref("blue")
 const error = ref("")
 
+function catError(v: string | string[] | undefined, fallback: string): string {
+  const raw = Array.isArray(v) ? v[0] : v
+  return raw ?? fallback
+}
+
 async function add() {
   const result = await api.create(label.value, newColor.value)
   if (result.ok) {
+    error.value = ""
     label.value = ""
     newColor.value = "blue"
     api.refresh()
   } else {
-    error.value = (result.errors?.category as string) ?? "Could not add category"
+    error.value = catError(result.errors?.category, "Could not add category")
   }
 }
 
 async function update(id: number, data: Record<string, unknown>) {
   const result = await api.update(id, data)
   if (result.ok) {
+    error.value = ""
     api.refresh()
   } else {
-    error.value = (result.errors?.category as string) ?? "Could not save category"
+    error.value = catError(result.errors?.category, "Could not save category")
   }
 }
 
@@ -38,15 +45,21 @@ async function remove(category: UserCategory) {
   if (category.is_sink || !confirm(`Delete ${category.label}?`)) return
   const result = await api.remove(category.id)
   if (result.ok) {
+    error.value = ""
     api.refresh(true)
   } else {
-    error.value = (result.errors?.category as string) ?? "Could not delete"
+    error.value = catError(result.errors?.category, "Could not delete")
   }
 }
 
 async function reorder(id: number, otherId: number) {
-  await api.swap(id, otherId)
-  api.refresh()
+  const result = await api.swap(id, otherId)
+  if (result.ok) {
+    error.value = ""
+    api.refresh()
+  } else {
+    error.value = catError(result.errors?.category, "Could not reorder")
+  }
 }
 </script>
 
