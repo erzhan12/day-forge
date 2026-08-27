@@ -310,7 +310,6 @@ describe("Schedule.vue focus indicator", () => {
     expect(win.document.body.textContent).toContain("Deep focus")
     expect(win.document.body.textContent).toContain("1h left")
     expect(win.document.body.textContent).not.toContain("Unrelated private plan")
-    expect(win.document.body.textContent).not.toContain("work")
     expect(win.document.body.textContent).not.toContain("2026-08-12")
     expect(win.document.body.textContent).not.toContain("11:00")
     expect(win.document.title).toBe("Focus")

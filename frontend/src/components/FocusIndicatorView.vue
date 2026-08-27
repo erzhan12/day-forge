@@ -44,9 +44,9 @@ const nextBlockLabel = computed(() => {
 })
 
 const nextBlockRemainingLabel = computed(() =>
-  nextBlockLabel.value === null || props.nextBlockRemainingMinutes === null
-    ? null
-    : formatRemainingMinutes(props.nextBlockRemainingMinutes),
+  nextBlockLabel.value !== null && props.nextBlockRemainingMinutes !== null
+    ? formatRemainingMinutes(props.nextBlockRemainingMinutes)
+    : null,
 )
 </script>
 
