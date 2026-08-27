@@ -87,10 +87,5 @@ def connect_rate_limit_key(provider: str, user_id: int) -> str:
 
 
 def category_mutation_rate_limit_key(user_id: int) -> str:
-    """Return the namespaced per-user category-mutation counter key.
-
-    One shared counter gates every write on ``/api/user/categories/*``
-    (create, update, delete, reorder) so a single budget bounds all
-    category churn per user. Reads are never counted.
-    """
+    """Return the namespaced per-user category-mutation counter key."""
     return f"category_mutation_rl:{user_id}"

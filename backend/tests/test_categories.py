@@ -594,16 +594,16 @@ class TestCategoryMutationRateLimit:
     def test_all_verbs_share_one_counter(self, auth_client):
         a, b = self._ids(auth_client)[:2]
         # Verb 1 — swap. Verb 2 — create. Both under the budget of 2.
-        assert _post(auth_client, SWAP, {"a": a, "b": b}).status_code != 429
-        assert self._create(auth_client, "New", "amber").status_code != 429
+        assert _post(auth_client, SWAP, {"a": a, "b": b}).status_code == 200
+        assert self._create(auth_client, "New", "amber").status_code == 201
         # Budget spent; a DELETE (guard fires before the row fetch) → 429,
         # not the 404 an over-budget request would otherwise get.
         assert auth_client.delete(_detail(999999)).status_code == 429
 
     def test_patch_gated_after_budget(self, auth_client):
         pk = self._ids(auth_client)[0]  # read — uncounted
-        self._create(auth_client, "A", "blue")
-        self._create(auth_client, "B", "cyan")
+        assert self._create(auth_client, "A", "blue").status_code == 201
+        assert self._create(auth_client, "B", "cyan").status_code == 201
         # Budget spent by the two creates; PATCH (guard fires before the
         # row fetch) → 429, closing the verb-coverage gap left by
         # test_all_verbs_share_one_counter (swap/create/delete only).
@@ -612,8 +612,8 @@ class TestCategoryMutationRateLimit:
 
     def test_swap_gated_after_budget(self, auth_client):
         a, b = self._ids(auth_client)[:2]
-        assert _post(auth_client, SWAP, {"a": a, "b": b}).status_code != 429
-        assert _post(auth_client, SWAP, {"a": a, "b": b}).status_code != 429
+        assert _post(auth_client, SWAP, {"a": a, "b": b}).status_code == 200
+        assert _post(auth_client, SWAP, {"a": a, "b": b}).status_code == 200
         assert _post(auth_client, SWAP, {"a": a, "b": b}).status_code == 429
 
     def test_budget_is_per_user(self, auth_client):

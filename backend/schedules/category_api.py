@@ -28,11 +28,7 @@ def _error(message, status=400):
 
 
 def _rate_limited(request):
-    """Return a 429 response if the user's category-mutation budget is spent.
-
-    One shared per-user counter across all write verbs; callers invoke this
-    at the top of every mutation path (never on GET reads).
-    """
+    """Return a 429 response if this user's category-mutation budget is spent, else None."""
     key = category_mutation_rate_limit_key(request.user.id)
     if not consume_rate_limit(key, settings.CATEGORY_MUTATION_RATE_LIMIT_PER_HOUR):
         return rate_limited_response()
