@@ -274,7 +274,7 @@ def templates_collection(request):
             if validate_template_blocks(
                 cleaned["blocks"],
                 get_schedule_window(request.user),
-                categories=ordered_categories(request.user),
+                categories=categories,
             ):
                 return _err("blocks", "Invalid category.")
             tpl = Template.objects.create(user=request.user, **cleaned)
@@ -320,7 +320,7 @@ def template_detail(request, pk):
             if validate_template_blocks(
                 cleaned["blocks"],
                 get_schedule_window(request.user),
-                categories=ordered_categories(request.user),
+                categories=categories,
             ):
                 return _err("blocks", "Invalid category.")
             tpl.name = cleaned["name"]

@@ -658,12 +658,28 @@ class TestValidateTemplateBlocks:
         errors = validate_template_blocks([self._block(category=123)], categories=cats)
         assert errors == ["block[0]: invalid category 123"]
 
-    def test_categories_is_required_keyword(self, user):
-        # Positional call and omitted keyword both raise — no lenient None path.
+    def test_categories_positional_raises(self, user):
+        # Passing categories positionally is rejected — it is keyword-only now.
         with pytest.raises(TypeError):
             validate_template_blocks([self._block()], DEFAULT_WINDOW, self._cats(user))
+
+    def test_categories_omitted_raises(self, user):
+        # Omitting categories entirely raises — no lenient None default.
         with pytest.raises(TypeError):
             validate_template_blocks([self._block()])
+
+    def test_missing_title_rejected(self, user):
+        cats = self._cats(user)
+        block = {"title": "", "start_time": "08:00", "end_time": "09:00", "category": "work"}
+        errors = validate_template_blocks([block], categories=cats)
+        assert "block[0]: title is required" in errors
+
+    def test_title_too_long_rejected(self, user):
+        cats = self._cats(user)
+        errors = validate_template_blocks(
+            [self._block(title="x" * 256)], categories=cats
+        )
+        assert "block[0]: title too long" in errors
 
     def test_overlap_rejected(self, user):
         cats = self._cats(user)
