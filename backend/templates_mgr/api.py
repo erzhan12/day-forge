@@ -12,6 +12,7 @@ catch ``IntegrityError`` to surface a structured 409 instead of a 500.
 import datetime
 import json
 import logging
+from collections.abc import Iterable
 
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
@@ -79,7 +80,7 @@ def _rule_to_dict(r: Rule) -> dict:
 
 
 def validate_template_blocks(
-    blocks, window: ScheduleWindow = DEFAULT_WINDOW, *, categories
+    blocks, window: ScheduleWindow = DEFAULT_WINDOW, *, categories: Iterable
 ) -> list[str]:
     """Validate the ``blocks`` JSON array on a Template.
 
@@ -155,10 +156,13 @@ def validate_template_blocks(
 
 
 def _parse_template_payload(
-    data, window: ScheduleWindow, *, categories
+    data, window: ScheduleWindow, *, categories: Iterable
 ) -> tuple[dict, JsonResponse | None]:
     """Validate the create/update body. Returns ``(cleaned, None)`` on
-    success, or ``({}, JsonResponse)`` with a 400 on failure."""
+    success, or ``({}, JsonResponse)`` with a 400 on failure.
+
+    ``categories`` is a required keyword-only iterable of the user's Category
+    rows, forwarded to ``validate_template_blocks``."""
     if not isinstance(data, dict):
         return {}, _err("body", "Request body must be a JSON object.")
 

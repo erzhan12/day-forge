@@ -648,6 +648,10 @@ class TestValidateTemplateBlocks:
     def test_empty_categories_fallback_raises(self, user):
         # An empty catalog is an invariant violation (ordered_categories always
         # seeds); a category-less block hitting the sink default fails loudly.
+        # The RuntimeError originates in sink_category — pin that contract here
+        # so this expectation won't silently drift if sink_category changes.
+        with pytest.raises(RuntimeError):
+            sink_category([])
         block = {"title": "Focus", "start_time": "08:00", "end_time": "09:00"}
         with pytest.raises(RuntimeError):
             validate_template_blocks([block], categories=[])
