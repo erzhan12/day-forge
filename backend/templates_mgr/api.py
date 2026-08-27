@@ -79,7 +79,7 @@ def _rule_to_dict(r: Rule) -> dict:
 
 
 def validate_template_blocks(
-    blocks, window: ScheduleWindow = DEFAULT_WINDOW, categories=None
+    blocks, window: ScheduleWindow = DEFAULT_WINDOW, *, categories
 ) -> list[str]:
     """Validate the ``blocks`` JSON array on a Template.
 
@@ -110,10 +110,8 @@ def validate_template_blocks(
             errors.append(f"block[{i}]: title is required")
         elif len(title) > 255:
             errors.append(f"block[{i}]: title too long")
-        category = entry.get("category", sink_category(categories).slug if categories else "other")
-        if not isinstance(category, str) or (
-            categories is not None and category not in {row.slug for row in categories}
-        ):
+        category = entry.get("category", sink_category(categories).slug)
+        if not isinstance(category, str) or category not in {row.slug for row in categories}:
             errors.append(f"block[{i}]: invalid category {category!r}")
         start_str = entry.get("start_time")
         end_str = entry.get("end_time")
@@ -151,7 +149,7 @@ def validate_template_blocks(
 
 
 def _parse_template_payload(
-    data, window: ScheduleWindow, categories=None
+    data, window: ScheduleWindow, *, categories
 ) -> tuple[dict, JsonResponse | None]:
     """Validate the create/update body. Returns ``(cleaned, None)`` on
     success, or ``({}, JsonResponse)`` with a 400 on failure."""
@@ -169,14 +167,14 @@ def _parse_template_payload(
         return {}, _err("type", "Type must be 'weekday' or 'weekend'.")
 
     blocks = data.get("blocks", [])
-    block_errors = validate_template_blocks(blocks, window, categories)
+    block_errors = validate_template_blocks(blocks, window, categories=categories)
     if block_errors:
         return {}, JsonResponse({"errors": {"blocks": block_errors}}, status=400)
 
     # Persist an explicit sink slug for old/manual payloads that omitted the
     # field, so downstream draft generation never needs a legacy fallback.
     normalized_blocks = [dict(block) for block in blocks]
-    fallback = sink_category(categories).slug if categories else "other"
+    fallback = sink_category(categories).slug
     for block in normalized_blocks:
         block.setdefault("category", fallback)
     return ({"name": name.strip(), "type": type_, "blocks": normalized_blocks}, None)
@@ -264,7 +262,9 @@ def templates_collection(request):
         return _err("body", "Invalid JSON.")
 
     categories = ordered_categories(request.user)
-    cleaned, err = _parse_template_payload(data, get_schedule_window(request.user), categories)
+    cleaned, err = _parse_template_payload(
+        data, get_schedule_window(request.user), categories=categories
+    )
     if err is not None:
         return err
 
@@ -274,7 +274,7 @@ def templates_collection(request):
             if validate_template_blocks(
                 cleaned["blocks"],
                 get_schedule_window(request.user),
-                ordered_categories(request.user),
+                categories=ordered_categories(request.user),
             ):
                 return _err("blocks", "Invalid category.")
             tpl = Template.objects.create(user=request.user, **cleaned)
@@ -309,7 +309,9 @@ def template_detail(request, pk):
         return _err("body", "Invalid JSON.")
 
     categories = ordered_categories(request.user)
-    cleaned, err = _parse_template_payload(data, get_schedule_window(request.user), categories)
+    cleaned, err = _parse_template_payload(
+        data, get_schedule_window(request.user), categories=categories
+    )
     if err is not None:
         return err
 
@@ -318,7 +320,7 @@ def template_detail(request, pk):
             if validate_template_blocks(
                 cleaned["blocks"],
                 get_schedule_window(request.user),
-                ordered_categories(request.user),
+                categories=ordered_categories(request.user),
             ):
                 return _err("blocks", "Invalid category.")
             tpl.name = cleaned["name"]

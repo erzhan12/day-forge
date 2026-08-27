@@ -28,6 +28,8 @@ from schedules.categories import (
     validate_slug,
 )
 from schedules.models import Category, Schedule, TimeBlock
+from schedules.window import DEFAULT_WINDOW
+from templates_mgr.api import validate_template_blocks
 from templates_mgr.models import Template
 
 User = get_user_model()
@@ -623,3 +625,77 @@ class TestCategoryMutationRateLimit:
         # A second user's counter is independent and still full.
         other = self._second_client()
         assert self._create(other, "X", "blue").status_code == 201
+
+
+# --------------------------------------------------------------------------- #
+# validate_template_blocks — category validation against the user catalog
+# (feature 0065: categories is a required keyword; the None default is gone)
+# --------------------------------------------------------------------------- #
+@pytest.mark.django_db
+class TestValidateTemplateBlocks:
+    def _cats(self, user):
+        return ordered_categories(user)
+
+    def _block(self, category="work", start="08:00", end="09:00", title="Focus"):
+        return {"title": title, "start_time": start, "end_time": end, "category": category}
+
+    def test_valid_block_passes(self, user):
+        errors = validate_template_blocks([self._block()], categories=self._cats(user))
+        assert errors == []
+
+    def test_missing_category_defaults_to_sink_and_passes(self, user):
+        cats = self._cats(user)
+        block = {"title": "Focus", "start_time": "08:00", "end_time": "09:00"}
+        assert validate_template_blocks([block], categories=cats) == []
+
+    def test_unknown_category_rejected(self, user):
+        cats = self._cats(user)
+        errors = validate_template_blocks([self._block(category="nope")], categories=cats)
+        assert errors == ["block[0]: invalid category 'nope'"]
+
+    def test_non_string_category_rejected(self, user):
+        cats = self._cats(user)
+        errors = validate_template_blocks([self._block(category=123)], categories=cats)
+        assert errors == ["block[0]: invalid category 123"]
+
+    def test_categories_is_required_keyword(self, user):
+        # Positional call and omitted keyword both raise — no lenient None path.
+        with pytest.raises(TypeError):
+            validate_template_blocks([self._block()], DEFAULT_WINDOW, self._cats(user))
+        with pytest.raises(TypeError):
+            validate_template_blocks([self._block()])
+
+    def test_overlap_rejected(self, user):
+        cats = self._cats(user)
+        blocks = [
+            self._block(start="08:00", end="09:00"),
+            self._block(start="08:30", end="09:30"),
+        ]
+        assert validate_template_blocks(blocks, categories=cats) == ["blocks may not overlap"]
+
+    def test_adjacent_half_open_ok(self, user):
+        cats = self._cats(user)
+        blocks = [
+            self._block(start="08:00", end="09:00"),
+            self._block(start="09:00", end="10:00"),
+        ]
+        assert validate_template_blocks(blocks, categories=cats) == []
+
+    def test_off_grid_time_rejected(self, user):
+        cats = self._cats(user)
+        errors = validate_template_blocks([self._block(start="08:02")], categories=cats)
+        assert "block[0]: times must align to 5-minute granularity" in errors
+
+    def test_outside_window_rejected(self, user):
+        cats = self._cats(user)
+        errors = validate_template_blocks(
+            [self._block(start="05:00", end="05:30")], categories=cats
+        )
+        assert any("must fall within" in e for e in errors)
+
+    def test_start_after_end_rejected(self, user):
+        cats = self._cats(user)
+        errors = validate_template_blocks(
+            [self._block(start="10:00", end="09:00")], categories=cats
+        )
+        assert errors == ["block[0]: start_time must be before end_time"]
