@@ -7,7 +7,7 @@ from django.http import JsonResponse
 
 logger = logging.getLogger(__name__)
 
-CONNECT_RATE_LIMIT_WINDOW_SECONDS = 3600
+RATE_LIMIT_WINDOW_SECONDS = 3600
 # Bound recovery if an evicted key keeps disappearing between cache operations.
 _MAX_RESEED_ATTEMPTS = 3
 
@@ -22,7 +22,7 @@ def consume_rate_limit(key: str, limit: int) -> bool:
     new shared window and the others retry ``incr`` against it. Repeated
     eviction has a bounded retry budget and fails closed.
     """
-    if cache.add(key, 1, CONNECT_RATE_LIMIT_WINDOW_SECONDS):
+    if cache.add(key, 1, RATE_LIMIT_WINDOW_SECONDS):
         count = 1
     else:
         try:
@@ -42,7 +42,7 @@ def consume_rate_limit(key: str, limit: int) -> bool:
                 # eviction near window-end gets a fresh window (up to ~2x budget
                 # in a targeted attack). Not closable without persisting the
                 # original anchor timestamp; accepted trade-off.
-                if cache.add(key, 1, CONNECT_RATE_LIMIT_WINDOW_SECONDS):
+                if cache.add(key, 1, RATE_LIMIT_WINDOW_SECONDS):
                     count = 1
                     break
 
@@ -77,7 +77,7 @@ def rate_limited_response() -> JsonResponse:
     )
     # RFC 6585 §4: a 429 SHOULD advertise when to retry. The window is a
     # fixed constant, so the worst-case wait is one full window.
-    response["Retry-After"] = str(CONNECT_RATE_LIMIT_WINDOW_SECONDS)
+    response["Retry-After"] = str(RATE_LIMIT_WINDOW_SECONDS)
     return response
 
 

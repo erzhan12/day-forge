@@ -7,7 +7,7 @@ import time
 from django.core.cache import cache
 from schedules.ratelimit import (
     _MAX_RESEED_ATTEMPTS,
-    CONNECT_RATE_LIMIT_WINDOW_SECONDS,
+    RATE_LIMIT_WINDOW_SECONDS,
     category_mutation_rate_limit_key,
     connect_rate_limit_key,
     consume_rate_limit,
@@ -66,7 +66,7 @@ def test_consume_rate_limit_preserves_window_ttl():
 
     assert expiry_after_second_call == expiry_after_first_call
     assert expiry_after_first_call > 0
-    assert CONNECT_RATE_LIMIT_WINDOW_SECONDS == 3600
+    assert RATE_LIMIT_WINDOW_SECONDS == 3600
 
 
 def test_consume_rate_limit_race_recovery_callers_share_one_window(monkeypatch):
@@ -113,7 +113,7 @@ def test_consume_rate_limit_reseeded_window_has_full_ttl(monkeypatch):
 
     assert consume_rate_limit(key, limit=2) is True
     ttl_remaining = cache._expire_info[cache_key] - time.time()
-    assert ttl_remaining > CONNECT_RATE_LIMIT_WINDOW_SECONDS / 2
+    assert ttl_remaining > RATE_LIMIT_WINDOW_SECONDS / 2
 
 
 def test_consume_rate_limit_contention_single_add_winner_others_increment(
