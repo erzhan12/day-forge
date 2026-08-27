@@ -914,3 +914,13 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
   The in-transaction read must stay fresh (it's the authoritative re-check), but the
   pre-transaction 400 could reuse a passed-in snapshot. Minor (≤8 rows, one query); optimize
   only if it shows on a profile.
+
+### 0066 focus-indicator gap — PR #177 deferral
+- **P3 [DOCS] Remove stale PiP-completion references from `RULES.md`.** The
+  "Just-completed suppression" paragraph and the `justCompletedId` /
+  `handleIndicatorComplete` / `focusCompletion` symbols documented in `RULES.md`
+  do not exist anywhere in `frontend/src` (grep-verified during the 0066 external
+  review, finding F; only an unrelated `setCompleted` lives in `useBlockCompletion.ts`).
+  The staleness predates feature 0066 and was rejected as out-of-scope for PR #177.
+  Do a focused doc-cleanup pass to delete/correct these references so the PiP is
+  documented as display-only. See `docs/features/0066_REVIEW.md` § Iteration 1, finding F.

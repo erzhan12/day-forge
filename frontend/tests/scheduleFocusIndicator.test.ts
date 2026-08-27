@@ -384,6 +384,20 @@ describe("Schedule.vue focus indicator", () => {
     expect(win.document.body.textContent).toContain("1h left")
   })
 
+  it("uses Untitled for a whitespace-only-title future block", async () => {
+    const win = makeFakeWindow()
+    installFakePip(win)
+    nowMinutes.value = 600
+    mountPage([
+      makeBlock({ id: 1, title: "   ", start_time: "11:00", end_time: "12:00" }),
+    ])
+    await flushPromises()
+    await vm().focusIndicator.open()
+    await flushPromises()
+    expect(win.document.body.textContent).toContain("Untitled")
+    expect(win.document.body.textContent).toContain("1h left")
+  })
+
   it("selects the nearest later block when now sits inside a completed block", async () => {
     const win = makeFakeWindow()
     installFakePip(win)
