@@ -274,13 +274,6 @@ def templates_collection(request):
 
     try:
         with transaction.atomic():
-            # Validate again in the write transaction after a possible delete.
-            if validate_template_blocks(
-                cleaned["blocks"],
-                get_schedule_window(request.user),
-                categories=categories,
-            ):
-                return _err("blocks", "Invalid category.")
             tpl = Template.objects.create(user=request.user, **cleaned)
     except IntegrityError:
         return JsonResponse(
@@ -321,12 +314,6 @@ def template_detail(request, pk):
 
     try:
         with transaction.atomic():
-            if validate_template_blocks(
-                cleaned["blocks"],
-                get_schedule_window(request.user),
-                categories=categories,
-            ):
-                return _err("blocks", "Invalid category.")
             tpl.name = cleaned["name"]
             tpl.type = cleaned["type"]
             tpl.blocks = cleaned["blocks"]

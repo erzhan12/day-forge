@@ -640,9 +640,17 @@ class TestValidateTemplateBlocks:
         return {"title": title, "start_time": start, "end_time": end, "category": category}
 
     def test_fixture_seeds_default_slug(self, user):
-        # Guards the "work" slug the other tests' _block() default depends on;
-        # a fixture change surfaces here rather than as an opaque validation error.
+        # _block() hard-codes category="work"; depends on seed_templates seeding
+        # a 'work' slug. Guarding it here means a fixture change surfaces as this
+        # test rather than an opaque validation error in downstream tests.
         assert "work" in {row.slug for row in self._cats(user)}
+
+    def test_empty_categories_fallback_raises(self, user):
+        # An empty catalog is an invariant violation (ordered_categories always
+        # seeds); a category-less block hitting the sink default fails loudly.
+        block = {"title": "Focus", "start_time": "08:00", "end_time": "09:00"}
+        with pytest.raises(RuntimeError):
+            validate_template_blocks([block], categories=[])
 
     def test_valid_block_passes(self, user):
         errors = validate_template_blocks([self._block()], categories=self._cats(user))
