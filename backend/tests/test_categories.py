@@ -553,8 +553,9 @@ class TestConcurrencyHardening:
 class TestCategoryMutationRateLimit:
     """One shared per-user counter gates create/update/delete/swap; GET
     reads are never counted. Backed by ``schedules.ratelimit`` — the same
-    fixed-window helper as the connect endpoints. ``_clear_cache`` (autouse)
-    resets the counter between tests; the budget is pinned to 2 here.
+    fixed-window helper as the connect endpoints. The conftest ``_clear_cache``
+    autouse fixture resets the counter between tests; ``_pin_budget`` below
+    pins the per-hour budget to 2.
     """
 
     @pytest.fixture(autouse=True)
@@ -598,6 +599,16 @@ class TestCategoryMutationRateLimit:
         # Budget spent; a DELETE (guard fires before the row fetch) → 429,
         # not the 404 an over-budget request would otherwise get.
         assert auth_client.delete(_detail(999999)).status_code == 429
+
+    def test_patch_gated_after_budget(self, auth_client):
+        pk = self._ids(auth_client)[0]  # read — uncounted
+        self._create(auth_client, "A", "blue")
+        self._create(auth_client, "B", "cyan")
+        # Budget spent by the two creates; PATCH (guard fires before the
+        # row fetch) → 429, closing the verb-coverage gap left by
+        # test_all_verbs_share_one_counter (swap/create/delete only).
+        resp = _patch(auth_client, _detail(pk), {"label": "Renamed"})
+        assert resp.status_code == 429
 
     def test_swap_gated_after_budget(self, auth_client):
         a, b = self._ids(auth_client)[:2]

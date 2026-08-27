@@ -33,7 +33,7 @@ def consume_rate_limit(key: str, limit: int) -> bool:
             # user, so log it — a burst of these is a security-relevant
             # signal, not routine.
             logger.warning(
-                "Connect rate limit key evicted mid-window; reseeding (key=%s)",
+                "Rate limit key evicted mid-window; reseeding (key=%s)",
                 key,
             )
             for _ in range(_MAX_RESEED_ATTEMPTS):
@@ -60,7 +60,7 @@ def consume_rate_limit(key: str, limit: int) -> bool:
 
     if count > limit:
         logger.warning(
-            "Connect rate limit exceeded (key=%s, count=%s, limit=%s)",
+            "Rate limit exceeded (key=%s, count=%s, limit=%s)",
             key,
             count,
             limit,
