@@ -85,6 +85,10 @@ def validate_template_blocks(
 
     Returns a list of error strings. Empty list means OK.
 
+    ``categories`` is a required keyword-only iterable of the user's Category
+    rows; each block's ``category`` slug must be a member (a missing slug
+    defaults to the sink category).
+
     Checks:
       * ``blocks`` is a list, not too long
       * each entry has ``title`` (string, non-empty, ≤255), ``start_time``,

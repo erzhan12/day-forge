@@ -639,6 +639,11 @@ class TestValidateTemplateBlocks:
     def _block(self, category="work", start="08:00", end="09:00", title="Focus"):
         return {"title": title, "start_time": start, "end_time": end, "category": category}
 
+    def test_fixture_seeds_default_slug(self, user):
+        # Guards the "work" slug the other tests' _block() default depends on;
+        # a fixture change surfaces here rather than as an opaque validation error.
+        assert "work" in {row.slug for row in self._cats(user)}
+
     def test_valid_block_passes(self, user):
         errors = validate_template_blocks([self._block()], categories=self._cats(user))
         assert errors == []
