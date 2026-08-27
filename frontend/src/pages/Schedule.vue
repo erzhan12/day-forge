@@ -616,6 +616,10 @@ const indicatorNextBlockTitle = computed(() => indicatorNextBlock.value?.title ?
 const indicatorNextBlockRemaining = computed(() => {
   const block = indicatorNextBlock.value
   if (block === null || nowMinutes.value === null) return null
+  // nextBlockAfter already guaranteed a finite start strictly after now, so
+  // this re-parse + guard is belt-and-suspenders (kept, not dead code): the
+  // parsed start isn't returned by the helper, and the guard keeps this
+  // computed self-contained against any future change to that guarantee.
   const remaining = timeToMinutes(block.start_time) - nowMinutes.value
   return Number.isFinite(remaining) && remaining > 0 ? remaining : null
 })

@@ -66,7 +66,7 @@ const nextBlockRemainingLabel = computed(() =>
       <span v-if="remainingLabel" class="fi-remaining">{{ remainingLabel }}</span>
       <span v-if="errorState" class="fi-retry" role="alert">Retry</span>
     </template>
-    <template v-else-if="nextBlockLabel !== null && nextBlockRemainingLabel !== null">
+    <template v-else-if="nextBlockLabel !== null">
       <span class="fi-next-title">{{ nextBlockLabel }}</span>
       <span class="fi-next-remaining">{{ nextBlockRemainingLabel }}</span>
     </template>
