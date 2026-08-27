@@ -114,7 +114,9 @@ def validate_template_blocks(
             errors.append(f"block[{i}]: title is required")
         elif len(title) > 255:
             errors.append(f"block[{i}]: title too long")
-        category = entry.get("category", sink_category(categories).slug)
+        # Lazy sink lookup: only computed when the block omits a category, so an
+        # explicit slug is validated even if the catalog is somehow empty.
+        category = entry["category"] if "category" in entry else sink_category(categories).slug
         if not isinstance(category, str) or category not in {row.slug for row in categories}:
             errors.append(f"block[{i}]: invalid category {category!r}")
         start_str = entry.get("start_time")
@@ -274,6 +276,11 @@ def templates_collection(request):
 
     try:
         with transaction.atomic():
+            # No in-transaction category re-validation: _parse_template_payload
+            # already validated the blocks against the same categories. The
+            # blocks JSON field has no FK, so a category deleted in the tiny
+            # window before this write leaves a stale slug that folds to the
+            # sink on read (display-only) — not worth an extra guarded query.
             tpl = Template.objects.create(user=request.user, **cleaned)
     except IntegrityError:
         return JsonResponse(
@@ -314,6 +321,9 @@ def template_detail(request, pk):
 
     try:
         with transaction.atomic():
+            # See templates_collection: upfront validation is sufficient; no
+            # in-transaction category re-check (blocks JSON has no FK; a raced
+            # delete folds to the sink on read).
             tpl.name = cleaned["name"]
             tpl.type = cleaned["type"]
             tpl.blocks = cleaned["blocks"]

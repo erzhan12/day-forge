@@ -652,6 +652,13 @@ class TestValidateTemplateBlocks:
         with pytest.raises(RuntimeError):
             validate_template_blocks([block], categories=[])
 
+    def test_empty_categories_explicit_slug_rejected(self, user):
+        # An explicit slug never hits the sink default, so an empty catalog
+        # yields an ordinary error list rather than a RuntimeError — the raise
+        # above is sink-path-specific, not a blanket "empty = crash".
+        errors = validate_template_blocks([self._block(category="work")], categories=[])
+        assert errors == ["block[0]: invalid category 'work'"]
+
     def test_valid_block_passes(self, user):
         errors = validate_template_blocks([self._block()], categories=self._cats(user))
         assert errors == []
