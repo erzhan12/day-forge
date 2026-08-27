@@ -345,6 +345,38 @@ describe("useFocusIndicator", () => {
     fi.cleanup()
   })
 
+  it("injects load-bearing next-block layout rules into the mounted PiP document", async () => {
+    const win = makeFakeWindow()
+    installFakePip(win)
+    const fi = useFocusIndicator({
+      component: FocusIndicatorView,
+      props: () => ({
+        active: false,
+        progressPercent: 0,
+        errorState: false,
+        nextBlockTitle: "Deep work",
+        nextBlockRemainingMinutes: 23,
+      }),
+    })
+    await fi.open()
+    await flushPromises()
+
+    const css = [...win.document.querySelectorAll("style")]
+      .map((el) => el.textContent ?? "")
+      .join("\n")
+    expect(win.document.querySelector(".fi-next-title")?.textContent).toBe("Deep work")
+    expect(win.document.querySelector(".fi-next-remaining")?.textContent).toBe("23m left")
+    expect(css).toMatch(/\.fi-next-title\s*\{[^}]*min-width:\s*0/)
+    expect(css).toMatch(/\.fi-next-title\s*\{[^}]*overflow:\s*hidden/)
+    expect(css).toMatch(/\.fi-next-title\s*\{[^}]*text-overflow:\s*ellipsis/)
+    expect(css).toMatch(/\.fi-next-title\s*\{[^}]*white-space:\s*nowrap/)
+    expect(css).toMatch(/\.fi-next-remaining\s*\{[^}]*flex:\s*none/)
+    expect(css).toMatch(/\.fi-next-remaining\s*\{[^}]*white-space:\s*nowrap/)
+    expect(css).toMatch(/\.fi-next-remaining\s*\{[^}]*tabular-nums/)
+    expect(css).not.toContain("Deep work")
+    fi.cleanup()
+  })
+
   it("makes the PiP mount host fill the window so .fi-bar can flex instead of collapsing to 0px", async () => {
     // Chrome Document PiP is a flex body. The Vue mount node is an unstyled
     // wrapper; without width:100%/flex:1 it shrink-wraps to its contents

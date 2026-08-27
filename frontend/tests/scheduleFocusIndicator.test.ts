@@ -292,4 +292,197 @@ describe("Schedule.vue focus indicator", () => {
     await flushPromises()
     expect(vm().indicatorActive).toBe(true)
   })
+
+  it("bridges an idle gap to PiP with the nearest future title and live countdown", async () => {
+    const win = makeFakeWindow()
+    installFakePip(win)
+    nowMinutes.value = 600
+    mountPage([
+      makeBlock({ id: 2, title: "Deep focus", start_time: "11:00", end_time: "12:00" }),
+      makeBlock({ id: 3, title: "Unrelated private plan", start_time: "12:00", end_time: "13:00" }),
+    ])
+    await flushPromises()
+    expect(vm().indicatorActive).toBe(false)
+    expect(vm().indicatorNextBlockTitle).toBe("Deep focus")
+    expect(vm().indicatorNextBlockRemaining).toBe(60)
+    await vm().focusIndicator.open()
+    await flushPromises()
+    expect(win.document.body.textContent).toContain("Deep focus")
+    expect(win.document.body.textContent).toContain("1h left")
+    expect(win.document.body.textContent).not.toContain("Unrelated private plan")
+    expect(win.document.body.textContent).not.toContain("work")
+    expect(win.document.body.textContent).not.toContain("2026-08-12")
+    expect(win.document.body.textContent).not.toContain("11:00")
+    expect(win.document.title).toBe("Focus")
+    expect(win.document.querySelector('[role="progressbar"]')).toBeNull()
+
+    nowMinutes.value = 630
+    await flushPromises()
+    expect(win.document.body.textContent).toContain("30m left")
+  })
+
+  it("replaces an open active bar with next-block details when the clock enters a gap", async () => {
+    const win = makeFakeWindow()
+    installFakePip(win)
+    mountPage([
+      makeBlock({ id: 1, title: "Standup with Bob" }),
+      makeBlock({ id: 2, title: "Deep work", start_time: "11:00", end_time: "12:00" }),
+    ])
+    await flushPromises()
+    await vm().focusIndicator.open()
+    await flushPromises()
+    expect(win.document.querySelector('[role="progressbar"]')).not.toBeNull()
+
+    nowMinutes.value = 600
+    await flushPromises()
+    expect(win.document.querySelector('[role="progressbar"]')).toBeNull()
+    expect(win.document.body.textContent).toContain("Deep work")
+    expect(win.document.body.textContent).toContain("1h left")
+  })
+
+  it("keeps active PiP state title-free even when a later block exists", async () => {
+    const win = makeFakeWindow()
+    installFakePip(win)
+    mountPage([
+      makeBlock({ id: 1, title: "Standup with Bob" }),
+      makeBlock({ id: 2, title: "Deep work", start_time: "11:00", end_time: "12:00" }),
+    ])
+    await flushPromises()
+    expect(vm().indicatorNextBlock).toBeNull()
+    await vm().focusIndicator.open()
+    await flushPromises()
+    expect(win.document.querySelector('[role="progressbar"]')).not.toBeNull()
+    expect(win.document.body.textContent).not.toContain("Standup with Bob")
+    expect(win.document.body.textContent).not.toContain("Deep work")
+  })
+
+  it("shows a completed future block's real title (not Untitled)", async () => {
+    const win = makeFakeWindow()
+    installFakePip(win)
+    nowMinutes.value = 600
+    mountPage([
+      makeBlock({ id: 1, title: "Dentist", start_time: "11:00", end_time: "12:00", is_completed: true }),
+    ])
+    await flushPromises()
+    await vm().focusIndicator.open()
+    await flushPromises()
+    expect(win.document.body.textContent).toContain("Dentist")
+    expect(win.document.body.textContent).toContain("1h left")
+    expect(win.document.body.textContent).not.toContain("Untitled")
+  })
+
+  it("uses Untitled for an empty-title future block", async () => {
+    const win = makeFakeWindow()
+    installFakePip(win)
+    nowMinutes.value = 600
+    mountPage([
+      makeBlock({ id: 1, title: "", start_time: "11:00", end_time: "12:00" }),
+    ])
+    await flushPromises()
+    await vm().focusIndicator.open()
+    await flushPromises()
+    expect(win.document.body.textContent).toContain("Untitled")
+    expect(win.document.body.textContent).toContain("1h left")
+  })
+
+  it("selects the nearest later block when now sits inside a completed block", async () => {
+    const win = makeFakeWindow()
+    installFakePip(win)
+    nowMinutes.value = 570 // 09:30, inside the 09:00–10:00 completed block
+    mountPage([
+      makeBlock({ id: 1, title: "Morning routine", start_time: "09:00", end_time: "10:00", is_completed: true }),
+      makeBlock({ id: 2, title: "Deep work", start_time: "11:00", end_time: "12:00" }),
+    ])
+    await flushPromises()
+    expect(vm().indicatorActive).toBe(false)
+    expect(vm().indicatorNextBlockTitle).toBe("Deep work")
+    await vm().focusIndicator.open()
+    await flushPromises()
+    expect(win.document.querySelector('[role="progressbar"]')).toBeNull()
+    expect(win.document.body.textContent).toContain("Deep work")
+    expect(win.document.body.textContent).not.toContain("Morning routine")
+  })
+
+  it("keeps PiP neutral when no block starts after now", async () => {
+    const win = makeFakeWindow()
+    installFakePip(win)
+    nowMinutes.value = 800 // 13:20, after the only block has ended
+    mountPage([makeBlock({ title: "Deep work", start_time: "11:00", end_time: "12:00" })])
+    await flushPromises()
+    expect(vm().indicatorNextBlock).toBeNull()
+    await vm().focusIndicator.open()
+    await flushPromises()
+    expect(win.document.querySelector(".fi-neutral")?.textContent).toBe("—")
+    expect(win.document.body.textContent).toContain("No active block")
+    expect(win.document.body.textContent).not.toContain("Deep work")
+  })
+
+  it("keeps PiP neutral off-today even with a later-looking block and finite now", async () => {
+    const win = makeFakeWindow()
+    installFakePip(win)
+    nowMinutes.value = 600 // finite minute…
+    nowDate.value = null // …but the today-signal is off (viewing another day)
+    mountPage([makeBlock({ title: "Deep work", start_time: "11:00", end_time: "12:00" })])
+    await flushPromises()
+    expect(vm().indicatorNextBlock).toBeNull()
+    await vm().focusIndicator.open()
+    await flushPromises()
+    expect(win.document.querySelector(".fi-neutral")?.textContent).toBe("—")
+    expect(win.document.body.textContent).toContain("No active block")
+    expect(win.document.body.textContent).not.toContain("Deep work")
+  })
+
+  it.each([
+    ["unparseable start", 600, "bad", "12:00"],
+    ["unparseable end", 600, "11:00", "bad"],
+    ["zero duration", 600, "11:00", "11:00"],
+    ["negative duration", 600, "11:00", "10:00"],
+  ])("keeps PiP neutral for %s next-block data", async (_name, minute, start_time, end_time) => {
+    const win = makeFakeWindow()
+    installFakePip(win)
+    nowMinutes.value = minute as number
+    mountPage([makeBlock({ title: "Deep work", start_time, end_time })])
+    await flushPromises()
+    await vm().focusIndicator.open()
+    await flushPromises()
+    expect(win.document.querySelector(".fi-neutral")?.textContent).toBe("—")
+    expect(win.document.body.textContent).toContain("No active block")
+    expect(win.document.body.textContent).not.toContain("Deep work")
+  })
+
+  it("replaces next-block details with a private active state when the clock reaches its start", async () => {
+    const win = makeFakeWindow()
+    installFakePip(win)
+    nowMinutes.value = 600
+    mountPage([makeBlock({ title: "Deep work", start_time: "11:00", end_time: "12:00" })])
+    await flushPromises()
+    await vm().focusIndicator.open()
+    await flushPromises()
+    expect(win.document.body.textContent).toContain("Deep work")
+
+    nowMinutes.value = 660
+    await flushPromises()
+    expect(win.document.querySelector('[role="progressbar"]')).not.toBeNull()
+    expect(win.document.body.textContent).toContain("1h left")
+    expect(win.document.body.textContent).not.toContain("Deep work")
+  })
+
+  it("updates an open gap indicator when effective blocks change", async () => {
+    const win = makeFakeWindow()
+    installFakePip(win)
+    nowMinutes.value = 600
+    mountPage([makeBlock({ id: 2, title: "Later", start_time: "12:00", end_time: "13:00" })])
+    await flushPromises()
+    await vm().focusIndicator.open()
+    await flushPromises()
+    expect(win.document.body.textContent).toContain("Later")
+
+    await wrapper!.setProps({
+      blocks: [makeBlock({ id: 3, title: "Sooner", start_time: "11:00", end_time: "12:00" })],
+    })
+    await flushPromises()
+    expect(win.document.body.textContent).toContain("Sooner")
+    expect(win.document.body.textContent).toContain("1h left")
+    expect(win.document.body.textContent).not.toContain("Later")
+  })
 })

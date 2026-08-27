@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import type { TimeBlock } from "../src/types"
 import {
   activeUnfinishedBlock,
+  nextBlockAfter,
   progressRatio,
   progressPercentFromRatio,
 } from "../src/utils/focusIndicator"
@@ -62,6 +63,63 @@ describe("activeUnfinishedBlock", () => {
     const a = block({ id: 1, start_time: "09:00", end_time: "10:00", sort_order: 2 })
     const b = block({ id: 2, start_time: "09:00", end_time: "10:00", sort_order: 1 })
     expect(activeUnfinishedBlock([a, b], 570, TODAY)).toBe(b)
+  })
+})
+
+describe("nextBlockAfter", () => {
+  it("returns the nearest strictly later block from unsorted input without mutating it", () => {
+    const later = block({ id: 3, start_time: "13:00", end_time: "14:00" })
+    const nearest = block({ id: 2, start_time: "11:00", end_time: "12:00" })
+    const past = block({ id: 1, start_time: "09:00", end_time: "10:00" })
+    const blocks = [later, past, nearest]
+    expect(nextBlockAfter(blocks, 600, TODAY)).toBe(nearest)
+    expect(blocks).toEqual([later, past, nearest])
+  })
+
+  it("breaks equal starts by sort_order and includes completed future blocks", () => {
+    const first = block({ id: 1, start_time: "11:00", end_time: "12:00", sort_order: 1, is_completed: true })
+    const second = block({ id: 2, start_time: "11:00", end_time: "12:00", sort_order: 2 })
+    expect(nextBlockAfter([second, first], 600, TODAY)).toBe(first)
+  })
+
+  it("does not treat a completed block containing now as next", () => {
+    const current = block({ id: 1, start_time: "09:00", end_time: "10:00", is_completed: true })
+    const later = block({ id: 2, start_time: "11:00", end_time: "12:00" })
+    expect(nextBlockAfter([current, later], 570, TODAY)).toBe(later)
+  })
+
+  it("excludes a block that starts exactly now and returns null after the final start", () => {
+    const b = block({ start_time: "10:00", end_time: "11:00" })
+    expect(nextBlockAfter([b], 600, TODAY)).toBeNull()
+    expect(nextBlockAfter([b], 700, TODAY)).toBeNull()
+  })
+
+  it("returns null for empty data or a missing today signal", () => {
+    expect(nextBlockAfter([], 600, TODAY)).toBeNull()
+    expect(nextBlockAfter([block()], null, TODAY)).toBeNull()
+    expect(nextBlockAfter([block()], 600, null)).toBeNull()
+  })
+
+  it("fails closed when any start is unparseable, even for an irrelevant past block", () => {
+    const malformedPast = block({ id: 1, start_time: "bad", end_time: "10:00" })
+    const future = block({ id: 2, start_time: "11:00", end_time: "12:00" })
+    expect(nextBlockAfter([malformedPast, future], 600, TODAY)).toBeNull()
+  })
+
+  it.each([
+    ["unparseable", "11:00", "bad"],
+    ["zero duration", "11:00", "11:00"],
+    ["negative duration", "11:00", "10:00"],
+  ])("fails closed for a selected future block with %s duration", (_name, start_time, end_time) => {
+    const invalid = block({ id: 1, start_time, end_time, sort_order: 0 })
+    const laterValid = block({ id: 2, start_time: "12:00", end_time: "13:00" })
+    expect(nextBlockAfter([laterValid, invalid], 600, TODAY)).toBeNull()
+  })
+
+  it("does not skip an invalid equal-start sibling to a valid one", () => {
+    const invalid = block({ id: 1, start_time: "11:00", end_time: "11:00", sort_order: 0 })
+    const valid = block({ id: 2, start_time: "11:00", end_time: "12:00", sort_order: 1 })
+    expect(nextBlockAfter([valid, invalid], 600, TODAY)).toBeNull()
   })
 })
 

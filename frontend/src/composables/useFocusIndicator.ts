@@ -39,6 +39,22 @@ const PIP_STYLES = `
     white-space: nowrap;
     opacity: 0.85;
   }
+  .fi-next-title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .fi-next-remaining {
+    flex: none;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    opacity: 0.85;
+  }
   .fi-fill {
     height: 100%;
     background: currentColor;
@@ -93,7 +109,8 @@ interface FocusIndicatorConfig {
  * Owns the Document Picture-in-Picture window lifecycle for the focus
  * indicator: feature detection, single-instance open from a user gesture,
  * pending-request + orphan guards, a live reactive second-app mount, and
- * teardown. Contains NO block fields.
+ * teardown. Its document title stays generic; the view enforces the narrow
+ * active-state and idle-gap body privacy policy.
  */
 export function useFocusIndicator(config: FocusIndicatorConfig) {
   const supported =

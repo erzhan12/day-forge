@@ -20,6 +20,7 @@ import FocusIndicatorView from "../components/FocusIndicatorView.vue"
 import { useFocusIndicator } from "../composables/useFocusIndicator"
 import {
   activeUnfinishedBlock,
+  nextBlockAfter,
   progressRatio,
   progressPercentFromRatio,
 } from "../utils/focusIndicator"
@@ -585,7 +586,7 @@ const currentBlockRemaining = computed(() =>
     : null
 )
 
-// --- Focus indicator: always-on-top PiP progress (feature 0049 / issue #131) ---
+// --- Focus indicator: active progress (0049) and idle next-block gap (0066) ---
 const indicatorActiveBlock = computed(() =>
   activeUnfinishedBlock(effectiveBlocks.value, nowMinutes.value, nowDate.value),
 )
@@ -604,6 +605,20 @@ const indicatorRemaining = computed(() => {
   if (b === null || nowMinutes.value === null) return null
   return remainingMinutesForBlock(b, nowMinutes.value)
 })
+// Active rendering always wins: only an idle indicator may expose the next
+// block's title in the PiP body.
+const indicatorNextBlock = computed(() =>
+  indicatorActive.value
+    ? null
+    : nextBlockAfter(effectiveBlocks.value, nowMinutes.value, nowDate.value),
+)
+const indicatorNextBlockTitle = computed(() => indicatorNextBlock.value?.title ?? null)
+const indicatorNextBlockRemaining = computed(() => {
+  const block = indicatorNextBlock.value
+  if (block === null || nowMinutes.value === null) return null
+  const remaining = timeToMinutes(block.start_time) - nowMinutes.value
+  return Number.isFinite(remaining) && remaining > 0 ? remaining : null
+})
 
 const focusIndicator = useFocusIndicator({
   component: FocusIndicatorView,
@@ -611,6 +626,8 @@ const focusIndicator = useFocusIndicator({
     active: indicatorActive.value,
     progressPercent: indicatorPercent.value,
     remainingMinutes: indicatorRemaining.value,
+    nextBlockTitle: indicatorNextBlockTitle.value,
+    nextBlockRemainingMinutes: indicatorNextBlockRemaining.value,
     errorState: false,
   }),
 })
@@ -696,11 +713,14 @@ defineExpose({
   calendarsBranch,
   refreshExternalTasks,
   refreshExternalCalendars,
-  // Focus-indicator seam (feature 0049) — asserted by the integration test;
+  // Focus-indicator seam (features 0049/0066) — asserted by integration tests;
   // not a parent-facing API.
   focusIndicator,
   indicatorActive,
   indicatorPercent,
+  indicatorNextBlock,
+  indicatorNextBlockTitle,
+  indicatorNextBlockRemaining,
 })
 </script>
 

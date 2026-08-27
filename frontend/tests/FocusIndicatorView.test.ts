@@ -61,6 +61,67 @@ describe("FocusIndicatorView", () => {
     expect(w.find("button").exists()).toBe(false)
   })
 
+  it("renders a valid inactive next-block title and shared formatted countdown", () => {
+    const w = mountView({
+      active: false,
+      nextBlockTitle: "Deep work",
+      nextBlockRemainingMinutes: 90,
+    })
+    expect(w.find(".fi-next-title").text()).toBe("Deep work")
+    expect(w.find(".fi-next-remaining").text()).toBe("1h 30m left")
+    expect(w.find('[role="progressbar"]').exists()).toBe(false)
+    expect(w.find(".fi-bar").exists()).toBe(false)
+    expect(w.find(".fi-neutral").exists()).toBe(false)
+    expect(w.find(".fi-sr-only").exists()).toBe(false)
+    expect(w.find(".focus-indicator").attributes("data-state")).toBe("neutral")
+  })
+
+  it.each(["", "   "])("renders Untitled for an empty next title", (nextBlockTitle) => {
+    const w = mountView({ active: false, nextBlockTitle, nextBlockRemainingMinutes: 23 })
+    expect(w.find(".fi-next-title").text()).toBe("Untitled")
+    // Still the gap branch, not the neutral fallback stacked alongside it.
+    expect(w.find(".fi-next-remaining").text()).toBe("23m left")
+    expect(w.find(".fi-neutral").exists()).toBe(false)
+    expect(w.find(".fi-sr-only").exists()).toBe(false)
+  })
+
+  it("keeps active progress state private when next-block props are supplied", () => {
+    const w = mountView({
+      active: true,
+      remainingMinutes: 23,
+      nextBlockTitle: "Deep work",
+      nextBlockRemainingMinutes: 90,
+    })
+    expect(w.find('[role="progressbar"]').exists()).toBe(true)
+    expect(w.find(".fi-remaining").text()).toBe("23m left")
+    expect(w.find(".fi-next-title").exists()).toBe(false)
+    expect(w.find(".fi-next-remaining").exists()).toBe(false)
+  })
+
+  it.each([null, undefined, Number.NaN, 0, -1])(
+    "fails closed to neutral when the next countdown is invalid (%s)",
+    (nextBlockRemainingMinutes) => {
+      const w = mountView({
+        active: false,
+        nextBlockTitle: "Deep work",
+        nextBlockRemainingMinutes,
+      })
+      expect(w.find(".fi-next-title").exists()).toBe(false)
+      expect(w.find(".fi-next-remaining").exists()).toBe(false)
+      expect(w.find(".fi-neutral").text()).toBe("—")
+      expect(w.find(".fi-sr-only").text()).toBe("No active block")
+    },
+  )
+
+  it("treats a null title as no next block even with a positive countdown", () => {
+    const w = mountView({ active: false, nextBlockTitle: null, nextBlockRemainingMinutes: 23 })
+    expect(w.find(".fi-next-title").exists()).toBe(false)
+    // No stray countdown alongside the neutral glyph.
+    expect(w.find(".fi-next-remaining").exists()).toBe(false)
+    expect(w.find(".fi-neutral").text()).toBe("—")
+    expect(w.find(".fi-sr-only").text()).toBe("No active block")
+  })
+
   it("in error state keeps the bar and shows a generic retry affordance", () => {
     const w = mountView({ active: true, errorState: true })
     expect(w.find('[role="progressbar"]').exists()).toBe(true)

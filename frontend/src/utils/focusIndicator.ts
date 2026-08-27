@@ -22,6 +22,34 @@ export function activeUnfinishedBlock(
 }
 
 /**
+ * The nearest block starting strictly after `nowMinutes`, for today's idle
+ * focus-indicator state. A null today signal or one malformed start anywhere
+ * fails closed: without every start, the chronological "nearest" claim cannot
+ * be proved. Equal starts use `sort_order`; the selected candidate must itself
+ * have a finite, positive duration and is never skipped for a later block.
+ */
+export function nextBlockAfter(
+  blocks: TimeBlock[],
+  nowMinutes: number | null,
+  nowDate: string | null,
+): TimeBlock | null {
+  if (nowMinutes === null || nowDate === null) return null
+
+  const withStarts = blocks.map((block) => ({ block, start: timeToMinutes(block.start_time) }))
+  if (withStarts.some(({ start }) => !Number.isFinite(start))) return null
+
+  const next = withStarts
+    .filter(({ start }) => start > nowMinutes)
+    .sort((a, b) => a.start - b.start || a.block.sort_order - b.block.sort_order)[0]
+  if (!next) return null
+
+  const end = timeToMinutes(next.block.end_time)
+  const duration = end - next.start
+  if (!Number.isFinite(duration) || duration <= 0) return null
+  return next.block
+}
+
+/**
  * Elapsed fraction of `block` at `nowMinutes`, clamped to `[0, 1]`. Returns
  * `null` (caller renders neutral, never NaN/Infinity) when the duration is
  * zero, negative, or unparseable — fail closed per the 0049 plan.

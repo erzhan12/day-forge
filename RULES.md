@@ -837,8 +837,9 @@ no Service Worker, no closed-tab alerts.
   a **per-call-site factory, NOT a singleton**: each call returns its own
   `{ saving, errorState, setCompleted, complete, reset, dispose }`. `TimeBlock`
   creates one per row (N rows → N instances). The PiP indicator is
-  display-only (progress + remaining minutes) and does **not** complete
-  blocks. A singleton would collapse per-row `saving`/`generation` and regress
+  display-only (active-block progress + remaining minutes, or an idle-gap
+  next-block title + countdown — see the PiP privacy invariant below) and
+  does **not** complete blocks. A singleton would collapse per-row `saving`/`generation` and regress
   the abort-on-list-reshape invariant (issue #21). `TimeBlock` keeps its own
   optimistic `displayedCompleted` + local `errorMessage` string ("Failed to
   update" copy, pinned by `TimeBlock.test.ts`). `setCompleted` resolves
@@ -847,16 +848,21 @@ no Service Worker, no closed-tab alerts.
   clears `saving`/`errorState`; `dispose()` (unmount) aborts + bumps
   generation only. Composables guard `onUnmounted` with `getCurrentInstance()`
   so they're unit-testable by direct call.
-- **PiP privacy invariant.** Never put block title/category/date/clock-times
-  into the PiP document — DOM, `aria-*`, `data-testid`, error copy, or
-  `document.title` (the generic constant `"Focus"`). A derived remaining-
-  minutes countdown (`"23m left"`, same `formatRemainingMinutes` as the
-  timeline badge) is allowed. `FocusIndicatorView.vue` props are
-  `active/progressPercent/remainingMinutes/errorState`. The isolated-view
-  privacy test is necessary-but-not-sufficient; the load-bearing gate is the
-  integration test (`scheduleFocusIndicator.test.ts`) asserting the REAL
-  mounted PiP `document.body` + `document.title` contain no sentinel
-  title/category/date/clock-time strings.
+- **PiP privacy invariant.** For an active unfinished block, never put its
+  title/category/date/clock-times into the PiP document — DOM, `aria-*`,
+  `data-testid`, error copy, or `document.title` (the generic constant
+  `"Focus"`). Only progress plus a derived remaining-minutes countdown
+  (`"23m left"`, same `formatRemainingMinutes` as the timeline badge) is
+  allowed. In the idle gap state, a valid later block's title (or `Untitled`)
+  and its minutes-until-start are the deliberate, body-only exception. Its
+  category, date, clock times, current-block identity, unrelated identities,
+  and the document title remain prohibited; there is no settings toggle for
+  this always-on-top/screen-share tradeoff. `FocusIndicatorView.vue` props are
+  `active/progressPercent/remainingMinutes/errorState/nextBlockTitle/`
+  `nextBlockRemainingMinutes`. The isolated-view privacy test is
+  necessary-but-not-sufficient; the load-bearing integration test
+  (`scheduleFocusIndicator.test.ts`) must cover active and gap states
+  separately against the REAL mounted PiP `document.body` + `document.title`.
 - **PiP view CSS must be injected into the PiP document.** Document
   Picture-in-Picture is a separate `Document`. Vue SFC `<style scoped>` is
   injected into the opener by Vite and does not apply inside the PiP. Any
