@@ -363,6 +363,25 @@ if HABITICA_REQUEST_TIMEOUT <= 0:
         f"got {HABITICA_REQUEST_TIMEOUT!r}"
     )
 
+# ---------------------------------------------------------------------------
+# User-customizable categories (feature 0063 / 0064 follow-up)
+# ---------------------------------------------------------------------------
+# Per-user fixed-window budget for category *mutations* (POST create,
+# PATCH/DELETE detail, POST swap on /api/user/categories/*). One shared
+# counter (``category_mutation_rl:<user_id>``) bounds all four write verbs;
+# GET reads are never counted. Higher than the 20/hr connect budgets because
+# category edits are cheap, self-scoped operations a user runs interactively
+# while reorganizing — 60/hr still blocks scripted abuse. Same import-time
+# positive-value guard as the *_CONNECT_RATE_LIMIT_PER_HOUR settings.
+CATEGORY_MUTATION_RATE_LIMIT_PER_HOUR = int(
+    os.environ.get("CATEGORY_MUTATION_RATE_LIMIT_PER_HOUR", "60")
+)
+if CATEGORY_MUTATION_RATE_LIMIT_PER_HOUR <= 0:
+    raise ValueError(
+        "CATEGORY_MUTATION_RATE_LIMIT_PER_HOUR must be a positive integer; "
+        f"got {CATEGORY_MUTATION_RATE_LIMIT_PER_HOUR!r}"
+    )
+
 # Background external-task refresh while the left task rail is open.
 # ``0`` disables polling; default 60 seconds.
 #

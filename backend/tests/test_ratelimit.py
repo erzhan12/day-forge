@@ -8,6 +8,7 @@ from django.core.cache import cache
 from schedules.ratelimit import (
     _MAX_RESEED_ATTEMPTS,
     CONNECT_RATE_LIMIT_WINDOW_SECONDS,
+    category_mutation_rate_limit_key,
     connect_rate_limit_key,
     consume_rate_limit,
     rate_limited_response,
@@ -192,6 +193,10 @@ def test_consume_rate_limit_repeated_eviction_fails_closed(monkeypatch, caplog):
 
 def test_connect_rate_limit_key_shape():
     assert connect_rate_limit_key("caldav", 42) == "connect_rl:caldav:42"
+
+
+def test_category_mutation_rate_limit_key_shape():
+    assert category_mutation_rate_limit_key(42) == "category_mutation_rl:42"
 
 
 def test_rate_limited_response_envelope_and_retry_after():

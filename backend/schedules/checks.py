@@ -64,10 +64,11 @@ def warn_ineffective_cache_for_connect_rate_limits(app_configs, **kwargs):
 
     The per-user connect budgets (``CALDAV_CONNECT_RATE_LIMIT_PER_HOUR``,
     ``TODOIST_CONNECT_RATE_LIMIT_PER_HOUR``,
-    ``HABITICA_CONNECT_RATE_LIMIT_PER_HOUR``, feature 0036) count via
-    ``schedules.ratelimit.consume_rate_limit`` against
-    ``CACHES['default']``. All three flagged backends weaken the
-    brute-force protection, but in materially different ways:
+    ``HABITICA_CONNECT_RATE_LIMIT_PER_HOUR``, feature 0036) and the
+    category-mutation budget (``CATEGORY_MUTATION_RATE_LIMIT_PER_HOUR``,
+    feature 0064) count via ``schedules.ratelimit.consume_rate_limit``
+    against ``CACHES['default']``. All flagged backends weaken the
+    abuse protection, but in materially different ways:
 
     - ``LocMemCache`` — per-process, so each worker enforces its own
       window; the effective budget is roughly ``limit × worker_count``.
@@ -101,17 +102,18 @@ def warn_ineffective_cache_for_connect_rate_limits(app_configs, **kwargs):
 
     errors.append(
         Warning(
-            "The connect rate limits use an ineffective cache backend "
-            f"({backend}) with DEBUG=False. The per-user "
-            "*_CONNECT_RATE_LIMIT_PER_HOUR counters live in "
+            "The connect and category-mutation rate limits use an "
+            f"ineffective cache backend ({backend}) with DEBUG=False. The "
+            "per-user *_CONNECT_RATE_LIMIT_PER_HOUR and "
+            "CATEGORY_MUTATION_RATE_LIMIT_PER_HOUR counters live in "
             "CACHES['default'], which does not enforce the budget "
             "correctly on this backend: LocMemCache is per-process (budget "
             "≈ limit × worker_count, harmless on a single-worker deploy), "
             "DummyCache stores nothing (the limit "
             "is disabled entirely), and FileBasedCache increments "
             "non-atomically (concurrent attempts can undercount) — each "
-            "weakens the brute-force protection on the credential-verifying "
-            "connect endpoints.",
+            "weakens the abuse protection on the credential-verifying "
+            "connect endpoints and the category-mutation endpoints.",
             hint=(
                 "Point CACHES['default']['BACKEND'] at a shared, atomic "
                 "cache — django.core.cache.backends.redis.RedisCache (via "

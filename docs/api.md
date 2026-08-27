@@ -24,6 +24,8 @@ JSON endpoints for managing schedules and time blocks. Page routes (`/`, `/sched
 
 `PATCH /api/user/categories/{id}/` changes `label`, `color_id`, or promotes the row by posting `{ "is_new_block_default": true }`. `slug` and `is_sink` are immutable. `POST /api/user/categories/swap/` accepts `{ "a": id, "b": id }`. `DELETE /api/user/categories/{id}/` refuses the sink and atomically remaps the deleted slug to the sink across blocks, templates, travel overrides, and review maps.
 
+All four **write** operations (POST create, PATCH, DELETE, POST swap) share one per-user fixed-window budget (`CATEGORY_MUTATION_RATE_LIMIT_PER_HOUR`, default 60/hr; feature 0064); exceeding it returns `429 Too Many Requests` with `{"errors": {"detail": "Rate limit exceeded. Try again later."}}` and a `Retry-After: 3600` header. `GET /api/user/categories/` reads are never counted.
+
 ### `POST /api/schedules/{date}/blocks/`
 
 Create a time block on the schedule for the given date, owned by the authenticated user. If the user has no schedule for that date, one is created.

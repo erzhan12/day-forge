@@ -84,3 +84,13 @@ def rate_limited_response() -> JsonResponse:
 def connect_rate_limit_key(provider: str, user_id: int) -> str:
     """Return the namespaced per-provider connection counter key."""
     return f"connect_rl:{provider}:{user_id}"
+
+
+def category_mutation_rate_limit_key(user_id: int) -> str:
+    """Return the namespaced per-user category-mutation counter key.
+
+    One shared counter gates every write on ``/api/user/categories/*``
+    (create, update, delete, reorder) so a single budget bounds all
+    category churn per user. Reads are never counted.
+    """
+    return f"category_mutation_rl:{user_id}"

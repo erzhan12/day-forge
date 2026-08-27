@@ -1,5 +1,6 @@
 import json
 
+from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.db.utils import IntegrityError
 from django.http import JsonResponse
@@ -15,10 +16,27 @@ from schedules.categories import (
 )
 from schedules.http import parse_swap_body, reject_oversized_body
 from schedules.models import Category
+from schedules.ratelimit import (
+    category_mutation_rate_limit_key,
+    consume_rate_limit,
+    rate_limited_response,
+)
 
 
 def _error(message, status=400):
     return JsonResponse({"errors": {"category": message}}, status=status)
+
+
+def _rate_limited(request):
+    """Return a 429 response if the user's category-mutation budget is spent.
+
+    One shared per-user counter across all write verbs; callers invoke this
+    at the top of every mutation path (never on GET reads).
+    """
+    key = category_mutation_rate_limit_key(request.user.id)
+    if not consume_rate_limit(key, settings.CATEGORY_MUTATION_RATE_LIMIT_PER_HOUR):
+        return rate_limited_response()
+    return None
 
 
 def _body(request):
@@ -43,6 +61,9 @@ def categories_collection(request):
         return JsonResponse(
             {"categories": [serialize_category(row) for row in ordered_categories(request.user)]}
         )
+    limited = _rate_limited(request)
+    if limited:
+        return limited
     data, err = _body(request)
     if err:
         return err
@@ -56,6 +77,9 @@ def categories_collection(request):
 @login_required
 @require_http_methods(["PATCH", "DELETE"])
 def category_detail(request, pk):
+    limited = _rate_limited(request)
+    if limited:
+        return limited
     try:
         category = Category.objects.get(pk=pk, user=request.user)
     except Category.DoesNotExist:
@@ -89,6 +113,9 @@ def category_detail(request, pk):
 @login_required
 @require_http_methods(["POST"])
 def categories_swap(request):
+    limited = _rate_limited(request)
+    if limited:
+        return limited
     parsed = parse_swap_body(request, noun="category")
     if isinstance(parsed, JsonResponse):
         return parsed

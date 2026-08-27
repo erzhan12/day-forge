@@ -18,6 +18,7 @@ from calendar_sync.models import TravelRule
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db.utils import IntegrityError, OperationalError
+from django.test import Client
 from schedules.categories import (
     create_category,
     default_category,
@@ -543,3 +544,71 @@ class TestConcurrencyHardening:
         ):
             resp = _patch(auth_client, _detail(focus.pk), {"label": "Personal"})
         assert resp.status_code == 400
+
+
+# --------------------------------------------------------------------------- #
+# Per-user mutation rate limit (feature 0064)
+# --------------------------------------------------------------------------- #
+@pytest.mark.django_db
+class TestCategoryMutationRateLimit:
+    """One shared per-user counter gates create/update/delete/swap; GET
+    reads are never counted. Backed by ``schedules.ratelimit`` — the same
+    fixed-window helper as the connect endpoints. ``_clear_cache`` (autouse)
+    resets the counter between tests; the budget is pinned to 2 here.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _pin_budget(self, settings):
+        settings.CATEGORY_MUTATION_RATE_LIMIT_PER_HOUR = 2
+
+    def _ids(self, client):
+        """Return category ids via a GET (a read — never counted)."""
+        return [row["id"] for row in client.get(COLLECTION).json()["categories"]]
+
+    def _create(self, client, label, color):
+        return _post(client, COLLECTION, {"label": label, "color_id": color})
+
+    def _second_client(self):
+        User.objects.create_user(username="other", password="pw12345678")
+        client = Client()
+        client.login(username="other", password="pw12345678")
+        return client
+
+    def test_create_blocked_after_budget_spent(self, auth_client):
+        assert self._create(auth_client, "A", "blue").status_code == 201
+        assert self._create(auth_client, "B", "cyan").status_code == 201
+        resp = self._create(auth_client, "C", "amber")
+        assert resp.status_code == 429
+        assert resp.json() == {"errors": {"detail": "Rate limit exceeded. Try again later."}}
+        assert resp["Retry-After"] == "3600"
+
+    def test_get_reads_never_counted(self, auth_client):
+        for _ in range(5):
+            assert auth_client.get(COLLECTION).status_code == 200
+        # Budget untouched by reads → both writes still land before the block.
+        assert self._create(auth_client, "A", "blue").status_code == 201
+        assert self._create(auth_client, "B", "cyan").status_code == 201
+        assert self._create(auth_client, "C", "amber").status_code == 429
+
+    def test_all_verbs_share_one_counter(self, auth_client):
+        a, b = self._ids(auth_client)[:2]
+        # Verb 1 — swap. Verb 2 — create. Both under the budget of 2.
+        assert _post(auth_client, SWAP, {"a": a, "b": b}).status_code != 429
+        assert self._create(auth_client, "New", "amber").status_code != 429
+        # Budget spent; a DELETE (guard fires before the row fetch) → 429,
+        # not the 404 an over-budget request would otherwise get.
+        assert auth_client.delete(_detail(999999)).status_code == 429
+
+    def test_swap_gated_after_budget(self, auth_client):
+        a, b = self._ids(auth_client)[:2]
+        assert _post(auth_client, SWAP, {"a": a, "b": b}).status_code != 429
+        assert _post(auth_client, SWAP, {"a": a, "b": b}).status_code != 429
+        assert _post(auth_client, SWAP, {"a": a, "b": b}).status_code == 429
+
+    def test_budget_is_per_user(self, auth_client):
+        self._create(auth_client, "A", "blue")
+        self._create(auth_client, "B", "cyan")
+        assert self._create(auth_client, "C", "amber").status_code == 429
+        # A second user's counter is independent and still full.
+        other = self._second_client()
+        assert self._create(other, "X", "blue").status_code == 201
