@@ -425,6 +425,11 @@ def _time_from_minutes(value: int) -> datetime.time:
     return datetime.time(hour, minute)
 
 
+def _minutes_from_time(value: datetime.time) -> int:
+    """Inverse of ``_time_from_minutes``: minutes since midnight (feature 0067)."""
+    return value.hour * 60 + value.minute
+
+
 def _normalize_actions(
     snapshot: ScheduleSnapshot,
     parsed_actions: Sequence[dict],
@@ -818,12 +823,9 @@ def plan_mutations(
     if auto_creates:
         from ai.free_slot import find_slot
 
-        def _to_min(value: datetime.time) -> int:
-            return value.hour * 60 + value.minute
-
         base_min = window.start_minutes
         if earliest_start is not None:
-            base_min = max(_to_min(earliest_start), window.start_minutes)
+            base_min = max(_minutes_from_time(earliest_start), window.start_minutes)
 
         for create in sorted(auto_creates, key=lambda c: c.action_index):
             temp_id = -(create.action_index + 1)
@@ -842,11 +844,11 @@ def plan_mutations(
                 if block_id == temp_id:
                     continue
                 lo = max(
-                    _to_min(block.start_time) - AUTO_PLACEMENT_GAP_MINUTES,
+                    _minutes_from_time(block.start_time) - AUTO_PLACEMENT_GAP_MINUTES,
                     window.start_minutes,
                 )
                 hi = min(
-                    _to_min(block.end_time) + AUTO_PLACEMENT_GAP_MINUTES,
+                    _minutes_from_time(block.end_time) + AUTO_PLACEMENT_GAP_MINUTES,
                     window.end_minutes,
                 )
                 if hi <= lo:

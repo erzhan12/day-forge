@@ -933,3 +933,12 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
   and the pre-existing update-direction block uses the same pattern — hoisting one
   of two is inconsistent and risks reintroducing the cycle at module load. Needs a
   focused check that a top-level import is genuinely cycle-safe before applying.
+
+- **P3 [QUALITY] Consider an upper bound on `duration_minutes` at the schema.**
+  PR #178 claude-review (cycle 2, finding #2) suggested rejecting `duration_minutes
+  > 1440` at `schemas.validate_action_shape` so an over-large value fails with a
+  clear API error instead of silently becoming a `no_slot` outcome in the planner.
+  Deferred: feature 0067 **deliberately** treats an oversized duration as a safe
+  `no_slot` (plan § Edge cases — "very large but otherwise valid duration") and a
+  planner test pins that behavior; adding a hard cap is a contract change worth its
+  own small PR, and any bound should be window-relative rather than a flat 24h.
