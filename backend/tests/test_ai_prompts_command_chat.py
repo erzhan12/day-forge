@@ -139,3 +139,70 @@ class TestBuildChatUserMessage:
             schedule, [], now, [_rule("R")]
         )
         assert msg.index("Existing blocks:") < msg.index("Active rules")
+
+
+class TestChatSystemPromptAutoPlacement:
+    """Feature 0067: chat system prompt describes the two add modes and the
+    backend-owned deterministic placement policy for untimed adds."""
+
+    @staticmethod
+    def _prompt():
+        from ai.prompts import build_system_prompt_chat
+        from schedules.window import DEFAULT_WINDOW
+
+        return build_system_prompt_chat(DEFAULT_WINDOW)
+
+    def test_describes_two_add_modes(self):
+        prompt = self._prompt()
+        low = prompt.lower()
+        # Explicit both-times mode and automatic no-times mode both mentioned.
+        assert "duration_minutes" in prompt
+        assert "automatic" in low or "no time" in low or "omit both" in low
+
+    def test_mentions_default_duration_and_gap_and_grid(self):
+        prompt = self._prompt()
+        assert "25" in prompt  # default duration minutes
+        assert "10" in prompt  # default gap minutes
+        assert "5-min" in prompt or "5 minute" in prompt.lower() or "5-minute" in prompt
+
+    def test_forbids_fabricated_start(self):
+        low = self._prompt().lower()
+        assert "omit both" in low or "never" in low
+        # Explicitly instruct: when the user gives no start, omit both time fields.
+        assert "omit both" in low
+
+    def test_hard_rule_two_no_longer_fills_start_or_gap(self):
+        prompt = self._prompt()
+        # Hard rule 2 previously told the model to fill "duration, gap, start
+        # time". After 0067 only ``duration`` may remain; the backend owns
+        # omitted starts and spacing.
+        assert "gap, start time" not in prompt
+        assert "duration, gap, start time" not in prompt
+        # Positive assertion: the reworded rule must state the backend owns
+        # omitted start times and spacing (not merely drop the old phrase).
+        low = prompt.lower()
+        assert "backend owns omitted start" in low
+        assert "spacing between blocks" in low
+
+    def test_no_slot_retry_protocol_is_untimed_or_explicit(self):
+        low = self._prompt().lower()
+        # After a no_slot ask, retry with a smaller duration_minutes (still an
+        # untimed add) OR an explicit-time add — never the identical failing add.
+        assert "no_slot" in low or "no slot" in low
+        assert "smaller" in low
+        assert "duration_minutes" in self._prompt()
+
+
+class TestChatUserMessageCurrentTimeAnnotation:
+    def test_current_local_time_annotated_as_context(self):
+        import datetime
+
+        from ai.prompts import build_chat_user_message
+
+        schedule = _schedule(datetime.date(2026, 5, 4))
+        now = datetime.datetime(2026, 5, 4, 9, 30)
+        msg = build_chat_user_message(schedule, [], now, [])
+        assert "Current local time:" in msg
+        # Annotated as context, not placement authority.
+        low = msg.lower()
+        assert "context" in low

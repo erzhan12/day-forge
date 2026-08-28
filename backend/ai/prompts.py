@@ -3,10 +3,11 @@
 Pure functions so they can be unit-tested without the OpenAI SDK.
 
 Two top-level prompts live here. Both inject the user's active
-Rules (priority desc) into the server-built schedule context so the
-model can fill omitted defaults (duration, gap, start time) instead of
-asking for clarification. Active/user-owned filtering happens at the
-view/query layer; the prompt builders render whatever rules the caller
+Rules (priority desc) into the server-built schedule context. Rules may
+still inform a block's duration, but omitted start times and inter-block
+spacing are backend-owned for chat auto-placement (feature 0067) — the
+model must not fabricate a start. Active/user-owned filtering happens at
+the view/query layer; the prompt builders render whatever rules the caller
 passes in.
 
 * ``SYSTEM_PROMPT_DRAFT`` + ``build_draft_user_message`` — the Phase-5
@@ -56,8 +57,17 @@ Working day window: {window.start_str}-{window.end_str}. Never produce blocks ou
 All times use 24-hour HH:MM format with 5-minute granularity.
 
 Valid action types and required fields:
-- add:    type=add, title=str, start_time=HH:MM, end_time=HH:MM,
-          category=one of {_category_text(categories)}
+- add: type=add, title=str, category=one of {_category_text(categories)}.
+       Two modes:
+       * explicit — supply BOTH start_time=HH:MM and end_time=HH:MM.
+       * automatic — the user gave no start time: OMIT both start_time and
+         end_time. The backend places the block deterministically at the
+         nearest free slot forward (25-minute default duration, 10-minute
+         gaps around neighbours, aligned to the 5-minute grid, within the
+         working-day window). You MAY add an optional duration_minutes (a
+         positive multiple of 5) when the user or a rule implies a length,
+         but NEVER invent a start_time. Supplying only one of the two time
+         fields is invalid.
 - move:   type=move, task_id=int, start_time=HH:MM, end_time=HH:MM (optional;
           omit to keep the original duration)
 - remove: type=remove, task_id=int
@@ -75,8 +85,10 @@ Per-turn response shapes (you MUST pick exactly one):
 
 Hard rules:
 1. ``ask`` MUST be ``null`` whenever ``actions`` is non-empty.
-2. Respect every active rule. Use rules to fill in defaults (duration,
-   gap, start time) the user omitted, instead of asking for clarification.
+2. Respect every active rule. Use rules to fill in the duration the user
+   omitted (a rule may inform duration_minutes on an automatic add), instead
+   of asking for clarification. The backend owns omitted start times and the
+   spacing between blocks — never fill those in yourself.
    Only set ``ask`` to a non-empty string when the user clearly intends a
    schedule mutation AND the current blocks, prior transcript, latest user
    turn, and active rules together still leave the intended mutation
@@ -112,6 +124,10 @@ Hard rules:
    c. For a conflicting or out-of-window add (new block), re-emit a CONCRETE add
       with a specific free time — never a ``direction`` (adds have no direction
       flow).
+   d. After a ``no_slot`` server ask (an automatic untimed add found no forward
+      slot), retry with EITHER an explicit-time add at a specific free time OR
+      another untimed add carrying a SMALLER duration_minutes — never resend the
+      identical untimed add that just failed.
 """
 
 
@@ -312,7 +328,9 @@ def build_chat_user_message(schedule, blocks, now, rules) -> str:
     rules_section = _format_rules_section(rules)
     return (
         f"Schedule date: {schedule.date.isoformat()} ({weekday})\n"
-        f"Current local time: {now.strftime('%H:%M')}\n"
+        f"Current local time: {now.strftime('%H:%M')} "
+        f"(context only — the backend, not you, chooses where an automatic "
+        f"untimed add is placed)\n"
         f"Existing blocks:\n{block_section}\n\n"
         f"{rules_section}"
     )

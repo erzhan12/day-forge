@@ -77,13 +77,24 @@ class BlockCandidate:
         )
 
 
+# Feature 0067: deterministic auto-placement of untimed chat ``add`` actions.
+# Defaults centralised here (the grid comes from ``free_slot.GRID_MINUTES``).
+DEFAULT_AUTO_DURATION_MINUTES = 25
+AUTO_PLACEMENT_GAP_MINUTES = 10
+
+
 @dataclass(frozen=True)
 class CreateMutation:
     action_index: int
     title: str
     category: str
-    start_time: datetime.time
-    end_time: datetime.time
+    # ``start_time``/``end_time`` are ``None`` for an ``auto_place`` create
+    # (feature 0067) — the placement pass fills them in. Explicit both-time
+    # creates carry parsed times and ``auto_place=False``.
+    start_time: datetime.time | None = None
+    end_time: datetime.time | None = None
+    duration_minutes: int | None = None
+    auto_place: bool = False
 
 
 @dataclass(frozen=True)
@@ -404,6 +415,16 @@ def _day_bounds(day_start: str, day_end: str) -> tuple[datetime.time, datetime.t
     return parse_time(day_start), parse_time(day_end)
 
 
+def _time_from_minutes(value: int) -> datetime.time:
+    """Convert minutes-since-midnight to a ``datetime.time`` (feature 0067).
+
+    Callers must clamp ``value`` into ``[0, 1439]`` in integer-minute space
+    first; this never wraps past midnight.
+    """
+    hour, minute = divmod(value, 60)
+    return datetime.time(hour, minute)
+
+
 def _normalize_actions(
     snapshot: ScheduleSnapshot,
     parsed_actions: Sequence[dict],
@@ -427,15 +448,29 @@ def _normalize_actions(
         if kind == "add":
             title = action["title"].strip()
             category = action["category"]
-            creates.append(
-                CreateMutation(
-                    action_index=action_index,
-                    title=title,
-                    category=category,
-                    start_time=parse_time(action["start_time"]),
-                    end_time=parse_time(action["end_time"]),
+            # Feature 0067: an untimed chat add omits both time fields and is
+            # placed deterministically by the placement pass. Explicit both-time
+            # adds parse their times here as before.
+            if "start_time" not in action and "end_time" not in action:
+                creates.append(
+                    CreateMutation(
+                        action_index=action_index,
+                        title=title,
+                        category=category,
+                        duration_minutes=action.get("duration_minutes"),
+                        auto_place=True,
+                    )
                 )
-            )
+            else:
+                creates.append(
+                    CreateMutation(
+                        action_index=action_index,
+                        title=title,
+                        category=category,
+                        start_time=parse_time(action["start_time"]),
+                        end_time=parse_time(action["end_time"]),
+                    )
+                )
             continue
 
         task_id = action["task_id"]
@@ -556,6 +591,11 @@ def _build_candidate(
         )
 
     for create in creates:
+        # Feature 0067: auto-placement creates carry no times yet — the
+        # placement pass inserts them after the overlap fixpoint. Skip them
+        # here so ``None`` boundaries never reach overlap/clamp logic.
+        if create.auto_place:
+            continue
         temp_id = -(create.action_index + 1)
         candidate[temp_id] = BlockCandidate(
             id=temp_id,
@@ -576,12 +616,18 @@ def plan_mutations(
     *,
     day_start: str = DEFAULT_WINDOW.start_str,
     day_end: str = DEFAULT_WINDOW.end_str,
+    earliest_start: datetime.time | None = None,
 ) -> PartialPlan | PlanError:
     """Plan the accepted subset of a chat turn.
 
     Structural misses still abort.  Policy failures (window, grid, interval,
     and overlap) reject only the affected time intent so independent metadata
     can safely persist in the same atomic turn.
+
+    ``earliest_start`` is the forward placement floor for untimed auto-place
+    creates (feature 0067): ``None`` searches from the window start (used for
+    non-today schedules), otherwise placement scans forward from this
+    grid-aligned time. It never affects explicit-time adds.
     """
     normalized = _normalize_actions(snapshot, parsed_actions)
     if isinstance(normalized, PlanError):
@@ -676,6 +722,10 @@ def plan_mutations(
             )
 
     for create in creates:
+        # Feature 0067: auto-placement creates have no times to clamp/validate
+        # here — the placement pass owns them (runs after the overlap fixpoint).
+        if create.auto_place:
+            continue
         temp_id = -(create.action_index + 1)
         accepted_changed.add(temp_id)
         start, end = create.start_time, create.end_time
@@ -756,6 +806,68 @@ def plan_mutations(
             "plan_mutations fixpoint did not converge; possible planner bug (schedule=%s)",
             snapshot.id,
         )
+
+    # ------------------------------------------------------------------
+    # Feature 0067: deterministic auto-placement of untimed chat adds.
+    # Runs AFTER the overlap fixpoint so ``find_slot``'s occupancy check is
+    # the SOLE overlap guard for autos (the fixpoint is not re-entered). Each
+    # auto searches forward from the common base against current occupancy;
+    # its RAW (unpadded) placed interval feeds the next auto's padding.
+    # ------------------------------------------------------------------
+    auto_creates = [c for c in creates if c.auto_place]
+    if auto_creates:
+        from ai.free_slot import find_slot
+
+        def _to_min(value: datetime.time) -> int:
+            return value.hour * 60 + value.minute
+
+        base_min = window.start_minutes
+        if earliest_start is not None:
+            base_min = max(_to_min(earliest_start), window.start_minutes)
+
+        for create in sorted(auto_creates, key=lambda c: c.action_index):
+            temp_id = -(create.action_index + 1)
+            accepted_changed.add(temp_id)
+            dur = create.duration_minutes or DEFAULT_AUTO_DURATION_MINUTES
+
+            # Reject via minute comparison BEFORE building any datetime.time so a
+            # large duration never constructs a midnight-wrapped time. An exact
+            # fit (base_min + dur == end_minutes) is allowed, matching find_slot.
+            if base_min + dur > window.end_minutes:
+                reject(temp_id, "no_slot")
+                continue
+
+            padded: list[tuple[datetime.time, datetime.time]] = []
+            for block_id, block in candidate.items():
+                if block_id == temp_id:
+                    continue
+                lo = max(
+                    _to_min(block.start_time) - AUTO_PLACEMENT_GAP_MINUTES,
+                    window.start_minutes,
+                )
+                hi = min(
+                    _to_min(block.end_time) + AUTO_PLACEMENT_GAP_MINUTES,
+                    window.end_minutes,
+                )
+                if hi <= lo:
+                    continue
+                padded.append((_time_from_minutes(lo), _time_from_minutes(hi)))
+
+            base_start = _time_from_minutes(base_min)
+            base_end = _time_from_minutes(base_min + dur)
+            suggestion = find_slot(base_start, base_end, "later", window, padded)
+            if suggestion is None or suggestion.start_time is None:
+                reject(temp_id, "no_slot")
+                continue
+            candidate[temp_id] = BlockCandidate(
+                id=temp_id,
+                start_time=suggestion.start_time,
+                end_time=suggestion.end_time,
+                title=create.title,
+                category=create.category,
+                is_completed=False,
+                source_action_index=create.action_index,
+            )
 
     update_entries: list[UpdateDiffEntry] = []
     outcomes: list[ActionOutcome] = []

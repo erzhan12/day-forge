@@ -259,3 +259,14 @@ def test_build_draft_user_message_without_template(user):
     assert "(no template entries)" in msg
     assert "(no recent history)" in msg
     assert "(no active rules)" in msg
+
+
+def test_draft_add_schema_unchanged_requires_explicit_times():
+    """Feature 0067: the draft add schema is untouched — explicit HH:MM start
+    and end are still required; no untimed/auto-placement language leaks in."""
+    prompt = SYSTEM_PROMPT_DRAFT
+    assert "start_time=HH:MM" in prompt
+    assert "end_time=HH:MM" in prompt
+    # Chat-only auto-placement vocabulary must NOT appear in the draft prompt.
+    assert "duration_minutes" not in prompt
+    assert "auto" not in prompt.lower() or "automatic" not in prompt.lower()

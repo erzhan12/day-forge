@@ -447,3 +447,45 @@ class TestParsing:
                 [],
                 now,
             )
+
+
+class TestChatUntimedAdd:
+    """Feature 0067: ``run_chat`` accepts an untimed add (both times omitted);
+    a one-sided-time add still fails validation → ``AIParseError``."""
+
+    def test_accepts_untimed_add(self, patch_client, fake_schedule, now):
+        action = {"type": "add", "title": "LeverX", "category": "work"}
+        patch_client(_ok_response(actions=[action]))
+        result = run_chat(
+            [{"role": "user", "content": "add LeverX"}],
+            fake_schedule,
+            [],
+            [],
+            now,
+        )
+        assert result.parsed_actions == [action]
+        assert result.ask is None
+
+    def test_accepts_untimed_add_with_duration_minutes(self, patch_client, fake_schedule, now):
+        action = {"type": "add", "title": "LeverX", "category": "work", "duration_minutes": 30}
+        patch_client(_ok_response(actions=[action]))
+        result = run_chat(
+            [{"role": "user", "content": "add LeverX 30 min"}],
+            fake_schedule,
+            [],
+            [],
+            now,
+        )
+        assert result.parsed_actions == [action]
+
+    def test_one_sided_time_add_raises_parse(self, patch_client, fake_schedule, now):
+        action = {"type": "add", "title": "LeverX", "category": "work", "start_time": "09:00"}
+        patch_client(_ok_response(actions=[action]))
+        with pytest.raises(AIParseError):
+            run_chat(
+                [{"role": "user", "content": "add LeverX at 9"}],
+                fake_schedule,
+                [],
+                [],
+                now,
+            )

@@ -385,7 +385,10 @@ async def run_chat(messages, schedule, blocks, rules, now, categories=None) -> A
     )
     per_action_errors = []
     for idx, action in enumerate(parsed["actions"]):
-        errs = validate_action_shape(action, allowed_categories)
+        # Feature 0067: chat allows an untimed add (both times omitted → backend
+        # deterministic placement). The draft path uses ``validate_draft_response``
+        # with the ``False`` default, so draft adds still require both times.
+        errs = validate_action_shape(action, allowed_categories, allow_untimed_add=True)
         if errs:
             per_action_errors.append(f"action[{idx}]: {', '.join(errs)}")
     if per_action_errors:

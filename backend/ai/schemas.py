@@ -15,9 +15,16 @@ import re
 from django.conf import settings
 from schedules.http import is_plain_int
 
+from ai.free_slot import GRID_MINUTES
+
 MAX_ACTIONS_PER_COMMAND = 20
 
 ALLOWED_ACTION_TYPES = {"add", "move", "remove", "resize", "update"}
+
+# Feature 0067: allowed keys on an ``add`` action. A key outside this set (e.g.
+# a misspelled ``start``/``end``) is rejected rather than silently ignored,
+# which would otherwise misclassify a mistyped explicit add as an untimed add.
+_ADD_ALLOWED_KEYS = {"type", "title", "category", "start_time", "end_time", "duration_minutes"}
 
 # Fields expected per action type. ``task_id`` is always an int; time fields
 # use HH:MM.
@@ -41,11 +48,19 @@ def _is_hhmm(value) -> bool:
     return isinstance(value, str) and bool(_TIME_PATTERN.match(value))
 
 
-def validate_action_shape(action, allowed_categories) -> list[str]:
+def validate_action_shape(
+    action, allowed_categories, *, allow_untimed_add: bool = False
+) -> list[str]:
     """Return a list of per-action error strings. Empty list means OK.
 
     Checks types and enum membership only — business rules like "block is on
     the right schedule" or "no overlap" are enforced by the view.
+
+    ``allow_untimed_add`` (feature 0067) is passed ``True`` only from the chat
+    per-action loop (``service.run_chat``). When true, an ``add`` may omit BOTH
+    ``start_time`` and ``end_time`` (deterministic backend placement) and may
+    carry an optional ``duration_minutes``. The draft path leaves it ``False``,
+    so a draft ``add`` still requires both times.
     """
     errors: list[str] = []
     if not isinstance(action, dict):
@@ -55,9 +70,55 @@ def validate_action_shape(action, allowed_categories) -> list[str]:
     if action_type not in ALLOWED_ACTION_TYPES:
         return [f"type must be one of {sorted(ALLOWED_ACTION_TYPES)}, got {action_type!r}"]
 
-    for field in _REQUIRED_FIELDS[action_type]:
-        if field not in action:
-            errors.append(f"{action_type} action requires '{field}'")
+    # Feature 0067: an untimed chat add classifies by time-key presence. Reject
+    # unknown keys first so a misspelled ``start``/``end`` cannot masquerade as
+    # a valid untimed add and get auto-placed. ``duration_minutes`` is only
+    # valid on a chat untimed add — rejected on explicit adds and everywhere
+    # else below.
+    if action_type == "add":
+        unknown = set(action) - _ADD_ALLOWED_KEYS
+        if unknown:
+            errors.append(f"add action has unknown key(s): {sorted(unknown)}")
+        has_start = "start_time" in action
+        has_end = "end_time" in action
+        if allow_untimed_add:
+            # Require only title + category; both-or-neither on times.
+            for field in ("title", "category"):
+                if field not in action:
+                    errors.append(f"add action requires '{field}'")
+            if has_start != has_end:
+                errors.append(
+                    "add action requires both 'start_time' and 'end_time' or neither"
+                )
+        else:
+            for field in _REQUIRED_FIELDS["add"]:
+                if field not in action:
+                    errors.append(f"add action requires '{field}'")
+    else:
+        for field in _REQUIRED_FIELDS[action_type]:
+            if field not in action:
+                errors.append(f"{action_type} action requires '{field}'")
+
+    # ``duration_minutes`` is valid ONLY on a chat untimed add (both time fields
+    # absent). Reject it anywhere else — explicit add, move, resize, update,
+    # remove — so an unknown key is never silently ignored.
+    if "duration_minutes" in action:
+        is_untimed_chat_add = (
+            action_type == "add"
+            and allow_untimed_add
+            and "start_time" not in action
+            and "end_time" not in action
+        )
+        if not is_untimed_chat_add:
+            errors.append("duration_minutes is only valid on an untimed add")
+        else:
+            dm = action["duration_minutes"]
+            if not is_plain_int(dm):
+                errors.append("duration_minutes must be an integer")
+            elif dm <= 0:
+                errors.append("duration_minutes must be positive")
+            elif dm % GRID_MINUTES:
+                errors.append(f"duration_minutes must be a multiple of {GRID_MINUTES}")
 
     # ``move`` and ``resize`` only require ``task_id`` structurally, but a
     # payload with no time fields would apply as a silent no-op — the AI

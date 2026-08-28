@@ -1598,3 +1598,214 @@ class TestResolutionAskPrecedence:
             "That time is outside your schedule window. "
             "Please give a time within your day."
         )
+
+
+class TestEarliestStartHelper:
+    """Feature 0067: pure ``_earliest_start`` view helper.
+
+    Signature: ``_earliest_start(schedule_date, window, now_local)`` →
+    ``datetime.time | None``. ``None`` for a non-today date; for today, the
+    current local time rounded UP to the next 5-min grid, clamped to the
+    window (before → window start; at/after end or midnight-cross → the
+    window-end no-fit sentinel that deterministically yields ``no_slot``).
+    """
+
+    WINDOW = None
+
+    @staticmethod
+    def _window():
+        from schedules.window import ScheduleWindow
+
+        return ScheduleWindow(datetime.time(6, 0), datetime.time(23, 0))
+
+    def _call(self, now_local, date=datetime.date(2026, 4, 18)):
+        from ai.views import _earliest_start
+
+        return _earliest_start(date, self._window(), now_local)
+
+    def test_exact_grid_instant_unchanged(self):
+        now = datetime.datetime(2026, 4, 18, 10, 5, 0)
+        assert self._call(now) == datetime.time(10, 5)
+
+    def test_on_grid_with_leftover_seconds_rounds_up(self):
+        now = datetime.datetime(2026, 4, 18, 10, 5, 30)
+        assert self._call(now) == datetime.time(10, 10)
+
+    def test_on_grid_with_leftover_microseconds_rounds_up(self):
+        now = datetime.datetime(2026, 4, 18, 10, 5, 0, 1)
+        assert self._call(now) == datetime.time(10, 10)
+
+    def test_off_grid_rounds_up(self):
+        now = datetime.datetime(2026, 4, 18, 10, 2, 30)
+        assert self._call(now) == datetime.time(10, 5)
+
+    def test_before_window_returns_window_start(self):
+        now = datetime.datetime(2026, 4, 18, 5, 0, 0)
+        assert self._call(now) == datetime.time(6, 0)
+
+    def test_after_window_end_returns_sentinel_at_or_past_end(self):
+        now = datetime.datetime(2026, 4, 18, 23, 0, 0)
+        result = self._call(now)
+        # The no-fit sentinel is exactly window.day_end (default 23:00), not
+        # merely "at or past" it — an off-by-a-grid sentinel > day_end could
+        # construct an out-of-range value downstream.
+        assert result == datetime.time(23, 0)
+
+    def test_late_evening_rounding_crosses_midnight_returns_sentinel(self):
+        now = datetime.datetime(2026, 4, 18, 23, 58, 0)
+        result = self._call(now)
+        assert result == datetime.time(23, 0)
+
+    def test_non_today_date_returns_none(self):
+        now = datetime.datetime(2026, 4, 18, 10, 0, 0)
+        assert self._call(now, date=datetime.date(2026, 4, 19)) is None
+        assert self._call(now, date=datetime.date(2026, 4, 17)) is None
+
+
+class TestAutoPlacementIntegration:
+    """Feature 0067: chat untimed-add apply path (deterministic placement)."""
+
+    def _auto_add_result(self, title="LeverX", category="personal", duration_minutes=None):
+        action = {"type": "add", "title": title, "category": category}
+        if duration_minutes is not None:
+            action["duration_minutes"] = duration_minutes
+        return AIChatResult(
+            raw_response_text="{}",
+            parsed_actions=[action],
+            explanation="Added",
+            ask=None,
+        )
+
+    @pytest.mark.django_db
+    def test_untimed_add_uses_fresh_apply_time_local_now(
+        self, user, auth_client, today_schedule, monkeypatch
+    ):
+        # Sequential mocked timestamps: the pre-LLM prompt localtime is EARLIER
+        # than the apply-time localtime. A regression reusing the stale pre-LLM
+        # ``now`` at apply time would place the block earlier and fail this
+        # assertion. Both timestamps carry the schedule's date so it is "today".
+        import ai.views as views
+
+        sched_date = datetime.date(2026, 4, 18)
+        pre_llm = datetime.datetime.combine(sched_date, datetime.time(9, 0))
+        apply_time = datetime.datetime.combine(sched_date, datetime.time(10, 2, 30))
+        times = iter([pre_llm, apply_time])
+
+        def _fake_localtime(*args, **kwargs):
+            return next(times)
+
+        monkeypatch.setattr(views.timezone, "localtime", _fake_localtime)
+        _patch_run_chat(monkeypatch, self._auto_add_result())
+
+        resp = _post(auth_client, {"messages": [_user_turn("add LeverX")]})
+        assert resp.status_code == 200, resp.content
+        data = resp.json()
+        assert data["applied"] is True
+        assert len(data["blocks"]) == 1
+        block = data["blocks"][0]
+        # Apply-time now 10:02:30 rounds up to 10:05; block starts at/after it.
+        assert block["start_time"] >= "10:05"
+        assert block["start_time"] == "10:05"
+        assert block["end_time"] == "10:30"
+
+    @pytest.mark.django_db
+    def test_untimed_add_no_slot_surfaces_ask(
+        self, user, auth_client, today_schedule, monkeypatch
+    ):
+        # Fill the whole window so no forward slot fits → no_slot skip.
+        TimeBlock.objects.create(
+            schedule=today_schedule,
+            title="All day",
+            start_time=datetime.time(6, 0),
+            end_time=datetime.time(23, 0),
+            category="work",
+        )
+        import ai.views as views
+
+        now = datetime.datetime.combine(datetime.date(2026, 4, 18), datetime.time(9, 0))
+        monkeypatch.setattr(views.timezone, "localtime", lambda *a, **k: now)
+        _patch_run_chat(monkeypatch, self._auto_add_result())
+
+        resp = _post(auth_client, {"messages": [_user_turn("add LeverX")]})
+        assert resp.status_code == 200, resp.content
+        data = resp.json()
+        assert data["applied"] is False
+        assert len(data["blocks"]) == 1  # only the pre-existing all-day block
+        outcome = data["outcomes"][0]
+        assert outcome["status"] == "skipped"
+        assert outcome["reason_code"] == "no_slot"
+        assert data["ask"] == (
+            "No free slot with the required gaps fits LeverX in your day window. "
+            "Try a shorter duration or a specific free time."
+        )
+
+
+class TestResolutionAskNoSlotPrecedence:
+    """Feature 0067: ``no_slot`` sits AFTER the update ``attempted_direction``
+    tier and BEFORE the generic skipped-add branch in ``_build_resolution_ask``."""
+
+    @staticmethod
+    def _no_slot(action_index: int) -> ActionOutcome:
+        return ActionOutcome(
+            action_index=action_index,
+            task_id=None,
+            status="skipped",
+            skipped_fields=("title", "category", "start_time", "end_time"),
+            reason_code="no_slot",
+        )
+
+    @staticmethod
+    def _attempted_direction(action_index: int, task_id: int) -> ActionOutcome:
+        return ActionOutcome(
+            action_index=action_index,
+            task_id=task_id,
+            status="skipped",
+            skipped_fields=("start_time", "end_time"),
+            reason_code="overlap",
+            attempted_direction="later",
+        )
+
+    @staticmethod
+    def _skipped_add(action_index: int) -> ActionOutcome:
+        return ActionOutcome(
+            action_index=action_index,
+            task_id=None,
+            status="skipped",
+            skipped_fields=("title", "category", "start_time", "end_time"),
+            reason_code="out_of_window",
+        )
+
+    def test_no_slot_ask_copy(self):
+        outcome = self._no_slot(0)
+        ask = _build_resolution_ask((outcome,), {}, {0: "LeverX"})
+        assert ask == (
+            "No free slot with the required gaps fits LeverX in your day window. "
+            "Try a shorter duration or a specific free time."
+        )
+
+    def test_attempted_direction_wins_over_no_slot_both_orders(self):
+        block_titles = {10: "Focus"}
+        create_titles = {1: "LeverX"}
+        direction = self._attempted_direction(0, 10)
+        no_slot = self._no_slot(1)
+        expected = (
+            "No free later slot fits Focus within your day window. "
+            "Please choose another time."
+        )
+        ask_a = _build_resolution_ask((direction, no_slot), block_titles, create_titles)
+        ask_b = _build_resolution_ask((no_slot, direction), block_titles, create_titles)
+        assert ask_a == expected
+        assert ask_b == expected
+
+    def test_no_slot_wins_over_generic_skipped_add_both_orders(self):
+        create_titles = {0: "LeverX", 1: "Other"}
+        no_slot = self._no_slot(0)
+        generic = self._skipped_add(1)
+        expected = (
+            "No free slot with the required gaps fits LeverX in your day window. "
+            "Try a shorter duration or a specific free time."
+        )
+        ask_a = _build_resolution_ask((no_slot, generic), {}, create_titles)
+        ask_b = _build_resolution_ask((generic, no_slot), {}, create_titles)
+        assert ask_a == expected
+        assert ask_b == expected

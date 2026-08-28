@@ -28,6 +28,7 @@ from schedules.validators import validate_five_minute_granularity
 from schedules.window import DEFAULT_WINDOW, ScheduleWindow, get_schedule_window
 from templates_mgr.models import Rule, Template
 
+from ai.free_slot import GRID_MINUTES
 from ai.models import AIInteraction
 from ai.mutation_planner import (
     ActionOutcome,
@@ -258,7 +259,8 @@ def _build_resolution_ask(
     # question the user sees is order-invariant (not whichever skipped
     # outcome happened to appear first). Precedence:
     #   concrete suggestion > direction_required > unresolved_conflict
-    #   > no-slot(attempted_direction) > skipped-add(task_id None)
+    #   > attempted_direction(no free later/earlier slot for a move)
+    #   > no_slot(auto-placement has no forward slot) > skipped-add(task_id None)
     #   > generic-invalid.
     for outcome in skipped:
         suggestion = outcome.suggestion
@@ -289,6 +291,16 @@ def _build_resolution_ask(
                 f"No free {outcome.attempted_direction} slot fits {title(outcome)} "
                 "within your day window. Please choose another time."
             )
+    # Feature 0067: an untimed auto-placed add that found no forward slot. A
+    # ``no_slot`` outcome has ``task_id is None`` and empty ``attempted_direction``,
+    # so this must precede the generic skipped-add branch below (which would
+    # otherwise emit the wrong "give it a concrete free start/end" copy).
+    for outcome in skipped:
+        if outcome.reason_code == "no_slot":
+            return (
+                f"No free slot with the required gaps fits {title(outcome)} in your "
+                "day window. Try a shorter duration or a specific free time."
+            )
     for outcome in skipped:
         if outcome.task_id is None:
             return (
@@ -304,6 +316,48 @@ def _build_resolution_ask(
         f"That time range for {title(skipped[0])} is not valid or available. "
         "Please give a valid time."
     )
+
+
+def _earliest_start(
+    schedule_date: datetime.date,
+    window: ScheduleWindow,
+    now_local: datetime.datetime,
+) -> datetime.time | None:
+    """Compute the forward placement floor for chat auto-placement (feature 0067).
+
+    - Non-today schedule (``schedule_date != now_local.date()``) → ``None``: the
+      planner then searches from ``window.day_start`` independent of the clock.
+    - Today → the current local time rounded **UP** to the next 5-min grid
+      (an exact grid instant is unchanged; any leftover seconds/microseconds
+      round up so the block never lands in the past). Then:
+        * If the rounded value would cross midnight, or ``now`` is at/after the
+          window end, return ``window.day_end`` — a no-fit sentinel that makes
+          ``plan_mutations`` deterministically emit ``no_slot`` (base_min ==
+          end_minutes ⇒ base_min + dur > end_minutes for any positive dur).
+        * If the rounded value is before the window start, return
+          ``window.day_start``.
+        * Otherwise return the rounded grid time.
+    """
+    if schedule_date != now_local.date():
+        return None
+
+    grid = GRID_MINUTES
+    minutes = now_local.hour * 60 + now_local.minute
+    has_leftover = now_local.second or now_local.microsecond
+    remainder = minutes % grid
+    if remainder or has_leftover:
+        rounded = minutes + (grid - remainder if remainder else grid if has_leftover else 0)
+    else:
+        rounded = minutes
+
+    # Rounding crossed midnight, or the clock is already at/past the window end
+    # → no forward slot can exist today.
+    if rounded >= 24 * 60 or minutes >= window.end_minutes:
+        return window.day_end
+    if rounded < window.start_minutes:
+        return window.day_start
+    hour, minute = divmod(rounded, 60)
+    return datetime.time(hour, minute)
 
 
 def _validation_error_detail(e: ValidationError) -> dict:
@@ -676,11 +730,18 @@ def _apply_actions_sync(
             if isinstance(category, str) and category not in allowed_categories:
                 raise _Rollback(_action_error(index, "invalid category"))
         window = get_schedule_window(locked_schedule.user)
+        # Feature 0067: take a FRESH local time under the lock (not the pre-LLM
+        # prompt timestamp) so an untimed add is placed forward from apply-time,
+        # never in the past. ``_earliest_start`` returns ``None`` for a non-today
+        # schedule (planner then searches from the window start).
+        now_local = timezone.localtime()
+        earliest_start = _earliest_start(locked_schedule.date, window, now_local)
         plan_result = plan_mutations(
             locked_context.schedule,
             result.parsed_actions,
             day_start=window.start_str,
             day_end=window.end_str,
+            earliest_start=earliest_start,
         )
         if isinstance(plan_result, PlanError):
             raise _Rollback(_action_error(plan_result.action_index, plan_result.detail))

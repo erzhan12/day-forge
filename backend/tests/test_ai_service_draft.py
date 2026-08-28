@@ -259,3 +259,28 @@ def test_capture_refuses_to_follow_symlink(
         and "LLM_DRAFT_CAPTURE_PROMPT_PATH" in r.message
         for r in caplog.records
     )
+
+
+@pytest.mark.django_db
+def test_run_draft_rejects_untimed_add(user, monkeypatch, settings):
+    """Feature 0067: draft add still requires both times. An untimed add
+    (chat's placement mode) is rejected on the draft path → ``AIParseError``."""
+    settings.LLM_API_KEY = "sk-test"
+    schedule = Schedule.objects.create(user=user, date=datetime.date(2026, 5, 4))
+    template = Template.objects.create(user=user, name="WD", type="weekday", blocks=[])
+
+    fake = _FakeClient(
+        {},
+        json.dumps(
+            {
+                "actions": [{"type": "add", "title": "LeverX", "category": "work"}],
+                "explanation": "should fail",
+            }
+        ),
+    )
+    monkeypatch.setattr("ai.service._get_client", lambda: fake)
+
+    with pytest.raises(AIParseError) as exc_info:
+        run_draft(schedule, template, [], [], datetime.datetime(2026, 5, 4, 8, 0))
+    msg = str(exc_info.value)
+    assert "start_time" in msg and "end_time" in msg

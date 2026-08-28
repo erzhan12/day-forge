@@ -54,7 +54,10 @@ const emit = defineEmits<{
       <h3 class="subsection-title">Rules</h3>
       <p class="section-subtitle">
         Active rules are passed to the AI when generating drafts. Higher
-        priority rules take precedence on conflict.
+        priority rules take precedence on conflict. When you ask chat to add a
+        block without a time, the backend places it at the nearest free slot
+        forward from now — a 25-minute default duration, 10-minute gaps around
+        neighbours, aligned to 5 minutes.
       </p>
       <RulesList :rules="rules" @changed="emit('rules-changed')" />
     </div>

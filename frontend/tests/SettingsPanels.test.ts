@@ -216,6 +216,18 @@ describe("SettingsTemplatesRulesPanel", () => {
       .toEqual(["Templates", "Rules", "Travel-time rules"])
     expect(wrapper.find(".template-grid").exists()).toBe(true)
 
+    // Feature 0067: the Rules subtitle documents that untimed chat block
+    // placement is backend-owned (nearest free slot forward, 25-min default,
+    // 10-min gaps), extending — not replacing — the existing "passed to the AI"
+    // prose.
+    const rulesSubtitle = wrapper.text()
+    expect(rulesSubtitle).toContain("passed to the AI")
+    expect(rulesSubtitle).toContain("nearest free slot")
+    // Pin the concrete backend-placement figures, not just the lead phrase.
+    expect(rulesSubtitle).toContain("25-minute")
+    expect(rulesSubtitle).toContain("10-minute")
+    expect(rulesSubtitle).toContain("5 minutes")
+
     const buttons = wrapper.findAll("button")
     await buttons[0].trigger("click")
     await buttons[2].trigger("click")

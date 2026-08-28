@@ -153,3 +153,86 @@ def test_direction_rejected_on_non_update_types():
             {"type": kind, "direction": "later", **extra}, ALLOWED
         )
         assert any("'direction' is not valid on a" in e for e in errors)
+
+
+# ---------------------------------------------------------------------------
+# Feature 0067: chat untimed-add schema (allow_untimed_add=True).
+# ---------------------------------------------------------------------------
+
+
+def _untimed_add(**extra):
+    action = {"type": "add", "title": "LeverX", "category": "work"}
+    action.update(extra)
+    return action
+
+
+class TestChatUntimedAdd:
+    def test_untimed_add_passes_with_flag(self):
+        assert validate_action_shape(_untimed_add(), ALLOWED, allow_untimed_add=True) == []
+
+    def test_both_times_still_pass_with_flag(self):
+        action = _untimed_add(start_time="09:00", end_time="09:30")
+        assert validate_action_shape(action, ALLOWED, allow_untimed_add=True) == []
+
+    def test_untimed_add_rejected_without_flag(self):
+        # Draft path (default False) still requires both times.
+        errors = validate_action_shape(_untimed_add(), ALLOWED)
+        assert any("start_time" in e for e in errors)
+        assert any("end_time" in e for e in errors)
+
+    def test_start_only_produces_paired_time_error(self):
+        errors = validate_action_shape(
+            _untimed_add(start_time="09:00"), ALLOWED, allow_untimed_add=True
+        )
+        assert any("both" in e and "neither" in e for e in errors)
+
+    def test_end_only_produces_paired_time_error(self):
+        errors = validate_action_shape(
+            _untimed_add(end_time="09:30"), ALLOWED, allow_untimed_add=True
+        )
+        assert any("both" in e and "neither" in e for e in errors)
+
+    def test_duration_minutes_accepts_positive_multiple_of_five(self):
+        for d in (5, 25, 30, 120):
+            assert (
+                validate_action_shape(
+                    _untimed_add(duration_minutes=d), ALLOWED, allow_untimed_add=True
+                )
+                == []
+            )
+
+    def test_duration_minutes_rejects_bad_values(self):
+        for bad in (0, -5, 7, True, False, "25", 25.0, None):
+            errors = validate_action_shape(
+                _untimed_add(duration_minutes=bad), ALLOWED, allow_untimed_add=True
+            )
+            assert errors, f"expected rejection for duration_minutes={bad!r}"
+
+    def test_duration_minutes_rejected_on_explicit_add(self):
+        errors = validate_action_shape(
+            _untimed_add(start_time="09:00", end_time="09:30", duration_minutes=25),
+            ALLOWED,
+            allow_untimed_add=True,
+        )
+        assert any("duration_minutes" in e for e in errors)
+
+    def test_duration_minutes_rejected_on_move_resize_update_remove(self):
+        for kind, extra in (
+            ("move", {"task_id": 5, "start_time": "09:00"}),
+            ("resize", {"task_id": 5, "end_time": "10:00"}),
+            ("update", {"task_id": 5, "title": "X"}),
+            ("remove", {"task_id": 5}),
+        ):
+            action = {"type": kind, "duration_minutes": 25, **extra}
+            errors = validate_action_shape(action, ALLOWED, allow_untimed_add=True)
+            assert any("duration_minutes" in e for e in errors), kind
+
+    def test_unknown_key_on_add_rejected(self):
+        # A misspelled ``start``/``end`` key must NOT masquerade as an untimed add.
+        for bad_key in ("start", "end", "when", "time"):
+            errors = validate_action_shape(
+                {"type": "add", "title": "X", "category": "work", bad_key: "09:00"},
+                ALLOWED,
+                allow_untimed_add=True,
+            )
+            assert errors, f"expected rejection for unknown add key {bad_key!r}"

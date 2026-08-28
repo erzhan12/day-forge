@@ -89,6 +89,14 @@ def _add(title: str, start: str, end: str, category: str = "work") -> dict:
     }
 
 
+def _auto_add(title: str, category: str = "work", duration_minutes: int | None = None) -> dict:
+    """An untimed chat ``add`` (feature 0067): no start_time/end_time."""
+    action: dict = {"type": "add", "title": title, "category": category}
+    if duration_minutes is not None:
+        action["duration_minutes"] = duration_minutes
+    return action
+
+
 def _canonical_intervals(plan: MutationPlan) -> dict[int, tuple[str, str]]:
     """Map real block id → (start, end) HH:MM for permutation comparisons."""
     snap = plan.diff  # type: ignore[attr-defined]
@@ -826,3 +834,348 @@ def test_plan_update_unknown_task_id():
     assert result.detail == (
         "Referenced block no longer exists; it may have been deleted. Please retry."
     )
+
+
+# ---------------------------------------------------------------------------
+# Feature 0067: deterministic auto-placement of untimed chat ``add`` actions.
+# ``plan_mutations(..., earliest_start=...)`` places a titled/categorised add
+# with no start/end at the nearest free 5-min-grid slot forward from
+# ``earliest_start`` (today) or the window start (other dates), 25-min default
+# duration, 10-min gaps around neighbours. Failure → ``no_slot`` skip.
+# ---------------------------------------------------------------------------
+
+
+def _create_intervals(plan: MutationPlan) -> list[tuple[str, str]]:
+    return [
+        (c.start_time.strftime("%H:%M"), c.end_time.strftime("%H:%M"))
+        for c in plan.diff.creates
+    ]
+
+
+def _union_intervals(
+    snapshot: ScheduleSnapshot, plan: MutationPlan
+) -> list[tuple[datetime.time, datetime.time]]:
+    """Final non-overlapping set: unchanged snapshot blocks + diff (feature 0067).
+
+    ``MutationDiff`` carries deletes/updates/creates only, so the union with the
+    surviving unchanged snapshot blocks is the real occupancy a placement or
+    padding miss would collide with.
+    """
+    deleted = {e.block_id for e in plan.diff.deletes}
+    updated = {e.block_id for e in plan.diff.updates}
+    intervals: list[tuple[datetime.time, datetime.time]] = []
+    for b in snapshot.blocks:
+        if b.id in deleted or b.id in updated:
+            continue
+        intervals.append((b.start_time, b.end_time))
+    for e in plan.diff.updates:
+        intervals.append((e.start_time, e.end_time))
+    for c in plan.diff.creates:
+        intervals.append((c.start_time, c.end_time))
+    return intervals
+
+
+def _assert_non_overlapping(intervals):
+    ordered = sorted(intervals, key=lambda iv: iv[0])
+    for (a_start, a_end), (b_start, b_end) in zip(ordered, ordered[1:]):
+        assert a_end <= b_start, f"overlap between {a_start}-{a_end} and {b_start}-{b_end}"
+
+
+class TestAutoPlacement:
+    def test_empty_today_places_at_earliest_start_default_25(self):
+        snap = _schedule([])
+        result = plan_mutations(
+            snap,
+            [_auto_add("LeverX")],
+            day_start=DAY_START,
+            day_end=DAY_END,
+            earliest_start=_t("10:05"),
+        )
+        assert isinstance(result, MutationPlan)
+        assert _create_intervals(result) == [("10:05", "10:30")]
+
+    def test_today_never_starts_before_earliest_start(self):
+        # A block occupies 10:00-10:30; earliest_start 10:05 → first free grid
+        # slot with 10-min padding is 10:40 (after 10:30 + 10 min).
+        snap = _schedule([_block(1, "10:00", "10:30")])
+        result = plan_mutations(
+            snap,
+            [_auto_add("Task")],
+            day_start=DAY_START,
+            day_end=DAY_END,
+            earliest_start=_t("10:05"),
+        )
+        assert isinstance(result, MutationPlan)
+        start, _ = _create_intervals(result)[0]
+        assert start >= "10:05"
+
+    def test_custom_duration(self):
+        snap = _schedule([])
+        result = plan_mutations(
+            snap,
+            [_auto_add("Task", duration_minutes=30)],
+            day_start=DAY_START,
+            day_end=DAY_END,
+            earliest_start=_t("09:00"),
+        )
+        assert isinstance(result, MutationPlan)
+        assert _create_intervals(result) == [("09:00", "09:30")]
+
+    def test_exact_fit_at_window_end_allowed(self):
+        # A default-duration auto whose end lands exactly on day_end must be
+        # placed, not rejected: the no_slot guard is strict `>` (base_min + dur
+        # > end_minutes), mirroring find_slot's `candidate + duration <=
+        # end_minutes`. A regression to `>=` would spuriously return no_slot.
+        snap = _schedule([])
+        result = plan_mutations(
+            snap,
+            [_auto_add("Edge")],
+            day_start="08:00",
+            day_end="08:25",
+            earliest_start=None,
+        )
+        assert isinstance(result, MutationPlan)
+        assert _create_intervals(result) == [("08:00", "08:25")]
+
+    def test_gap_before_a_neighbour(self):
+        # Neighbour at 09:40-10:00; a 25-min auto from base 09:00 may end
+        # exactly 10 min before it (09:00-09:25 ends before 09:30 padded edge).
+        snap = _schedule([_block(1, "09:40", "10:00")])
+        result = plan_mutations(
+            snap,
+            [_auto_add("Task")],
+            day_start=DAY_START,
+            day_end=DAY_END,
+            earliest_start=_t("09:00"),
+        )
+        assert isinstance(result, MutationPlan)
+        assert _create_intervals(result) == [("09:00", "09:25")]
+
+    def test_gap_after_a_neighbour(self):
+        # Neighbour 09:00-09:30; earliest_start 09:00. The placed block may
+        # start exactly 10 min after it: 09:40-10:05.
+        snap = _schedule([_block(1, "09:00", "09:30")])
+        result = plan_mutations(
+            snap,
+            [_auto_add("Task")],
+            day_start=DAY_START,
+            day_end=DAY_END,
+            earliest_start=_t("09:00"),
+        )
+        assert isinstance(result, MutationPlan)
+        assert _create_intervals(result) == [("09:40", "10:05")]
+
+    def test_rejected_update_original_interval_still_blocks_placement(self):
+        # Two blocks: id1 09:00-09:30, id2 09:40-10:10. An update tries to move
+        # id2 onto id1 (overlap → rejected, reverts to 09:40-10:10). An auto add
+        # must still avoid the reverted original 09:40-10:10.
+        snap = _schedule([_block(1, "09:00", "09:30"), _block(2, "09:40", "10:10")])
+        actions = [
+            {"type": "update", "task_id": 2, "start_time": "09:10", "end_time": "09:40"},
+            _auto_add("Auto"),
+        ]
+        result = plan_mutations(
+            snap,
+            actions,
+            day_start=DAY_START,
+            day_end=DAY_END,
+            earliest_start=_t("09:00"),
+        )
+        assert isinstance(result, MutationPlan)
+        # id2 update rejected (overlap) so it reverts to 09:40-10:10.
+        assert 2 not in {e.block_id for e in result.diff.updates}
+        _assert_non_overlapping(_union_intervals(snap, result))
+
+    def test_deleted_block_frees_its_space(self):
+        # id1 occupies 09:00-09:30; removing it frees the slot so an auto with
+        # earliest_start 09:00 lands at 09:00-09:25.
+        snap = _schedule([_block(1, "09:00", "09:30")])
+        actions = [_remove(1), _auto_add("Auto")]
+        result = plan_mutations(
+            snap,
+            actions,
+            day_start=DAY_START,
+            day_end=DAY_END,
+            earliest_start=_t("09:00"),
+        )
+        assert isinstance(result, MutationPlan)
+        assert _create_intervals(result) == [("09:00", "09:25")]
+
+    def test_sequential_two_default_adds_preserve_order_and_gap(self):
+        snap = _schedule([])
+        actions = [_auto_add("First"), _auto_add("Second")]
+        result = plan_mutations(
+            snap,
+            actions,
+            day_start=DAY_START,
+            day_end=DAY_END,
+            earliest_start=_t("09:00"),
+        )
+        assert isinstance(result, MutationPlan)
+        assert _create_intervals(result) == [("09:00", "09:25"), ("09:35", "10:00")]
+
+    def test_unequal_durations_later_add_may_take_earlier_gap(self):
+        # An early hole 09:00-09:25 sits before a padded block (block 09:35-11:00
+        # pads to 09:25-11:10). The long 60-min add does NOT fit the 25-min hole,
+        # so from base 09:00 it lands after the block at 11:10-12:10. The short
+        # 25-min add searches from the SAME common base 09:00 and DOES fit the
+        # early hole (09:00-09:25 touches the padded block half-open) — so the
+        # later action occupies a strictly EARLIER slot than the first, which is
+        # the plan's common-base decision (not sequential-append).
+        snap = _schedule([_block(1, "09:35", "11:00")])
+        actions = [
+            _auto_add("Long", duration_minutes=60),
+            _auto_add("Short"),
+        ]
+        result = plan_mutations(
+            snap,
+            actions,
+            day_start=DAY_START,
+            day_end=DAY_END,
+            earliest_start=_t("09:00"),
+        )
+        assert isinstance(result, MutationPlan)
+        intervals = _create_intervals(result)
+        assert set(intervals) == {("11:10", "12:10"), ("09:00", "09:25")}
+        # The later (short) add starts strictly earlier than the first (long) add.
+        long_iv = next(iv for iv in intervals if iv == ("11:10", "12:10"))
+        short_iv = next(iv for iv in intervals if iv == ("09:00", "09:25"))
+        assert short_iv[0] < long_iv[0]
+
+    def test_no_slot_when_window_fully_padded(self):
+        # A single block spans the entire window: no forward slot fits.
+        snap = _schedule([_block(1, "06:00", "23:00")])
+        result = plan_mutations(
+            snap,
+            [_auto_add("Auto")],
+            day_start=DAY_START,
+            day_end=DAY_END,
+            earliest_start=_t("06:00"),
+        )
+        assert isinstance(result, MutationPlan)
+        assert result.diff.creates == ()
+        outcome = result.outcomes[0]
+        assert outcome.status == "skipped"
+        assert outcome.reason_code == "no_slot"
+        assert outcome.conflicting_task_ids == ()
+        assert outcome.suggestion is None
+        assert outcome.attempted_direction is None
+
+    @pytest.mark.parametrize("date", ["2026-04-10", "2026-04-25"])
+    def test_non_today_searches_from_window_start(self, date):
+        # earliest_start=None (past or future date) → search begins at day_start.
+        snap = _schedule([], date=date)
+        result = plan_mutations(
+            snap,
+            [_auto_add("Auto")],
+            day_start=DAY_START,
+            day_end=DAY_END,
+            earliest_start=None,
+        )
+        assert isinstance(result, MutationPlan)
+        assert _create_intervals(result) == [("06:00", "06:25")]
+
+    def test_grid_alignment_of_returned_boundaries(self):
+        snap = _schedule([_block(1, "09:00", "09:30")])
+        result = plan_mutations(
+            snap,
+            [_auto_add("Auto")],
+            day_start=DAY_START,
+            day_end=DAY_END,
+            earliest_start=_t("09:07"),
+        )
+        assert isinstance(result, MutationPlan)
+        for c in result.diff.creates:
+            assert c.start_time.minute % 5 == 0
+            assert c.end_time.minute % 5 == 0
+
+    def test_custom_window_honored_at_both_edges(self):
+        # Window 08:00-10:00; a 25-min auto from a past-date search starts at
+        # 08:00-08:25; and an add that cannot fit near the end → no_slot.
+        snap = _schedule([_block(1, "08:00", "09:40")])
+        result = plan_mutations(
+            snap,
+            [_auto_add("Auto")],
+            day_start="08:00",
+            day_end="10:00",
+            earliest_start=None,
+        )
+        assert isinstance(result, MutationPlan)
+        # Only free padded slot: after 09:40 + 10 min = 09:50, but 09:50+25 > 10:00 → no_slot.
+        assert result.diff.creates == ()
+        assert result.outcomes[0].reason_code == "no_slot"
+
+    def test_very_large_duration_returns_no_slot_without_wrapping(self):
+        # duration exceeding the window span must be rejected via minute
+        # comparison (no wrapped datetime.time constructed).
+        snap = _schedule([])
+        result = plan_mutations(
+            snap,
+            [_auto_add("Huge", duration_minutes=20 * 60)],
+            day_start=DAY_START,
+            day_end=DAY_END,
+            earliest_start=_t("06:00"),
+        )
+        assert isinstance(result, MutationPlan)
+        assert result.diff.creates == ()
+        assert result.outcomes[0].reason_code == "no_slot"
+
+    def test_near_midnight_window_padding_stays_in_minute_space(self):
+        # Custom near-midnight window 00:00-23:55; a block adjacent to the
+        # 00:00 edge is padded/clamped in integer minutes before any
+        # datetime.time is built — no hour∉0..23 error, no inverted pair.
+        snap = _schedule([_block(1, "00:00", "00:30")])
+        result = plan_mutations(
+            snap,
+            [_auto_add("Auto")],
+            day_start="00:00",
+            day_end="23:55",
+            earliest_start=None,
+        )
+        assert isinstance(result, MutationPlan)
+        # First free padded slot after 00:30 + 10 = 00:40.
+        assert _create_intervals(result) == [("00:40", "01:05")]
+        _assert_non_overlapping(_union_intervals(snap, result))
+
+    def test_explicit_create_regression_not_auto_moved(self):
+        # An explicit both-time add keeps its clamp/validation/overlap/outcome
+        # behaviour and is not auto-moved to satisfy the 10-min policy.
+        snap = _schedule([_block(1, "09:00", "09:30")])
+        result = plan_mutations(
+            snap,
+            [_add("Explicit", "09:35", "10:00")],
+            day_start=DAY_START,
+            day_end=DAY_END,
+            earliest_start=_t("09:00"),
+        )
+        assert isinstance(result, MutationPlan)
+        # Placed exactly where requested — no 10-min inflation applied.
+        assert _create_intervals(result) == [("09:35", "10:00")]
+
+    def test_auto_inserted_after_overlap_fixpoint_union_is_non_overlapping(self):
+        # Defensive: find_slot is the sole overlap guard for autos. Assert
+        # non-overlap over the union of unchanged snapshot blocks and the diff.
+        snap = _schedule([_block(1, "09:00", "09:30"), _block(2, "11:00", "11:30")])
+        actions = [_auto_add("A"), _auto_add("B")]
+        result = plan_mutations(
+            snap,
+            actions,
+            day_start=DAY_START,
+            day_end=DAY_END,
+            earliest_start=_t("09:00"),
+        )
+        assert isinstance(result, MutationPlan)
+        assert len(result.diff.creates) == 2
+        _assert_non_overlapping(_union_intervals(snap, result))
+
+    def test_earliest_start_defaults_none_keeps_existing_callers(self):
+        # An untimed add with no earliest_start kwarg starts at window start.
+        snap = _schedule([])
+        result = plan_mutations(
+            snap,
+            [_auto_add("Auto")],
+            day_start=DAY_START,
+            day_end=DAY_END,
+        )
+        assert isinstance(result, MutationPlan)
+        assert _create_intervals(result) == [("06:00", "06:25")]
