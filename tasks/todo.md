@@ -957,3 +957,29 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
   (JSON action examples) — converting to an f-string risks mangling those braces
   for a single, rarely-changed number. Do it via a targeted concatenation/format
   in a focused pass with a test asserting the numbers match the constants.
+
+### 0068 duration-resize: deferred edge tests (PR #179 claude-review P2/P3)
+
+Author chose to ship feature 0068 without the full plan-mandated test matrix
+(implementation is traced-correct; 236 tests pass). PR #179 (APPROVED, no P0/P1)
+re-raised these as P2/P3 hardening. Add in a focused follow-up pass:
+
+- **Planner edge tests** (`test_ai_mutation_planner.py::TestDurationResize`):
+  `test_plan_duration_resize_crossing_midnight_never_wraps` (22:00 +120 →
+  out_of_window, no ValueError), `test_plan_very_large_duration_never_wraps`
+  (10:00 +1500 → out_of_window, not 10:00–11:00),
+  `test_plan_extreme_negative_delta_rejected_interval_no_valueerror`
+  (12:00–12:30 δ−40 and 00:05–00:35 δ−40 → interval),
+  `test_plan_out_of_range_duration_then_chained_action` (poison ≥1440/≤0 ×
+  delta/bare-move/metadata → all out_of_window),
+  `test_plan_duration_resize_overlap_reverts_target` (unchanged neighbour →
+  overlap + direction_required sentinel),
+  `test_plan_duration_resize_overlap_with_changed_neighbour_unresolved`.
+  Full mandated list in `docs/features/0068_PLAN.md` Phase 2 RED.
+- **View e2e** (`test_ai_views_chat.py::TestChatDurationResize`): extend
+  `test_chat_applies_duration_resize_end_to_end` to all four intents
+  (abs 20, abs 60, rel +30, rel −15), currently only abs 20.
+- **P3 dedup** (`schemas.py`): hoist `has_start`/`has_end` to the top of
+  `validate_action_shape` (defined twice: add-branch + outer resize logic).
+- PR #179 finding #5 (comment on the `compute_move_resize_times` duration
+  bypass) is already satisfied at `mutation_planner.py:523-525` — no action.
