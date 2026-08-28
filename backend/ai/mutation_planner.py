@@ -634,6 +634,11 @@ def plan_mutations(
     non-today schedules), otherwise placement scans forward from this
     grid-aligned time. It never affects explicit-time adds.
     """
+    # Function-local (not module-level) to avoid the free_slot ↔ mutation_planner
+    # circular import (free_slot type-imports SlotSuggestion from here). Deferring
+    # to call time keeps module load acyclic; the import cache makes it free.
+    from ai.free_slot import find_slot
+
     normalized = _normalize_actions(snapshot, parsed_actions)
     if isinstance(normalized, PlanError):
         return normalized
@@ -821,15 +826,12 @@ def plan_mutations(
     # ------------------------------------------------------------------
     auto_creates = [c for c in creates if c.auto_place]
     if auto_creates:
-        from ai.free_slot import find_slot
-
         base_min = window.start_minutes
         if earliest_start is not None:
             base_min = max(_minutes_from_time(earliest_start), window.start_minutes)
 
         for create in sorted(auto_creates, key=lambda c: c.action_index):
             temp_id = -(create.action_index + 1)
-            accepted_changed.add(temp_id)
             dur = create.duration_minutes or DEFAULT_AUTO_DURATION_MINUTES
 
             # Reject via minute comparison BEFORE building any datetime.time so a
@@ -870,6 +872,10 @@ def plan_mutations(
                 is_completed=False,
                 source_action_index=create.action_index,
             )
+            # Marked accepted only after a slot is secured (mirrors the
+            # explicit-create path); no_slot rejects never add it, so reject()
+            # has nothing to discard for a skipped auto.
+            accepted_changed.add(temp_id)
 
     update_entries: list[UpdateDiffEntry] = []
     outcomes: list[ActionOutcome] = []
@@ -915,8 +921,6 @@ def plan_mutations(
         # future one) must NOT reach ``find_slot`` — it would yield a
         # misleading direction question.
         if skipped and time_requested and reason == "overlap":
-            from ai.free_slot import find_slot
-
             occupied = [
                 (block.start_time, block.end_time)
                 for block_id, block in candidate.items()

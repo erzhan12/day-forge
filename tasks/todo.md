@@ -925,14 +925,20 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
   Do a focused doc-cleanup pass to delete/correct these references so the PiP is
   documented as display-only. See `docs/features/0066_REVIEW.md` § Iteration 1, finding F.
 
-- **P3 [QUALITY] Hoist the deferred `find_slot` import in `mutation_planner.py`.**
-  `plan_mutations` imports `from ai.free_slot import find_slot` locally (two call
-  sites). PR #178 claude-review (finding #3) suggested moving it to module top.
-  Deferred: the local import is the file's deliberate circular-import-avoidance
-  convention (`free_slot` type-imports `SlotSuggestion` from `mutation_planner`),
-  and the pre-existing update-direction block uses the same pattern — hoisting one
-  of two is inconsistent and risks reintroducing the cycle at module load. Needs a
-  focused check that a top-level import is genuinely cycle-safe before applying.
+- **P2 [QUALITY] Refactor `_build_resolution_ask` to a single prioritized dispatch.**
+  PR #178 claude-review (cycle 3, finding #1): the function now has ~7 sequential
+  `for outcome in skipped` scans whose relative order is enforced only by a comment.
+  A `no_slot` create is correctly branched, but a **pre-existing** gap remains — an
+  `out_of_window` **create** outcome (`task_id=None`, `reason_code="out_of_window"`)
+  falls into the generic `task_id is None` branch and gets the wrong "give it a
+  concrete free start/end" copy. Refactor the scans into one `(predicate, message_fn)`
+  dispatch list iterated once, making ordering mechanically explicit, and give
+  out-of-window creates a window-specific message. Deferred here: the underlying gap
+  predates 0067 and the refactor touches pre-existing branches — own small PR.
+
+  (Resolved in PR #178: the duplicate `find_slot` local import was deduped to a
+  single function-local import at the top of `plan_mutations`'s body — kept
+  function-local to preserve the `free_slot` ↔ `mutation_planner` cycle avoidance.)
 
 - **P3 [QUALITY] Consider an upper bound on `duration_minutes` at the schema.**
   PR #178 claude-review (cycle 2, finding #2) suggested rejecting `duration_minutes
