@@ -72,9 +72,9 @@ def validate_action_shape(
 
     # Feature 0067: an untimed chat add classifies by time-key presence. Reject
     # unknown keys first so a misspelled ``start``/``end`` cannot masquerade as
-    # a valid untimed add and get auto-placed. ``duration_minutes`` is only
-    # valid on a chat untimed add — rejected on explicit adds and everywhere
-    # else below.
+    # a valid untimed add and get auto-placed. ``duration_minutes`` is valid on
+    # a chat untimed add OR as the sole duration operand of a resize (feature
+    # 0068) — rejected on explicit adds and everywhere else below.
     if action_type == "add":
         unknown = set(action) - _ADD_ALLOWED_KEYS
         if unknown:
@@ -87,9 +87,7 @@ def validate_action_shape(
                 if field not in action:
                     errors.append(f"add action requires '{field}'")
             if has_start != has_end:
-                errors.append(
-                    "add action requires both 'start_time' and 'end_time' or neither"
-                )
+                errors.append("add action requires both 'start_time' and 'end_time' or neither")
         else:
             for field in _REQUIRED_FIELDS["add"]:
                 if field not in action:
@@ -99,18 +97,35 @@ def validate_action_shape(
             if field not in action:
                 errors.append(f"{action_type} action requires '{field}'")
 
-    # ``duration_minutes`` is valid ONLY on a chat untimed add (both time fields
-    # absent). Reject it anywhere else — explicit add, move, resize, update,
-    # remove — so an unknown key is never silently ignored.
+    has_start = "start_time" in action
+    has_end = "end_time" in action
+    has_boundary_mode = has_start or has_end
+    has_absolute_duration = "duration_minutes" in action
+    has_relative_duration = "duration_delta_minutes" in action
+
+    # A resize has exactly one anchor: one or both explicit boundaries, an
+    # absolute duration, or a signed duration delta.  Keeping these modes
+    # exclusive means the planner is the single owner of all end-time math.
+    if action_type == "resize":
+        mode_count = sum((has_boundary_mode, has_absolute_duration, has_relative_duration))
+        if mode_count != 1:
+            errors.append(
+                "resize action requires exactly one of boundary times, "
+                "'duration_minutes', or 'duration_delta_minutes'"
+            )
+
+    # ``duration_minutes`` is valid on a chat untimed add (both time fields
+    # absent) or as the sole duration operand of a resize.  It is deliberately
+    # not accepted on explicit adds or the other mutation kinds.
     if "duration_minutes" in action:
         is_untimed_chat_add = (
-            action_type == "add"
-            and allow_untimed_add
-            and "start_time" not in action
-            and "end_time" not in action
+            action_type == "add" and allow_untimed_add and not has_start and not has_end
         )
-        if not is_untimed_chat_add:
-            errors.append("duration_minutes is only valid on an untimed add")
+        is_duration_resize = (
+            action_type == "resize" and not has_boundary_mode and not has_relative_duration
+        )
+        if not (is_untimed_chat_add or is_duration_resize):
+            errors.append("duration_minutes is only valid on an untimed add or resize")
         else:
             dm = action["duration_minutes"]
             if not is_plain_int(dm):
@@ -120,15 +135,27 @@ def validate_action_shape(
             elif dm % GRID_MINUTES:
                 errors.append(f"duration_minutes must be a multiple of {GRID_MINUTES}")
 
+    # Relative duration is resize-only.  The value is intentionally signed,
+    # but zero is not useful intent and would otherwise create a no-op.
+    if has_relative_duration:
+        if action_type != "resize":
+            errors.append("duration_delta_minutes is only valid on a resize")
+        else:
+            delta = action["duration_delta_minutes"]
+            if not is_plain_int(delta):
+                errors.append("duration_delta_minutes must be an integer")
+            elif delta == 0:
+                errors.append("duration_delta_minutes must be non-zero")
+            elif delta % GRID_MINUTES:
+                errors.append(f"duration_delta_minutes must be a multiple of {GRID_MINUTES}")
+
     # ``move`` and ``resize`` only require ``task_id`` structurally, but a
     # payload with no time fields would apply as a silent no-op — the AI
     # would "succeed" without actually doing what the user asked. Reject
     # at the schema layer so the view never sees it.
     if action_type in {"move", "resize"}:
-        if "start_time" not in action and "end_time" not in action:
-            errors.append(
-                f"{action_type} action requires at least one of 'start_time' or 'end_time'"
-            )
+        if action_type == "move" and not has_boundary_mode:
+            errors.append("move action requires at least one of 'start_time' or 'end_time'")
 
     if action_type == "update":
         editable = {"title", "category", "start_time", "end_time"}

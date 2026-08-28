@@ -150,6 +150,12 @@ The frontend refreshes `currentHHMM` on a 1-minute interval (matches `Schedule.v
 - Caller orders rules by `-priority` before passing them in; the formatter preserves caller order, so a future "filter inactive at the prompt layer" refactor would silently break the priority-desc invariant.
 - Chat-specific: rules render into the **trusted** schedule-context message (the first user-role message), not the untrusted prior-transcript flatten. A tampered client must not be able to impersonate or shadow the user's defaults — see `backend/ai/service.py:run_chat`.
 
+## AI duration resize ownership (feature 0068)
+
+- Chat-only `resize` accepts exactly one intent mode: explicit boundary time(s), an absolute `duration_minutes`, or a signed `duration_delta_minutes`. Duration modes omit both boundaries; `duration_minutes` remains valid for an untimed chat add, while `duration_delta_minutes` is resize-only.
+- The mutation planner, not the LLM or view, computes duration-derived ends in integer minutes. It preserves the effective start, rejects a derived end outside the configured day window or past midnight instead of clamping it, and retains the normal overlap-resolution flow. Keep duration arithmetic out of `compute_move_resize_times()` and persistence code.
+- A duration end below the five-minute floor is `interval`; an out-of-window derived end is `out_of_window`. The planner carries explicit provenance so a duration resize always reports `end_time` as applied or skipped rather than a silent successful no-op.
+
 ## AI batch mutations (feature 0030, issue #38)
 
 - Chat apply routes through a pure **final-state planner** (`backend/ai/mutation_planner.py`): the LLM's action batch is normalized into a target schedule, validated holistically, then diffed. Move order no longer matters.

@@ -76,6 +76,65 @@ def _assistant_turn(text):
     return {"role": "assistant", "content": text}
 
 
+@pytest.mark.django_db
+class TestChatDurationResize:
+    def test_chat_applies_duration_resize_end_to_end(
+        self, auth_client, today_schedule, monkeypatch
+    ):
+        block = TimeBlock.objects.create(
+            schedule=today_schedule,
+            title="Lunch",
+            start_time="12:00",
+            end_time="13:00",
+            category="personal",
+        )
+        _patch_run_chat(
+            monkeypatch,
+            AIChatResult(
+                raw_response_text="{}",
+                parsed_actions=[{"type": "resize", "task_id": block.id, "duration_minutes": 20}],
+                explanation="Shortened lunch.",
+                ask=None,
+            ),
+        )
+        response = _post(auth_client, {"messages": [_user_turn("make lunch 20 minutes")]})
+        assert response.status_code == 200
+        block.refresh_from_db()
+        assert (block.start_time.strftime("%H:%M"), block.end_time.strftime("%H:%M")) == (
+            "12:00",
+            "12:20",
+        )
+        assert response.json()["outcomes"][0]["applied_fields"] == ["end_time"]
+
+    def test_chat_duration_resize_rejected_past_user_day_end(
+        self, auth_client, today_schedule, user, monkeypatch
+    ):
+        _set_window(user, "06:00", "20:00")
+        block = TimeBlock.objects.create(
+            schedule=today_schedule,
+            title="Late work",
+            start_time="19:00",
+            end_time="19:30",
+            category="work",
+        )
+        _patch_run_chat(
+            monkeypatch,
+            AIChatResult(
+                raw_response_text="{}",
+                parsed_actions=[{"type": "resize", "task_id": block.id, "duration_minutes": 90}],
+                explanation="Extended.",
+                ask=None,
+            ),
+        )
+        response = _post(auth_client, {"messages": [_user_turn("make it 90 minutes")]})
+        assert response.status_code == 200
+        block.refresh_from_db()
+        assert block.end_time.strftime("%H:%M") == "19:30"
+        outcome = response.json()["outcomes"][0]
+        assert outcome["reason_code"] == "out_of_window"
+        assert outcome["skipped_fields"] == ["end_time"]
+
+
 class TestValidation:
     @pytest.mark.django_db
     def test_requires_auth(self, client):
@@ -1488,9 +1547,7 @@ def test_chat_exact_conflict_then_direction_yields_concrete_suggestion(
     assert payload1["applied"] is False
     suggestion1 = payload1["outcomes"][0]["suggestion"]
     assert suggestion1 == {"direction_required": True}
-    assert payload1["ask"] == (
-        "That time conflicts. Should I look for an earlier or later slot?"
-    )
+    assert payload1["ask"] == ("That time conflicts. Should I look for an earlier or later slot?")
     # The exact-conflict turn must not have moved the block.
     target.refresh_from_db()
     assert target.start_time.strftime("%H:%M") == "09:00"
@@ -1595,8 +1652,7 @@ class TestResolutionAskPrecedence:
         )
         ask = _build_resolution_ask((out_of_window,), block_titles, {})
         assert ask == (
-            "That time is outside your schedule window. "
-            "Please give a time within your day."
+            "That time is outside your schedule window. Please give a time within your day."
         )
 
 
@@ -1709,9 +1765,7 @@ class TestAutoPlacementIntegration:
         assert block["end_time"] == "10:30"
 
     @pytest.mark.django_db
-    def test_untimed_add_no_slot_surfaces_ask(
-        self, user, auth_client, today_schedule, monkeypatch
-    ):
+    def test_untimed_add_no_slot_surfaces_ask(self, user, auth_client, today_schedule, monkeypatch):
         # Fill the whole window so no forward slot fits → no_slot skip.
         TimeBlock.objects.create(
             schedule=today_schedule,
@@ -1789,8 +1843,7 @@ class TestResolutionAskNoSlotPrecedence:
         direction = self._attempted_direction(0, 10)
         no_slot = self._no_slot(1)
         expected = (
-            "No free later slot fits Focus within your day window. "
-            "Please choose another time."
+            "No free later slot fits Focus within your day window. Please choose another time."
         )
         ask_a = _build_resolution_ask((direction, no_slot), block_titles, create_titles)
         ask_b = _build_resolution_ask((no_slot, direction), block_titles, create_titles)

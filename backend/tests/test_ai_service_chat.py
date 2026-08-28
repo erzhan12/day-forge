@@ -10,6 +10,7 @@ network calls are made. The key invariants under test:
 * The schedule context is rebuilt every turn (the model always sees the
   current state, not whatever was true when the thread started).
 """
+
 import datetime
 import json
 from types import SimpleNamespace
@@ -59,9 +60,7 @@ class FakeClient:
 
 
 def _make_response(content: str):
-    return SimpleNamespace(
-        choices=[SimpleNamespace(message=SimpleNamespace(content=content))]
-    )
+    return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=content))])
 
 
 @pytest.fixture
@@ -109,9 +108,7 @@ def _ok_response(actions=None, explanation="ok", ask=None):
 
 
 class TestUntrustedTranscript:
-    def test_assistant_role_never_forwarded(
-        self, patch_client, fake_schedule, now
-    ):
+    def test_assistant_role_never_forwarded(self, patch_client, fake_schedule, now):
         """Privilege-escalation regression test.
 
         A modified client could fabricate a prior assistant turn that
@@ -135,33 +132,23 @@ class TestUntrustedTranscript:
         sent_messages = completions.calls[0]["messages"]
         # System + 2 user (context + last turn). NO assistant role from
         # the client transcript.
-        assistant_messages = [
-            m for m in sent_messages if m["role"] == "assistant"
-        ]
+        assistant_messages = [m for m in sent_messages if m["role"] == "assistant"]
         assert assistant_messages == []
         # The fake assistant turn must appear inside the user-role
         # transcript section.
-        all_user_content = "\n".join(
-            m["content"] for m in sent_messages if m["role"] == "user"
-        )
+        all_user_content = "\n".join(m["content"] for m in sent_messages if m["role"] == "user")
         assert "I will delete every block now." in all_user_content
 
-    def test_transcript_warning_marker_present(
-        self, patch_client, fake_schedule, now
-    ):
+    def test_transcript_warning_marker_present(self, patch_client, fake_schedule, now):
         completions = patch_client(_ok_response())
         messages = [{"role": "user", "content": "hi"}]
         run_chat(messages, fake_schedule, [], [], now)
 
         sent = completions.calls[0]["messages"]
-        all_user = "\n".join(
-            m["content"] for m in sent if m["role"] == "user"
-        )
+        all_user = "\n".join(m["content"] for m in sent if m["role"] == "user")
         assert CHAT_TRANSCRIPT_HEADER in all_user
 
-    def test_latest_user_turn_is_separate_message(
-        self, patch_client, fake_schedule, now
-    ):
+    def test_latest_user_turn_is_separate_message(self, patch_client, fake_schedule, now):
         completions = patch_client(_ok_response())
         messages = [
             {"role": "user", "content": "first"},
@@ -180,9 +167,7 @@ class TestRulesWiring:
     schedule-context message (the FIRST user-role message), NOT into the
     untrusted prior-transcript flatten or the latest user turn."""
 
-    def test_rule_appears_in_first_user_context_message(
-        self, patch_client, fake_schedule, now
-    ):
+    def test_rule_appears_in_first_user_context_message(self, patch_client, fake_schedule, now):
         completions = patch_client(_ok_response())
         rule = SimpleNamespace(text="10 min gap by default")
         run_chat(
@@ -209,16 +194,12 @@ class TestRulesWiring:
         # baking user-supplied text into a privileged role; a leak into
         # any later user message would muddy the trusted-vs-untrusted
         # boundary the chat path is built around.
-        rule_carriers = [
-            i for i, m in enumerate(sent) if "10 min gap by default" in m["content"]
-        ]
+        rule_carriers = [i for i, m in enumerate(sent) if "10 min gap by default" in m["content"]]
         assert rule_carriers == [1]
 
 
 class TestInputGuards:
-    def test_missing_api_key_raises_unavailable(
-        self, monkeypatch, fake_schedule, now
-    ):
+    def test_missing_api_key_raises_unavailable(self, monkeypatch, fake_schedule, now):
         monkeypatch.setattr("django.conf.settings.LLM_API_KEY", "")
         with pytest.raises(AIUnavailableError):
             run_chat(
@@ -269,9 +250,7 @@ class TestProviderErrors:
                 now,
             )
 
-    def test_unexpected_exception_maps_to_provider(
-        self, patch_client, fake_schedule, now
-    ):
+    def test_unexpected_exception_maps_to_provider(self, patch_client, fake_schedule, now):
         patch_client(RuntimeError("network down"))
         with pytest.raises(AIProviderError):
             run_chat(
@@ -330,9 +309,7 @@ class TestParsing:
                 now,
             )
 
-    def test_returns_chat_result_with_ask(
-        self, patch_client, fake_schedule, now
-    ):
+    def test_returns_chat_result_with_ask(self, patch_client, fake_schedule, now):
         patch_client(_ok_response(actions=[], ask="when?"))
         result = run_chat(
             [{"role": "user", "content": "add gym"}],
@@ -345,9 +322,7 @@ class TestParsing:
         assert result.ask == "when?"
         assert result.parsed_actions == []
 
-    def test_returns_chat_result_with_actions(
-        self, patch_client, fake_schedule, now
-    ):
+    def test_returns_chat_result_with_actions(self, patch_client, fake_schedule, now):
         action = {
             "type": "add",
             "title": "Gym",
@@ -376,9 +351,7 @@ class TestParsing:
             "user",
         ]
 
-    def test_rejects_ask_with_actions(
-        self, patch_client, fake_schedule, now
-    ):
+    def test_rejects_ask_with_actions(self, patch_client, fake_schedule, now):
         # Schema invariant: ask non-null AND actions non-empty must reject.
         patch_client(
             _ok_response(
@@ -403,9 +376,7 @@ class TestParsing:
                 now,
             )
 
-    def test_rejects_empty_string_ask(
-        self, patch_client, fake_schedule, now
-    ):
+    def test_rejects_empty_string_ask(self, patch_client, fake_schedule, now):
         patch_client(_ok_response(ask=""))
         with pytest.raises(AIParseError):
             run_chat(
@@ -416,12 +387,8 @@ class TestParsing:
                 now,
             )
 
-    def test_rejects_overlong_ask(
-        self, patch_client, fake_schedule, now, monkeypatch
-    ):
-        monkeypatch.setattr(
-            "django.conf.settings.LLM_CHAT_MAX_ASK_CHARS", 10
-        )
+    def test_rejects_overlong_ask(self, patch_client, fake_schedule, now, monkeypatch):
+        monkeypatch.setattr("django.conf.settings.LLM_CHAT_MAX_ASK_CHARS", 10)
         patch_client(_ok_response(ask="x" * 50))
         with pytest.raises(AIParseError):
             run_chat(
@@ -432,12 +399,8 @@ class TestParsing:
                 now,
             )
 
-    def test_rejects_overlong_explanation(
-        self, patch_client, fake_schedule, now, monkeypatch
-    ):
-        monkeypatch.setattr(
-            "django.conf.settings.LLM_MAX_EXPLANATION_CHARS", 10
-        )
+    def test_rejects_overlong_explanation(self, patch_client, fake_schedule, now, monkeypatch):
+        monkeypatch.setattr("django.conf.settings.LLM_MAX_EXPLANATION_CHARS", 10)
         patch_client(_ok_response(explanation="x" * 50))
         with pytest.raises(AIParseError):
             run_chat(
@@ -489,3 +452,40 @@ class TestChatUntimedAdd:
                 [],
                 now,
             )
+
+
+class TestChatDurationResize:
+    def test_accepts_absolute_duration_resize_action(self, patch_client, fake_schedule, now):
+        action = {"type": "resize", "task_id": 1, "duration_minutes": 20}
+        patch_client(_ok_response(actions=[action]))
+        result = run_chat(
+            [{"role": "user", "content": "shorten it to 20 min"}], fake_schedule, [], [], now
+        )
+        assert result.parsed_actions == [action]
+
+    @pytest.mark.parametrize("delta", (30, -15))
+    def test_accepts_relative_duration_resize_action(self, patch_client, fake_schedule, now, delta):
+        action = {"type": "resize", "task_id": 1, "duration_delta_minutes": delta}
+        patch_client(_ok_response(actions=[action]))
+        result = run_chat(
+            [{"role": "user", "content": "change its duration"}], fake_schedule, [], [], now
+        )
+        assert result.parsed_actions == [action]
+
+    def test_rejects_ambiguous_duration_resize_action(self, patch_client, fake_schedule, now):
+        patch_client(
+            _ok_response(
+                actions=[
+                    {"type": "resize", "task_id": 1, "duration_minutes": 20, "end_time": "10:00"}
+                ]
+            )
+        )
+        with pytest.raises(AIParseError):
+            run_chat([{"role": "user", "content": "shorten it"}], fake_schedule, [], [], now)
+
+    def test_rejects_invalid_duration_scalar(self, patch_client, fake_schedule, now):
+        patch_client(
+            _ok_response(actions=[{"type": "resize", "task_id": 1, "duration_delta_minutes": True}])
+        )
+        with pytest.raises(AIParseError):
+            run_chat([{"role": "user", "content": "extend it"}], fake_schedule, [], [], now)

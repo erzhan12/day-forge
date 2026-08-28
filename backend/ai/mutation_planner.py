@@ -18,6 +18,8 @@ from schedules.http import parse_time, times_overlap
 from schedules.validators import validate_five_minute_granularity
 from schedules.window import DEFAULT_WINDOW, ScheduleWindow, clamp_boundary
 
+from ai.free_slot import GRID_MINUTES
+
 logger = logging.getLogger(__name__)
 
 _UNKNOWN_TASK_DETAIL = "Referenced block no longer exists; it may have been deleted. Please retry."
@@ -110,6 +112,11 @@ class UpdateMutation:
     new_title: str | None = None
     new_category: str | None = None
     direction: str = "exact"
+    # Feature 0068: duration resizing owns end arithmetic in integer-minute
+    # space. ``new_end`` is only a representability-safe reconstruction.
+    duration_derived_end: bool = False
+    derived_end_minutes: int | None = None
+    chain_poisoned: bool = False
 
 
 @dataclass(frozen=True)
@@ -447,6 +454,7 @@ def _normalize_actions(
     creates: list[CreateMutation] = []
     merged_updates: dict[int, UpdateMutation] = {}
     chain_effective: dict[int, _EffectiveTimes] = {}
+    chain_poisoned: set[int] = set()
 
     for action_index, action in enumerate(parsed_actions):
         kind = action["type"]
@@ -487,6 +495,7 @@ def _normalize_actions(
             removed.add(task_id)
             merged_updates.pop(task_id, None)
             chain_effective.pop(task_id, None)
+            chain_poisoned.discard(task_id)
             deletes.append(DeleteMutation(action_index=action_index, task_id=task_id))
             continue
 
@@ -507,10 +516,33 @@ def _normalize_actions(
                 end_time=block.end_time,
             )
 
+        duration_absolute = action.get("duration_minutes") if kind == "resize" else None
+        duration_delta = action.get("duration_delta_minutes") if kind == "resize" else None
+        duration_mode = duration_absolute is not None or duration_delta is not None
+
+        # Keep boundary move/resize behaviour centralized in the established
+        # helper. Duration actions intentionally bypass its time arithmetic:
+        # their end is derived below in integer-minute space.
         new_start, new_end, wrapped = compute_move_resize_times(action, effective)
         start_supplied = "start_time" in action
         end_supplied = "end_time" in action
         bare_move = kind == "move" and not end_supplied
+        duration_derived_end = False
+        derived_end_minutes: int | None = None
+        if duration_mode:
+            start_minutes = _minutes_from_time(effective.start_time)
+            if duration_absolute is not None:
+                derived_end_minutes = start_minutes + duration_absolute
+            else:
+                derived_end_minutes = _minutes_from_time(effective.end_time) + duration_delta
+            # ``datetime.time`` cannot represent negative or >=24:00 values.
+            # This clamped reconstruction is never used for duration verdicts.
+            new_start = effective.start_time
+            new_end = _time_from_minutes(min(max(derived_end_minutes, 0), 1439))
+            duration_derived_end = True
+            end_supplied = False
+            bare_move = False
+            wrapped = False
         if bare_move:
             bare_move_derived_end = True
             wrapped_flag = wrapped
@@ -521,10 +553,15 @@ def _normalize_actions(
         prev = merged_updates.get(task_id)
         if prev is not None and not start_supplied:
             start_supplied = prev.start_supplied
-        if prev is not None and not end_supplied and not bare_move:
+        if prev is not None and not end_supplied and not bare_move and not duration_mode:
             end_supplied = prev.end_supplied
             bare_move_derived_end = prev.bare_move_derived_end
             wrapped_flag = prev.wrapped
+            # A metadata-only follow-up retains a prior duration end's
+            # provenance so it cannot become a silent no-op.
+            if prev.duration_derived_end:
+                duration_derived_end = True
+                derived_end_minutes = prev.derived_end_minutes
 
         new_title = (
             action["title"].strip()
@@ -550,6 +587,15 @@ def _normalize_actions(
             if new_category is None:
                 new_category = prev.new_category
 
+        duration_out_of_range = (
+            duration_derived_end
+            and derived_end_minutes is not None
+            and not 0 <= derived_end_minutes < 24 * 60
+        )
+        # This mutation remembers whether an *earlier* action poisoned the
+        # chain. Its own invalid duration is handled by the dedicated ladder
+        # below, preserving interval-vs-window precedence for that action.
+        mutation_chain_poisoned = task_id in chain_poisoned
         merged_updates[task_id] = UpdateMutation(
             action_index=action_index,
             task_id=task_id,
@@ -562,7 +608,12 @@ def _normalize_actions(
             new_title=new_title,
             new_category=new_category,
             direction=direction,
+            duration_derived_end=duration_derived_end,
+            derived_end_minutes=derived_end_minutes,
+            chain_poisoned=mutation_chain_poisoned,
         )
+        if duration_out_of_range:
+            chain_poisoned.add(task_id)
         chain_effective[task_id] = _EffectiveTimes(
             start_time=new_start,
             end_time=new_end,
@@ -680,14 +731,51 @@ def plan_mutations(
 
     # Intrinsic validation and the narrowly-scoped near-edge clamping pass.
     for task_id, upd in merged_updates.items():
-        time_requested = upd.start_supplied or upd.end_supplied or upd.bare_move_derived_end
+        time_requested = (
+            upd.start_supplied
+            or upd.end_supplied
+            or upd.bare_move_derived_end
+            or upd.duration_derived_end
+        )
         if not time_requested:
             continue
         accepted_changed.add(task_id)
         start, end = upd.new_start, upd.new_end
+        # A follow-up after an unrepresentable duration must not run against
+        # the clamped stand-in held in ``new_end``.
+        if upd.chain_poisoned:
+            reject(task_id, "out_of_window")
+            continue
         if upd.wrapped and upd.bare_move_derived_end:
             reject(task_id, "out_of_window")
             continue
+        if upd.duration_derived_end:
+            if upd.derived_end_minutes is None:
+                # Invariant: a duration-derived end always carries its integer
+                # minutes. Reject defensively rather than assert (which a ``-O``
+                # run strips, turning a slipped invariant into a wrong apply).
+                reject(task_id, "out_of_window")
+                continue
+            derived_end = upd.derived_end_minutes
+            start_minutes = _minutes_from_time(start)
+            # An inherited supplied start would be clamped later; reject
+            # instead of silently changing the requested duration.
+            if upd.start_supplied and start < window.day_start:
+                reject(task_id, "out_of_window")
+                continue
+            if derived_end - start_minutes < GRID_MINUTES:
+                reject(task_id, "interval")
+                continue
+            if (
+                derived_end > window.end_minutes
+                or derived_end < window.start_minutes
+                or derived_end >= 24 * 60
+            ):
+                reject(task_id, "out_of_window")
+                continue
+            if derived_end % GRID_MINUTES:
+                reject(task_id, "granularity")
+                continue
         if (
             upd.start_supplied
             and start > window.day_end
@@ -860,11 +948,7 @@ def plan_mutations(
             base_start = _time_from_minutes(base_min)
             base_end = _time_from_minutes(base_min + dur)
             suggestion = find_slot(base_start, base_end, "later", window, padded)
-            if (
-                suggestion is None
-                or suggestion.start_time is None
-                or suggestion.end_time is None
-            ):
+            if suggestion is None or suggestion.start_time is None or suggestion.end_time is None:
                 # find_slot(direction="later") always populates both bounds
                 # together; the end_time check documents that invariant and
                 # guards against a broadened return contract.
@@ -889,10 +973,17 @@ def plan_mutations(
     for task_id in sorted(merged_updates):
         upd = merged_updates[task_id]
         current = candidate[task_id]
-        time_requested = upd.start_supplied or upd.end_supplied or upd.bare_move_derived_end
+        time_requested = (
+            upd.start_supplied
+            or upd.end_supplied
+            or upd.bare_move_derived_end
+            or upd.duration_derived_end
+        )
         time_accepted = task_id not in rejected and time_requested
         start_changed = time_accepted and upd.start_supplied
-        end_changed = time_accepted and (upd.end_supplied or upd.bare_move_derived_end)
+        end_changed = time_accepted and (
+            upd.end_supplied or upd.bare_move_derived_end or upd.duration_derived_end
+        )
         title = upd.new_title
         category = upd.new_category
         if title is not None or category is not None or start_changed or end_changed:
@@ -918,7 +1009,7 @@ def plan_mutations(
             target = applied if time_accepted else skipped
             if upd.start_supplied:
                 target.append("start_time")
-            if upd.end_supplied or upd.bare_move_derived_end:
+            if upd.end_supplied or upd.bare_move_derived_end or upd.duration_derived_end:
                 target.append("end_time")
         reason, conflicts = rejected.get(task_id, (None, ()))
         suggestion = None

@@ -146,12 +146,9 @@ def test_direction_rejected_on_non_update_types():
     for kind, extra in (
         ("move", {"task_id": 5, "start_time": "09:00"}),
         ("resize", {"task_id": 5, "end_time": "10:00"}),
-        ("add", {"title": "X", "start_time": "09:00", "end_time": "10:00",
-                 "category": "work"}),
+        ("add", {"title": "X", "start_time": "09:00", "end_time": "10:00", "category": "work"}),
     ):
-        errors = validate_action_shape(
-            {"type": kind, "direction": "later", **extra}, ALLOWED
-        )
+        errors = validate_action_shape({"type": kind, "direction": "later", **extra}, ALLOWED)
         assert any("'direction' is not valid on a" in e for e in errors)
 
 
@@ -245,3 +242,67 @@ class TestChatUntimedAdd:
                 allow_untimed_add=True,
             )
             assert errors, f"expected rejection for unknown add key {bad_key!r}"
+
+
+# ---------------------------------------------------------------------------
+# Feature 0068: chat duration-based resize schema.
+# ---------------------------------------------------------------------------
+
+
+class TestChatDurationResize:
+    @staticmethod
+    def _resize(**extra):
+        action = {"type": "resize", "task_id": 5}
+        action.update(extra)
+        return action
+
+    def test_resize_accepts_absolute_duration_minutes(self):
+        assert validate_action_shape(self._resize(duration_minutes=20), ALLOWED) == []
+
+    def test_resize_accepts_signed_duration_delta_minutes(self):
+        for delta in (5, 30, -5, -15):
+            assert validate_action_shape(self._resize(duration_delta_minutes=delta), ALLOWED) == []
+
+    def test_resize_requires_a_boundary_or_duration_operand(self):
+        errors = validate_action_shape(self._resize(), ALLOWED)
+        assert any("requires exactly one" in error for error in errors)
+
+    def test_resize_duration_modes_are_mutually_exclusive(self):
+        invalid = (
+            self._resize(duration_minutes=20, duration_delta_minutes=5),
+            self._resize(duration_minutes=20, end_time="10:00"),
+            self._resize(duration_delta_minutes=5, start_time="09:00"),
+        )
+        for action in invalid:
+            errors = validate_action_shape(action, ALLOWED)
+            assert any("exactly one" in error for error in errors), action
+
+    def test_resize_duration_minutes_rejects_invalid_values(self):
+        for value in (0, -5, "20", 20.0, None, 7):
+            errors = validate_action_shape(self._resize(duration_minutes=value), ALLOWED)
+            assert errors, value
+
+    def test_resize_duration_minutes_bool_uses_plain_int_guard(self):
+        for value in (True, False):
+            errors = validate_action_shape(self._resize(duration_minutes=value), ALLOWED)
+            assert any("duration_minutes must be an integer" in error for error in errors)
+
+    def test_resize_duration_delta_rejects_invalid_values(self):
+        for value in (0, "5", 5.0, None, 7, -7):
+            errors = validate_action_shape(self._resize(duration_delta_minutes=value), ALLOWED)
+            assert errors, value
+
+    def test_resize_duration_delta_bool_uses_plain_int_guard(self):
+        for value in (True, False):
+            errors = validate_action_shape(self._resize(duration_delta_minutes=value), ALLOWED)
+            assert any("duration_delta_minutes must be an integer" in error for error in errors)
+
+    def test_duration_delta_minutes_is_rejected_outside_resize(self):
+        for action in (
+            _untimed_add(duration_delta_minutes=5),
+            {"type": "move", "task_id": 5, "start_time": "09:00", "duration_delta_minutes": 5},
+            {"type": "update", "task_id": 5, "title": "X", "duration_delta_minutes": 5},
+            {"type": "remove", "task_id": 5, "duration_delta_minutes": 5},
+        ):
+            errors = validate_action_shape(action, ALLOWED, allow_untimed_add=True)
+            assert any("duration_delta_minutes" in error for error in errors), action

@@ -71,8 +71,16 @@ Valid action types and required fields:
 - move:   type=move, task_id=int, start_time=HH:MM, end_time=HH:MM (optional;
           omit to keep the original duration)
 - remove: type=remove, task_id=int
-- resize: type=resize, task_id=int, start_time=HH:MM (optional),
-          end_time=HH:MM (optional)
+- resize: type=resize, task_id=int. Choose EXACTLY ONE mode:
+          * boundary mode: start_time=HH:MM and/or end_time=HH:MM.
+          * absolute duration mode: duration_minutes=positive multiple of 5.
+            This means the target total duration; OMIT both time fields.
+          * relative duration mode: duration_delta_minutes=non-zero signed
+            multiple of 5. Positive makes the block longer; negative makes it
+            shorter. OMIT both time fields.
+          Duration modes preserve the block's current start. The backend, not
+          you, calculates and validates the derived end and conflicts; a
+          duration that runs past the working-day end is rejected, not clamped.
 - update: type=update, task_id=int, with any non-empty subset of title,
           category, start_time, end_time; direction may be earlier, later, or exact
 
@@ -128,6 +136,11 @@ Hard rules:
       slot), retry with EITHER an explicit-time add at a specific free time OR
       another untimed add carrying a SMALLER duration_minutes — never resend the
       identical untimed add that just failed.
+10. For duration resize language, emit duration_minutes for “to 20 minutes”
+    / “to 1 hour”, and duration_delta_minutes for “30 minutes longer” / “15
+    minutes shorter” (use -15 for shorter). Never calculate a new end_time or
+    convert a relative change into an absolute duration; omit both boundary
+    fields in duration mode.
 """
 
 

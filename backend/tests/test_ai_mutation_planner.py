@@ -2,6 +2,7 @@
 
 import datetime
 
+import ai.mutation_planner as mutation_planner
 import pytest
 from ai.mutation_planner import (
     BlockSnapshot,
@@ -72,6 +73,17 @@ def _resize(task_id: int, start: str | None = None, end: str | None = None) -> d
         action["start_time"] = start
     if end is not None:
         action["end_time"] = end
+    return action
+
+
+def _duration_resize(
+    task_id: int, *, duration_minutes: int | None = None, duration_delta_minutes: int | None = None
+) -> dict:
+    action: dict = {"type": "resize", "task_id": task_id}
+    if duration_minutes is not None:
+        action["duration_minutes"] = duration_minutes
+    if duration_delta_minutes is not None:
+        action["duration_delta_minutes"] = duration_delta_minutes
     return action
 
 
@@ -780,9 +792,7 @@ def test_same_task_bare_move_preserves_prior_direction():
     keep ``direction=later`` — the merge must not reset it to ``exact``. Proven
     via the resulting skip: a later slot is proposed, not a direction_required
     question."""
-    snap = _schedule(
-        [_block(1, "09:00", "10:00", title="Gym"), _block(2, "11:00", "12:00")]
-    )
+    snap = _schedule([_block(1, "09:00", "10:00", title="Gym"), _block(2, "11:00", "12:00")])
     result = plan_mutations(
         snap,
         [
@@ -847,8 +857,7 @@ def test_plan_update_unknown_task_id():
 
 def _create_intervals(plan: MutationPlan) -> list[tuple[str, str]]:
     return [
-        (c.start_time.strftime("%H:%M"), c.end_time.strftime("%H:%M"))
-        for c in plan.diff.creates
+        (c.start_time.strftime("%H:%M"), c.end_time.strftime("%H:%M")) for c in plan.diff.creates
     ]
 
 
@@ -1179,3 +1188,90 @@ class TestAutoPlacement:
         )
         assert isinstance(result, MutationPlan)
         assert _create_intervals(result) == [("06:00", "06:25")]
+
+
+class TestDurationResize:
+    def test_normalize_absolute_duration_sets_derived_end_minutes(self):
+        snap = _schedule([_block(1, "12:00", "13:00")])
+        normalized = mutation_planner._normalize_actions(
+            snap, [_duration_resize(1, duration_minutes=20)]
+        )
+        assert not isinstance(normalized, PlanError)
+        _deletes, updates, _creates = normalized
+        update = updates[1]
+        assert update.new_end == _t("12:20")
+        assert update.duration_derived_end is True
+        assert update.derived_end_minutes == 740
+        assert update.end_supplied is False
+
+    @pytest.mark.parametrize(("delta", "expected"), [(30, 810), (-15, 765)])
+    def test_normalize_relative_duration_delta_sets_derived_end_minutes(self, delta, expected):
+        snap = _schedule([_block(1, "12:00", "13:00")])
+        normalized = mutation_planner._normalize_actions(
+            snap, [_duration_resize(1, duration_delta_minutes=delta)]
+        )
+        assert not isinstance(normalized, PlanError)
+        assert normalized[1][1].derived_end_minutes == expected
+
+    def test_plan_resize_absolute_duration_emits_end_only_update(self):
+        snap = _schedule([_block(1, "12:00", "13:00")])
+        result = plan_mutations(
+            snap, [_duration_resize(1, duration_minutes=20)], day_start=DAY_START, day_end=DAY_END
+        )
+        assert isinstance(result, MutationPlan)
+        assert len(result.diff.updates) == 1
+        update = result.diff.updates[0]
+        assert update.start_changed is False
+        assert update.end_changed is True
+        assert update.end_time == _t("12:20")
+        assert result.outcomes[0].applied_fields == ("end_time",)
+
+    def test_plan_resize_delta_uses_effective_chained_duration(self):
+        snap = _schedule([_block(1, "12:00", "13:00")])
+        result = plan_mutations(
+            snap,
+            [
+                _duration_resize(1, duration_minutes=20),
+                _duration_resize(1, duration_delta_minutes=30),
+            ],
+            day_start=DAY_START,
+            day_end=DAY_END,
+        )
+        assert isinstance(result, MutationPlan)
+        assert result.diff.updates[0].end_time == _t("12:50")
+
+    def test_plan_bare_move_after_duration_resize_preserves_resized_duration(self):
+        snap = _schedule([_block(1, "12:00", "13:00")])
+        result = plan_mutations(
+            snap,
+            [_duration_resize(1, duration_minutes=20), _move(1, "14:00")],
+            day_start=DAY_START,
+            day_end=DAY_END,
+        )
+        assert isinstance(result, MutationPlan)
+        update = result.diff.updates[0]
+        assert (update.start_time, update.end_time) == (_t("14:00"), _t("14:20"))
+
+    @pytest.mark.parametrize("delta", (-60, -65))
+    def test_plan_relative_resize_below_floor_is_skipped(self, delta):
+        snap = _schedule([_block(1, "12:00", "13:00")])
+        result = plan_mutations(
+            snap,
+            [_duration_resize(1, duration_delta_minutes=delta)],
+            day_start=DAY_START,
+            day_end=DAY_END,
+        )
+        assert isinstance(result, MutationPlan)
+        assert result.diff.updates == ()
+        outcome = result.outcomes[0]
+        assert outcome.skipped_fields == ("end_time",)
+        assert outcome.reason_code == "interval"
+
+    def test_plan_duration_past_window_is_rejected_not_clamped(self):
+        snap = _schedule([_block(1, "22:00", "22:30")])
+        result = plan_mutations(
+            snap, [_duration_resize(1, duration_minutes=120)], day_start=DAY_START, day_end=DAY_END
+        )
+        assert isinstance(result, MutationPlan)
+        assert result.diff.updates == ()
+        assert result.outcomes[0].reason_code == "out_of_window"

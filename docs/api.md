@@ -349,6 +349,17 @@ never auto-relocated. **The `generate-draft` endpoint is unaffected: draft `add`
 still require explicit HH:MM start/end for every block and are never
 auto-placed.**
 
+**Duration resize — chat only (feature 0068).** A `resize` action must use
+exactly one mode: boundary mode (`start_time` and/or `end_time`), absolute
+duration mode (`duration_minutes`, a positive multiple of 5), or relative
+duration mode (`duration_delta_minutes`, a non-zero signed multiple of 5).
+Duration modes omit both time fields and preserve the block's effective start.
+`duration_minutes` means the target total duration; `duration_delta_minutes`
+extends (positive) or shortens (negative) the current effective duration. The
+backend derives the end in integer-minute space, validates the window/grid and
+checks conflicts. A derived end beyond the working-day end (or midnight) is
+**rejected, never clamped**; no neighbouring block is shifted or shortened.
+
 New envelope fields (feature 0054):
 
 | Field | Type | Notes |
@@ -365,7 +376,7 @@ Each `outcomes[]` entry:
 | `status` | string | `"applied"` (all requested fields landed), `"partial"` (some fields landed, some skipped), or `"skipped"` (nothing landed for this action). |
 | `applied_fields` | array | Field names that persisted (e.g. `title`, `category`, `start_time`, `end_time`). For `remove` actions this is always `[]` — the action's effect is the deletion of the block itself, not a field change. |
 | `skipped_fields` | array | Field names rejected by a policy check. For `remove` actions this is always `[]` (see `applied_fields`). |
-| `reason_code` | string \| null | Why the skip happened (e.g. `out_of_window`, `unresolved_conflict`, `no_slot`). `null` when nothing was skipped. `no_slot` (feature 0067) means an **untimed** chat `add` found no free forward slot with the required gaps in the day window; `task_id` is `null` and `suggestion`/`attempted_direction`/`conflicting_task_ids` are empty. For a `no_slot` skip, `skipped_fields` lists the fields that would have been written had a slot been found (`["title", "category", "start_time", "end_time"]`). |
+| `reason_code` | string \| null | Why the skip happened (e.g. `out_of_window`, `unresolved_conflict`, `no_slot`). `null` when nothing was skipped. `interval` also covers a computed duration below the 5-minute floor; duration ends beyond the day window are `out_of_window` and are rejected rather than truncated. `no_slot` (feature 0067) means an **untimed** chat `add` found no free forward slot with the required gaps in the day window; `task_id` is `null` and `suggestion`/`attempted_direction`/`conflicting_task_ids` are empty. For a `no_slot` skip, `skipped_fields` lists the fields that would have been written had a slot been found (`["title", "category", "start_time", "end_time"]`). |
 | `conflicting_task_ids` | array | Block ids that the skipped time work collided with. |
 | `attempted_direction` | string \| null | `"earlier"` / `"later"` when a directional free-slot search was attempted and found nothing, else `null`. |
 | `suggestion` | object \| null | `null`, or `{ "start_time", "end_time", "direction" }` (a concrete free slot to offer), or `{ "direction_required": true }` (the model must ask the user which direction to search). |
