@@ -860,7 +860,14 @@ def plan_mutations(
             base_start = _time_from_minutes(base_min)
             base_end = _time_from_minutes(base_min + dur)
             suggestion = find_slot(base_start, base_end, "later", window, padded)
-            if suggestion is None or suggestion.start_time is None:
+            if (
+                suggestion is None
+                or suggestion.start_time is None
+                or suggestion.end_time is None
+            ):
+                # find_slot(direction="later") always populates both bounds
+                # together; the end_time check documents that invariant and
+                # guards against a broadened return contract.
                 reject(temp_id, "no_slot")
                 continue
             candidate[temp_id] = BlockCandidate(

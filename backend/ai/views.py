@@ -351,7 +351,12 @@ def _earliest_start(
         rounded = minutes
 
     # Rounding crossed midnight, or the clock is already at/past the window end
-    # → no forward slot can exist today.
+    # → no forward slot can exist today. The two operands use different bases on
+    # purpose: `rounded >= 24*60` guards the post-rounding midnight wrap (so we
+    # never build an out-of-range time), while `minutes >= window.end_minutes`
+    # uses the pre-rounding clock so a time already at/after the window end
+    # short-circuits regardless of grid rounding. Both funnel to the day_end
+    # no-fit sentinel — do not "simplify" them to a single base.
     if rounded >= 24 * 60 or minutes >= window.end_minutes:
         return window.day_end
     if rounded < window.start_minutes:

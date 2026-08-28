@@ -208,6 +208,15 @@ class TestChatUntimedAdd:
             )
             assert errors, f"expected rejection for duration_minutes={bad!r}"
 
+    def test_duration_minutes_bool_rejected_by_is_plain_int_guard(self):
+        # bool is an int subclass, so True/False must be caught by the
+        # is_plain_int guard *before* the numeric (<=0 / %5) checks could
+        # short-circuit. Assert the integer-type error specifically.
+        errors = validate_action_shape(
+            _untimed_add(duration_minutes=True), ALLOWED, allow_untimed_add=True
+        )
+        assert any("must be an integer" in e for e in errors), errors
+
     def test_duration_minutes_rejected_on_explicit_add(self):
         errors = validate_action_shape(
             _untimed_add(start_time="09:00", end_time="09:30", duration_minutes=25),

@@ -948,3 +948,12 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
   `no_slot` (plan § Edge cases — "very large but otherwise valid duration") and a
   planner test pins that behavior; adding a hard cap is a contract change worth its
   own small PR, and any bound should be window-relative rather than a flat 24h.
+
+- **P2 [QUALITY] Interpolate `DEFAULT_AUTO_DURATION_MINUTES`/`AUTO_PLACEMENT_GAP_MINUTES` into the chat prompt.**
+  PR #178 claude-review (cycle 4, finding #1): `backend/ai/prompts.py` hardcodes
+  "25-minute default duration, 10-minute" (one occurrence, line ~65) rather than
+  interpolating the planner constants, so a constant change silently drifts the
+  prompt. Deferred: the surrounding prompt is a brace-heavy triple-quoted literal
+  (JSON action examples) — converting to an f-string risks mangling those braces
+  for a single, rarely-changed number. Do it via a targeted concatenation/format
+  in a focused pass with a test asserting the numbers match the constants.
