@@ -346,7 +346,7 @@ def _earliest_start(
     has_leftover = now_local.second or now_local.microsecond
     remainder = minutes % grid
     if remainder or has_leftover:
-        rounded = minutes + (grid - remainder if remainder else grid if has_leftover else 0)
+        rounded = minutes + (grid - remainder if remainder else grid)
     else:
         rounded = minutes
 

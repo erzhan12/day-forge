@@ -924,3 +924,12 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
   The staleness predates feature 0066 and was rejected as out-of-scope for PR #177.
   Do a focused doc-cleanup pass to delete/correct these references so the PiP is
   documented as display-only. See `docs/features/0066_REVIEW.md` § Iteration 1, finding F.
+
+- **P3 [QUALITY] Hoist the deferred `find_slot` import in `mutation_planner.py`.**
+  `plan_mutations` imports `from ai.free_slot import find_slot` locally (two call
+  sites). PR #178 claude-review (finding #3) suggested moving it to module top.
+  Deferred: the local import is the file's deliberate circular-import-avoidance
+  convention (`free_slot` type-imports `SlotSuggestion` from `mutation_planner`),
+  and the pre-existing update-direction block uses the same pattern — hoisting one
+  of two is inconsistent and risks reintroducing the cycle at module load. Needs a
+  focused check that a top-level import is genuinely cycle-safe before applying.

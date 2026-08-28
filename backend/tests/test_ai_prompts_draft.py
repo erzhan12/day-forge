@@ -269,4 +269,4 @@ def test_draft_add_schema_unchanged_requires_explicit_times():
     assert "end_time=HH:MM" in prompt
     # Chat-only auto-placement vocabulary must NOT appear in the draft prompt.
     assert "duration_minutes" not in prompt
-    assert "auto" not in prompt.lower() or "automatic" not in prompt.lower()
+    assert "auto" not in prompt.lower() and "automatic" not in prompt.lower()
