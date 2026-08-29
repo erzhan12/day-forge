@@ -1275,3 +1275,43 @@ class TestDurationResize:
         assert isinstance(result, MutationPlan)
         assert result.diff.updates == ()
         assert result.outcomes[0].reason_code == "out_of_window"
+
+    def test_failed_oow_duration_does_not_inflate_later_bare_move(self):
+        # A rejected window-OOW duration must not poison same-turn bare-move
+        # duration arithmetic via chain_effective (0068 regression).
+        snap = _schedule([_block(1, "20:00", "21:00")])
+        result = plan_mutations(
+            snap,
+            [
+                _duration_resize(1, duration_minutes=200),  # 23:20, past default 23:00 end
+                _move(1, "14:00"),
+            ],
+            day_start=DAY_START,
+            day_end=DAY_END,
+        )
+        assert isinstance(result, MutationPlan)
+        assert len(result.diff.updates) == 1
+        update = result.diff.updates[0]
+        assert (update.start_time, update.end_time) == (_t("14:00"), _t("15:00"))
+        outcome = result.outcomes[0]
+        assert outcome.status == "applied"
+        assert outcome.applied_fields == ("start_time", "end_time")
+
+    def test_unrepresentable_duration_poison_blocks_later_bare_move(self):
+        snap = _schedule([_block(1, "12:00", "13:00")])
+        result = plan_mutations(
+            snap,
+            [
+                _duration_resize(1, duration_minutes=1500),
+                _move(1, "14:00"),
+            ],
+            day_start=DAY_START,
+            day_end=DAY_END,
+        )
+        assert isinstance(result, MutationPlan)
+        assert result.diff.updates == ()
+        # Same-task actions merge to one outcome keyed by the last action index.
+        outcome = result.outcomes[0]
+        assert outcome.action_index == 1
+        assert outcome.reason_code == "out_of_window"
+        assert outcome.status == "skipped"
