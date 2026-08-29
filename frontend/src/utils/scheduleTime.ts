@@ -60,15 +60,17 @@ export function clampToDay(minutes: number, window = DEFAULT_SCHEDULE_WINDOW): n
 }
 
 /**
- * All blocks sorted by (start_time, sort_order). Stored blocks are never
- * dropped — real blocks (including legacy out-of-window / off-grid from-event
- * blocks) always render at their true geometry. Returns a fresh array so the
- * caller's (Inertia prop) array is never mutated in place.
+ * Return structural items sorted by (start_time, optional sort_order). Values
+ * are never dropped and the returned array is fresh, so callers' arrays
+ * (including Inertia props) are never mutated in place. Missing sort_order
+ * is treated as zero.
  */
-export function sortBlocksByStart(blocks: TimeBlock[]): TimeBlock[] {
+export function sortBlocksByStart<T extends { start_time: string; sort_order?: number }>(
+  blocks: T[],
+): T[] {
   return [...blocks].sort((a, b) => {
     const startDelta = timeToMinutes(a.start_time) - timeToMinutes(b.start_time)
-    return startDelta !== 0 ? startDelta : a.sort_order - b.sort_order
+    return startDelta !== 0 ? startDelta : (a.sort_order ?? 0) - (b.sort_order ?? 0)
   })
 }
 

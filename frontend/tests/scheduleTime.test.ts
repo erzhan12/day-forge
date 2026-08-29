@@ -741,6 +741,18 @@ describe("configurable day window (feature 0053)", () => {
       expect(input.map((b) => b.id)).toEqual(snapshotIds)
       expect(input.map((b) => b.id)).toEqual([1, 2, 3])
     })
+
+    it("treats an omitted equal-start sort_order as zero without mutation", () => {
+      const input = [
+        { label: "defined", start_time: "09:00", sort_order: 1 },
+        { label: "omitted", start_time: "09:00" },
+      ]
+      const result = sortBlocksByStart(input)
+
+      expect(result).not.toBe(input)
+      expect(result.map((block) => block.label)).toEqual(["omitted", "defined"])
+      expect(input.map((block) => block.label)).toEqual(["defined", "omitted"])
+    })
   })
 })
 

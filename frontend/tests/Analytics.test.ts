@@ -8,7 +8,7 @@ vi.mock("@inertiajs/vue3", () => ({
 }))
 
 import Analytics from "../src/pages/Analytics.vue"
-import type { DailyReview, Schedule, StreakInfo, TimeBlock } from "../src/types"
+import type { DailyReview, Schedule, StreakInfo, TimeBlock, UserCategory } from "../src/types"
 
 function makeReview(overrides: Partial<DailyReview> = {}): DailyReview {
   return {
@@ -39,6 +39,21 @@ function makeSchedule(status: Schedule["status"]): Schedule {
 
 const STREAK: StreakInfo = { current: 3, threshold: 0.8, window_days: 30 }
 const BLOCKS: TimeBlock[] = []
+const CATEGORIES: UserCategory[] = []
+
+function mountAnalytics(overrides: Partial<InstanceType<typeof Analytics>["$props"]> = {}) {
+  return mount(Analytics, {
+    props: {
+      review: makeReview(),
+      streak: STREAK,
+      schedule: makeSchedule("active"),
+      blocks: BLOCKS,
+      date: "2026-04-01",
+      categories: CATEGORIES,
+      ...overrides,
+    },
+  })
+}
 
 describe("Analytics.vue", () => {
   beforeEach(() => {
@@ -88,6 +103,37 @@ describe("Analytics.vue", () => {
     })
     expect(wrapper.find(".mark-reviewed-btn").exists()).toBe(false)
     expect(wrapper.text()).toContain("Reviewed")
+  })
+
+  it.each(["draft", "active", "reviewed"] as const)(
+    "keeps Daily export available for a %s schedule, including empty blocks",
+    (status) => {
+      const wrapper = mountAnalytics({ schedule: makeSchedule(status), blocks: [] })
+      expect(wrapper.find(".daily-export-btn").exists()).toBe(true)
+      expect(wrapper.find(".mark-reviewed-btn").exists()).toBe(status !== "reviewed")
+    },
+  )
+
+  it("opens the export dialog with the viewed date and exact blocks, then closes it", async () => {
+    const blocks = [
+      {
+        id: 55,
+        title: "Export me",
+        start_time: "08:00",
+        end_time: "09:00",
+        category: "work",
+        is_completed: false,
+        sort_order: 0,
+      },
+    ]
+    const wrapper = mountAnalytics({ blocks })
+    await wrapper.find(".daily-export-btn").trigger("click")
+    const dialog = wrapper.findComponent({ name: "DailyExportDialog" })
+    expect(dialog.exists()).toBe(true)
+    expect(dialog.props("date")).toBe("2026-04-01")
+    expect(dialog.props("blocks")).toStrictEqual(blocks)
+    await dialog.vm.$emit("close")
+    expect(wrapper.findComponent({ name: "DailyExportDialog" }).exists()).toBe(false)
   })
 
   it("clicking Mark reviewed posts to the API", async () => {

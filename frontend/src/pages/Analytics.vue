@@ -6,6 +6,7 @@ import CompletionBar from "../components/CompletionBar.vue"
 import CategoryBreakdown from "../components/CategoryBreakdown.vue"
 import StreakCounter from "../components/StreakCounter.vue"
 import SkippedTasks from "../components/SkippedTasks.vue"
+import DailyExportDialog from "../components/DailyExportDialog.vue"
 import { useAnalytics } from "../composables/useAnalytics"
 import { parseLocalDate } from "../utils/date"
 import { useThemeFromProps } from "../composables/useThemeFromProps"
@@ -28,6 +29,7 @@ const props = withDefaults(defineProps<{
 const { isMarkingReviewed, lastError, markReviewed, saveNotes } = useAnalytics()
 
 const isReviewed = computed(() => props.schedule.status === "reviewed")
+const isDailyExportOpen = ref(false)
 
 const formattedDate = computed(() => {
   const d = parseLocalDate(props.date)
@@ -112,9 +114,19 @@ async function onMarkReviewed() {
         >
           {{ isMarkingReviewed ? "Saving…" : "Mark reviewed" }}
         </button>
+        <button type="button" class="daily-export-btn" @click="isDailyExportOpen = true">
+          Daily export
+        </button>
       </div>
       <p v-if="lastError" class="error">{{ lastError }}</p>
     </header>
+
+    <DailyExportDialog
+      v-if="isDailyExportOpen"
+      :date="props.date"
+      :blocks="props.blocks"
+      @close="isDailyExportOpen = false"
+    />
 
     <div class="panels">
       <CompletionBar
@@ -213,6 +225,16 @@ async function onMarkReviewed() {
 .mark-reviewed-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.daily-export-btn {
+  padding: 6px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
 }
 
 .error {
