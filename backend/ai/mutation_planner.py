@@ -437,9 +437,35 @@ def _minutes_from_time(value: datetime.time) -> int:
     return value.hour * 60 + value.minute
 
 
+def _duration_fails_end_verdict(
+    *,
+    derived_end_minutes: int,
+    start: datetime.time,
+    start_supplied: bool,
+    window: ScheduleWindow,
+) -> bool:
+    """Mirror the duration-end ladder in ``plan_mutations`` (integer space only)."""
+    start_minutes = _minutes_from_time(start)
+    if not 0 <= derived_end_minutes < 24 * 60:
+        return True
+    if start_supplied and start < window.day_start:
+        return True
+    if derived_end_minutes - start_minutes < GRID_MINUTES:
+        return True
+    if (
+        derived_end_minutes > window.end_minutes
+        or derived_end_minutes < window.start_minutes
+        or derived_end_minutes >= 24 * 60
+    ):
+        return True
+    return bool(derived_end_minutes % GRID_MINUTES)
+
+
 def _normalize_actions(
     snapshot: ScheduleSnapshot,
     parsed_actions: Sequence[dict],
+    *,
+    window: ScheduleWindow | None = None,
 ) -> (
     PlanError
     | tuple[
@@ -614,10 +640,26 @@ def _normalize_actions(
         )
         if duration_out_of_range:
             chain_poisoned.add(task_id)
-        chain_effective[task_id] = _EffectiveTimes(
-            start_time=new_start,
-            end_time=new_end,
-        )
+        # A rejected duration must not feed same-turn chaining: ``chain_effective``
+        # is updated in normalize (before the validation pass), so a window/interval/
+        # granularity failure that only surfaces later would otherwise inflate a
+        # subsequent bare move with the failed resize's clamped stand-in.
+        skip_chain_update = False
+        if duration_derived_end and derived_end_minutes is not None:
+            if duration_out_of_range:
+                skip_chain_update = True
+            elif window is not None and _duration_fails_end_verdict(
+                derived_end_minutes=derived_end_minutes,
+                start=new_start,
+                start_supplied=start_supplied,
+                window=window,
+            ):
+                skip_chain_update = True
+        if not skip_chain_update:
+            chain_effective[task_id] = _EffectiveTimes(
+                start_time=new_start,
+                end_time=new_end,
+            )
 
     return deletes, merged_updates, creates
 
@@ -690,15 +732,15 @@ def plan_mutations(
     # to call time keeps module load acyclic; the import cache makes it free.
     from ai.free_slot import find_slot
 
-    normalized = _normalize_actions(snapshot, parsed_actions)
+    window_start, window_end = _day_bounds(day_start, day_end)
+    window = ScheduleWindow(window_start, window_end)
+    normalized = _normalize_actions(snapshot, parsed_actions, window=window)
     if isinstance(normalized, PlanError):
         return normalized
 
     deletes, merged_updates, creates = normalized
     candidate = _build_candidate(snapshot, deletes, merged_updates, creates)
     snapshot_by_id = {block.id: block for block in snapshot.blocks}
-    window_start, window_end = _day_bounds(day_start, day_end)
-    window = ScheduleWindow(window_start, window_end)
     accepted_changed: set[int] = set()
     rejected: dict[int, tuple[str, tuple[int, ...]]] = {}
 
