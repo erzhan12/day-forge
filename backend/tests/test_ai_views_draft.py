@@ -213,6 +213,13 @@ class TestDraftClientTimezone:
             return AIDraftResult("{}", [], "ok")
 
         monkeypatch.setattr(views, "run_draft", _capture)
+        # Pin the instant so the UTC assertion is self-documenting and immune
+        # to the real wall clock rather than relying on it.
+        monkeypatch.setattr(
+            views.timezone,
+            "now",
+            lambda: datetime.datetime(2026, 4, 18, 4, 2, 30, tzinfo=datetime.UTC),
+        )
 
         resp = _post(auth_client, body=b"\xff\xfe")
         assert resp.status_code == 200, resp.content
@@ -220,6 +227,7 @@ class TestDraftClientTimezone:
         # The undecodable body must degrade to the UTC fallback, not an
         # unset/wrong zone — the key correctness property of the new parse path.
         assert captured["now"].tzinfo == ZoneInfo("UTC")
+        assert captured["now"].strftime("%Y-%m-%d %H:%M:%S") == "2026-04-18 04:02:30"
 
 
 @pytest.mark.django_db

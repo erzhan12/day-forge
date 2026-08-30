@@ -238,10 +238,16 @@ describe("useChat", () => {
     await chat.submitTurn("second", snapshotBlocks, vi.fn())
 
     expect(requestJsonMock.mock.calls[0][2]).toEqual(
-      expect.objectContaining({ client_tz: "Asia/Almaty" }),
+      expect.objectContaining({
+        client_tz: "Asia/Almaty",
+        messages: expect.any(Array),
+      }),
     )
     expect(requestJsonMock.mock.calls[1][2]).toEqual(
-      expect.objectContaining({ client_tz: "Pacific/Kiritimati" }),
+      expect.objectContaining({
+        client_tz: "Pacific/Kiritimati",
+        messages: expect.any(Array),
+      }),
     )
     formatSpy.mockRestore()
   })

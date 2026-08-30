@@ -1785,7 +1785,7 @@ class TestClientTimezoneResolver:
                 raise OSError("too long")
             return real_zoneinfo(key)
 
-        monkeypatch.setattr(views, "ZoneInfo", _zoneinfo, raising=False)
+        monkeypatch.setattr(views, "ZoneInfo", _zoneinfo)
         resolved = views._resolve_client_tz("forced-oserror")
         assert isinstance(resolved, ZoneInfo)
         assert resolved.key == settings.TIME_ZONE
@@ -1796,7 +1796,7 @@ class TestClientTimezoneResolver:
         def _missing_zoneinfo(_key):
             raise ZoneInfoNotFoundError("missing")
 
-        monkeypatch.setattr(views, "ZoneInfo", _missing_zoneinfo, raising=False)
+        monkeypatch.setattr(views, "ZoneInfo", _missing_zoneinfo)
         assert views._resolve_client_tz("Asia/Almaty") is datetime.UTC
 
     def test_dst_zone_uses_zoneinfo_offsets(self):
