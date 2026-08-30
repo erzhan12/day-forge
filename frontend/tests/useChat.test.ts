@@ -218,6 +218,34 @@ describe("useChat", () => {
     )
   })
 
+  it("sends the browser timezone at each request time", async () => {
+    let currentZone = "Asia/Almaty"
+    const formatSpy = vi.spyOn(Intl, "DateTimeFormat").mockImplementation(
+      () =>
+        ({
+          resolvedOptions: () => ({ timeZone: currentZone }),
+        }) as Intl.DateTimeFormat,
+    )
+    requestJsonMock.mockResolvedValue({
+      ok: true,
+      data: { blocks: null, explanation: "ok", ask: null, applied: false },
+    })
+    const chat = useChat()
+    chat.setActiveDate("2026-05-07")
+
+    await chat.submitTurn("first", snapshotBlocks, vi.fn())
+    currentZone = "Pacific/Kiritimati"
+    await chat.submitTurn("second", snapshotBlocks, vi.fn())
+
+    expect(requestJsonMock.mock.calls[0][2]).toEqual(
+      expect.objectContaining({ client_tz: "Asia/Almaty" }),
+    )
+    expect(requestJsonMock.mock.calls[1][2]).toEqual(
+      expect.objectContaining({ client_tz: "Pacific/Kiritimati" }),
+    )
+    formatSpy.mockRestore()
+  })
+
   it("clarifying-question turn stores ask in content (not explanation)", async () => {
     const chat = useChat()
     chat.setActiveDate("2026-05-07")

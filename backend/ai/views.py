@@ -5,6 +5,7 @@ import hashlib
 import json
 import logging
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from asgiref.sync import sync_to_async
 from django.conf import settings
@@ -316,6 +317,23 @@ def _build_resolution_ask(
         f"That time range for {title(skipped[0])} is not valid or available. "
         "Please give a valid time."
     )
+
+
+def _resolve_client_tz(raw: object) -> datetime.tzinfo:
+    """Resolve an untrusted browser IANA zone without changing global state."""
+
+    def _fallback() -> datetime.tzinfo:
+        try:
+            return ZoneInfo(settings.TIME_ZONE)
+        except (ZoneInfoNotFoundError, ValueError, OSError):
+            return datetime.timezone.utc  # noqa: UP017
+
+    if not isinstance(raw, str):
+        return _fallback()
+    try:
+        return ZoneInfo(raw)
+    except (ZoneInfoNotFoundError, ValueError, OSError):
+        return _fallback()
 
 
 def _earliest_start(
@@ -685,6 +703,7 @@ def _apply_actions_sync(
     schedule: Schedule,
     result: AIChatResult,
     *,
+    client_tz: datetime.tzinfo,
     expected_fingerprint: str,
     interaction_id: int | None = None,
 ) -> PartialPlan:
@@ -735,11 +754,12 @@ def _apply_actions_sync(
             if isinstance(category, str) and category not in allowed_categories:
                 raise _Rollback(_action_error(index, "invalid category"))
         window = get_schedule_window(locked_schedule.user)
-        # Feature 0067: take a FRESH local time under the lock (not the pre-LLM
-        # prompt timestamp) so an untimed add is placed forward from apply-time,
-        # never in the past. ``_earliest_start`` returns ``None`` for a non-today
-        # schedule (planner then searches from the window start).
-        now_local = timezone.localtime()
+        # Feature 0067/0070: sample a FRESH instant under the lock (not the
+        # pre-LLM prompt timestamp) and localize it with this request's timezone
+        # so an untimed add is placed forward from apply-time, never in the past.
+        # ``_earliest_start`` returns ``None`` for a non-today schedule (planner
+        # then searches from the window start).
+        now_local = timezone.localtime(timezone.now(), client_tz)
         earliest_start = _earliest_start(locked_schedule.date, window, now_local)
         plan_result = plan_mutations(
             locked_context.schedule,
@@ -827,6 +847,18 @@ async def ai_generate_draft(request, date):
     except ValueError:
         return JsonResponse({"errors": {"date": "Invalid date format."}}, status=400)
 
+    # Unlike chat, the draft body is optional. Its only supported field is an
+    # advisory timezone, so every malformed body shape simply uses the safe
+    # fallback instead of changing the endpoint's established 200/4xx flow.
+    client_tz = _resolve_client_tz(None)
+    if request.body:
+        try:
+            body_data = json.loads(request.body)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            body_data = None
+        if isinstance(body_data, dict):
+            client_tz = _resolve_client_tz(body_data.get("client_tz"))
+
     user = await request.auser()
     schedule, _ = await Schedule.objects.aget_or_create(user=user, date=parsed_date)
 
@@ -878,7 +910,7 @@ async def ai_generate_draft(request, date):
     ]
     rules = await _load_active_rules(user)
 
-    now = timezone.localtime()
+    now = timezone.localtime(timezone.now(), client_tz)
     try:
         schedule._schedule_window = await sync_to_async(get_schedule_window)(user)
         schedule._categories = await sync_to_async(ordered_categories, thread_sensitive=True)(user)
@@ -1087,6 +1119,7 @@ async def ai_chat(request, date):
     err = _validate_chat_messages(messages)
     if err is not None:
         return JsonResponse({"errors": {"messages": err}}, status=400)
+    client_tz = _resolve_client_tz(data.get("client_tz"))
 
     user = await request.auser()
     schedule, _ = await Schedule.objects.aget_or_create(user=user, date=parsed_date)
@@ -1108,7 +1141,7 @@ async def ai_chat(request, date):
         blocks=current_blocks,
         rules=rules,
     )
-    now = timezone.localtime()
+    now = timezone.localtime(timezone.now(), client_tz)
 
     try:
         schedule._schedule_window = await sync_to_async(get_schedule_window)(user)
@@ -1174,6 +1207,7 @@ async def ai_chat(request, date):
         plan = await sync_to_async(_apply_actions_sync, thread_sensitive=True)(
             schedule,
             result,
+            client_tz=client_tz,
             expected_fingerprint=expected_fingerprint,
             interaction_id=interaction.id if interaction else None,
         )

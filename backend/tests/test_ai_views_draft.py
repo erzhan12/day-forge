@@ -4,6 +4,9 @@ Patches ``ai.views.run_draft`` so no network call is made; the view's DB
 interactions and the apply path are exercised for real.
 """
 import datetime
+import json
+import types
+from zoneinfo import ZoneInfo
 
 import pytest
 from ai.models import AIInteraction
@@ -22,8 +25,8 @@ from templates_mgr.models import Rule, Template
 URL = "/api/ai/schedules/2026-05-04/generate-draft/"
 
 
-def _post(client, url=URL):
-    return client.post(url, "", content_type="application/json")
+def _post(client, url=URL, body=""):
+    return client.post(url, body, content_type="application/json")
 
 
 def _set_window(user, day_start, day_end):
@@ -134,6 +137,79 @@ class TestHappyPath:
         assert resp.status_code == 200
         assert cache.get(f"ai_draft_rl:{user.id}") == 1
         assert cache.get(f"ai_chat_rl:{user.id}") in (None, 0)
+
+
+@pytest.mark.django_db
+class TestDraftClientTimezone:
+    """Feature 0070: draft prompt context accepts an optional client zone."""
+
+    FIXED_UTC = datetime.datetime(2026, 4, 18, 4, 2, 30, tzinfo=datetime.UTC)
+
+    def test_draft_prompt_uses_request_timezone(self, auth_client, template, monkeypatch):
+        import ai.views as views
+
+        captured = {}
+
+        async def _capture(schedule, tmpl, history, rules, now):
+            captured["now"] = now
+            return AIDraftResult("{}", [], "ok")
+
+        monkeypatch.setattr(views.timezone, "now", lambda: self.FIXED_UTC)
+        monkeypatch.setattr(views, "run_draft", _capture)
+
+        resp = _post(auth_client, body=json.dumps({"client_tz": "Asia/Almaty"}))
+        assert resp.status_code == 200, resp.content
+        assert captured["now"].tzinfo == ZoneInfo("Asia/Almaty")
+        assert captured["now"].strftime("%Y-%m-%d %H:%M:%S") == "2026-04-18 09:02:30"
+
+    @pytest.mark.parametrize(
+        "body",
+        ["", "{}", '{"client_tz":"Not/AZone"}', '{"client_tz":[]}', "{", "[]"],
+    )
+    def test_optional_timezone_body_falls_back_to_utc_without_error(
+        self, auth_client, template, monkeypatch, body
+    ):
+        import ai.views as views
+
+        captured = {}
+
+        async def _capture(schedule, tmpl, history, rules, now):
+            captured["now"] = now
+            return AIDraftResult("{}", [], "ok")
+
+        monkeypatch.setattr(views.timezone, "now", lambda: self.FIXED_UTC)
+        monkeypatch.setattr(views, "run_draft", _capture)
+
+        resp = _post(auth_client, body=body)
+        assert resp.status_code == 200, resp.content
+        assert captured["now"].tzinfo == ZoneInfo("UTC")
+        assert captured["now"].strftime("%Y-%m-%d %H:%M:%S") == "2026-04-18 04:02:30"
+
+    def test_invalidly_encoded_optional_body_falls_back_without_error(
+        self, auth_client, template, monkeypatch
+    ):
+        import ai.views as views
+
+        parsed = {"called": False}
+
+        def _invalid_decode(raw):
+            parsed["called"] = True
+            assert raw == b"\xff\xfe"
+            raise UnicodeDecodeError("utf-8", raw, 0, 1, "invalid start byte")
+
+        monkeypatch.setattr(
+            views,
+            "json",
+            types.SimpleNamespace(
+                loads=_invalid_decode,
+                JSONDecodeError=json.JSONDecodeError,
+            ),
+        )
+        _patch_run(monkeypatch, AIDraftResult("{}", [], "ok"))
+
+        resp = _post(auth_client, body=b"\xff\xfe")
+        assert resp.status_code == 200, resp.content
+        assert parsed["called"] is True
 
 
 @pytest.mark.django_db

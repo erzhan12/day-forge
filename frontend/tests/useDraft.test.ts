@@ -94,6 +94,26 @@ describe("useDraft", () => {
     expect(routerReload).not.toHaveBeenCalled()
   })
 
+  it("sends the browser timezone at each request time", async () => {
+    let currentZone = "Asia/Almaty"
+    const formatSpy = vi.spyOn(Intl, "DateTimeFormat").mockImplementation(
+      () =>
+        ({
+          resolvedOptions: () => ({ timeZone: currentZone }),
+        }) as Intl.DateTimeFormat,
+    )
+    requestJsonMock.mockResolvedValue({ ok: true, data: { explanation: "ok" } })
+    const { generateDraft } = useDraft()
+
+    await generateDraft("2026-05-04")
+    currentZone = "Pacific/Kiritimati"
+    await generateDraft("2026-05-05")
+
+    expect(requestJsonMock.mock.calls[0][2]).toEqual({ client_tz: "Asia/Almaty" })
+    expect(requestJsonMock.mock.calls[1][2]).toEqual({ client_tz: "Pacific/Kiritimati" })
+    formatSpy.mockRestore()
+  })
+
   it("stale in-flight draft does not set lastDraftError from a failed response", async () => {
     const draftA = makeDeferred()
     const draftB = makeDeferred()

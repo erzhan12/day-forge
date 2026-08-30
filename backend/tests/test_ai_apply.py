@@ -2,6 +2,7 @@
 
 import json
 import time
+from zoneinfo import ZoneInfo
 
 import ai.views
 import pytest
@@ -45,6 +46,7 @@ class TestRollbackPropagation:
             )(
                 schedule,
                 result,
+                client_tz=ZoneInfo("UTC"),
                 expected_fingerprint="stale-garbage",
                 interaction_id=None,
             )

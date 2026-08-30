@@ -50,9 +50,11 @@ export function useDraft() {
 
     let result: DraftSubmitResult
     try {
+      const clientTz = Intl.DateTimeFormat().resolvedOptions().timeZone
       result = await requestJson(
         `/api/ai/schedules/${date}/generate-draft/`,
         "POST",
+        { client_tz: clientTz },
       )
     } finally {
       if (myId === latestRequestId) {

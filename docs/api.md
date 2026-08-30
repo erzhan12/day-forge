@@ -295,6 +295,7 @@ Requires `LLM_API_KEY` to be set. When unset, every call returns `503` so the fr
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
 | `messages` | array | yes | Non-empty list of `{role, content}` turns. Roles strictly alternate `user` / `assistant`, starting with `user`. Last turn must be `user`. `1 ≤ len ≤ LLM_CHAT_MAX_TURNS` (default 40). Each `content` is 1–`LLM_MAX_COMMAND_CHARS` (default 500) chars. Sum of all `content` lengths ≤ `LLM_CHAT_MAX_TOTAL_CHARS` (default 4000). |
+| `client_tz` | string | no | Browser IANA timezone (for example `Asia/Almaty`). Used only for prompt context and forward placement of untimed adds. Invalid or missing values fall back safely to the server timezone. |
 
 Malformed `messages` (including non-object JSON roots) return `400` **before** `Schedule.get_or_create` and **before** the rate-limit counter is consumed.
 
@@ -458,7 +459,11 @@ until the user makes a real edit.
 |------|------|-------|
 | `date` | string | `YYYY-MM-DD`. Invalid format → `400`. |
 
-**Request body** — none.
+**Request body** — optional JSON object.
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `client_tz` | string | no | Browser IANA timezone (for example `Asia/Almaty`) used for draft prompt context. Missing, invalid, or malformed optional request bodies safely fall back to the server timezone. |
 
 **Success — `200 OK`**
 

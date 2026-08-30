@@ -9,6 +9,7 @@ handling are all exercised against real DB.
 import datetime
 import hashlib
 import json
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import pytest
 from ai.models import AIInteraction
@@ -23,8 +24,10 @@ from ai.service import (
 )
 from ai.views import _build_resolution_ask
 from asgiref.sync import sync_to_async
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.cache import cache
+from django.utils import timezone
 from schedules.models import Schedule, TimeBlock, UserScheduleSettings
 from templates_mgr.models import Rule
 
@@ -837,11 +840,12 @@ class TestChatBatchMutationExecutor:
                 ask=None,
             )
 
-        def _spy_apply(schedule, result, *, expected_fingerprint, interaction_id=None):
+        def _spy_apply(schedule, result, *, client_tz, expected_fingerprint, interaction_id=None):
             apply_called["v"] = True
             return original_apply(
                 schedule,
                 result,
+                client_tz=client_tz,
                 expected_fingerprint=expected_fingerprint,
                 interaction_id=interaction_id,
             )
@@ -1717,6 +1721,92 @@ class TestEarliestStartHelper:
         assert self._call(now, date=datetime.date(2026, 4, 19)) is None
         assert self._call(now, date=datetime.date(2026, 4, 17)) is None
 
+    def test_resolved_timezone_changes_local_floor_from_utc(self):
+        from ai.views import _resolve_client_tz
+
+        instant = datetime.datetime(2026, 4, 18, 4, 2, 30, tzinfo=datetime.UTC)
+        local_now = timezone.localtime(instant, _resolve_client_tz("Asia/Almaty"))
+        utc_now = timezone.localtime(instant, ZoneInfo("UTC"))
+
+        assert self._call(local_now) == datetime.time(9, 5)
+        assert self._call(utc_now) == datetime.time(6, 0)
+
+    def test_resolved_timezone_handles_date_flip_at_helper_level(self):
+        from ai.views import _resolve_client_tz
+
+        instant = datetime.datetime(2026, 4, 18, 20, 0, tzinfo=datetime.UTC)
+        local_now = timezone.localtime(instant, _resolve_client_tz("Pacific/Kiritimati"))
+        utc_now = timezone.localtime(instant, ZoneInfo("UTC"))
+        schedule_date = datetime.date(2026, 4, 19)
+
+        assert self._call(local_now, date=schedule_date) == datetime.time(10, 0)
+        assert self._call(utc_now, date=schedule_date) is None
+
+
+class TestClientTimezoneResolver:
+    def test_valid_iana_zone_returns_zoneinfo(self):
+        from ai.views import _resolve_client_tz
+
+        resolved = _resolve_client_tz("Asia/Almaty")
+        assert isinstance(resolved, ZoneInfo)
+        assert resolved.key == "Asia/Almaty"
+
+    @pytest.mark.parametrize(
+        "raw",
+        [None, "", "Not/AZone", 42, [], {}],
+    )
+    def test_invalid_values_fall_back_to_configured_timezone(self, raw):
+        from ai.views import _resolve_client_tz
+
+        resolved = _resolve_client_tz(raw)
+        assert isinstance(resolved, ZoneInfo)
+        assert resolved.key == settings.TIME_ZONE
+
+    @pytest.mark.parametrize("raw", ["..", "/UTC"])
+    def test_malformed_string_keys_fall_back_without_raising(self, raw):
+        from ai.views import _resolve_client_tz
+
+        resolved = _resolve_client_tz(raw)
+        assert isinstance(resolved, ZoneInfo)
+        assert resolved.key == settings.TIME_ZONE
+
+    def test_oserror_from_client_lookup_falls_back(self, monkeypatch):
+        import ai.views as views
+
+        real_zoneinfo = ZoneInfo
+
+        def _zoneinfo(key):
+            if key == "forced-oserror":
+                raise OSError("too long")
+            return real_zoneinfo(key)
+
+        monkeypatch.setattr(views, "ZoneInfo", _zoneinfo, raising=False)
+        resolved = views._resolve_client_tz("forced-oserror")
+        assert isinstance(resolved, ZoneInfo)
+        assert resolved.key == settings.TIME_ZONE
+
+    def test_missing_timezone_database_uses_utc_as_last_resort(self, monkeypatch):
+        import ai.views as views
+
+        def _missing_zoneinfo(_key):
+            raise ZoneInfoNotFoundError("missing")
+
+        monkeypatch.setattr(views, "ZoneInfo", _missing_zoneinfo, raising=False)
+        assert views._resolve_client_tz("Asia/Almaty") is datetime.UTC
+
+    def test_dst_zone_uses_zoneinfo_offsets(self):
+        from ai.views import _resolve_client_tz
+
+        resolved = _resolve_client_tz("Europe/Berlin")
+        winter = timezone.localtime(
+            datetime.datetime(2026, 1, 15, 12, 0, tzinfo=datetime.UTC), resolved
+        )
+        summer = timezone.localtime(
+            datetime.datetime(2026, 7, 15, 12, 0, tzinfo=datetime.UTC), resolved
+        )
+        assert winter.utcoffset() == datetime.timedelta(hours=1)
+        assert summer.utcoffset() == datetime.timedelta(hours=2)
+
 
 class TestAutoPlacementIntegration:
     """Feature 0067: chat untimed-add apply path (deterministic placement)."""
@@ -1792,6 +1882,93 @@ class TestAutoPlacementIntegration:
             "No free slot with the required gaps fits LeverX in your day window. "
             "Try a shorter duration or a specific free time."
         )
+
+
+@pytest.mark.django_db
+class TestChatClientTimezone:
+    """Feature 0070: request-local prompt and auto-placement timezone."""
+
+    FIXED_UTC = datetime.datetime(2026, 4, 18, 4, 2, 30, tzinfo=datetime.UTC)
+
+    @staticmethod
+    def _untimed_add():
+        return AIChatResult(
+            raw_response_text="{}",
+            parsed_actions=[{"type": "add", "title": "LeverX", "category": "personal"}],
+            explanation="Added",
+            ask=None,
+        )
+
+    def test_chat_prompt_uses_request_timezone(self, auth_client, monkeypatch):
+        import ai.views as views
+
+        captured = {}
+
+        async def _capture(messages, schedule, blocks, rules, now):
+            captured["now"] = now
+            return AIChatResult("{}", [], "ok", None)
+
+        monkeypatch.setattr(views.timezone, "now", lambda: self.FIXED_UTC)
+        monkeypatch.setattr(views, "run_chat", _capture)
+
+        resp = _post(
+            auth_client,
+            {"messages": [_user_turn("hi")], "client_tz": "Asia/Almaty"},
+        )
+        assert resp.status_code == 200, resp.content
+        assert captured["now"].tzinfo == ZoneInfo("Asia/Almaty")
+        assert captured["now"].strftime("%Y-%m-%d %H:%M:%S") == "2026-04-18 09:02:30"
+
+    def test_untimed_add_uses_local_apply_floor(self, auth_client, monkeypatch):
+        import ai.views as views
+
+        monkeypatch.setattr(views.timezone, "now", lambda: self.FIXED_UTC)
+        _patch_run_chat(monkeypatch, self._untimed_add())
+
+        resp = _post(
+            auth_client,
+            {"messages": [_user_turn("add LeverX")], "client_tz": "Asia/Almaty"},
+        )
+        assert resp.status_code == 200, resp.content
+        assert resp.json()["blocks"][0]["start_time"] == "09:05"
+
+    def test_untimed_add_uses_local_date_after_utc_date_flip(self, auth_client, monkeypatch):
+        import ai.views as views
+
+        fixed_utc = datetime.datetime(2026, 4, 18, 20, 0, tzinfo=datetime.UTC)
+        monkeypatch.setattr(views.timezone, "now", lambda: fixed_utc)
+        _patch_run_chat(monkeypatch, self._untimed_add())
+
+        resp = _post(
+            auth_client,
+            {"messages": [_user_turn("add LeverX")], "client_tz": "Pacific/Kiritimati"},
+            url="/api/ai/schedules/2026-04-19/chat/",
+        )
+        assert resp.status_code == 200, resp.content
+        assert resp.json()["blocks"][0]["start_time"] == "10:00"
+
+    @pytest.mark.parametrize("raw_tz", [None, "Not/AZone", 42, []])
+    def test_invalid_client_timezone_is_a_utc_prompt_regression_guard(
+        self, auth_client, monkeypatch, raw_tz
+    ):
+        import ai.views as views
+
+        captured = {}
+
+        async def _capture(messages, schedule, blocks, rules, now):
+            captured["now"] = now
+            return AIChatResult("{}", [], "ok", None)
+
+        monkeypatch.setattr(views.timezone, "now", lambda: self.FIXED_UTC)
+        monkeypatch.setattr(views, "run_chat", _capture)
+
+        resp = _post(
+            auth_client,
+            {"messages": [_user_turn("hi")], "client_tz": raw_tz},
+        )
+        assert resp.status_code == 200, resp.content
+        assert captured["now"].tzinfo == ZoneInfo("UTC")
+        assert captured["now"].strftime("%Y-%m-%d %H:%M:%S") == "2026-04-18 04:02:30"
 
 
 class TestResolutionAskNoSlotPrecedence:
