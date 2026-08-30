@@ -461,6 +461,31 @@ def _duration_fails_end_verdict(
     return bool(derived_end_minutes % GRID_MINUTES)
 
 
+def _duration_would_overlap(
+    task_id: int,
+    start: datetime.time,
+    derived_end_minutes: int,
+    snapshot_by_id: dict[int, BlockSnapshot],
+    chain_effective: dict[int, _EffectiveTimes],
+    removed: set[int],
+) -> bool:
+    """True when a duration-derived interval would overlap another live block."""
+    if not 0 <= derived_end_minutes < 24 * 60:
+        return False
+    end = _time_from_minutes(derived_end_minutes)
+    for other_id, block in snapshot_by_id.items():
+        if other_id == task_id or other_id in removed:
+            continue
+        if other_id in chain_effective:
+            eff = chain_effective[other_id]
+            other_start, other_end = eff.start_time, eff.end_time
+        else:
+            other_start, other_end = block.start_time, block.end_time
+        if times_overlap(start, end, other_start, other_end):
+            return True
+    return False
+
+
 def _normalize_actions(
     snapshot: ScheduleSnapshot,
     parsed_actions: Sequence[dict],
@@ -653,6 +678,15 @@ def _normalize_actions(
                 start=new_start,
                 start_supplied=start_supplied,
                 window=window,
+            ):
+                skip_chain_update = True
+            elif _duration_would_overlap(
+                task_id,
+                new_start,
+                derived_end_minutes,
+                snapshot_by_id,
+                chain_effective,
+                removed,
             ):
                 skip_chain_update = True
         if not skip_chain_update:
