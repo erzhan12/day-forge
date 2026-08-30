@@ -205,11 +205,21 @@ class TestDraftClientTimezone:
                 JSONDecodeError=json.JSONDecodeError,
             ),
         )
-        _patch_run(monkeypatch, AIDraftResult("{}", [], "ok"))
+
+        captured = {}
+
+        async def _capture(schedule, tmpl, history, rules, now):
+            captured["now"] = now
+            return AIDraftResult("{}", [], "ok")
+
+        monkeypatch.setattr(views, "run_draft", _capture)
 
         resp = _post(auth_client, body=b"\xff\xfe")
         assert resp.status_code == 200, resp.content
         assert parsed["called"] is True
+        # The undecodable body must degrade to the UTC fallback, not an
+        # unset/wrong zone — the key correctness property of the new parse path.
+        assert captured["now"].tzinfo == ZoneInfo("UTC")
 
 
 @pytest.mark.django_db

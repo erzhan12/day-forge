@@ -295,7 +295,7 @@ Requires `LLM_API_KEY` to be set. When unset, every call returns `503` so the fr
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
 | `messages` | array | yes | Non-empty list of `{role, content}` turns. Roles strictly alternate `user` / `assistant`, starting with `user`. Last turn must be `user`. `1 ≤ len ≤ LLM_CHAT_MAX_TURNS` (default 40). Each `content` is 1–`LLM_MAX_COMMAND_CHARS` (default 500) chars. Sum of all `content` lengths ≤ `LLM_CHAT_MAX_TOTAL_CHARS` (default 4000). |
-| `client_tz` | string | no | Browser IANA timezone (for example `Asia/Almaty`). Used only for prompt context and forward placement of untimed adds. Invalid or missing values fall back safely to the server timezone. |
+| `client_tz` | string | no | Browser IANA timezone (for example `Asia/Almaty`). Used only for prompt context and forward placement of untimed adds. Invalid or missing values fall back to the server's configured timezone (`TIME_ZONE` setting); if that itself is unavailable, UTC is used as a last resort. |
 
 Malformed `messages` (including non-object JSON roots) return `400` **before** `Schedule.get_or_create` and **before** the rate-limit counter is consumed.
 

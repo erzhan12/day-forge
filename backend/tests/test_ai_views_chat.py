@@ -1758,6 +1758,11 @@ class TestClientTimezoneResolver:
     def test_invalid_values_fall_back_to_configured_timezone(self, raw):
         from ai.views import _resolve_client_tz
 
+        # Self-document the expectation: the fallback resolves to the server's
+        # configured zone, which is "UTC" in the test environment. A future
+        # settings change breaks this loudly instead of silently shifting the
+        # assertion's meaning.
+        assert settings.TIME_ZONE == "UTC"
         resolved = _resolve_client_tz(raw)
         assert isinstance(resolved, ZoneInfo)
         assert resolved.key == settings.TIME_ZONE
