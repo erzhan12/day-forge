@@ -326,7 +326,7 @@ def _resolve_client_tz(raw: object) -> datetime.tzinfo:
         try:
             return ZoneInfo(settings.TIME_ZONE)
         except (ZoneInfoNotFoundError, ValueError, OSError):
-            return datetime.timezone.utc  # noqa: UP017
+            return datetime.UTC
 
     if not isinstance(raw, str):
         return _fallback()
@@ -850,14 +850,15 @@ async def ai_generate_draft(request, date):
     # Unlike chat, the draft body is optional. Its only supported field is an
     # advisory timezone, so every malformed body shape simply uses the safe
     # fallback instead of changing the endpoint's established 200/4xx flow.
-    client_tz = _resolve_client_tz(None)
+    raw_client_tz = None
     if request.body:
         try:
             body_data = json.loads(request.body)
         except (json.JSONDecodeError, UnicodeDecodeError):
             body_data = None
         if isinstance(body_data, dict):
-            client_tz = _resolve_client_tz(body_data.get("client_tz"))
+            raw_client_tz = body_data.get("client_tz")
+    client_tz = _resolve_client_tz(raw_client_tz)
 
     user = await request.auser()
     schedule, _ = await Schedule.objects.aget_or_create(user=user, date=parsed_date)
