@@ -295,12 +295,14 @@ function mountPage(props: {
   auto_draft_pending?: boolean
   has_template_for_type?: boolean
   slot_type?: "weekday" | "weekend"
+  schedule_window?: { start: string; end: string; time_zone: string }
 }) {
   wrapper = mount(Schedule, {
     props: {
       auto_draft_pending: false,
       has_template_for_type: true,
       slot_type: "weekday" as const,
+      schedule_window: { start: "06:00", end: "23:00", time_zone: "Asia/Almaty" },
       ...props,
     },
     global: { stubs: STUBS },
@@ -324,6 +326,15 @@ describe("Schedule.vue auto-draft watcher", () => {
     localStorage.clear()
     vi.unstubAllGlobals()
     vi.clearAllMocks()
+  })
+
+  it("passes the persisted schedule timezone to the page-level mismatch prompt", () => {
+    const page = mountPage({
+      schedule: makeSchedule("2026-05-04"),
+      blocks: [],
+      date: "2026-05-04",
+    })
+    expect(page.findComponent({ name: "TimeZoneMismatchPrompt" }).props("timeZone")).toBe("Asia/Almaty")
   })
 
   it("(a) fires generateDraft once on first mount when auto_draft_pending=true and blocks are empty", async () => {

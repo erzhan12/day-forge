@@ -15,7 +15,7 @@ from django.db import connections
 from django.test import Client, TransactionTestCase
 from django.urls import reverse
 from django.utils import timezone
-from schedules.models import Schedule, TimeBlock
+from schedules.models import Schedule, TimeBlock, UserScheduleSettings
 from templates_mgr import preferences as preferences_module
 from templates_mgr.models import UserPreferences
 from templates_mgr.preferences import (
@@ -815,6 +815,12 @@ def test_settings_view_includes_ui_preferences_prop(auth_client, user):
         "theme": "light_premium",
         "chat_suggestions": ["Settings prompt"],
     }
+
+
+def test_settings_view_includes_schedule_time_zone(auth_client, user):
+    UserScheduleSettings.objects.create(user=user, time_zone="Asia/Almaty")
+    response = auth_client.get(reverse("settings"), HTTP_X_INERTIA="true")
+    assert response.json()["props"]["schedule_window"]["time_zone"] == "Asia/Almaty"
 
 
 def test_analytics_view_includes_ui_preferences_prop(auth_client, user):

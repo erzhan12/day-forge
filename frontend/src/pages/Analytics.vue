@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from "vue"
 import { Link } from "@inertiajs/vue3"
-import type { DailyReview, Schedule, StreakInfo, TimeBlock, ScheduleWindow, UserCategory } from "../types"
+import type { DailyReview, Schedule, ScheduleSettingsWire, StreakInfo, TimeBlock, UserCategory } from "../types"
+import TimeZoneMismatchPrompt from "../components/TimeZoneMismatchPrompt.vue"
 import CompletionBar from "../components/CompletionBar.vue"
 import CategoryBreakdown from "../components/CategoryBreakdown.vue"
 import StreakCounter from "../components/StreakCounter.vue"
@@ -20,10 +21,10 @@ const props = withDefaults(defineProps<{
   schedule: Schedule
   blocks: TimeBlock[]
   date: string
-  schedule_window?: ScheduleWindow
+  schedule_window?: ScheduleSettingsWire
   categories: UserCategory[]
 }>(), {
-  schedule_window: () => ({ start: "06:00", end: "23:00" }),
+  schedule_window: () => ({ start: "06:00", end: "23:00", time_zone: "UTC" }),
 })
 
 const { isMarkingReviewed, lastError, markReviewed, saveNotes } = useAnalytics()
@@ -95,6 +96,7 @@ async function onMarkReviewed() {
 
 <template>
   <div class="analytics-page">
+    <TimeZoneMismatchPrompt :time-zone="schedule_window.time_zone" />
     <header class="page-header">
       <Link :href="`/schedule/${date}/`" class="back-link">&larr; Back to schedule</Link>
       <div class="title-row">

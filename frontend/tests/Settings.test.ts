@@ -91,7 +91,7 @@ function mountSettings(): VueWrapper {
       templates: [],
       rules: [],
       travel_rules: [],
-      schedule_window: { start: "06:00", end: "23:00" },
+      schedule_window: { start: "06:00", end: "23:00", time_zone: "Asia/Almaty" },
     },
     global: {
       stubs: {
@@ -122,6 +122,12 @@ afterEach(() => {
 })
 
 describe("Settings topic shell", () => {
+  it("passes the persisted schedule timezone to the page-level mismatch prompt", () => {
+    stubMatchMedia(true)
+    wrapper = mountSettings()
+    expect(wrapper.findComponent({ name: "TimeZoneMismatchPrompt" }).props("timeZone")).toBe("Asia/Almaty")
+  })
+
   it("mounts the AI Assistant editor inside a stable section", () => {
     stubMatchMedia(true)
     window.history.replaceState({}, "", "/settings/#ai-assistant")

@@ -4,7 +4,7 @@ from django.contrib.auth.decorators import login_required
 from django.views.decorators.csrf import ensure_csrf_cookie
 from inertia import render as inertia_render
 from schedules.categories import ordered_categories, serialize_category
-from schedules.window import get_schedule_window
+from schedules.window import get_schedule_settings
 
 from templates_mgr.models import Rule, Template
 from templates_mgr.preferences import (
@@ -31,7 +31,7 @@ def settings_view(request):
     # Resolve preferences exactly once per render so the SSR data-theme
     # and the Inertia ``ui_preferences`` prop always agree.
     prefs = get_user_preferences(request.user)
-    window = get_schedule_window(request.user)
+    schedule_settings = get_schedule_settings(request.user)
     categories = ordered_categories(request.user)
 
     return inertia_render(
@@ -62,7 +62,11 @@ def settings_view(request):
             "travel_rules": [serialize_travel_rule(r) for r in travel_rules],
             "categories": [serialize_category(category) for category in categories],
             "ui_preferences": ui_preferences_payload(prefs),
-            "schedule_window": {"start": window.start_str, "end": window.end_str},
+            "schedule_window": {
+                "start": schedule_settings.window.start_str,
+                "end": schedule_settings.window.end_str,
+                "time_zone": schedule_settings.time_zone,
+            },
         },
         template_data={"initial_theme": prefs.theme},
     )

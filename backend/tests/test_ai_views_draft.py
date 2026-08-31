@@ -5,7 +5,6 @@ interactions and the apply path are exercised for real.
 """
 import datetime
 import json
-import types
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -140,12 +139,12 @@ class TestHappyPath:
 
 
 @pytest.mark.django_db
-class TestDraftClientTimezone:
-    """Feature 0070: draft prompt context accepts an optional client zone."""
+class TestDraftStoredTimezone:
+    """Draft prompt context derives solely from persisted user settings."""
 
     FIXED_UTC = datetime.datetime(2026, 4, 18, 4, 2, 30, tzinfo=datetime.UTC)
 
-    def test_draft_prompt_uses_request_timezone(self, auth_client, template, monkeypatch):
+    def test_draft_prompt_uses_stored_timezone(self, auth_client, user, template, monkeypatch):
         import ai.views as views
 
         captured = {}
@@ -157,17 +156,72 @@ class TestDraftClientTimezone:
         monkeypatch.setattr(views.timezone, "now", lambda: self.FIXED_UTC)
         monkeypatch.setattr(views, "run_draft", _capture)
 
-        resp = _post(auth_client, body=json.dumps({"client_tz": "Asia/Almaty"}))
+        UserScheduleSettings.objects.create(user=user, time_zone="Asia/Almaty")
+        resp = _post(auth_client, body=json.dumps({"client_tz": "Pacific/Kiritimati"}))
         assert resp.status_code == 200, resp.content
         assert captured["now"].tzinfo == ZoneInfo("Asia/Almaty")
         assert captured["now"].strftime("%Y-%m-%d %H:%M:%S") == "2026-04-18 09:02:30"
+
+    def test_applying_draft_looks_up_settings_once_for_prompt_and_once_for_apply(
+        self, auth_client, user, template, monkeypatch
+    ):
+        import ai.views as views
+
+        original_settings = views.get_schedule_settings
+        original_window = views.get_schedule_window
+        lookups = []
+
+        def _settings_spy(subject):
+            lookups.append(("prompt", subject.pk))
+            return original_settings(subject)
+
+        def _window_spy(subject):
+            lookups.append(("apply", subject.pk))
+            return original_window(subject)
+
+        monkeypatch.setattr(views, "get_schedule_settings", _settings_spy)
+        monkeypatch.setattr(views, "get_schedule_window", _window_spy)
+        _patch_run(monkeypatch, _ok_result())
+
+        response = _post(auth_client)
+
+        assert response.status_code == 200, response.content
+        assert lookups == [("prompt", user.pk), ("apply", user.pk)]
+
+    def test_next_draft_uses_timezone_changed_via_settings_api(
+        self, auth_client, user, template, monkeypatch
+    ):
+        import ai.views as views
+
+        captured = []
+
+        async def _capture(schedule, tmpl, history, rules, now):
+            captured.append(now)
+            return AIDraftResult("{}", [], "ok")
+
+        monkeypatch.setattr(views.timezone, "now", lambda: self.FIXED_UTC)
+        monkeypatch.setattr(views, "run_draft", _capture)
+
+        first = _post(auth_client)
+        changed = auth_client.patch(
+            "/api/user/schedule-settings/",
+            data=json.dumps({"time_zone": "Asia/Almaty"}),
+            content_type="application/json",
+        )
+        second = _post(auth_client)
+
+        assert first.status_code == 200
+        assert changed.status_code == 200
+        assert second.status_code == 200
+        assert captured[0].tzinfo == ZoneInfo("UTC")
+        assert captured[1].tzinfo == ZoneInfo("Asia/Almaty")
 
     @pytest.mark.parametrize(
         "body",
         ["", "{}", '{"client_tz":"Not/AZone"}', '{"client_tz":[]}', "{", "[]"],
     )
-    def test_optional_timezone_body_falls_back_to_utc_without_error(
-        self, auth_client, template, monkeypatch, body
+    def test_optional_timezone_body_is_ignored_in_favor_of_stored_zone(
+        self, auth_client, user, template, monkeypatch, body
     ):
         import ai.views as views
 
@@ -180,31 +234,16 @@ class TestDraftClientTimezone:
         monkeypatch.setattr(views.timezone, "now", lambda: self.FIXED_UTC)
         monkeypatch.setattr(views, "run_draft", _capture)
 
+        UserScheduleSettings.objects.create(user=user, time_zone="Asia/Almaty")
         resp = _post(auth_client, body=body)
         assert resp.status_code == 200, resp.content
-        assert captured["now"].tzinfo == ZoneInfo("UTC")
-        assert captured["now"].strftime("%Y-%m-%d %H:%M:%S") == "2026-04-18 04:02:30"
+        assert captured["now"].tzinfo == ZoneInfo("Asia/Almaty")
+        assert captured["now"].strftime("%Y-%m-%d %H:%M:%S") == "2026-04-18 09:02:30"
 
     def test_invalidly_encoded_optional_body_falls_back_without_error(
         self, auth_client, template, monkeypatch
     ):
         import ai.views as views
-
-        parsed = {"called": False}
-
-        def _invalid_decode(raw):
-            parsed["called"] = True
-            assert raw == b"\xff\xfe"
-            raise UnicodeDecodeError("utf-8", raw, 0, 1, "invalid start byte")
-
-        monkeypatch.setattr(
-            views,
-            "json",
-            types.SimpleNamespace(
-                loads=_invalid_decode,
-                JSONDecodeError=json.JSONDecodeError,
-            ),
-        )
 
         captured = {}
 
@@ -223,9 +262,7 @@ class TestDraftClientTimezone:
 
         resp = _post(auth_client, body=b"\xff\xfe")
         assert resp.status_code == 200, resp.content
-        assert parsed["called"] is True
-        # The undecodable body must degrade to the UTC fallback, not an
-        # unset/wrong zone — the key correctness property of the new parse path.
+        # Draft bodies are no longer parsed for a timezone at all.
         assert captured["now"].tzinfo == ZoneInfo("UTC")
         assert captured["now"].strftime("%Y-%m-%d %H:%M:%S") == "2026-04-18 04:02:30"
 

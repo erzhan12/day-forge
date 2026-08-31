@@ -295,9 +295,8 @@ Requires `LLM_API_KEY` to be set. When unset, every call returns `503` so the fr
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
 | `messages` | array | yes | Non-empty list of `{role, content}` turns. Roles strictly alternate `user` / `assistant`, starting with `user`. Last turn must be `user`. `1 ≤ len ≤ LLM_CHAT_MAX_TURNS` (default 40). Each `content` is 1–`LLM_MAX_COMMAND_CHARS` (default 500) chars. Sum of all `content` lengths ≤ `LLM_CHAT_MAX_TOTAL_CHARS` (default 4000). |
-| `client_tz` | string | no | Browser IANA timezone (for example `Asia/Almaty`). Used only for prompt context and forward placement of untimed adds. Invalid or missing values fall back to the server's configured timezone (`TIME_ZONE` setting); if that itself is unavailable, UTC is used as a last resort. |
 
-Malformed `messages` (including non-object JSON roots) return `400` **before** `Schedule.get_or_create` and **before** the rate-limit counter is consumed.
+Malformed `messages` (including non-object JSON roots) return `400` **before** `Schedule.get_or_create` and **before** the rate-limit counter is consumed. Prompt time and untimed-add placement use the user's persisted schedule `time_zone`; legacy `client_tz` fields are ignored.
 
 **Success — apply turn — `200 OK`**
 
@@ -459,11 +458,7 @@ until the user makes a real edit.
 |------|------|-------|
 | `date` | string | `YYYY-MM-DD`. Invalid format → `400`. |
 
-**Request body** — optional JSON object.
-
-| Field | Type | Required | Notes |
-|-------|------|----------|-------|
-| `client_tz` | string | no | Browser IANA timezone (for example `Asia/Almaty`) used for draft prompt context. Missing, invalid, or malformed optional request bodies safely fall back to the server timezone. |
+**Request body** — optional. Draft prompt time uses the user's persisted schedule `time_zone`; any legacy `client_tz` field is ignored.
 
 **Success — `200 OK`**
 
@@ -628,7 +623,7 @@ Unauthenticated requests follow the conventions header — Django's `@login_requ
 
 ## Schedule Settings
 
-Per-user schedule **day window** (the working-day bounds that constrain manual, AI, template, and calendar-placement times). One row per user, created on first authenticated access with the default `06:00–23:00`. Lives in the `schedules` app (a scheduling-domain rule), intentionally separate from the UI preferences at `/api/user/preferences/`.
+Per-user schedule day window and IANA timezone. The timezone is the sole server-side source of user-local `now()` for AI draft, chat, and untimed placement. One row per user is created on first authenticated access with `06:00–23:00` and `UTC`. Lives in the `schedules` app, intentionally separate from UI preferences.
 
 `GET` and `PATCH` set `Cache-Control: private, no-store` on every response, including error responses (same rationale as User Preferences).
 
@@ -637,12 +632,12 @@ Per-user schedule **day window** (the working-day bounds that constrain manual, 
 Returns the current user's window. Creates the default row if none exists.
 
 ```json
-{"day_start": "06:00", "day_end": "23:00"}
+{"day_start": "06:00", "day_end": "23:00", "time_zone": "UTC"}
 ```
 
 ### `PATCH /api/user/schedule-settings/`
 
-Sets the window. **Both** fields are required — the window is a coupled pair, validated together so an overnight cross-pair is caught. On any validation failure the stored row is left unchanged (last saved value preserved).
+Partial update over the coupled window and independent timezone. `day_start` and `day_end` must be supplied together; `time_zone` can be sent alone. An empty body or a lone window bound is invalid. On validation failure the stored row is unchanged.
 
 **Body**
 
@@ -650,6 +645,7 @@ Sets the window. **Both** fields are required — the window is a coupled pair, 
 |-------|------|-------|
 | `day_start` | string | `HH:MM`, 5-minute aligned. |
 | `day_end` | string | `HH:MM`, 5-minute aligned, later than `day_start` (same calendar day — overnight windows are not supported). |
+| `time_zone` | string | Optional IANA identifier, such as `Asia/Almaty`. Invalid values return the stable error below. |
 
 **Errors**
 
@@ -657,6 +653,7 @@ Sets the window. **Both** fields are required — the window is a coupled pair, 
 |--------|--------------|---------|
 | `400` | `body` | Invalid JSON or non-object body. |
 | `400` | `day_start` / `day_end` | `"{field} is required."`, `"Use HH:MM format."`, `"Must align to 5-minute granularity."`, or (on `day_end`) `"Must be later than day_start; overnight windows are not supported."` |
+| `400` | `time_zone` | `"Must be a valid IANA time zone."` when a present value is invalid. |
 | `413` | `body` | Request body exceeds 100 KB. |
 
 Unauthenticated requests return a `302` redirect (per the conventions header), not a JSON `401`.

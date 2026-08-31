@@ -190,7 +190,6 @@ export function useChat() {
 
     let result: ChatApiResult
     try {
-      const clientTz = Intl.DateTimeFormat().resolvedOptions().timeZone
       result = (await requestJson(
         `/api/ai/schedules/${requestDate}/chat/`,
         "POST",
@@ -199,7 +198,6 @@ export function useChat() {
             role,
             content,
           })),
-          client_tz: clientTz,
         },
       )) as ChatApiResult
     } finally {

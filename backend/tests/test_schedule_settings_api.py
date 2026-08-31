@@ -44,7 +44,7 @@ def test_get_first_call_returns_default_window(auth_client, user):
     assert not UserScheduleSettings.objects.filter(user=user).exists()
     resp = auth_client.get(reverse(URL_NAME))
     assert resp.status_code == 200
-    assert resp.json() == {"day_start": "06:00", "day_end": "23:00"}
+    assert resp.json() == {"day_start": "06:00", "day_end": "23:00", "time_zone": "UTC"}
     assert resp.headers["Cache-Control"] == "private, no-store"
 
 
@@ -54,8 +54,16 @@ def test_get_returns_saved_window(auth_client, user):
     )
     resp = auth_client.get(reverse(URL_NAME))
     assert resp.status_code == 200
-    assert resp.json() == {"day_start": "08:00", "day_end": "22:30"}
+    assert resp.json() == {"day_start": "08:00", "day_end": "22:30", "time_zone": "UTC"}
     assert resp.headers["Cache-Control"] == "private, no-store"
+
+
+def test_get_returns_persisted_non_utc_time_zone(auth_client, user):
+    """GET must serialize the stored zone rather than a response default."""
+    UserScheduleSettings.objects.create(user=user, time_zone="Asia/Almaty")
+    resp = auth_client.get(reverse(URL_NAME))
+    assert resp.status_code == 200
+    assert resp.json()["time_zone"] == "Asia/Almaty"
 
 
 # ---------------------------------------------------------------------------
@@ -70,7 +78,7 @@ def test_patch_valid_persists_and_echoes_normalized_window(auth_client, user):
         content_type="application/json",
     )
     assert resp.status_code == 200
-    assert resp.json() == {"day_start": "07:00", "day_end": "21:15"}
+    assert resp.json() == {"day_start": "07:00", "day_end": "21:15", "time_zone": "UTC"}
     assert resp.headers["Cache-Control"] == "private, no-store"
     # Persisted to the DB.
     row = UserScheduleSettings.objects.get(user=user)
@@ -88,11 +96,77 @@ def test_patch_updates_existing_row(auth_client, user):
         content_type="application/json",
     )
     assert resp.status_code == 200
-    assert resp.json() == {"day_start": "09:00", "day_end": "18:00"}
+    assert resp.json() == {"day_start": "09:00", "day_end": "18:00", "time_zone": "UTC"}
     # Exactly one row — the update did not create a duplicate.
     assert UserScheduleSettings.objects.filter(user=user).count() == 1
     row = UserScheduleSettings.objects.get(user=user)
     assert (row.day_start, row.day_end) == (datetime.time(9, 0), datetime.time(18, 0))
+
+
+def test_patch_first_time_with_time_zone_persists_zone_via_defaults(auth_client, user):
+    """A first PATCH on a no-prior-row user that includes ``time_zone`` must
+    persist that zone through ``get_or_create`` ``defaults`` — not silently fall
+    back to the model's ``"UTC"`` default (guards the create-path drop)."""
+    assert not UserScheduleSettings.objects.filter(user=user).exists()
+    resp = auth_client.patch(
+        reverse(URL_NAME),
+        data=json.dumps({"day_start": "07:00", "day_end": "21:00", "time_zone": "Asia/Almaty"}),
+        content_type="application/json",
+    )
+    assert resp.status_code == 200
+    assert resp.json() == {"day_start": "07:00", "day_end": "21:00", "time_zone": "Asia/Almaty"}
+    row = UserScheduleSettings.objects.get(user=user)
+    assert row.time_zone == "Asia/Almaty"
+    assert (row.day_start, row.day_end) == (datetime.time(7, 0), datetime.time(21, 0))
+
+
+def test_patch_all_fields_and_timezone_only_are_partial_updates(auth_client, user):
+    UserScheduleSettings.objects.create(
+        user=user, day_start=datetime.time(8, 0), day_end=datetime.time(20, 0), time_zone="UTC"
+    )
+    response = auth_client.patch(
+        reverse(URL_NAME),
+        data=json.dumps({"time_zone": "Asia/Almaty"}),
+        content_type="application/json",
+    )
+    assert response.status_code == 200
+    assert response.json() == {
+        "day_start": "08:00",
+        "day_end": "20:00",
+        "time_zone": "Asia/Almaty",
+    }
+    response = auth_client.patch(
+        reverse(URL_NAME),
+        data=json.dumps({"day_start": "09:00", "day_end": "19:00"}),
+        content_type="application/json",
+    )
+    assert response.status_code == 200
+    assert response.json()["time_zone"] == "Asia/Almaty"
+
+
+@pytest.mark.parametrize("value", ["", "Not/AZone", "..", "/UTC", 1])
+def test_patch_invalid_time_zone_has_stable_error(auth_client, user, value):
+    response = auth_client.patch(
+        reverse(URL_NAME), data=json.dumps({"time_zone": value}), content_type="application/json"
+    )
+    assert response.status_code == 400
+    assert response.json()["errors"]["time_zone"] == "Must be a valid IANA time zone."
+    assert not UserScheduleSettings.objects.filter(user=user).exists()
+
+
+def test_patch_invalid_window_and_time_zone_reports_both_errors_and_keeps_row(auth_client, user):
+    _seed_baseline(user)
+    response = auth_client.patch(
+        reverse(URL_NAME),
+        data=json.dumps({"day_start": "22:00", "day_end": "08:00", "time_zone": "Not/AZone"}),
+        content_type="application/json",
+    )
+    assert response.status_code == 400
+    errors = response.json()["errors"]
+    assert "day_end" in errors
+    assert "time_zone" in errors
+    assert response.headers["Cache-Control"] == "private, no-store"
+    _assert_row_unchanged(user)
 
 
 # ---------------------------------------------------------------------------
@@ -272,6 +346,7 @@ def test_get_isolated_per_user(db):
     assert client_a.get(reverse(URL_NAME)).json() == {
         "day_start": "07:00",
         "day_end": "19:00",
+        "time_zone": "UTC",
     }
 
     client_b = Client()
@@ -279,6 +354,7 @@ def test_get_isolated_per_user(db):
     assert client_b.get(reverse(URL_NAME)).json() == {
         "day_start": "05:00",
         "day_end": "22:00",
+        "time_zone": "UTC",
     }
 
 
@@ -320,4 +396,24 @@ def test_patch_does_not_leak_across_users(db):
     assert client_b.get(reverse(URL_NAME)).json() == {
         "day_start": "08:00",
         "day_end": "20:00",
+        "time_zone": "UTC",
     }
+
+
+def test_custom_time_zone_patch_does_not_leak_across_users(db):
+    alice = User.objects.create_user(username="alice_tz", password="pw")
+    bob = User.objects.create_user(username="bob_tz", password="pw")
+    UserScheduleSettings.objects.create(user=alice, time_zone="UTC")
+    UserScheduleSettings.objects.create(user=bob, time_zone="Europe/Berlin")
+    client_a = Client()
+    client_a.login(username="alice_tz", password="pw")
+
+    response = client_a.patch(
+        reverse(URL_NAME),
+        data=json.dumps({"time_zone": "Asia/Almaty"}),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 200
+    assert UserScheduleSettings.objects.get(user=alice).time_zone == "Asia/Almaty"
+    assert UserScheduleSettings.objects.get(user=bob).time_zone == "Europe/Berlin"

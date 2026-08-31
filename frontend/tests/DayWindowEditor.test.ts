@@ -23,7 +23,7 @@ const { routerReloadSpy, requestJsonSpy } = mocks
 
 import DayWindowEditor from "../src/components/DayWindowEditor.vue"
 
-function mountEditor(window = { start: "06:00", end: "22:00" }) {
+function mountEditor(window = { start: "06:00", end: "22:00", time_zone: "UTC" }) {
   return mount(DayWindowEditor, { props: { window } })
 }
 
@@ -34,19 +34,21 @@ beforeEach(() => {
 
 describe("DayWindowEditor", () => {
   it("seeds both HH:MM inputs from the schedule_window prop", () => {
-    const wrapper = mountEditor({ start: "07:30", end: "21:45" })
+    const wrapper = mountEditor({ start: "07:30", end: "21:45", time_zone: "Asia/Almaty" })
     const inputs = wrapper.findAll('input[type="time"]')
     expect(inputs).toHaveLength(2)
     expect((inputs[0].element as HTMLInputElement).value).toBe("07:30")
     expect((inputs[1].element as HTMLInputElement).value).toBe("21:45")
+    expect((wrapper.find("select").element as HTMLSelectElement).value).toBe("Asia/Almaty")
   })
 
   it("re-seeds inputs when the window prop changes (deep watcher)", async () => {
-    const wrapper = mountEditor({ start: "06:00", end: "22:00" })
-    await wrapper.setProps({ window: { start: "08:00", end: "20:00" } })
+    const wrapper = mountEditor({ start: "06:00", end: "22:00", time_zone: "UTC" })
+    await wrapper.setProps({ window: { start: "08:00", end: "20:00", time_zone: "Europe/Berlin" } })
     const inputs = wrapper.findAll('input[type="time"]')
     expect((inputs[0].element as HTMLInputElement).value).toBe("08:00")
     expect((inputs[1].element as HTMLInputElement).value).toBe("20:00")
+    expect((wrapper.find("select").element as HTMLSelectElement).value).toBe("Europe/Berlin")
   })
 
   // -- client-side validation (fast feedback, no PATCH) ------------------
@@ -85,7 +87,7 @@ describe("DayWindowEditor", () => {
 
   it("valid input → PATCHes schedule-settings and triggers router.reload", async () => {
     requestJsonSpy.mockResolvedValueOnce({ ok: true } as ApiResult)
-    const wrapper = mountEditor({ start: "06:00", end: "22:00" })
+    const wrapper = mountEditor({ start: "06:00", end: "22:00", time_zone: "UTC" })
     const inputs = wrapper.findAll('input[type="time"]')
     await inputs[0].setValue("07:00")
     await inputs[1].setValue("23:00")
@@ -94,7 +96,7 @@ describe("DayWindowEditor", () => {
     expect(requestJsonSpy).toHaveBeenCalledWith(
       "/api/user/schedule-settings/",
       "PATCH",
-      { day_start: "07:00", day_end: "23:00" },
+      { day_start: "07:00", day_end: "23:00", time_zone: "UTC" },
     )
     expect(routerReloadSpy).toHaveBeenCalledWith({ only: ["schedule_window"] })
   })
@@ -110,6 +112,7 @@ describe("DayWindowEditor", () => {
     const inputs = wrapper.findAll('input[type="time"]')
     expect((inputs[0].element as HTMLInputElement).disabled).toBe(true)
     expect((inputs[1].element as HTMLInputElement).disabled).toBe(true)
+    expect((wrapper.find("select").element as HTMLSelectElement).disabled).toBe(true)
     expect(wrapper.find("button").text()).toBe("Saving…")
     resolveSave!({ ok: true })
     await flushPromises()
@@ -124,7 +127,7 @@ describe("DayWindowEditor", () => {
       status: 400,
       errors: { day_end: "End must be after start." },
     } as ApiResult)
-    const wrapper = mountEditor({ start: "06:00", end: "22:00" })
+    const wrapper = mountEditor({ start: "06:00", end: "22:00", time_zone: "UTC" })
     const inputs = wrapper.findAll('input[type="time"]')
     // Edit to a locally-valid pair that the server rejects.
     await inputs[0].setValue("07:00")
@@ -154,7 +157,7 @@ describe("DayWindowEditor", () => {
 
   it("error result with no `errors` payload → falls back to a generic message", async () => {
     requestJsonSpy.mockResolvedValueOnce({ ok: false, status: 500 } as ApiResult)
-    const wrapper = mountEditor({ start: "06:00", end: "22:00" })
+    const wrapper = mountEditor({ start: "06:00", end: "22:00", time_zone: "UTC" })
     const inputs = wrapper.findAll('input[type="time"]')
     await inputs[1].setValue("23:00")
     await wrapper.find("button").trigger("click")
@@ -163,5 +166,21 @@ describe("DayWindowEditor", () => {
     expect(wrapper.text()).toContain("Unable to save day window.")
     // Still reverts on failure.
     expect((inputs[1].element as HTMLInputElement).value).toBe("22:00")
+  })
+
+  it("shows a timezone field error and reverts the selector to its persisted prop", async () => {
+    requestJsonSpy.mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      errors: { time_zone: "Must be a valid IANA time zone." },
+    } as ApiResult)
+    const wrapper = mountEditor({ start: "06:00", end: "22:00", time_zone: "Asia/Almaty" })
+    await wrapper.find("select").setValue("Europe/Berlin")
+    await wrapper.find("button").trigger("click")
+    await flushPromises()
+
+    expect(wrapper.text()).toContain("Must be a valid IANA time zone.")
+    expect((wrapper.find("select").element as HTMLSelectElement).value).toBe("Asia/Almaty")
+    expect(routerReloadSpy).not.toHaveBeenCalled()
   })
 })

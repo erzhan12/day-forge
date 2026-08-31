@@ -117,6 +117,7 @@ class UserScheduleSettings(models.Model):
     )
     day_start = models.TimeField(default=datetime.time(6, 0))
     day_end = models.TimeField(default=datetime.time(23, 0))
+    time_zone = models.CharField(max_length=64, default="UTC")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -134,7 +135,7 @@ class UserScheduleSettings(models.Model):
         # imports UserScheduleSettings at module load. The grid/seconds rule
         # lives in exactly one place (check_time_on_grid) so this model surface
         # and the string-based validate_window can never drift.
-        from schedules.window import check_time_on_grid
+        from schedules.window import check_time_on_grid, validate_time_zone
 
         errors = {}
         for field in ("day_start", "day_end"):
@@ -152,6 +153,13 @@ class UserScheduleSettings(models.Model):
             and self.day_start >= self.day_end
         ):
             errors["day_end"] = "Must be later than day_start; overnight windows are not supported."
+        try:
+            validate_time_zone(self.time_zone)
+        except ValidationError as exc:
+            # ``exc.messages`` is a list; the sibling window entries in this dict
+            # are plain strings (and the API layer echoes a string too), so take
+            # the single message to keep the ``time_zone`` error shape consistent.
+            errors["time_zone"] = exc.messages[0]
         if errors:
             raise ValidationError(errors)
 

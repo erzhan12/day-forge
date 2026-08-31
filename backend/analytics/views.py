@@ -34,7 +34,7 @@ from inertia import render as inertia_render
 from schedules.categories import ordered_categories, serialize_category, sink_category
 from schedules.http import reject_oversized_body
 from schedules.models import Schedule, TimeBlock
-from schedules.window import get_schedule_window
+from schedules.window import get_schedule_settings
 from templates_mgr.preferences import (
     get_user_preferences,
     ui_preferences_payload,
@@ -179,7 +179,7 @@ def analytics_view(request, date):
 
     blocks = list(schedule.time_blocks.all().order_by("start_time", "sort_order"))
     prefs = get_user_preferences(request.user)
-    window = get_schedule_window(request.user)
+    schedule_settings = get_schedule_settings(request.user)
     return inertia_render(
         request,
         "Analytics",
@@ -195,7 +195,11 @@ def analytics_view(request, date):
             "categories": [serialize_category(category) for category in categories],
             "date": parsed_date.isoformat(),
             "ui_preferences": ui_preferences_payload(prefs),
-            "schedule_window": {"start": window.start_str, "end": window.end_str},
+            "schedule_window": {
+                "start": schedule_settings.window.start_str,
+                "end": schedule_settings.window.end_str,
+                "time_zone": schedule_settings.time_zone,
+            },
         },
         template_data={"initial_theme": prefs.theme},
     )

@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, provide, toRef, watch } from "vue"
 import { Link, router } from "@inertiajs/vue3"
-import type { TimeBlock as TimeBlockType, Schedule, TravelRule, UserCategory } from "../types"
+import type { TimeBlock as TimeBlockType, Schedule, ScheduleSettingsWire, TravelRule, UserCategory } from "../types"
+import TimeZoneMismatchPrompt from "../components/TimeZoneMismatchPrompt.vue"
 import DateNavigator from "../components/DateNavigator.vue"
 import TimeBlock from "../components/TimeBlock.vue"
 import Timeline4a from "../components/Timeline4a.vue"
@@ -82,7 +83,7 @@ const props = withDefaults(
     has_template_for_type?: boolean
     slot_type?: "weekday" | "weekend"
     external_tasks_poll_interval?: number
-    schedule_window?: { start: string; end: string }
+    schedule_window?: ScheduleSettingsWire
   }>(),
   {
     auto_draft_pending: false,
@@ -92,7 +93,7 @@ const props = withDefaults(
     // always sends the prop, so this fallback is near-unreachable — but a
     // divergent value here misleads tests and static analysis.
     external_tasks_poll_interval: 60,
-    schedule_window: () => ({ start: "06:00", end: "23:00" }),
+    schedule_window: () => ({ start: "06:00", end: "23:00", time_zone: "UTC" }),
   },
 )
 
@@ -734,6 +735,7 @@ defineExpose({
     :class="{ 'layout-4a': layout === '4a' }"
     :style="schedulePageStyle"
   >
+    <TimeZoneMismatchPrompt :time-zone="schedule_window.time_zone" />
     <DateNavigator :date="date">
       <template #status>
         <DraftBadge

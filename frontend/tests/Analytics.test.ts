@@ -50,6 +50,7 @@ function mountAnalytics(overrides: Partial<InstanceType<typeof Analytics>["$prop
       blocks: BLOCKS,
       date: "2026-04-01",
       categories: CATEGORIES,
+      schedule_window: { start: "06:00", end: "23:00", time_zone: "Asia/Almaty" },
       ...overrides,
     },
   })
@@ -75,6 +76,11 @@ describe("Analytics.vue", () => {
     expect(wrapper.findComponent({ name: "CategoryBreakdown" }).exists()).toBe(true)
     expect(wrapper.findComponent({ name: "StreakCounter" }).exists()).toBe(true)
     expect(wrapper.findComponent({ name: "SkippedTasks" }).exists()).toBe(true)
+  })
+
+  it("passes the persisted schedule timezone to the page-level mismatch prompt", () => {
+    const wrapper = mountAnalytics()
+    expect(wrapper.findComponent({ name: "TimeZoneMismatchPrompt" }).props("timeZone")).toBe("Asia/Almaty")
   })
 
   it("shows the Mark reviewed button when status is active", () => {

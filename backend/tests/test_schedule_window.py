@@ -6,6 +6,8 @@ all pure functions/constants operating on ``datetime.time`` values. The stateful
 """
 import datetime
 
+import pytest
+from django.core.exceptions import ValidationError
 from schedules.window import (
     DEFAULT_DAY_END,
     DEFAULT_DAY_START,
@@ -13,8 +15,36 @@ from schedules.window import (
     ScheduleWindow,
     check_time_on_grid,
     clamp_boundary,
+    resolve_time_zone,
+    validate_time_zone,
     validate_window,
 )
+
+
+@pytest.mark.parametrize("value", ["UTC", "Asia/Almaty", "Europe/Berlin"])
+def test_validate_time_zone_accepts_iana_identifiers(value):
+    assert validate_time_zone(value).key == value
+
+
+@pytest.mark.parametrize("value", ["", "Not/AZone", "..", "/UTC", None, 12])
+def test_validate_time_zone_rejects_invalid_values(value):
+    with pytest.raises(ValidationError):
+        validate_time_zone(value)
+
+
+def test_resolve_time_zone_resolves_dst_zone():
+    zone = resolve_time_zone("Europe/Berlin")
+    assert zone.utcoffset(datetime.datetime(2026, 7, 1)) == datetime.timedelta(hours=2)
+
+
+def test_resolve_time_zone_falls_back_to_utc_by_identity(monkeypatch):
+    import schedules.window as window
+
+    def broken(_value):
+        raise OSError("tzdata unavailable")
+
+    monkeypatch.setattr(window, "ZoneInfo", broken)
+    assert window.resolve_time_zone("Europe/Berlin") is datetime.UTC
 
 # --- DEFAULT_WINDOW ---------------------------------------------------------
 

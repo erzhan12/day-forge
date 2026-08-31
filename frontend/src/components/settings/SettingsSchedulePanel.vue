@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import type { ScheduleWindow } from "../../types"
+import type { ScheduleSettingsWire } from "../../types"
 import DayWindowEditor from "../DayWindowEditor.vue"
 
-defineProps<{ window: ScheduleWindow }>()
+defineProps<{ window: ScheduleSettingsWire }>()
 </script>
 
 <template>

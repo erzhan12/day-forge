@@ -14,7 +14,7 @@ from analytics.services import recompute_review_from_schedule
 from django.contrib.auth.models import User
 from django.test import Client
 from django.utils import timezone
-from schedules.models import Schedule, TimeBlock
+from schedules.models import Schedule, TimeBlock, UserScheduleSettings
 
 ANALYTICS_URL = "/analytics/{date}/"
 MARK_REVIEWED_URL = "/api/analytics/schedules/{date}/mark-reviewed/"
@@ -34,6 +34,15 @@ def _make_block(schedule, start, end, *, completed=False, category="work"):
 
 def _props(resp):
     return json.loads(resp.content)["props"]
+
+
+@pytest.mark.django_db
+def test_analytics_window_prop_includes_persisted_time_zone(auth_inertia_client, user):
+    date = datetime.date(2026, 4, 1)
+    Schedule.objects.create(user=user, date=date)
+    UserScheduleSettings.objects.create(user=user, time_zone="Europe/Berlin")
+    response = auth_inertia_client.get(ANALYTICS_URL.format(date=date.isoformat()))
+    assert _props(response)["schedule_window"]["time_zone"] == "Europe/Berlin"
 
 
 @pytest.fixture

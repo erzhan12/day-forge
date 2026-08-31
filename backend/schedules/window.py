@@ -7,11 +7,20 @@ with :func:`get_schedule_window` at each HTTP/AI enforcement boundary.
 import datetime
 import re
 from dataclasses import dataclass
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from django.core.exceptions import ValidationError
 
 from schedules.models import UserScheduleSettings
 
 DEFAULT_DAY_START = datetime.time(6, 0)
 DEFAULT_DAY_END = datetime.time(23, 0)
+DEFAULT_TIME_ZONE = "UTC"
+
+# ZoneInfo can reject bad input in several platform-dependent ways. Keep this
+# shared tuple centralized while retaining distinct validate-vs-fallback APIs.
+TIME_ZONE_RESOLUTION_ERRORS = (ZoneInfoNotFoundError, ValueError, OSError, TypeError)
+TIME_ZONE_ERROR = "Must be a valid IANA time zone."
 
 # Strict two-digit, zero-padded 24-hour HH:MM. ``datetime.strptime`` alone
 # leniently accepts "6:0" / "06:5", which violates the HH:MM API contract, so
@@ -62,6 +71,32 @@ class ScheduleWindow:
 DEFAULT_WINDOW = ScheduleWindow(DEFAULT_DAY_START, DEFAULT_DAY_END)
 
 
+@dataclass(frozen=True)
+class ScheduleSettings:
+    """Frozen runtime policy fetched once per request boundary."""
+
+    window: ScheduleWindow
+    time_zone: str
+
+
+def validate_time_zone(value: object) -> ZoneInfo:
+    """Return a resolved IANA zone or raise a stable Django validation error."""
+    if not isinstance(value, str):
+        raise ValidationError(TIME_ZONE_ERROR)
+    try:
+        return ZoneInfo(value)
+    except TIME_ZONE_RESOLUTION_ERRORS as exc:
+        raise ValidationError(TIME_ZONE_ERROR) from exc
+
+
+def resolve_time_zone(value: object) -> datetime.tzinfo:
+    """Resolve stored timezone safely; corrupted rows intentionally fall back to UTC."""
+    try:
+        return ZoneInfo(value)
+    except TIME_ZONE_RESOLUTION_ERRORS:
+        return datetime.UTC
+
+
 def validate_window(day_start_str, day_end_str) -> tuple[ScheduleWindow | None, dict | None]:
     """Parse and validate a coupled ``HH:MM`` day-window pair."""
     errors: dict[str, str] = {}
@@ -93,16 +128,28 @@ def validate_window(day_start_str, day_end_str) -> tuple[ScheduleWindow | None, 
     return ScheduleWindow(parsed["day_start"], parsed["day_end"]), None
 
 
+def get_schedule_settings(user) -> ScheduleSettings:
+    """Return a user's frozen window/timezone settings in one get-or-create."""
+    settings, _ = UserScheduleSettings.objects.get_or_create(
+        user=user,
+        defaults={
+            "day_start": DEFAULT_DAY_START,
+            "day_end": DEFAULT_DAY_END,
+            "time_zone": DEFAULT_TIME_ZONE,
+        },
+    )
+    return ScheduleSettings(
+        ScheduleWindow(settings.day_start, settings.day_end), settings.time_zone
+    )
+
+
 def get_schedule_window(user) -> ScheduleWindow:
     """Return a user's frozen window DTO.
 
     This is a single-user, request-scoped lookup. Do not call it in a loop
     over users: bulk callers should query ``UserScheduleSettings`` directly.
     """
-    settings, _ = UserScheduleSettings.objects.get_or_create(
-        user=user, defaults={"day_start": DEFAULT_DAY_START, "day_end": DEFAULT_DAY_END}
-    )
-    return ScheduleWindow(settings.day_start, settings.day_end)
+    return get_schedule_settings(user).window
 
 
 def clamp_boundary(

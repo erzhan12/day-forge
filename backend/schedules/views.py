@@ -17,7 +17,7 @@ from templates_mgr.preferences import (
 
 from schedules.categories import ordered_categories, serialize_category
 from schedules.models import Schedule, TimeBlock
-from schedules.window import get_schedule_window
+from schedules.window import get_schedule_settings
 
 # Login renders Strategic statically — no user preference exists pre-auth.
 # Centralized so every login render path gets the same template_data; a
@@ -97,7 +97,7 @@ def schedule_view(request, date):
     template_exists = Template.objects.filter(user=request.user, type=slot_type).exists()
     api_key_set = bool(settings.LLM_API_KEY and settings.LLM_API_KEY.strip())
     prefs = get_user_preferences(request.user)
-    window = get_schedule_window(request.user)
+    schedule_settings = get_schedule_settings(request.user)
     categories = ordered_categories(request.user)
 
     return inertia_render(
@@ -130,7 +130,11 @@ def schedule_view(request, date):
             # left task rail is open; ``0`` disables polling.
             "external_tasks_poll_interval": (settings.EXTERNAL_TASKS_POLL_INTERVAL_SECONDS),
             "ui_preferences": ui_preferences_payload(prefs),
-            "schedule_window": {"start": window.start_str, "end": window.end_str},
+            "schedule_window": {
+                "start": schedule_settings.window.start_str,
+                "end": schedule_settings.window.end_str,
+                "time_zone": schedule_settings.time_zone,
+            },
         },
         template_data={"initial_theme": prefs.theme},
     )

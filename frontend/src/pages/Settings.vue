@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from "vue"
 import { Link, router } from "@inertiajs/vue3"
-import type { Rule, ScheduleWindow, Template, TravelRule, UserCategory } from "../types"
+import type { Rule, ScheduleSettingsWire, Template, TravelRule, UserCategory } from "../types"
+import TimeZoneMismatchPrompt from "../components/TimeZoneMismatchPrompt.vue"
 import SettingsCategoriesPanel from "../components/settings/SettingsCategoriesPanel.vue"
 import SettingsAiAssistantPanel from "../components/settings/SettingsAiAssistantPanel.vue"
 import SettingsAppearancePanel from "../components/settings/SettingsAppearancePanel.vue"
@@ -29,7 +30,7 @@ const props = defineProps<{
   rules: Rule[]
   travel_rules: TravelRule[]
   categories?: UserCategory[]
-  schedule_window: ScheduleWindow
+  schedule_window: ScheduleSettingsWire
 }>()
 
 const { activeTopic, topics, setTopic, markKeyboardIntent } = useSettingsTopic()
@@ -235,6 +236,7 @@ async function handleHabiticaDisconnect(): Promise<void> {
 
 <template>
   <div class="settings-page">
+    <TimeZoneMismatchPrompt :time-zone="schedule_window.time_zone" />
     <div class="settings-shell">
       <header class="page-header">
         <Link :href="`/schedule/${today}/`" class="back-link">← Back to schedule</Link>

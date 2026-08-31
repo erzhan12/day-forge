@@ -10,7 +10,7 @@ import datetime
 import json
 
 import pytest
-from schedules.models import Schedule
+from schedules.models import Schedule, UserScheduleSettings
 from templates_mgr.models import Template
 
 
@@ -107,3 +107,13 @@ class TestExternalTasksPollIntervalProp:
         resp = auth_inertia_client.get("/schedule/2026-05-04/")
         props = _props(resp)
         assert props["external_tasks_poll_interval"] == 0
+
+
+@pytest.mark.django_db
+def test_schedule_window_prop_includes_persisted_time_zone(auth_inertia_client, user):
+    UserScheduleSettings.objects.create(
+        user=user, day_start=datetime.time(8), day_end=datetime.time(21), time_zone="Asia/Almaty"
+    )
+    assert _props(auth_inertia_client.get("/schedule/2026-05-04/"))["schedule_window"] == {
+        "start": "08:00", "end": "21:00", "time_zone": "Asia/Almaty"
+    }

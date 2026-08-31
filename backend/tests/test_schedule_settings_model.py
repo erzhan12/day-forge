@@ -5,7 +5,12 @@ from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from schedules.models import UserScheduleSettings
-from schedules.window import DEFAULT_DAY_END, DEFAULT_DAY_START, get_schedule_window
+from schedules.window import (
+    DEFAULT_DAY_END,
+    DEFAULT_DAY_START,
+    get_schedule_settings,
+    get_schedule_window,
+)
 
 
 @pytest.fixture
@@ -50,6 +55,19 @@ class TestGetScheduleWindow:
         # No second row was created by the lookup.
         assert UserScheduleSettings.objects.get(user=user).pk == settings.pk
 
+    def test_get_schedule_settings_includes_persisted_time_zone(self, user):
+        UserScheduleSettings.objects.create(
+            user=user, day_start=datetime.time(8, 0), day_end=datetime.time(22, 0),
+            time_zone="Asia/Almaty",
+        )
+        settings = get_schedule_settings(user)
+        assert settings.window == get_schedule_window(user)
+        assert settings.time_zone == "Asia/Almaty"
+
+    def test_new_row_defaults_time_zone_to_utc(self, user):
+        get_schedule_window(user)
+        assert UserScheduleSettings.objects.get(user=user).time_zone == "UTC"
+
 
 # --- OneToOne uniqueness ---
 
@@ -85,12 +103,32 @@ class TestMultiUserIsolation:
         assert a_window.day_end == datetime.time(17, 0)
         assert UserScheduleSettings.objects.count() == 2
 
+    def test_custom_time_zones_remain_per_user(self, user, other_user):
+        UserScheduleSettings.objects.create(user=user, time_zone="Asia/Almaty")
+        UserScheduleSettings.objects.create(user=other_user, time_zone="Europe/Berlin")
+
+        assert get_schedule_settings(user).time_zone == "Asia/Almaty"
+        assert get_schedule_settings(other_user).time_zone == "Europe/Berlin"
+
 
 # --- Model-level invariant enforcement (full_clean via save/create) ---
 
 
 @pytest.mark.django_db
 class TestInvalidModelRejection:
+    @pytest.mark.parametrize("time_zone", ["", "Not/AZone", "x" * 65])
+    def test_invalid_time_zone_is_rejected(self, user, time_zone):
+        settings = UserScheduleSettings(user=user, time_zone=time_zone)
+        with pytest.raises(ValidationError) as exc:
+            settings.full_clean()
+        assert "time_zone" in exc.value.message_dict
+
+    @pytest.mark.parametrize("time_zone", ["", "Not/AZone", "x" * 65])
+    def test_save_rejects_invalid_time_zone_without_writing_row(self, user, time_zone):
+        with pytest.raises(ValidationError) as exc:
+            UserScheduleSettings.objects.create(user=user, time_zone=time_zone)
+        assert "time_zone" in exc.value.message_dict
+        assert UserScheduleSettings.objects.filter(user=user).count() == 0
     def test_full_clean_rejects_off_grid_start(self, user):
         settings = UserScheduleSettings(
             user=user, day_start=datetime.time(6, 3), day_end=datetime.time(23, 0)

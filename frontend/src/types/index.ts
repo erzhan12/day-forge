@@ -128,6 +128,11 @@ export interface ScheduleWindow {
   end: string
 }
 
+/** Route/API settings wire shape; timeline consumers deliberately use ScheduleWindow. */
+export interface ScheduleSettingsWire extends ScheduleWindow {
+  time_zone: string
+}
+
 // Augment Inertia's shared PageProps so every `usePage()` call site can
 // reach `page.props.ui_preferences` without an inline generic.
 //
@@ -137,6 +142,6 @@ export interface ScheduleWindow {
 declare module "@inertiajs/core" {
   interface PageProps {
     ui_preferences?: UiPreferences
-    schedule_window?: ScheduleWindow
+    schedule_window?: ScheduleSettingsWire
   }
 }
