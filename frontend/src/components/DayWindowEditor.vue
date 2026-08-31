@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from "vue"
+import { computed, ref, watch } from "vue"
 import { router } from "@inertiajs/vue3"
 import { requestJson } from "../composables/useHttp"
 import { timeZoneOptions } from "../utils/timeZones"
@@ -8,6 +8,9 @@ const props = defineProps<{ window: { start: string; end: string; time_zone: str
 const start = ref(props.window.start)
 const end = ref(props.window.end)
 const timeZone = ref(props.window.time_zone)
+// Hoisted from the template so the 400-entry IANA list is rebuilt only when the
+// selected zone changes, not on every render.
+const zoneOptions = computed(() => timeZoneOptions(timeZone.value))
 const saving = ref(false)
 const errors = ref<Record<string, string | string[]>>({})
 
@@ -53,7 +56,7 @@ async function save() {
     <div class="inputs">
       <label>Start <input v-model="start" type="time" step="300" :disabled="saving" /></label>
       <label>End <input v-model="end" type="time" step="300" :disabled="saving" /></label>
-      <label>Timezone <select v-model="timeZone" :disabled="saving"><option v-for="zone in timeZoneOptions(timeZone)" :key="zone" :value="zone">{{ zone }}</option></select></label>
+      <label>Timezone <select v-model="timeZone" :disabled="saving"><option v-for="zone in zoneOptions" :key="zone" :value="zone">{{ zone }}</option></select></label>
       <button type="button" :disabled="saving" @click="save">{{ saving ? "Saving…" : "Save" }}</button>
     </div>
     <p v-for="(message, field) in errors" :key="field" class="error">{{ Array.isArray(message) ? message.join(" ") : message }}</p>

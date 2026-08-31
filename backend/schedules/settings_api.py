@@ -22,12 +22,12 @@ def _settings_response(payload: dict, *, status: int = 200) -> JsonResponse:
 @require_http_methods(["GET", "PATCH"])
 def schedule_settings(request):
     if request.method == "GET":
-        schedule_settings = get_schedule_settings(request.user)
+        user_settings = get_schedule_settings(request.user)
         return _settings_response(
             {
-                "day_start": schedule_settings.window.start_str,
-                "day_end": schedule_settings.window.end_str,
-                "time_zone": schedule_settings.time_zone,
+                "day_start": user_settings.window.start_str,
+                "day_end": user_settings.window.end_str,
+                "time_zone": user_settings.time_zone,
             }
         )
 
