@@ -876,20 +876,26 @@ no Service Worker, no closed-tab alerts.
   include its visual rules in the `<style>` string injected into
   `pipWindow.document.head` (`PIP_STYLES` in `useFocusIndicator.ts`). Do not
   clone `app.css`.
-- **PiP mount host must fill the window.** PiP `body` is `display: flex`. The
-  Vue mount node is a flex item; without `width: 100%; flex: 1` it shrink-wraps
-  to the remaining-minutes label and `.fi-bar { flex: 1 }` gets **0px** — progress is
-  in the DOM (`aria-valuenow`, fill inline width) but the track is invisible.
-  Keep class `fi-root` on the mount element and in `PIP_STYLES`. Do not rely
-  on `.focus-indicator { width: 100% }` alone (percentage of a shrink-wrapped
-  parent is still shrink-wrapped).
-- **Transient activation.** `requestWindow()` must be called synchronously from
-  the header button's user gesture (`useFocusIndicator.open()`); it returns a
-  `Promise<Window>`. A `pendingOpen` flag guards rapid double-clicks; an `epoch`
-  counter makes a request that resolves after `cleanup()` close its orphan
-  window. Never auto-open on load or persist an "open" preference — Chrome
-  requires the gesture each app-window launch. `window.documentPictureInPicture`
-  is not in the TS DOM libs → ambient decl in `frontend/src/types/document-pip.d.ts`.
+- **PiP root opacity and sizing.** `html`/`body` stay transparent; `.fi-root`
+  fills the entire PiP document (`width`/`height: 100%`), paints `Canvas`, and
+  carries the single `--focus-indicator-opacity` layer. Do not put opacity on
+  just the bar or compound it with secondary-label opacity. Document PiP is an
+  opaque OS window: this fades content toward its window backstop, not through
+  to the desktop.
+- **Persistent PiP ownership and close semantics.** `FocusIndicatorHost` is
+  the application-root owner around Inertia `<App>`; pages only publish copied
+  schedule snapshots to its controller, so swaps and idle gaps never unmount
+  the PiP. X, Hide, browser PiP chrome close, and a definite `Login` component
+  transition are explicit closes: they clear retained data and the device flag.
+  Root disposal is non-intent and preserves the flag for reload.
+- **Gesture-gated restore intent.** `requestWindow()` must be called
+  synchronously from a Show-button gesture (`useFocusIndicator.open()`); a
+  `pendingOpen` flag and epoch guard protect races. The strict-only-true,
+  safe-storage device key `day-forge:focus-indicator:should-be-open` is set
+  only after successful open and is never an auto-open trigger. After reload it
+  only exposes a restore affordance; the next Show click performs the sole
+  request. `window.documentPictureInPicture` is not in TS DOM libs → ambient
+  declaration in `frontend/src/types/document-pip.d.ts`.
 - **Reactive bridge.** The PiP is a separate `Document`; the view is a **second
   `createApp` with a render function** (`createApp({ render: () => h(view,
   props()) })`, mirroring `app.ts:29`) whose `props()` re-reads the shared refs'

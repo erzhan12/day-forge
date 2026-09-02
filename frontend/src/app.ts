@@ -1,7 +1,8 @@
-import { createApp, h, type DefineComponent } from "vue"
+import { createApp, h, type Component, type DefineComponent } from "vue"
 import { createInertiaApp } from "@inertiajs/vue3"
 
 import { applyTheme, isKnownTheme } from "./utils/theme"
+import FocusIndicatorHost from "./components/FocusIndicatorHost.vue"
 
 // Boot-time theme guard. The base.html template server-renders
 // `<html data-theme="…">` before any JS runs, so the DOM should already
@@ -11,6 +12,10 @@ import { applyTheme, isKnownTheme } from "./utils/theme"
 const initialTheme = document.documentElement.dataset.theme
 if (!isKnownTheme(initialTheme)) {
   applyTheme("classic")
+}
+
+export function createInertiaRoot(App: Component, props: object) {
+  return { render: () => h(FocusIndicatorHost, () => h(App, props)) }
 }
 
 createInertiaApp({
@@ -26,7 +31,7 @@ createInertiaApp({
     return page
   },
   setup({ el, App, props, plugin }) {
-    createApp({ render: () => h(App, props) })
+    createApp(createInertiaRoot(App, props))
       .use(plugin)
       .mount(el)
   },

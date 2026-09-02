@@ -34,6 +34,92 @@ DEFAULT_CHAT_SUGGESTIONS = [
 ]
 
 
+# 0072 opacity contract. These tests intentionally precede the model/API
+# implementation; GET, PATCH and Inertia serializers must stay shape-equal.
+def test_focus_indicator_opacity_default_and_dto_shape(user, auth_client):
+    dto = get_user_preferences(user)
+    assert dto.focus_indicator_opacity == 0.70
+    assert ui_preferences_payload(dto)["focus_indicator_opacity"] == 0.70
+    assert auth_client.get(reverse("user_preferences")).json()["focus_indicator_opacity"] == 0.70
+
+
+@pytest.mark.parametrize("value", [0.20, 1.00, 0.42])
+def test_focus_indicator_opacity_patch_round_trips(auth_client, user, value):
+    response = auth_client.patch(
+        reverse("user_preferences"),
+        data=json.dumps({"focus_indicator_opacity": value}),
+        content_type="application/json",
+    )
+    assert response.status_code == 200
+    assert response.json()["focus_indicator_opacity"] == value
+    assert UserPreferences.objects.get(user=user).focus_indicator_opacity == value
+
+
+@pytest.mark.parametrize(
+    "value",
+    [".7", None, True, [], {}, float("nan"), float("inf"), 0.19, 1.01, 10**400, -(10**400)],
+)
+def test_focus_indicator_opacity_invalid_patch_is_structured_and_atomic(auth_client, user, value):
+    UserPreferences.objects.create(user=user, theme="classic", chat_suggestions=["Original"])
+    response = auth_client.patch(
+        reverse("user_preferences"),
+        data=json.dumps({"theme": "strategic", "focus_indicator_opacity": value}),
+        content_type="application/json",
+    )
+    assert response.status_code == 400
+    assert "focus_indicator_opacity" in response.json()["errors"]
+    assert response.headers["Cache-Control"] == "private, no-store"
+    row = UserPreferences.objects.get(user=user)
+    assert row.theme == "classic"
+
+
+def test_focus_indicator_opacity_read_normalizes_without_writing(user):
+    UserPreferences.objects.create(user=user, theme="classic")
+    UserPreferences.objects.filter(user=user).update(focus_indicator_opacity=4.0)
+    assert get_user_preferences(user).focus_indicator_opacity == 1.0
+    assert UserPreferences.objects.get(user=user).focus_indicator_opacity == 4.0
+
+
+def _patch_prefs(client, payload):
+    return client.patch(
+        reverse("user_preferences"),
+        data=json.dumps(payload),
+        content_type="application/json",
+    )
+
+
+def test_focus_indicator_opacity_partial_patch_preserves_each_field(auth_client, user):
+    assert _patch_prefs(auth_client, {"focus_indicator_opacity": 0.33}).status_code == 200
+    # A theme-only PATCH must not reset opacity...
+    themed = _patch_prefs(auth_client, {"theme": "strategic"})
+    assert themed.json()["theme"] == "strategic"
+    assert themed.json()["focus_indicator_opacity"] == 0.33
+    # ...and an opacity-only PATCH must not reset theme.
+    opac = _patch_prefs(auth_client, {"focus_indicator_opacity": 0.88})
+    assert opac.json()["theme"] == "strategic"
+    assert opac.json()["focus_indicator_opacity"] == 0.88
+    assert UserPreferences.objects.get(user=user).focus_indicator_opacity == 0.88
+
+
+def test_focus_indicator_opacity_is_isolated_per_user(auth_client, user):
+    other = User.objects.create_user(username="other0072", password="otherpass123")
+    other_client = Client()
+    other_client.force_login(other)
+    assert _patch_prefs(auth_client, {"focus_indicator_opacity": 0.25}).status_code == 200
+    assert _patch_prefs(other_client, {"focus_indicator_opacity": 0.95}).status_code == 200
+    assert UserPreferences.objects.get(user=user).focus_indicator_opacity == 0.25
+    assert UserPreferences.objects.get(user=other).focus_indicator_opacity == 0.95
+    # The reader never bleeds one account's value into the other's response.
+    assert auth_client.get(reverse("user_preferences")).json()["focus_indicator_opacity"] == 0.25
+
+
+def test_focus_indicator_opacity_saved_value_flows_through_shared_payload(auth_client, user):
+    # Every Inertia page and the JSON API serialize through ui_preferences_payload;
+    # a saved value must survive that shared path (guards serializer drift).
+    assert _patch_prefs(auth_client, {"focus_indicator_opacity": 0.37}).status_code == 200
+    assert ui_preferences_payload(get_user_preferences(user))["focus_indicator_opacity"] == 0.37
+
+
 # ---------------------------------------------------------------------------
 # Helper / DTO contract
 # ---------------------------------------------------------------------------
@@ -56,11 +142,13 @@ def test_ui_preferences_payload_serializes_dto_shape():
     dto = UserPreferencesDTO(
         theme="strategic",
         chat_suggestions=("First", "Second"),
+        focus_indicator_opacity=0.70,
     )
 
     assert ui_preferences_payload(dto) == {
         "theme": "strategic",
         "chat_suggestions": ["First", "Second"],
+        "focus_indicator_opacity": 0.70,
     }
 
 
@@ -299,6 +387,7 @@ def test_get_first_call_returns_default_classic(auth_client):
     assert resp.json() == {
         "theme": "classic",
         "chat_suggestions": DEFAULT_CHAT_SUGGESTIONS,
+        "focus_indicator_opacity": 0.70,
     }
     assert resp.headers["Cache-Control"] == "private, no-store"
 
@@ -310,6 +399,7 @@ def test_get_returns_saved_theme(auth_client, user):
     assert resp.json() == {
         "theme": "strategic",
         "chat_suggestions": DEFAULT_CHAT_SUGGESTIONS,
+        "focus_indicator_opacity": 0.70,
     }
     assert resp.headers["Cache-Control"] == "private, no-store"
 
@@ -324,6 +414,7 @@ def test_get_returns_saved_ordered_suggestions(auth_client, user):
     assert resp.json() == {
         "theme": "classic",
         "chat_suggestions": saved,
+        "focus_indicator_opacity": 0.70,
     }
 
 
@@ -342,6 +433,7 @@ def test_patch_sets_theme(auth_client, user):
     assert resp.json() == {
         "theme": "strategic",
         "chat_suggestions": DEFAULT_CHAT_SUGGESTIONS,
+        "focus_indicator_opacity": 0.70,
     }
     assert resp.headers["Cache-Control"] == "private, no-store"
     assert UserPreferences.objects.get(user=user).theme == "strategic"
@@ -357,6 +449,7 @@ def test_patch_sets_dark_4a_theme(auth_client, user):
     assert resp.json() == {
         "theme": "dark_4a",
         "chat_suggestions": DEFAULT_CHAT_SUGGESTIONS,
+        "focus_indicator_opacity": 0.70,
     }
     assert UserPreferences.objects.get(user=user).theme == "dark_4a"
 
@@ -374,6 +467,7 @@ def test_patch_same_value_is_valid_noop(auth_client, user):
     assert resp.json() == {
         "theme": "classic",
         "chat_suggestions": DEFAULT_CHAT_SUGGESTIONS,
+        "focus_indicator_opacity": 0.70,
     }
 
 
@@ -406,6 +500,7 @@ def test_patch_chat_suggestions_round_trip_trims_and_preserves_order(
     assert resp.json() == {
         "theme": "classic",
         "chat_suggestions": expected,
+        "focus_indicator_opacity": 0.70,
     }
     assert UserPreferences.objects.get(user=user).chat_suggestions == expected
     assert auth_client.get(reverse("user_preferences")).json()[
@@ -456,6 +551,7 @@ def test_patch_combined_theme_and_suggestions(auth_client, user):
     assert resp.json() == {
         "theme": "dark_4a",
         "chat_suggestions": ["Focus now"],
+        "focus_indicator_opacity": 0.70,
     }
 
 
@@ -699,6 +795,7 @@ def test_patch_unknown_field_alongside_valid_theme_is_accepted(auth_client):
     assert resp.json() == {
         "theme": "strategic",
         "chat_suggestions": DEFAULT_CHAT_SUGGESTIONS,
+        "focus_indicator_opacity": 0.70,
     }
 
 
@@ -719,6 +816,7 @@ def test_preferences_isolated_per_user(db):
     assert resp.json() == {
         "theme": "strategic",
         "chat_suggestions": DEFAULT_CHAT_SUGGESTIONS,
+        "focus_indicator_opacity": 0.70,
     }
 
     client2 = Client()
@@ -727,6 +825,7 @@ def test_preferences_isolated_per_user(db):
     assert resp.json() == {
         "theme": "light_premium",
         "chat_suggestions": DEFAULT_CHAT_SUGGESTIONS,
+        "focus_indicator_opacity": 0.70,
     }
 
 
@@ -799,6 +898,7 @@ def test_schedule_view_includes_ui_preferences_prop(auth_client, user):
     assert page["props"]["ui_preferences"] == {
         "theme": "strategic",
         "chat_suggestions": ["Schedule prompt"],
+        "focus_indicator_opacity": 0.70,
     }
 
 
@@ -814,6 +914,7 @@ def test_settings_view_includes_ui_preferences_prop(auth_client, user):
     assert page["props"]["ui_preferences"] == {
         "theme": "light_premium",
         "chat_suggestions": ["Settings prompt"],
+        "focus_indicator_opacity": 0.70,
     }
 
 
@@ -846,6 +947,7 @@ def test_analytics_view_includes_ui_preferences_prop(auth_client, user):
     assert page["props"]["ui_preferences"] == {
         "theme": "strategic",
         "chat_suggestions": ["Analytics prompt"],
+        "focus_indicator_opacity": 0.70,
     }
 
 

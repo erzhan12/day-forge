@@ -119,6 +119,10 @@ vi.mock("../src/composables/useExternalSourcePoll", () => ({
 
 import Schedule from "../src/pages/Schedule.vue"
 import type { Schedule as ScheduleType, TimeBlock } from "../src/types"
+import {
+  clearFocusIndicatorShouldBeOpen,
+  readFocusIndicatorShouldBeOpen,
+} from "../src/utils/focusIndicatorStorage"
 
 const PRIVATE = ["Standup with Bob", "work", "2026-08-12", "09:00", "10:00"]
 
@@ -215,14 +219,17 @@ afterEach(() => {
   wrapper?.unmount()
   wrapper = null
   delete (window as unknown as { documentPictureInPicture?: unknown }).documentPictureInPicture
+  clearFocusIndicatorShouldBeOpen()
   vi.unstubAllGlobals()
 })
 
 function installFakePip(win: ReturnType<typeof makeFakeWindow>) {
+  const requestWindow = vi.fn().mockResolvedValue(win)
   ;(window as unknown as { documentPictureInPicture: unknown }).documentPictureInPicture = {
-    requestWindow: vi.fn().mockResolvedValue(win),
+    requestWindow,
     window: null,
   }
+  return requestWindow
 }
 
 describe("Schedule.vue focus indicator", () => {
@@ -245,6 +252,57 @@ describe("Schedule.vue focus indicator", () => {
     mountPage([makeBlock()])
     await flushPromises()
     expect(wrapper!.find(".show-indicator-btn").exists()).toBe(true)
+    expect(wrapper!.text()).toContain("Show indicator")
+  })
+
+  it("Hide explicitly closes and clears intent, then Show opens again", async () => {
+    const win = makeFakeWindow()
+    const requestWindow = installFakePip(win)
+    mountPage([makeBlock()])
+    await wrapper!.get(".show-indicator-btn").trigger("click")
+    await flushPromises()
+    expect(wrapper!.text()).toContain("Hide indicator")
+    expect(readFocusIndicatorShouldBeOpen()).toBe(true)
+
+    await wrapper!.get(".show-indicator-btn").trigger("click")
+    await flushPromises()
+    expect(win.close).toHaveBeenCalledTimes(1)
+    expect(readFocusIndicatorShouldBeOpen()).toBe(false)
+    expect(wrapper!.text()).toContain("Show indicator")
+
+    await wrapper!.get(".show-indicator-btn").trigger("click")
+    await flushPromises()
+    expect(requestWindow).toHaveBeenCalledTimes(2)
+    expect(wrapper!.text()).toContain("Hide indicator")
+  })
+
+  it("the in-PiP close control returns the schedule header to Show", async () => {
+    const win = makeFakeWindow()
+    installFakePip(win)
+    mountPage([makeBlock()])
+    await wrapper!.get(".show-indicator-btn").trigger("click")
+    await flushPromises()
+    expect(wrapper!.text()).toContain("Hide indicator")
+
+    ;(win.document.querySelector(".fi-close") as HTMLButtonElement).click()
+    await flushPromises()
+
+    expect(win.close).toHaveBeenCalledTimes(1)
+    expect(wrapper!.text()).toContain("Show indicator")
+  })
+
+  it("browser PiP pagehide clears restore intent and returns the header to Show", async () => {
+    const win = makeFakeWindow()
+    installFakePip(win)
+    mountPage([makeBlock()])
+    await wrapper!.get(".show-indicator-btn").trigger("click")
+    await flushPromises()
+    expect(readFocusIndicatorShouldBeOpen()).toBe(true)
+
+    win._emit("pagehide")
+    await flushPromises()
+
+    expect(readFocusIndicatorShouldBeOpen()).toBe(false)
     expect(wrapper!.text()).toContain("Show indicator")
   })
 

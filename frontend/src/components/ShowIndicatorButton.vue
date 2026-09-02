@@ -7,21 +7,23 @@ import { computed } from "vue"
 const props = defineProps<{
   supported: boolean
   isOpen: boolean
+  shouldRestore?: boolean
   error: string | null
 }>()
 
-const emit = defineEmits<{ (e: "open"): void }>()
+const emit = defineEmits<{ (e: "open"): void; (e: "close"): void }>()
 
-const disabled = computed(() => !props.supported || props.isOpen)
+const disabled = computed(() => !props.supported)
 
 const label = computed(() => {
   if (!props.supported) return "Indicator not supported"
-  return props.isOpen ? "Indicator open" : "Show indicator"
+  return props.isOpen ? "Hide indicator" : "Show indicator"
 })
 
 function handleClick() {
   if (disabled.value) return
-  emit("open")
+  if (props.isOpen) emit("close")
+  else emit("open")
 }
 </script>
 
@@ -31,6 +33,7 @@ function handleClick() {
       type="button"
       class="show-indicator-btn"
       :disabled="disabled"
+      :aria-description="shouldRestore && !isOpen ? 'Reopen focus indicator' : undefined"
       :title="!supported ? 'Focus indicator is not supported in this browser.' : undefined"
       @click="handleClick"
     >

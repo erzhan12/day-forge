@@ -26,5 +26,11 @@ export function usePreferences() {
     })
   }
 
-  return { saveTheme, saveChatSuggestions }
+  async function saveFocusIndicatorOpacity(opacity: number): Promise<ApiResult> {
+    return requestJson("/api/user/preferences/", "PATCH", {
+      focus_indicator_opacity: opacity,
+    })
+  }
+
+  return { saveTheme, saveChatSuggestions, saveFocusIndicatorOpacity }
 }

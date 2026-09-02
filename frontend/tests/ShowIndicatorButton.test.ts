@@ -4,7 +4,7 @@ import ShowIndicatorButton from "../src/components/ShowIndicatorButton.vue"
 
 function mountBtn(props: Record<string, unknown> = {}) {
   return mount(ShowIndicatorButton, {
-    props: { supported: true, isOpen: false, error: null, ...props },
+    props: { supported: true, isOpen: false, shouldRestore: false, error: null, ...props },
   })
 }
 
@@ -18,13 +18,13 @@ describe("ShowIndicatorButton", () => {
     expect(w.emitted("open")).toHaveLength(1)
   })
 
-  it("shows a disabled 'Indicator open' status when open, and does not emit", async () => {
+  it("shows enabled Hide indicator when open and emits close", async () => {
     const w = mountBtn({ supported: true, isOpen: true })
     const btn = w.find("button")
-    expect(btn.text()).toContain("Indicator open")
-    expect(btn.attributes("disabled")).toBeDefined()
+    expect(btn.text()).toContain("Hide indicator")
+    expect(btn.attributes("disabled")).toBeUndefined()
     await btn.trigger("click")
-    expect(w.emitted("open")).toBeUndefined()
+    expect(w.emitted("close")).toHaveLength(1)
   })
 
   it("is disabled with a concise explanation when unsupported", () => {
@@ -44,6 +44,13 @@ describe("ShowIndicatorButton", () => {
   it("does not auto-emit on mount", () => {
     const w = mountBtn({ supported: true, isOpen: false })
     expect(w.emitted("open")).toBeUndefined()
+  })
+
+  it("exposes a distinct accessible restore affordance", () => {
+    const normal = mountBtn({ shouldRestore: false }).get("button")
+    const restore = mountBtn({ shouldRestore: true }).get("button")
+    expect(restore.attributes("aria-description")).toBe("Reopen focus indicator")
+    expect(normal.attributes("aria-description")).toBeUndefined()
   })
 
   it("renders an accessible error while leaving retry available", async () => {

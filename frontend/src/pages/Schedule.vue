@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, provide, toRef, watch } from "vue"
+import { computed, inject, onBeforeUnmount, ref, provide, toRef, watch } from "vue"
 import { Link, router } from "@inertiajs/vue3"
 import type { TimeBlock as TimeBlockType, Schedule, ScheduleSettingsWire, TravelRule, UserCategory } from "../types"
 import TimeZoneMismatchPrompt from "../components/TimeZoneMismatchPrompt.vue"
@@ -17,14 +17,10 @@ import ExternalRail4a from "../components/ExternalRail4a.vue"
 import DraftBadge from "../components/DraftBadge.vue"
 import RegenerateDraftButton from "../components/RegenerateDraftButton.vue"
 import ShowIndicatorButton from "../components/ShowIndicatorButton.vue"
-import FocusIndicatorView from "../components/FocusIndicatorView.vue"
-import { useFocusIndicator } from "../composables/useFocusIndicator"
 import {
-  activeUnfinishedBlock,
-  nextBlockAfter,
-  progressRatio,
-  progressPercentFromRatio,
-} from "../utils/focusIndicator"
+  FocusIndicatorControllerKey,
+  useFocusIndicatorController,
+} from "../composables/useFocusIndicatorController"
 import { todayString } from "../utils/date"
 import { useViewport } from "../composables/useViewport"
 import {
@@ -587,55 +583,22 @@ const currentBlockRemaining = computed(() =>
     : null
 )
 
-// --- Focus indicator: active progress (0049) and idle next-block gap (0066) ---
-const indicatorActiveBlock = computed(() =>
-  activeUnfinishedBlock(effectiveBlocks.value, nowMinutes.value, nowDate.value),
-)
-// Computed once per tick, read by both indicatorActive and indicatorPercent.
-const indicatorProgressRatio = computed(() => {
-  const b = indicatorActiveBlock.value
-  if (b === null || nowMinutes.value === null) return null
-  return progressRatio(b, nowMinutes.value)
+// The production root provides this long-lived owner. Direct Schedule mounts
+// in focused component tests retain a component-scoped fallback.
+const focusIndicatorController = inject(FocusIndicatorControllerKey, null) ?? useFocusIndicatorController()
+watch([() => props.date, effectiveBlocks], ([date, blocks]) => {
+  focusIndicatorController.publish(date, blocks)
+}, { immediate: true, deep: true })
+onBeforeUnmount(() => {
+  // A drag preview can be abandoned during page swap; retain canonical data.
+  focusIndicatorController.publish(props.date, props.blocks)
 })
-const indicatorActive = computed(() => indicatorProgressRatio.value !== null)
-const indicatorPercent = computed(() =>
-  progressPercentFromRatio(indicatorProgressRatio.value),
-)
-const indicatorRemaining = computed(() => {
-  const b = indicatorActiveBlock.value
-  if (b === null || nowMinutes.value === null) return null
-  return remainingMinutesForBlock(b, nowMinutes.value)
-})
-// Active rendering always wins: only an idle indicator may expose the next
-// block's title in the PiP body.
-const indicatorNextBlock = computed(() =>
-  indicatorActive.value
-    ? null
-    : nextBlockAfter(effectiveBlocks.value, nowMinutes.value, nowDate.value),
-)
-const indicatorNextBlockTitle = computed(() => indicatorNextBlock.value?.title ?? null)
-const indicatorNextBlockRemaining = computed(() => {
-  const block = indicatorNextBlock.value
-  if (block === null || nowMinutes.value === null) return null
-  // nextBlockAfter already guaranteed a finite start strictly after now, so
-  // this re-parse + guard is belt-and-suspenders (kept, not dead code): the
-  // parsed start isn't returned by the helper, and the guard keeps this
-  // computed self-contained against any future change to that guarantee.
-  const remaining = timeToMinutes(block.start_time) - nowMinutes.value
-  return Number.isFinite(remaining) && remaining > 0 ? remaining : null
-})
-
-const focusIndicator = useFocusIndicator({
-  component: FocusIndicatorView,
-  props: () => ({
-    active: indicatorActive.value,
-    progressPercent: indicatorPercent.value,
-    remainingMinutes: indicatorRemaining.value,
-    nextBlockTitle: indicatorNextBlockTitle.value,
-    nextBlockRemainingMinutes: indicatorNextBlockRemaining.value,
-    errorState: false,
-  }),
-})
+const focusIndicator = focusIndicatorController.focusIndicator
+const indicatorActive = focusIndicatorController.indicatorActive
+const indicatorPercent = focusIndicatorController.indicatorPercent
+const indicatorNextBlock = focusIndicatorController.indicatorNextBlock
+const indicatorNextBlockTitle = focusIndicatorController.indicatorNextBlockTitle
+const indicatorNextBlockRemaining = focusIndicatorController.indicatorNextBlockRemaining
 const focusIndicatorSupported = focusIndicator.supported
 const focusIndicatorOpen = focusIndicator.isOpen
 const focusIndicatorOpenError = focusIndicator.openError
@@ -752,8 +715,10 @@ defineExpose({
         <ShowIndicatorButton
           :supported="focusIndicatorSupported"
           :is-open="focusIndicatorOpen"
+          :should-restore="focusIndicator.shouldRestore.value"
           :error="focusIndicatorOpenError"
           @open="openFocusIndicator"
+          @close="focusIndicator.cleanup"
         />
         <Link
           v-if="showAnalyticsLink"

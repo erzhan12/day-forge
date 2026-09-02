@@ -18,6 +18,8 @@ const props = withDefaults(
   { remainingMinutes: null, nextBlockTitle: null, nextBlockRemainingMinutes: null },
 )
 
+const emit = defineEmits<{ (e: "close"): void }>()
+
 // Non-color state cue (state must not be conveyed by color alone).
 const stateName = computed(() =>
   props.errorState ? "error" : props.active ? "active" : "neutral",
@@ -74,5 +76,6 @@ const nextBlockRemainingLabel = computed(() =>
       <span class="fi-neutral" aria-hidden="true">—</span>
       <span class="fi-sr-only">No active block</span>
     </template>
+    <button type="button" class="fi-close" aria-label="Close focus indicator" @click="emit('close')">×</button>
   </div>
 </template>

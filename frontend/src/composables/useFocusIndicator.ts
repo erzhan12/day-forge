@@ -1,4 +1,6 @@
-import { type App, type Component, createApp, getCurrentInstance, h, onUnmounted, ref } from "vue"
+import { computed, type App, type Component, createApp, getCurrentInstance, h, onUnmounted, ref } from "vue"
+import { normalizeFocusIndicatorOpacity } from "../utils/focusIndicatorOpacity"
+import { clearFocusIndicatorShouldBeOpen, readFocusIndicatorShouldBeOpen, writeFocusIndicatorShouldBeOpen } from "../utils/focusIndicatorStorage"
 
 const PIP_WIDTH = 280
 const PIP_HEIGHT = 60
@@ -11,10 +13,10 @@ const PIP_OPEN_ERROR_DURATION_MS = 5_000
 // view's layout rules here rather than cloning app.css — Vue scoped CSS never
 // reaches a foreign Document.
 const PIP_STYLES = `
-  :root { color-scheme: light dark; }
-  html, body { margin: 0; width: 100%; height: 100%; }
-  body { display: flex; align-items: center; color: CanvasText; background: Canvas; }
-  .fi-root { width: 100%; flex: 1; min-width: 0; }
+  :root { color-scheme: light dark; --focus-indicator-opacity: 0.70; }
+  html, body { margin: 0; width: 100%; height: 100%; background: transparent; }
+  body { color: CanvasText; }
+  .fi-root { width: 100%; height: 100%; flex: 1; min-width: 0; display: flex; align-items: center; background: Canvas; opacity: var(--focus-indicator-opacity, 0.70); }
   .focus-indicator {
     display: flex;
     align-items: center;
@@ -37,7 +39,6 @@ const PIP_STYLES = `
     font-size: 12px;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
-    opacity: 0.85;
   }
   .fi-next-title {
     flex: 1;
@@ -53,7 +54,6 @@ const PIP_STYLES = `
     font-size: 12px;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
-    opacity: 0.85;
   }
   .fi-fill {
     height: 100%;
@@ -70,10 +70,10 @@ const PIP_STYLES = `
     text-transform: uppercase;
     letter-spacing: 0.04em;
   }
+  .fi-close { flex: none; border: 0; background: transparent; color: inherit; font: inherit; font-size: 18px; line-height: 1; padding: 2px; cursor: pointer; }
   .fi-neutral {
     flex: 1;
     text-align: center;
-    opacity: 0.6;
   }
   .fi-sr-only {
     position: absolute;
@@ -100,9 +100,9 @@ interface FocusIndicatorConfig {
    * repaints live (see 0049 plan § reactive-bridge).
    */
   props: () => Record<string, unknown>
-  title?: string
   width?: number
   height?: number
+  opacity?: unknown
 }
 
 /**
@@ -118,6 +118,9 @@ export function useFocusIndicator(config: FocusIndicatorConfig) {
 
   const isOpen = ref(false)
   const openError = ref<string | null>(null)
+  const storedShouldBeOpen = ref(readFocusIndicatorShouldBeOpen())
+  const shouldRestore = computed(() => supported && !isOpen.value && storedShouldBeOpen.value)
+  let opacity = normalizeFocusIndicatorOpacity(config.opacity)
   let pipWindow: Window | null = null
   let app: App | null = null
   let pendingOpen = false
@@ -125,6 +128,7 @@ export function useFocusIndicator(config: FocusIndicatorConfig) {
   // Bumped by cleanup()/dispose so a request that resolves after teardown
   // closes its just-created window instead of adopting an orphan.
   let epoch = 0
+  let openerUnloading = false
 
   function clearOpenError(): void {
     if (openErrorTimer !== null) {
@@ -158,7 +162,27 @@ export function useFocusIndicator(config: FocusIndicatorConfig) {
 
   function onPagehide(): void {
     // The window is already going away; just release our side.
+    if (!openerUnloading) {
+      clearFocusIndicatorShouldBeOpen()
+      storedShouldBeOpen.value = false
+    }
     teardown(false)
+  }
+
+  function setOpacity(value: unknown): void {
+    opacity = normalizeFocusIndicatorOpacity(value)
+    pipWindow?.document.documentElement.style.setProperty("--focus-indicator-opacity", String(opacity))
+    pipWindow?.document.querySelector<HTMLElement>(".fi-root")?.style.setProperty(
+      "--focus-indicator-opacity", String(opacity),
+    )
+  }
+
+  const markOpenerUnloading = () => { openerUnloading = true }
+  const clearOpenerUnloading = () => { openerUnloading = false }
+  if (typeof window !== "undefined") {
+    window.addEventListener("beforeunload", markOpenerUnloading)
+    window.addEventListener("pagehide", markOpenerUnloading)
+    window.addEventListener("pageshow", clearOpenerUnloading)
   }
 
   async function open(): Promise<void> {
@@ -185,19 +209,22 @@ export function useFocusIndicator(config: FocusIndicatorConfig) {
       }
       pendingOpen = false
       pipWindow = win
-      win.document.title = config.title ?? PIP_TITLE
+      win.document.title = PIP_TITLE
       const style = win.document.createElement("style")
       style.textContent = PIP_STYLES
       win.document.head.appendChild(style)
       const rootEl = win.document.createElement("div")
       rootEl.className = "fi-root"
+      rootEl.style.setProperty("--focus-indicator-opacity", String(opacity))
       win.document.body.appendChild(rootEl)
       // Render function re-reads config.props() each render → the shared refs it
       // dereferences are tracked, so the PiP repaints on every reactive change.
-      app = createApp({ render: () => h(config.component, config.props()) })
+      app = createApp({ render: () => h(config.component, { ...config.props(), onClose: cleanup }) })
       app.mount(rootEl)
       win.addEventListener("pagehide", onPagehide)
       isOpen.value = true
+      writeFocusIndicatorShouldBeOpen(true)
+      storedShouldBeOpen.value = true
     } catch (err) {
       // Any mid-setup failure (rejected requestWindow, or a throw after
       // `pipWindow = win` but before `isOpen`) must close the partially-opened
@@ -233,10 +260,26 @@ export function useFocusIndicator(config: FocusIndicatorConfig) {
     epoch++
     pendingOpen = false
     clearOpenError()
+    clearFocusIndicatorShouldBeOpen()
+    storedShouldBeOpen.value = false
     teardown(true)
   }
 
-  if (getCurrentInstance()) onUnmounted(cleanup)
+  function dispose(): void {
+    epoch++
+    pendingOpen = false
+    clearOpenError()
+    teardown(true)
+    if (typeof window !== "undefined") {
+      window.removeEventListener("beforeunload", markOpenerUnloading)
+      window.removeEventListener("pagehide", markOpenerUnloading)
+      window.removeEventListener("pageshow", clearOpenerUnloading)
+    }
+  }
 
-  return { supported, isOpen, openError, open, cleanup }
+  // Unmount is never an explicit user close. The root owner uses this for a
+  // hard reload/unload, preserving the gesture-gated device restore intent.
+  if (getCurrentInstance()) onUnmounted(dispose)
+
+  return { supported, isOpen, openError, shouldRestore, open, cleanup, dispose, setOpacity }
 }

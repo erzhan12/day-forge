@@ -3,6 +3,11 @@ import { flushPromises } from "@vue/test-utils"
 import { defineComponent, h, nextTick, ref } from "vue"
 import { useFocusIndicator } from "../src/composables/useFocusIndicator"
 import FocusIndicatorView from "../src/components/FocusIndicatorView.vue"
+import {
+  clearFocusIndicatorShouldBeOpen,
+  readFocusIndicatorShouldBeOpen,
+  writeFocusIndicatorShouldBeOpen,
+} from "../src/utils/focusIndicatorStorage"
 
 // A minimal component that renders aria-valuenow from a prop, so we can prove
 // the PiP view stays reactive after open.
@@ -43,11 +48,90 @@ function installFakePip(win?: ReturnType<typeof makeFakeWindow>) {
 
 afterEach(() => {
   delete (window as unknown as { documentPictureInPicture?: unknown }).documentPictureInPicture
+  clearFocusIndicatorShouldBeOpen()
   vi.useRealTimers()
   vi.restoreAllMocks()
 })
 
 describe("useFocusIndicator", () => {
+  it("applies default opacity to one full Canvas root and updates it live", async () => {
+    const win = makeFakeWindow()
+    const requestWindow = installFakePip(win)
+    const fi = useFocusIndicator({ component: Probe, props: () => ({ value: 0 }) })
+    await fi.open()
+    const root = win.document.querySelector(".fi-root") as HTMLElement
+    expect(root.style.getPropertyValue("--focus-indicator-opacity")).toBe("0.7")
+    expect(requestWindow).toHaveBeenCalledTimes(1)
+    fi.setOpacity(0.44)
+    expect(root.style.getPropertyValue("--focus-indicator-opacity")).toBe("0.44")
+    expect(requestWindow).toHaveBeenCalledTimes(1)
+    expect(win.close).not.toHaveBeenCalled()
+    expect(win.document.title).toBe("Focus")
+  })
+
+  it("records successful opens and explicit close in restore state", async () => {
+    const win = makeFakeWindow()
+    installFakePip(win)
+    const fi = useFocusIndicator({ component: Probe, props: () => ({ value: 0 }) })
+    await fi.open()
+    expect(fi.shouldRestore.value).toBe(false)
+    fi.cleanup()
+    expect(fi.shouldRestore.value).toBe(false)
+  })
+
+  it("exposes a stored restore intent while the supported PiP is closed", () => {
+    installFakePip()
+    writeFocusIndicatorShouldBeOpen(true)
+
+    const fi = useFocusIndicator({ component: Probe, props: () => ({ value: 0 }) })
+
+    expect(fi.isOpen.value).toBe(false)
+    expect(fi.shouldRestore.value).toBe(true)
+    fi.dispose()
+  })
+
+  it("preserves restore intent for PiP pagehide during opener unload, unlike a normal PiP close", async () => {
+    const unloadingWin = makeFakeWindow()
+    installFakePip(unloadingWin)
+    const unloading = useFocusIndicator({ component: Probe, props: () => ({ value: 0 }) })
+    await unloading.open()
+    window.dispatchEvent(new Event("beforeunload"))
+    unloadingWin._emit("pagehide")
+
+    expect(unloading.isOpen.value).toBe(false)
+    expect(readFocusIndicatorShouldBeOpen()).toBe(true)
+
+    const normalWin = makeFakeWindow()
+    installFakePip(normalWin)
+    const normal = useFocusIndicator({ component: Probe, props: () => ({ value: 0 }) })
+    await normal.open()
+    normalWin._emit("pagehide")
+
+    expect(normal.isOpen.value).toBe(false)
+    expect(readFocusIndicatorShouldBeOpen()).toBe(false)
+    unloading.dispose()
+    normal.dispose()
+  })
+
+  it("dispose preserves intent and removes opener listeners, while cleanup clears intent", async () => {
+    const removeListener = vi.spyOn(window, "removeEventListener")
+    const win = makeFakeWindow()
+    installFakePip(win)
+    const fi = useFocusIndicator({ component: Probe, props: () => ({ value: 0 }) })
+    await fi.open()
+
+    fi.dispose()
+
+    expect(readFocusIndicatorShouldBeOpen()).toBe(true)
+    expect(removeListener).toHaveBeenCalledWith("beforeunload", expect.any(Function))
+    expect(removeListener).toHaveBeenCalledWith("pagehide", expect.any(Function))
+    expect(removeListener).toHaveBeenCalledWith("pageshow", expect.any(Function))
+
+    const explicit = useFocusIndicator({ component: Probe, props: () => ({ value: 0 }) })
+    explicit.cleanup()
+    expect(readFocusIndicatorShouldBeOpen()).toBe(false)
+    explicit.dispose()
+  })
   it("reports supported=false and open() is a non-throwing no-op when the API is absent", async () => {
     delete (window as unknown as { documentPictureInPicture?: unknown }).documentPictureInPicture
     const fi = useFocusIndicator({ component: Probe, props: () => ({ value: 0 }) })

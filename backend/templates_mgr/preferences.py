@@ -11,9 +11,15 @@ so that:
    write-on-read hazards if a caller later does ``.save()`` on the result.
 """
 
+import math
 from dataclasses import dataclass
 
-from templates_mgr.models import UserPreferences
+from templates_mgr.models import (
+    FOCUS_INDICATOR_OPACITY_DEFAULT,
+    FOCUS_INDICATOR_OPACITY_MAX,
+    FOCUS_INDICATOR_OPACITY_MIN,
+    UserPreferences,
+)
 
 # SYNC ALERT: mirror these defaults and limits in the Phase 2 frontend utility
 # `frontend/src/utils/chatSuggestions.ts`.
@@ -37,6 +43,7 @@ class UserPreferencesDTO:
 
     theme: str
     chat_suggestions: tuple[str, ...]
+    focus_indicator_opacity: float
 
 
 def ui_preferences_payload(prefs: UserPreferencesDTO) -> dict:
@@ -44,6 +51,7 @@ def ui_preferences_payload(prefs: UserPreferencesDTO) -> dict:
     return {
         "theme": prefs.theme,
         "chat_suggestions": list(prefs.chat_suggestions),
+        "focus_indicator_opacity": prefs.focus_indicator_opacity,
     }
 
 
@@ -68,6 +76,13 @@ def normalize_chat_suggestions(raw) -> list[str]:
     return [trimmed for item in raw if (trimmed := item.strip())]
 
 
+def normalize_focus_indicator_opacity(raw) -> float:
+    """Return a finite stored opacity clamped for display, without writing."""
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)) or not math.isfinite(raw):
+        return FOCUS_INDICATOR_OPACITY_DEFAULT
+    return max(FOCUS_INDICATOR_OPACITY_MIN, min(FOCUS_INDICATOR_OPACITY_MAX, float(raw)))
+
+
 def get_user_preferences(user) -> UserPreferencesDTO:
     """Return the user's preferences as a frozen DTO.
 
@@ -86,9 +101,13 @@ def get_user_preferences(user) -> UserPreferencesDTO:
     """
     prefs, _ = UserPreferences.objects.get_or_create(
         user=user,
-        defaults={"theme": UserPreferences.Theme.CLASSIC},
+        defaults={
+            "theme": UserPreferences.Theme.CLASSIC,
+            "focus_indicator_opacity": FOCUS_INDICATOR_OPACITY_DEFAULT,
+        },
     )
     return UserPreferencesDTO(
         theme=normalize_theme(prefs.theme),
         chat_suggestions=tuple(normalize_chat_suggestions(prefs.chat_suggestions)),
+        focus_indicator_opacity=normalize_focus_indicator_opacity(prefs.focus_indicator_opacity),
     )

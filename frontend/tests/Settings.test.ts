@@ -14,6 +14,7 @@ vi.mock("@inertiajs/vue3", () => ({
     props: {
       ui_preferences: {
         theme: "classic",
+        focus_indicator_opacity: 0.42,
         chat_suggestions: [
           "Plan my remaining day",
           "Add a focused work block",
@@ -152,6 +153,15 @@ describe("Settings topic shell", () => {
       .toBeUndefined()
     expect(wrapper.get('[data-settings-topic="integrations"]').attributes())
       .toHaveProperty("hidden")
+  })
+
+  it("keeps the persisted opacity slider alongside the design selector in Appearance", () => {
+    stubMatchMedia(true)
+    wrapper = mountSettings()
+    const appearance = wrapper.get('[data-settings-topic="appearance"]')
+
+    expect(appearance.get('[data-testid="design-selector"]').exists()).toBe(true)
+    expect(appearance.get('input[type="range"]#focus-indicator-opacity').element.value).toBe("0.42")
   })
 
   it("marks topic headings for scroll-margin under the sticky mobile select", () => {

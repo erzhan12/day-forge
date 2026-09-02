@@ -33,7 +33,7 @@ describe("FocusIndicatorView", () => {
     expect(label.text()).toBe("23m left")
     const html = w.html()
     expect(html.indexOf("fi-bar")).toBeLessThan(html.indexOf("fi-remaining"))
-    expect(w.find("button").exists()).toBe(false)
+    expect(w.find(".fi-complete").exists()).toBe(false)
     for (const s of PRIVATE) expect(html).not.toContain(s)
   })
 
@@ -50,7 +50,6 @@ describe("FocusIndicatorView", () => {
 
   it("does not render a Complete control", () => {
     const w = mountView({ active: true })
-    expect(w.find("button").exists()).toBe(false)
     expect(w.find(".fi-complete").exists()).toBe(false)
     for (const s of PRIVATE) expect(w.html()).not.toContain(s)
   })
@@ -58,7 +57,7 @@ describe("FocusIndicatorView", () => {
   it("renders neutral (no bar, no Complete) when inactive", () => {
     const w = mountView({ active: false })
     expect(w.find('[role="progressbar"]').exists()).toBe(false)
-    expect(w.find("button").exists()).toBe(false)
+    expect(w.find(".fi-complete").exists()).toBe(false)
   })
 
   it("renders a valid inactive next-block title and shared formatted countdown", () => {
@@ -125,7 +124,7 @@ describe("FocusIndicatorView", () => {
   it("in error state keeps the bar and shows a generic retry affordance", () => {
     const w = mountView({ active: true, errorState: true })
     expect(w.find('[role="progressbar"]').exists()).toBe(true)
-    expect(w.find("button").exists()).toBe(false)
+    expect(w.find(".fi-complete").exists()).toBe(false)
     const retry = w.find(".fi-retry")
     expect(retry.exists()).toBe(true)
     expect(retry.text()).toBe("Retry")
@@ -146,5 +145,17 @@ describe("FocusIndicatorView", () => {
         "data-state",
       ),
     ).toBe("error")
+  })
+
+  it.each([
+    { active: true, errorState: false },
+    { active: false, errorState: false },
+    { active: true, errorState: true },
+  ])("has a generic close control in every state", async (props) => {
+    const w = mountView(props)
+    const close = w.get('button[aria-label="Close focus indicator"]')
+    expect(close.text()).not.toMatch(/Standup|work|2026|09:00/)
+    await close.trigger("click")
+    expect(w.emitted("close")).toHaveLength(1)
   })
 })
