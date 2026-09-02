@@ -116,6 +116,21 @@ describe("FocusIndicatorHost", () => {
     wrapper.unmount()
   })
 
+  it("opens the PiP at the account opacity present from the first mount", async () => {
+    page.props.ui_preferences.focus_indicator_opacity = 0.33
+    const win = makeFakeWindow()
+    installFakePip(win)
+    const wrapper = mount(FocusIndicatorHost, {
+      slots: { default: () => h(Publisher, { blocks: [block()] }) },
+    })
+    await controller!.focusIndicator.open()
+    await flushPromises()
+
+    const root = win.document.querySelector(".fi-root") as HTMLElement
+    expect(root.style.getPropertyValue("--focus-indicator-opacity")).toBe("0.33")
+    wrapper.unmount()
+  })
+
   it("closes and drops retained schedule data on the definite Login transition", async () => {
     const win = makeFakeWindow()
     installFakePip(win)

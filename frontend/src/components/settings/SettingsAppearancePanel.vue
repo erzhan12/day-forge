@@ -57,7 +57,10 @@ function settleThenCommitQueued(): void {
 
 function reconcileAfterReload(sent: number, sentGeneration: number, failed: boolean): void {
   if (!isMounted) return
-  if (generation === sentGeneration && opacity.value === sent) {
+  // An out-of-generation reconcile belongs to a superseded commit — a newer
+  // slider move now owns the preview and the message state, so do nothing.
+  if (generation !== sentGeneration) return
+  if (opacity.value === sent) {
     // The PATCH we just made is the authoritative account value. A genuinely
     // newer cross-session write is reconciled by the `!inFlight` prop watcher on
     // its next Inertia update, so we do not force the reloaded prop here.

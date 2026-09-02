@@ -169,6 +169,14 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
 
 ## Follow-ups (discovered during manual testing)
 
+- [ ] **0072-followup: `useFocusIndicator.test.ts` listener hygiene (PR #190, P3).**
+  Several tests call `useFocusIndicator(...)` directly without `fi.dispose()`, so
+  each registers `beforeunload`/`pagehide`/`pageshow` listeners on the shared jsdom
+  `window` that accumulate across the file. Add an `afterEach(() => fi?.dispose())`
+  (or per-test dispose) to prevent listener buildup. Deferred: the full suite is
+  green today with no observed ordering interference; this is preventive hygiene,
+  not a correctness fix, and touches many test bodies.
+
 - [ ] **PiP `errorState` is dead (PR #166, P3).** `Schedule.vue` hardcodes
   `errorState: false` into `useFocusIndicator`, so `FocusIndicatorView`'s
   error prop, `.fi-retry`, and the matching `PIP_STYLES` rules are unreachable

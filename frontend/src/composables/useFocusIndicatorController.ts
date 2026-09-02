@@ -38,7 +38,14 @@ export function useFocusIndicatorController(): FocusIndicatorController {
   const retainedDate = ref("")
   const retainedBlocks = ref<TimeBlock[]>([])
   const { nowMinutes, nowDate } = useNowMinutes(retainedDate)
-  const opacity = ref(FOCUS_INDICATOR_OPACITY_DEFAULT)
+  // Seed from the account prop so the initial useFocusIndicator() below is
+  // constructed with the correct opacity from the start — rather than relying on
+  // the immediate watch to patch a default snapshot before the first open().
+  const opacity = ref(
+    normalizeFocusIndicatorOpacity(
+      page?.props?.ui_preferences?.focus_indicator_opacity ?? FOCUS_INDICATOR_OPACITY_DEFAULT,
+    ),
+  )
 
   const activeBlock = computed(() =>
     activeUnfinishedBlock(retainedBlocks.value, nowMinutes.value, nowDate.value),

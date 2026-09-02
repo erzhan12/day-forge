@@ -211,6 +211,29 @@ describe("SettingsAppearancePanel opacity", () => {
     expect(w.find('[role="alert"]').exists()).toBe(false)
   })
 
+  it("suppresses a superseded commit's reload-failure warning after a newer slider move", async () => {
+    const aPatch = deferred<{ ok: true }>()
+    const bPatch = deferred<{ ok: true }>()
+    saveFocusIndicatorOpacity
+      .mockReturnValueOnce(aPatch.promise)
+      .mockReturnValueOnce(bPatch.promise)
+    reload.mockImplementation((options) => { options.onError?.(); options.onFinish?.() })
+    const w = mountPanel()
+    const input = w.get('input[type="range"]')
+
+    await input.setValue("0.50")   // commit A in flight (generation 1)
+    await input.setValue("0.66")   // generation 2, B queued
+
+    aPatch.resolve({ ok: true })   // A's reload fails, but A is now superseded (gen 2 != 1)
+    await flushPromises()
+    // No stale "Opacity saved" warning from the superseded commit while B is in flight.
+    expect(w.find('[role="status"]').exists()).toBe(false)
+
+    bPatch.resolve({ ok: true })   // B's reload fails for the CURRENT value → legit warning
+    await flushPromises()
+    expect(w.find('[role="status"]').exists()).toBe(true)
+  })
+
   it("recovers and keeps committing when a save promise rejects", async () => {
     saveFocusIndicatorOpacity
       .mockRejectedValueOnce(new Error("boom"))

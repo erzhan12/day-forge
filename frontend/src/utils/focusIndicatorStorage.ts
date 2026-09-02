@@ -1,3 +1,10 @@
+// Intentionally DEVICE-GLOBAL, not per-user: the restore intent is a property of
+// this browser/device, and the canonical cleanup is the Login-transition guard in
+// useFocusIndicatorController.ts (which clears it on logout). Do NOT add a
+// user-id suffix — that would break the device-restore UX. The only residual is
+// that after an ungraceful session end (crash without logout) the restore *hint*
+// (a boolean; the block snapshot is memory-only and gone) may briefly appear for
+// the next user on the same device.
 const KEY = "day-forge:focus-indicator:should-be-open"
 let memoryValue = false
 
