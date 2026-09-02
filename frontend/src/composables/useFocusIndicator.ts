@@ -171,7 +171,9 @@ export function useFocusIndicator(config: FocusIndicatorConfig) {
 
   function setOpacity(value: unknown): void {
     opacity = normalizeFocusIndicatorOpacity(value)
-    pipWindow?.document.documentElement.style.setProperty("--focus-indicator-opacity", String(opacity))
+    // Only `.fi-root` consumes the variable (its inline style wins by
+    // specificity), so setting it there is sufficient — a `documentElement`
+    // write would have no rendered effect.
     pipWindow?.document.querySelector<HTMLElement>(".fi-root")?.style.setProperty(
       "--focus-indicator-opacity", String(opacity),
     )

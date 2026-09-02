@@ -133,7 +133,7 @@ function handleInput(event: Event): void {
     <DesignSelector />
     <section class="focus-opacity" aria-labelledby="focus-opacity-heading">
       <h3 id="focus-opacity-heading">Focus indicator opacity</h3>
-      <label for="focus-indicator-opacity">Content opacity <output>{{ Math.round(opacity * 100) }}%</output></label>
+      <label for="focus-indicator-opacity">Content opacity <output aria-live="polite">{{ Math.round(opacity * 100) }}%</output></label>
       <input
         id="focus-indicator-opacity"
         type="range"
