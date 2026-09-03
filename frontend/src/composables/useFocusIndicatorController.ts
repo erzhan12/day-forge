@@ -11,10 +11,6 @@ import {
   progressRatio,
 } from "../utils/focusIndicator"
 import { remainingMinutesForBlock, timeToMinutes } from "../utils/scheduleTime"
-import {
-  FOCUS_INDICATOR_OPACITY_DEFAULT,
-  normalizeFocusIndicatorOpacity,
-} from "../utils/focusIndicatorOpacity"
 
 export interface FocusIndicatorController {
   focusIndicator: ReturnType<typeof useFocusIndicator>
@@ -38,14 +34,6 @@ export function useFocusIndicatorController(): FocusIndicatorController {
   const retainedDate = ref("")
   const retainedBlocks = ref<TimeBlock[]>([])
   const { nowMinutes, nowDate } = useNowMinutes(retainedDate)
-  // Seed from the account prop so the initial useFocusIndicator() below is
-  // constructed with the correct opacity from the start — rather than relying on
-  // the immediate watch to patch a default snapshot before the first open().
-  const opacity = ref(
-    normalizeFocusIndicatorOpacity(
-      page?.props?.ui_preferences?.focus_indicator_opacity ?? FOCUS_INDICATOR_OPACITY_DEFAULT,
-    ),
-  )
 
   const activeBlock = computed(() =>
     activeUnfinishedBlock(retainedBlocks.value, nowMinutes.value, nowDate.value),
@@ -76,7 +64,6 @@ export function useFocusIndicatorController(): FocusIndicatorController {
   })
   const focusIndicator = useFocusIndicator({
     component: FocusIndicatorView,
-    opacity: opacity.value,
     props: () => ({
       active: indicatorActive.value,
       progressPercent: indicatorPercent.value,
@@ -97,17 +84,6 @@ export function useFocusIndicatorController(): FocusIndicatorController {
     retainedBlocks.value = []
   }
 
-  watch(
-    () => page?.props?.ui_preferences?.focus_indicator_opacity,
-    (value) => {
-      // Prop absence is a partial-response boundary: retain the last valid
-      // account value instead of resetting an open PiP to the default.
-      if (value === undefined) return
-      opacity.value = normalizeFocusIndicatorOpacity(value)
-      focusIndicator.setOpacity(opacity.value)
-    },
-    { immediate: true },
-  )
   watch(
     () => page?.component,
     (component) => {

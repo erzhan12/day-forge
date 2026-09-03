@@ -54,21 +54,6 @@ afterEach(() => {
 })
 
 describe("useFocusIndicator", () => {
-  it("applies default opacity to one full Canvas root and updates it live", async () => {
-    const win = makeFakeWindow()
-    const requestWindow = installFakePip(win)
-    const fi = useFocusIndicator({ component: Probe, props: () => ({ value: 0 }) })
-    await fi.open()
-    const root = win.document.querySelector(".fi-root") as HTMLElement
-    expect(root.style.getPropertyValue("--focus-indicator-opacity")).toBe("0.7")
-    expect(requestWindow).toHaveBeenCalledTimes(1)
-    fi.setOpacity(0.44)
-    expect(root.style.getPropertyValue("--focus-indicator-opacity")).toBe("0.44")
-    expect(requestWindow).toHaveBeenCalledTimes(1)
-    expect(win.close).not.toHaveBeenCalled()
-    expect(win.document.title).toBe("Focus")
-  })
-
   it("records successful opens and explicit close in restore state", async () => {
     const win = makeFakeWindow()
     installFakePip(win)
@@ -90,42 +75,32 @@ describe("useFocusIndicator", () => {
     fi.dispose()
   })
 
-  it("preserves restore intent for PiP pagehide during opener unload, unlike a normal PiP close", async () => {
-    const unloadingWin = makeFakeWindow()
-    installFakePip(unloadingWin)
-    const unloading = useFocusIndicator({ component: Probe, props: () => ({ value: 0 }) })
-    await unloading.open()
-    window.dispatchEvent(new Event("beforeunload"))
-    unloadingWin._emit("pagehide")
-
-    expect(unloading.isOpen.value).toBe(false)
+  it("preserves restore intent on any PiP pagehide (browser chrome / Back to tab)", async () => {
+    const win = makeFakeWindow()
+    installFakePip(win)
+    const fi = useFocusIndicator({ component: Probe, props: () => ({ value: 0 }) })
+    await fi.open()
     expect(readFocusIndicatorShouldBeOpen()).toBe(true)
 
-    const normalWin = makeFakeWindow()
-    installFakePip(normalWin)
-    const normal = useFocusIndicator({ component: Probe, props: () => ({ value: 0 }) })
-    await normal.open()
-    normalWin._emit("pagehide")
+    // Chrome's "Back to tab" / window-close closes the PiP → pagehide. The
+    // window is dismissed but the restore intent survives (it is restorable),
+    // so this is NOT a sticky explicit close.
+    win._emit("pagehide")
 
-    expect(normal.isOpen.value).toBe(false)
-    expect(readFocusIndicatorShouldBeOpen()).toBe(false)
-    unloading.dispose()
-    normal.dispose()
+    expect(fi.isOpen.value).toBe(false)
+    expect(readFocusIndicatorShouldBeOpen()).toBe(true)
+    expect(fi.shouldRestore.value).toBe(true)
+    fi.dispose()
   })
 
-  it("dispose preserves intent and removes opener listeners, while cleanup clears intent", async () => {
-    const removeListener = vi.spyOn(window, "removeEventListener")
+  it("dispose preserves intent, while cleanup (explicit close) clears intent", async () => {
     const win = makeFakeWindow()
     installFakePip(win)
     const fi = useFocusIndicator({ component: Probe, props: () => ({ value: 0 }) })
     await fi.open()
 
     fi.dispose()
-
     expect(readFocusIndicatorShouldBeOpen()).toBe(true)
-    expect(removeListener).toHaveBeenCalledWith("beforeunload", expect.any(Function))
-    expect(removeListener).toHaveBeenCalledWith("pagehide", expect.any(Function))
-    expect(removeListener).toHaveBeenCalledWith("pageshow", expect.any(Function))
 
     const explicit = useFocusIndicator({ component: Probe, props: () => ({ value: 0 }) })
     explicit.cleanup()

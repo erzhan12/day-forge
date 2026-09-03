@@ -1,5 +1,10 @@
 # 0072 — External code review trail
 
+> **Post-QA descope:** The opacity/transparency dimension was removed because a
+> Document Picture-in-Picture window cannot be desktop-transparent. The
+> persistent ownership, explicit-close, and device-restore work remains; the
+> material below is retained as historical review record.
+
 Feature: Document PiP focus-indicator — whole-view opacity preference, persistent
 ownership host, explicit close (X + header Show/Hide), device-local restore flag,
 Settings → Appearance opacity slider. Branch `feature/0072-focus-indicator-opacity`.

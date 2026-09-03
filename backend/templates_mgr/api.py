@@ -32,19 +32,12 @@ from schedules.http import (
 )
 from schedules.window import DEFAULT_WINDOW, ScheduleWindow, get_schedule_window
 
-from templates_mgr.models import (
-    FOCUS_INDICATOR_OPACITY_MAX,
-    FOCUS_INDICATOR_OPACITY_MIN,
-    Rule,
-    Template,
-    UserPreferences,
-)
+from templates_mgr.models import Rule, Template, UserPreferences
 from templates_mgr.preferences import (
     MAX_CHAT_SUGGESTION_LENGTH,
     MAX_CHAT_SUGGESTIONS,
     get_user_preferences,
     normalize_chat_suggestions,
-    normalize_focus_indicator_opacity,
     normalize_theme,
     ui_preferences_payload,
 )
@@ -503,7 +496,6 @@ def _prefs_to_dict(prefs: UserPreferences) -> dict:
     return {
         "theme": normalize_theme(prefs.theme),
         "chat_suggestions": normalize_chat_suggestions(prefs.chat_suggestions),
-        "focus_indicator_opacity": normalize_focus_indicator_opacity(prefs.focus_indicator_opacity),
     }
 
 
@@ -596,23 +588,6 @@ def user_preferences(request):
                 )
             normalized_suggestions.append(trimmed)
         cleaned["chat_suggestions"] = normalized_suggestions
-
-    if "focus_indicator_opacity" in data:
-        opacity = data["focus_indicator_opacity"]
-        # The plain range comparison rejects NaN, ±Inf, AND out-of-range values
-        # (including an over-large JSON integer) without the OverflowError that
-        # math.isfinite() raises when coercing a huge int to float — which would
-        # otherwise surface as a 500 instead of this structured 400.
-        if (
-            isinstance(opacity, bool)
-            or not isinstance(opacity, (int, float))
-            or not FOCUS_INDICATOR_OPACITY_MIN <= opacity <= FOCUS_INDICATOR_OPACITY_MAX
-        ):
-            return _prefs_response(
-                {"errors": {"focus_indicator_opacity": "Must be a number from 0.20 to 1.00."}},
-                status=400,
-            )
-        cleaned["focus_indicator_opacity"] = float(opacity)
 
     if not cleaned:
         return _prefs_response({"errors": {"body": "No editable fields supplied."}}, status=400)

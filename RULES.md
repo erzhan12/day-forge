@@ -876,18 +876,15 @@ no Service Worker, no closed-tab alerts.
   include its visual rules in the `<style>` string injected into
   `pipWindow.document.head` (`PIP_STYLES` in `useFocusIndicator.ts`). Do not
   clone `app.css`.
-- **PiP root opacity and sizing.** `html`/`body` stay transparent; `.fi-root`
-  fills the entire PiP document (`width`/`height: 100%`), paints `Canvas`, and
-  carries the single `--focus-indicator-opacity` layer. Do not put opacity on
-  just the bar or compound it with secondary-label opacity. Document PiP is an
-  opaque OS window: this fades content toward its window backstop, not through
-  to the desktop.
 - **Persistent PiP ownership and close semantics.** `FocusIndicatorHost` is
   the application-root owner around Inertia `<App>`; pages only publish copied
   schedule snapshots to its controller, so swaps and idle gaps never unmount
-  the PiP. X, Hide, browser PiP chrome close, and a definite `Login` component
-  transition are explicit closes: they clear retained data and the device flag.
-  Root disposal is non-intent and preserves the flag for reload.
+  the PiP. Only the in-PiP X, the header Hide, and a definite `Login` component
+  transition are **explicit** closes (via `cleanup()`): they clear retained data
+  and the device flag. Browser PiP chrome dismissal (Chrome's "Back to tab" /
+  window-close → `pagehide`) and root disposal are **non-intent**: the window
+  closes but the flag is preserved, so the dismissal is restorable with one Show
+  click (and survives a reload).
 - **Gesture-gated restore intent.** `requestWindow()` must be called
   synchronously from a Show-button gesture (`useFocusIndicator.open()`); a
   `pendingOpen` flag and epoch guard protect races. The strict-only-true,

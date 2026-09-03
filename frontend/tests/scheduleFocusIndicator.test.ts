@@ -291,7 +291,7 @@ describe("Schedule.vue focus indicator", () => {
     expect(wrapper!.text()).toContain("Show indicator")
   })
 
-  it("browser PiP pagehide clears restore intent and returns the header to Show", async () => {
+  it("browser PiP pagehide (Back to tab) preserves restore intent and returns the header to Show", async () => {
     const win = makeFakeWindow()
     installFakePip(win)
     mountPage([makeBlock()])
@@ -302,7 +302,9 @@ describe("Schedule.vue focus indicator", () => {
     win._emit("pagehide")
     await flushPromises()
 
-    expect(readFocusIndicatorShouldBeOpen()).toBe(false)
+    // Chrome closed the window, but it stays restorable — intent preserved,
+    // header back to Show so one click reopens it.
+    expect(readFocusIndicatorShouldBeOpen()).toBe(true)
     expect(wrapper!.text()).toContain("Show indicator")
   })
 

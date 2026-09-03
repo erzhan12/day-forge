@@ -121,7 +121,6 @@ export interface UiPreferences {
   // Optional/unknown keeps partial or stale Inertia props safe at the
   // TypeScript boundary; useChatSuggestions performs runtime resolution.
   chat_suggestions?: unknown
-  focus_indicator_opacity?: number
 }
 
 export interface ScheduleWindow {

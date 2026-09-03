@@ -574,13 +574,13 @@ they both commit or neither does.
 
 ## User Preferences
 
-Per-user UI preferences (theme, AI quick-input suggestions, and Focus Indicator opacity). Each user has exactly one account-scoped preferences row, created on first authenticated access. Distinct from `/api/templates/` (schedule templates) despite the shared `templates_mgr` app.
+Per-user UI preferences (theme and AI quick-input suggestions). Each user has exactly one account-scoped preferences row, created on first authenticated access. Distinct from `/api/templates/` (schedule templates) despite the shared `templates_mgr` app.
 
 All responses from `GET` and `PATCH` set `Cache-Control: private, no-store` — including 400/413 error responses, which is exercised by tests. Success bodies contain per-user state; error bodies contain fixed validation strings and do NOT echo client-supplied values. A misconfigured CDN/proxy must never cache any path regardless, so the helper applies the header uniformly. (The header is NOT attached to 405/302 responses produced by Django's `@require_http_methods` / `@login_required` decorators before the view runs; those bodies are empty or a redirect Location, with no per-user state leak surface.)
 
 ### `GET /api/user/preferences/`
 
-Returns the current user's preferences. Creates a default row (theme `"classic"`, unset suggestions, Focus Indicator opacity `0.70`) if none exists. Unset or structurally malformed persisted suggestions resolve to the three defaults shown below without rewriting the row; a saved empty array remains empty. Malformed/non-finite stored opacity resolves to `0.70`; finite stored values are clamped to `0.20`–`1.00`, also without rewriting the row.
+Returns the current user's preferences. Creates a default row (theme `"classic"`, unset suggestions) if none exists. Unset or structurally malformed persisted suggestions resolve to the three defaults shown below without rewriting the row; a saved empty array remains empty.
 
 ```json
 {
@@ -589,8 +589,7 @@ Returns the current user's preferences. Creates a default row (theme `"classic"`
     "Plan my remaining day",
     "Add a focused work block",
     "Make room for a break"
-  ],
-  "focus_indicator_opacity": 0.70
+  ]
 }
 ```
 
@@ -598,7 +597,7 @@ Returns the current user's preferences. Creates a default row (theme `"classic"`
 
 ### `PATCH /api/user/preferences/`
 
-Partially updates theme, AI quick-input suggestions, and/or Focus Indicator opacity.
+Partially updates theme and/or AI quick-input suggestions.
 
 **Body**
 
@@ -606,7 +605,6 @@ Partially updates theme, AI quick-input suggestions, and/or Focus Indicator opac
 |-------|------|-------|
 | `theme` | string | `classic`, `strategic`, `light_premium`, or `dark_4a`. |
 | `chat_suggestions` | array of strings | At most 8 entries. Each entry is trimmed, must remain non-empty, and may contain at most 120 Unicode code points. Order and duplicates are preserved. `[]` intentionally hides all suggestions; `null` is rejected. |
-| `focus_indicator_opacity` | finite number | Inclusive `0.20`–`1.00`; defaults to `0.70`. Booleans, strings, `null`, non-finite values, and out-of-range numbers are rejected. |
 
 Unknown keys are silently ignored (forward-compatibility — matches the `/api/rules/{pk}/` PATCH pattern). A body containing zero recognized fields returns `400` with `errors.body = "No editable fields supplied."`; this is reserved for that case only — a PATCH with the same value as the persisted theme is a valid `200` no-op.
 
@@ -617,7 +615,6 @@ Unknown keys are silently ignored (forward-compatibility — matches the `/api/r
 | `400` | `body` | Invalid JSON, non-object body, or no recognized fields supplied. |
 | `400` | `theme` | Value is not one of the allowed theme ids. |
 | `400` | `chat_suggestions` | Value is not an array, has more than 8 entries, or contains a non-string, empty-after-trim, or over-120-code-point entry. |
-| `400` | `focus_indicator_opacity` | Value is not a finite numeric value in the inclusive `0.20`–`1.00` range. |
 | `413` | `body` | Request body exceeds 100 KB. |
 
 Unauthenticated requests follow the conventions header — Django's `@login_required` returns a `302` redirect to `/accounts/login/`, NOT a JSON `401`.

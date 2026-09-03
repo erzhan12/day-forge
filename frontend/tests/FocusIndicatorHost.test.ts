@@ -14,10 +14,10 @@ import {
 
 const page = reactive<{
   component?: string
-  props: { ui_preferences: { focus_indicator_opacity: number } }
+  props: Record<string, never>
 }>({
   component: "Schedule",
-  props: { ui_preferences: { focus_indicator_opacity: 0.42 } },
+  props: {},
 })
 const nowMinutes = ref<number | null>(570)
 const nowDate = ref<string | null>("2026-08-12")
@@ -86,7 +86,6 @@ const Consumer = defineComponent({
 
 beforeEach(() => {
   page.component = "Schedule"
-  page.props.ui_preferences.focus_indicator_opacity = 0.42
   nowMinutes.value = 570
   nowDate.value = "2026-08-12"
   controller = null
@@ -113,21 +112,6 @@ describe("FocusIndicatorHost", () => {
     expect(win.close).not.toHaveBeenCalled()
     expect(controller!.indicatorActive.value).toBe(true)
     expect(readFocusIndicatorShouldBeOpen()).toBe(true)
-    wrapper.unmount()
-  })
-
-  it("opens the PiP at the account opacity present from the first mount", async () => {
-    page.props.ui_preferences.focus_indicator_opacity = 0.33
-    const win = makeFakeWindow()
-    installFakePip(win)
-    const wrapper = mount(FocusIndicatorHost, {
-      slots: { default: () => h(Publisher, { blocks: [block()] }) },
-    })
-    await controller!.focusIndicator.open()
-    await flushPromises()
-
-    const root = win.document.querySelector(".fi-root") as HTMLElement
-    expect(root.style.getPropertyValue("--focus-indicator-opacity")).toBe("0.33")
     wrapper.unmount()
   })
 
@@ -169,24 +153,6 @@ describe("FocusIndicatorHost", () => {
     expect(requestWindow).toHaveBeenCalledTimes(1)
     expect(win.close).not.toHaveBeenCalled()
     expect(win.document.querySelector(".fi-neutral")?.textContent).toBe("—")
-    wrapper.unmount()
-  })
-
-  it("updates opacity in the existing PiP when the reactive account preference changes", async () => {
-    const win = makeFakeWindow()
-    const requestWindow = installFakePip(win)
-    const wrapper = mount(FocusIndicatorHost, { slots: { default: () => h(Publisher, { blocks: [block()] }) } })
-    await controller!.focusIndicator.open()
-    await flushPromises()
-    const root = win.document.querySelector(".fi-root") as HTMLElement
-    expect(root.style.getPropertyValue("--focus-indicator-opacity")).toBe("0.42")
-
-    page.props.ui_preferences.focus_indicator_opacity = 0.68
-    await nextTick()
-
-    expect(root.style.getPropertyValue("--focus-indicator-opacity")).toBe("0.68")
-    expect(requestWindow).toHaveBeenCalledTimes(1)
-    expect(win.close).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 

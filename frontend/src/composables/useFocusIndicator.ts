@@ -1,5 +1,4 @@
 import { computed, type App, type Component, createApp, getCurrentInstance, h, onUnmounted, ref } from "vue"
-import { normalizeFocusIndicatorOpacity } from "../utils/focusIndicatorOpacity"
 import { clearFocusIndicatorShouldBeOpen, readFocusIndicatorShouldBeOpen, writeFocusIndicatorShouldBeOpen } from "../utils/focusIndicatorStorage"
 
 const PIP_WIDTH = 280
@@ -13,10 +12,10 @@ const PIP_OPEN_ERROR_DURATION_MS = 5_000
 // view's layout rules here rather than cloning app.css — Vue scoped CSS never
 // reaches a foreign Document.
 const PIP_STYLES = `
-  :root { color-scheme: light dark; --focus-indicator-opacity: 0.70; }
+  :root { color-scheme: light dark; }
   html, body { margin: 0; width: 100%; height: 100%; background: transparent; }
   body { color: CanvasText; }
-  .fi-root { width: 100%; height: 100%; flex: 1; min-width: 0; display: flex; align-items: center; background: Canvas; opacity: var(--focus-indicator-opacity, 0.70); }
+  .fi-root { width: 100%; height: 100%; flex: 1; min-width: 0; display: flex; align-items: center; background: Canvas; }
   .focus-indicator {
     display: flex;
     align-items: center;
@@ -102,7 +101,6 @@ interface FocusIndicatorConfig {
   props: () => Record<string, unknown>
   width?: number
   height?: number
-  opacity?: unknown
 }
 
 /**
@@ -120,7 +118,6 @@ export function useFocusIndicator(config: FocusIndicatorConfig) {
   const openError = ref<string | null>(null)
   const storedShouldBeOpen = ref(readFocusIndicatorShouldBeOpen())
   const shouldRestore = computed(() => supported && !isOpen.value && storedShouldBeOpen.value)
-  let opacity = normalizeFocusIndicatorOpacity(config.opacity)
   let pipWindow: Window | null = null
   let app: App | null = null
   let pendingOpen = false
@@ -128,7 +125,6 @@ export function useFocusIndicator(config: FocusIndicatorConfig) {
   // Bumped by cleanup()/dispose so a request that resolves after teardown
   // closes its just-created window instead of adopting an orphan.
   let epoch = 0
-  let openerUnloading = false
 
   function clearOpenError(): void {
     if (openErrorTimer !== null) {
@@ -161,30 +157,12 @@ export function useFocusIndicator(config: FocusIndicatorConfig) {
   }
 
   function onPagehide(): void {
-    // The window is already going away; just release our side.
-    if (!openerUnloading) {
-      clearFocusIndicatorShouldBeOpen()
-      storedShouldBeOpen.value = false
-    }
+    // The PiP window is going away via browser chrome (Chrome's "Back to tab",
+    // its window-close button) or a main-window reload — NOT a deliberate
+    // dismissal. Preserve the device restore intent so one Show click brings it
+    // back; only our in-PiP X and the header Hide (both via cleanup()) are
+    // sticky explicit closes that clear the intent.
     teardown(false)
-  }
-
-  function setOpacity(value: unknown): void {
-    opacity = normalizeFocusIndicatorOpacity(value)
-    // Only `.fi-root` consumes the variable (its inline style wins by
-    // specificity), so setting it there is sufficient — a `documentElement`
-    // write would have no rendered effect.
-    pipWindow?.document.querySelector<HTMLElement>(".fi-root")?.style.setProperty(
-      "--focus-indicator-opacity", String(opacity),
-    )
-  }
-
-  const markOpenerUnloading = () => { openerUnloading = true }
-  const clearOpenerUnloading = () => { openerUnloading = false }
-  if (typeof window !== "undefined") {
-    window.addEventListener("beforeunload", markOpenerUnloading)
-    window.addEventListener("pagehide", markOpenerUnloading)
-    window.addEventListener("pageshow", clearOpenerUnloading)
   }
 
   async function open(): Promise<void> {
@@ -217,7 +195,6 @@ export function useFocusIndicator(config: FocusIndicatorConfig) {
       win.document.head.appendChild(style)
       const rootEl = win.document.createElement("div")
       rootEl.className = "fi-root"
-      rootEl.style.setProperty("--focus-indicator-opacity", String(opacity))
       win.document.body.appendChild(rootEl)
       // Render function re-reads config.props() each render → the shared refs it
       // dereferences are tracked, so the PiP repaints on every reactive change.
@@ -272,16 +249,11 @@ export function useFocusIndicator(config: FocusIndicatorConfig) {
     pendingOpen = false
     clearOpenError()
     teardown(true)
-    if (typeof window !== "undefined") {
-      window.removeEventListener("beforeunload", markOpenerUnloading)
-      window.removeEventListener("pagehide", markOpenerUnloading)
-      window.removeEventListener("pageshow", clearOpenerUnloading)
-    }
   }
 
   // Unmount is never an explicit user close. The root owner uses this for a
   // hard reload/unload, preserving the gesture-gated device restore intent.
   if (getCurrentInstance()) onUnmounted(dispose)
 
-  return { supported, isOpen, openError, shouldRestore, open, cleanup, dispose, setOpacity }
+  return { supported, isOpen, openError, shouldRestore, open, cleanup, dispose }
 }

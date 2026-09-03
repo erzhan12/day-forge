@@ -1,16 +1,9 @@
 from django.conf import settings
-from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
-
-# Authoritative bounds. Do not move these to preferences.py: that module
-# imports this model, while model validators must be import-cycle-free.
-FOCUS_INDICATOR_OPACITY_MIN = 0.20
-FOCUS_INDICATOR_OPACITY_MAX = 1.00
-FOCUS_INDICATOR_OPACITY_DEFAULT = 0.70
 
 
 class UserPreferences(models.Model):
-    """Per-user UI preferences (theme, chat suggestions, indicator opacity).
+    """Per-user UI preferences (theme and chat suggestions).
 
     Co-located in ``templates_mgr`` for v1 since there is no dedicated
     users/preferences app and `/settings/` already routes here. If
@@ -45,13 +38,6 @@ class UserPreferences(models.Model):
     # `templates_mgr/preferences.py`; mirror them in the Phase 2 frontend
     # utility `frontend/src/utils/chatSuggestions.ts`.
     chat_suggestions = models.JSONField(null=True, blank=True, default=None)
-    focus_indicator_opacity = models.FloatField(
-        default=FOCUS_INDICATOR_OPACITY_DEFAULT,
-        validators=[
-            MinValueValidator(FOCUS_INDICATOR_OPACITY_MIN),
-            MaxValueValidator(FOCUS_INDICATOR_OPACITY_MAX),
-        ],
-    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

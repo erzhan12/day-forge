@@ -25,14 +25,4 @@ describe("usePreferences", () => {
       { chat_suggestions: ordered },
     )
   })
-
-  it("PATCHes the exact opacity value", async () => {
-    requestJson.mockResolvedValue({ ok: true })
-    await usePreferences().saveFocusIndicatorOpacity(0.42)
-    expect(requestJson).toHaveBeenCalledWith(
-      "/api/user/preferences/",
-      "PATCH",
-      { focus_indicator_opacity: 0.42 },
-    )
-  })
 })
