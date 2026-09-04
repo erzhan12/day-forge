@@ -221,3 +221,49 @@ class TestChatUserMessageCurrentTimeAnnotation:
         # Annotated as context, not placement authority.
         low = msg.lower()
         assert "context" in low
+
+
+class TestChatSystemPromptRulePrecedence:
+    """Feature 0074: the chat system prompt tells the model that on a conflict
+    between two active rules, the higher-priority (earlier-listed) rule wins —
+    so a high-priority default (e.g. DURATION) beats a lower-priority
+    ask/clarify rule instead of prompting the user."""
+
+    @staticmethod
+    def _prompt():
+        from ai.prompts import build_system_prompt_chat
+        from schedules.window import DEFAULT_WINDOW
+
+        return build_system_prompt_chat(DEFAULT_WINDOW)
+
+    def test_states_higher_priority_wins_on_conflict(self):
+        low = self._prompt().lower()
+        # A precedence notion tied to conflict.
+        assert "precedence" in low or "wins" in low or "takes precedence" in low
+        assert "conflict" in low
+        # Direction must be explicit: the HIGHER-priority rule is obeyed. A clause
+        # that reversed this ("obey the lower-priority one") must fail this test.
+        assert "obey the higher-priority" in low
+
+    def test_anchors_precedence_on_list_order(self):
+        low = self._prompt().lower()
+        # Must reference the priority-desc ordering / highest-first / earlier-listed,
+        # not a bare number (avoids the 0-vs-1 UI-vs-prompt ambiguity).
+        assert (
+            "priority desc" in low
+            or "highest-priority first" in low
+            or "earlier-listed" in low
+            or "earlier listed" in low
+        )
+
+    def test_default_rule_overrides_ask_rule(self):
+        low = self._prompt().lower()
+        # The concrete DURATION-vs-CLARIFY regression: a higher-priority default
+        # overrides a lower-priority rule that says to ask.
+        assert "default" in low and "ask" in low
+        assert "overrides" in low
+        assert "lower-priority" in low or "lower priority" in low
+        # Direction: it is the HIGHER-priority default that takes precedence — a
+        # reversed statement (default is overridden by the ask rule) must fail.
+        assert "higher-priority rule that supplies a default value" in low
+        assert "takes precedence and overrides a lower-priority" in low
