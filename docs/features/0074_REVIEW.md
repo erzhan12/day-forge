@@ -5,7 +5,8 @@ conflict" clause (Hard rule 2) so a high-priority default rule beats a
 lower-priority ask/clarify rule. Branch `feature/0074-chat-rule-precedence`.
 Scope: `backend/ai/prompts.py` + `backend/tests/test_ai_prompts_command_chat.py`.
 
-Engines: **codex** (`gpt-5.6-sol`, read-only). **cursor** (`agent`) dropped —
+Engines: **codex** (`gpt-5.6-sol` — the model id passed to the local OpenAI Codex
+CLI for this repo's review runs; read-only sandbox). **cursor** (`agent`) dropped —
 empty output all session.
 
 ## Iteration 1 — codex: NO P1/P2 FINDINGS

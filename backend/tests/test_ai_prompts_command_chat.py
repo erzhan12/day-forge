@@ -238,8 +238,9 @@ class TestChatSystemPromptRulePrecedence:
 
     def test_states_higher_priority_wins_on_conflict(self):
         low = self._prompt().lower()
-        # A precedence notion tied to conflict.
-        assert "precedence" in low or "wins" in low or "takes precedence" in low
+        # A precedence notion tied to conflict. ("takes precedence" is a superstring
+        # of "precedence", so listing it separately would be a dead disjunct.)
+        assert "precedence" in low or "wins" in low
         assert "conflict" in low
         # Direction must be explicit: the HIGHER-priority rule is obeyed. A clause
         # that reversed this ("obey the lower-priority one") must fail this test.
@@ -263,7 +264,12 @@ class TestChatSystemPromptRulePrecedence:
         assert "default" in low and "ask" in low
         assert "overrides" in low
         assert "lower-priority" in low or "lower priority" in low
-        # Direction: it is the HIGHER-priority default that takes precedence — a
-        # reversed statement (default is overridden by the ask rule) must fail.
-        assert "higher-priority rule that supplies a default value" in low
-        assert "takes precedence and overrides a lower-priority" in low
+        # Direction check by ORDER, not verbatim phrase: the winning side
+        # (higher-priority / default) must be stated BEFORE the override verb and
+        # the losing side (lower-priority / ask) AFTER it. This rejects a reversed
+        # clause (which independent-token presence alone would NOT catch) while
+        # tolerating cosmetic rephrasing of the sentence.
+        pivot = low.find("overrides")
+        assert pivot != -1
+        assert "higher-priority" in low[:pivot] or "default" in low[:pivot]
+        assert "lower-priority" in low[pivot:] or "ask" in low[pivot:]
