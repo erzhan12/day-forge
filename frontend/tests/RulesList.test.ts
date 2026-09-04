@@ -34,6 +34,24 @@ function downButtons(wrapper: ReturnType<typeof mountList>) {
 }
 
 describe("RulesList", () => {
+  it("shows 0-based priority ranks while keeping the highest-priority rule first", () => {
+    const wrapper = mountList([
+      rule(2, "Highest-priority rule", 7),
+      rule(1, "Lower-priority rule", 2),
+    ])
+
+    const rows = wrapper.findAll(".rule-row")
+    const topBadge = rows[0].get(".priority-badge")
+    const secondBadge = rows[1].get(".priority-badge")
+
+    expect(rows[0].get(".rule-text").text()).toBe("Highest-priority rule")
+    expect(topBadge.text()).toBe("0")
+    expect(secondBadge.text()).toBe("1")
+    expect(topBadge.attributes("title")).toContain("0 is highest")
+    expect(topBadge.attributes("aria-label")).toContain("rank 0")
+    expect(topBadge.attributes("aria-label")).toContain("0 is highest")
+  })
+
   it("explains disabled reorder arrows when there is only one rule", () => {
     const wrapper = mountList([rule(1, "Only rule", 0)])
 

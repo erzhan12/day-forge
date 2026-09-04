@@ -215,8 +215,12 @@ async function confirmDelete(rule: Rule) {
         >
           {{ rule.text }}
         </button>
-        <span class="priority-badge" :title="`Priority ${rule.priority}`">
-          {{ rule.priority }}
+        <span
+          class="priority-badge"
+          :title="`Priority rank ${idx} — 0 is highest`"
+          :aria-label="`Priority rank ${idx} — 0 is highest`"
+        >
+          {{ idx }}
         </span>
         <button
           type="button"
