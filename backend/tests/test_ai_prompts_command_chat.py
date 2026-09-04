@@ -271,5 +271,10 @@ class TestChatSystemPromptRulePrecedence:
         # tolerating cosmetic rephrasing of the sentence.
         pivot = low.find("overrides")
         assert pivot != -1
-        assert "higher-priority" in low[:pivot] or "default" in low[:pivot]
+        # "higher-priority" is unique to the precedence clause, so requiring it
+        # BEFORE the override verb is a real reversal guard. (Do NOT add an
+        # `or "default"` branch — "default" also appears earlier, e.g. the
+        # "25-minute default duration" auto-placement text, so it would be
+        # trivially true and defeat the directional check.)
+        assert "higher-priority" in low[:pivot]
         assert "lower-priority" in low[pivot:] or "ask" in low[pivot:]
