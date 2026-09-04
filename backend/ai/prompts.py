@@ -47,6 +47,13 @@ def _category_text(categories):
 
 def build_system_prompt_chat(window, categories=_DEFAULT_CATEGORIES, sink_slug="other") -> str:
     """Render chat instructions for the user's current schedule window."""
+    # Rule 9b tells the model to re-emit the originally-requested interval from
+    # the prior transcript. Those prior turns are injected as an *untrusted*
+    # user-role message (see ``service.run_chat`` / ``serialise_prior_turns``) —
+    # the model may read them for coreference but they carry no privileged
+    # ``assistant`` authority. Do not reword rule 9b to imply the model has
+    # direct recall of its own prior output; that would weaken the
+    # untrusted-transcript guard.
     return f"""\
 You are the scheduling assistant for Day Forge, a daily time-blocking app.
 You are running in MULTI-TURN CHAT mode: the user can have a conversation

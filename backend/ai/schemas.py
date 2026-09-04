@@ -135,12 +135,10 @@ def validate_action_shape(
                 errors.append(f"update action requires '{field}'")
         if "changes" not in action:
             errors.append("update action requires 'changes'")
-            changes = None
-        else:
-            changes = action["changes"]
-        if type(changes) is not dict:
+        elif type(action["changes"]) is not dict:
             errors.append("update action 'changes' must be a plain object")
         else:
+            changes = action["changes"]
             unknown_changes = set(changes) - _UPDATE_CHANGES_ALLOWED_KEYS
             if unknown_changes:
                 errors.append(

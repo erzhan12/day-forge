@@ -70,7 +70,8 @@ def test_update_shape_accepts_nested_metadata_and_rejects_empty_or_bad_direction
         validate_action_shape({"type": "update", "task_id": 5, "changes": {"title": "X"}}, ALLOWED)
         == []
     )
-    assert validate_action_shape({"type": "update", "task_id": 5}, ALLOWED)
+    missing_changes_errors = validate_action_shape({"type": "update", "task_id": 5}, ALLOWED)
+    assert any("requires 'changes'" in e for e in missing_changes_errors)
     assert validate_action_shape(
         {"type": "update", "task_id": 5, "changes": {"title": "X"}, "direction": "sideways"},
         ALLOWED,
