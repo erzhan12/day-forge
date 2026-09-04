@@ -35,6 +35,9 @@ function downButtons(wrapper: ReturnType<typeof mountList>) {
 
 describe("RulesList", () => {
   it("shows 0-based priority ranks while keeping the highest-priority rule first", () => {
+    // Fixture order is intentional and matches the API contract: rules arrive
+    // pre-sorted by `-priority` (highest first), so render index === display
+    // rank. Do NOT add a client-side sort — the component is props-order-faithful.
     const wrapper = mountList([
       rule(2, "Highest-priority rule", 7),
       rule(1, "Lower-priority rule", 2),
@@ -45,11 +48,14 @@ describe("RulesList", () => {
     const secondBadge = rows[1].get(".priority-badge")
 
     expect(rows[0].get(".rule-text").text()).toBe("Highest-priority rule")
-    expect(topBadge.text()).toBe("0")
-    expect(secondBadge.text()).toBe("1")
+    // Visible number is aria-hidden decorative; the sr-only sibling carries the
+    // single announced label (no aria-label on the roleless badge → no double read).
+    expect(topBadge.get("[aria-hidden='true']").text()).toBe("0")
+    expect(secondBadge.get("[aria-hidden='true']").text()).toBe("1")
+    expect(topBadge.get(".sr-only").text()).toContain("rank 0")
+    expect(topBadge.get(".sr-only").text()).toContain("0 is highest")
+    expect(topBadge.attributes("aria-label")).toBeUndefined()
     expect(topBadge.attributes("title")).toContain("0 is highest")
-    expect(topBadge.attributes("aria-label")).toContain("rank 0")
-    expect(topBadge.attributes("aria-label")).toContain("0 is highest")
   })
 
   it("explains disabled reorder arrows when there is only one rule", () => {
