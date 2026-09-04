@@ -64,28 +64,49 @@ def test_invalid_add_action_per_action_check_fires():
     assert any("title" in e for e in errors)
 
 
-def test_update_shape_accepts_metadata_and_rejects_empty_or_bad_direction():
+def test_update_shape_accepts_nested_metadata_and_rejects_empty_or_bad_direction():
     assert "update" in ALLOWED_ACTION_TYPES
-    assert validate_action_shape({"type": "update", "task_id": 5, "title": "X"}, ALLOWED) == []
-    assert validate_action_shape({"type": "update", "task_id": 5}, ALLOWED)
-    assert validate_action_shape(
-        {"type": "update", "task_id": 5, "title": "X", "direction": "sideways"}, ALLOWED
+    assert (
+        validate_action_shape({"type": "update", "task_id": 5, "changes": {"title": "X"}}, ALLOWED)
+        == []
     )
+    missing_changes_errors = validate_action_shape({"type": "update", "task_id": 5}, ALLOWED)
+    assert any("requires 'changes'" in e for e in missing_changes_errors)
+    assert validate_action_shape(
+        {"type": "update", "task_id": 5, "changes": {"title": "X"}, "direction": "sideways"},
+        ALLOWED,
+    )
+
+
+def test_update_without_task_id_rejected():
+    # ``task_id`` is required on an update — without it the schema must reject
+    # (otherwise the planner's ``action["task_id"]`` raises KeyError -> 500 on a
+    # malformed model turn instead of a clean parse rejection).
+    errors = validate_action_shape(
+        {"type": "update", "changes": {"title": "X"}},
+        ALLOWED,
+    )
+    assert any("requires 'task_id'" in e for e in errors)
 
 
 def test_bad_direction_value_rejected():
     errors = validate_action_shape(
-        {"type": "update", "task_id": 5, "start_time": "09:00", "direction": "sideways"},
+        {
+            "type": "update",
+            "task_id": 5,
+            "changes": {"start_time": "09:00"},
+            "placement_direction": "sideways",
+        },
         ALLOWED,
     )
-    assert any("direction must be one of" in e for e in errors)
+    assert any("placement_direction must be one of" in e for e in errors)
 
 
 def test_update_empty_title_rejected():
     # The general title check applies to update too (not only add): an empty /
     # whitespace title is caught at the schema layer, never reaching full_clean.
     errors = validate_action_shape(
-        {"type": "update", "task_id": 5, "title": "   "},
+        {"type": "update", "task_id": 5, "changes": {"title": "   "}},
         ALLOWED,
     )
     assert any("title cannot be empty" in e for e in errors)
@@ -96,7 +117,7 @@ def test_update_invalid_category_rejected():
     # schema layer (whole-turn parse error), not soft-skipped, and never
     # reaching full_clean.
     errors = validate_action_shape(
-        {"type": "update", "task_id": 5, "category": "not_a_category"},
+        {"type": "update", "task_id": 5, "changes": {"category": "not_a_category"}},
         ALLOWED,
     )
     assert any("category must be one of" in e for e in errors)
@@ -108,20 +129,25 @@ def test_non_string_direction_rejected_without_crashing():
     # escape the AIParseError path and 500).
     for bad in ([], {}, 3, None):
         errors = validate_action_shape(
-            {"type": "update", "task_id": 5, "start_time": "09:00", "direction": bad},
+            {
+                "type": "update",
+                "task_id": 5,
+                "changes": {"start_time": "09:00"},
+                "placement_direction": bad,
+            },
             ALLOWED,
         )
-        assert any("direction must be one of" in e for e in errors)
+        assert any("placement_direction must be one of" in e for e in errors)
 
 
 def test_direction_without_time_rejected():
     # A metadata-only update carrying a valid direction but no time field is a
     # meaningless patch — direction requires an accompanying start/end time.
     errors = validate_action_shape(
-        {"type": "update", "task_id": 5, "title": "X", "direction": "later"},
+        {"type": "update", "task_id": 5, "changes": {"title": "X"}, "placement_direction": "later"},
         ALLOWED,
     )
-    assert any("direction requires an accompanying" in e for e in errors)
+    assert any("placement_direction requires an accompanying" in e for e in errors)
 
 
 def test_valid_update_with_time_and_direction_accepted():
@@ -130,9 +156,8 @@ def test_valid_update_with_time_and_direction_accepted():
             {
                 "type": "update",
                 "task_id": 5,
-                "start_time": "09:00",
-                "end_time": "10:00",
-                "direction": "later",
+                "changes": {"start_time": "09:00", "end_time": "10:00"},
+                "placement_direction": "later",
             },
             ALLOWED,
         )
@@ -140,16 +165,68 @@ def test_valid_update_with_time_and_direction_accepted():
     )
 
 
-def test_direction_rejected_on_non_update_types():
+def test_placement_direction_rejected_on_non_update_types():
     # ``direction`` is placement intent for an update time change only; the
     # planner never reads it on move/resize/add, so it must be rejected there.
     for kind, extra in (
         ("move", {"task_id": 5, "start_time": "09:00"}),
         ("resize", {"task_id": 5, "end_time": "10:00"}),
         ("add", {"title": "X", "start_time": "09:00", "end_time": "10:00", "category": "work"}),
+        ("remove", {"task_id": 5}),
     ):
-        errors = validate_action_shape({"type": kind, "direction": "later", **extra}, ALLOWED)
-        assert any("'direction' is not valid on a" in e for e in errors)
+        errors = validate_action_shape(
+            {"type": kind, "placement_direction": "later", **extra}, ALLOWED
+        )
+        assert any("unknown key" in e for e in errors)
+
+
+def test_update_rejects_flat_and_unknown_keys_at_both_levels():
+    for key, value in (
+        ("title", "X"),
+        ("category", "work"),
+        ("start_time", "09:00"),
+        ("end_time", "10:00"),
+        ("direction", "later"),
+        ("is_completed", True),
+        ("sort_order", 1),
+    ):
+        errors = validate_action_shape(
+            {"type": "update", "task_id": 5, "changes": {"title": "X"}, key: value}, ALLOWED
+        )
+        assert any("unknown top-level" in e for e in errors), key
+    for key, value in (("is_completed", True), ("sort_order", 1), ("bogus", "x")):
+        errors = validate_action_shape(
+            {"type": "update", "task_id": 5, "changes": {"title": "X", key: value}}, ALLOWED
+        )
+        assert any("inside changes" in e for e in errors), key
+
+
+def test_update_changes_is_required_nonempty_object_and_validates_nested_times():
+    class DictSubclass(dict):
+        pass
+
+    for changes in (None, [], {}, "title", DictSubclass(title="X")):
+        errors = validate_action_shape(
+            {"type": "update", "task_id": 5, "changes": changes}, ALLOWED
+        )
+        assert errors
+    for field, value in (("start_time", "9:00"), ("end_time", "09:03")):
+        errors = validate_action_shape(
+            {"type": "update", "task_id": 5, "changes": {field: value}}, ALLOWED
+        )
+        assert any(field in e for e in errors)
+
+
+def test_non_update_actions_reject_unknown_keys():
+    valid = {
+        "move": {"task_id": 5, "start_time": "09:00"},
+        "resize": {"task_id": 5, "end_time": "10:00"},
+        "remove": {"task_id": 5},
+    }
+    for kind, action in valid.items():
+        assert validate_action_shape({"type": kind, **action}, ALLOWED) == []
+        errors = validate_action_shape({"type": kind, **action, "changes": {}}, ALLOWED)
+        assert any("unknown key" in e for e in errors)
 
 
 # ---------------------------------------------------------------------------
@@ -226,7 +303,7 @@ class TestChatUntimedAdd:
         for kind, extra in (
             ("move", {"task_id": 5, "start_time": "09:00"}),
             ("resize", {"task_id": 5, "end_time": "10:00"}),
-            ("update", {"task_id": 5, "title": "X"}),
+            ("update", {"task_id": 5, "changes": {"title": "X"}}),
             ("remove", {"task_id": 5}),
         ):
             action = {"type": kind, "duration_minutes": 25, **extra}
@@ -301,7 +378,12 @@ class TestChatDurationResize:
         for action in (
             _untimed_add(duration_delta_minutes=5),
             {"type": "move", "task_id": 5, "start_time": "09:00", "duration_delta_minutes": 5},
-            {"type": "update", "task_id": 5, "title": "X", "duration_delta_minutes": 5},
+            {
+                "type": "update",
+                "task_id": 5,
+                "changes": {"title": "X"},
+                "duration_delta_minutes": 5,
+            },
             {"type": "remove", "task_id": 5, "duration_delta_minutes": 5},
         ):
             errors = validate_action_shape(action, ALLOWED, allow_untimed_add=True)

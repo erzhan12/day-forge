@@ -245,7 +245,7 @@ def compute_move_resize_times(
     new_start = parse_time(action["start_time"]) if "start_time" in action else block.start_time
     new_end = parse_time(action["end_time"]) if "end_time" in action else block.end_time
 
-    if kind == "move" and "end_time" not in action:
+    if kind in {"move", "update"} and "start_time" in action and "end_time" not in action:
         original = datetime.datetime.combine(
             datetime.date.min, block.end_time
         ) - datetime.datetime.combine(datetime.date.min, block.start_time)
@@ -567,6 +567,22 @@ def _normalize_actions(
                 end_time=block.end_time,
             )
 
+        changes = action["changes"] if kind == "update" else action
+        # The public nested update contract is translated here, at the one
+        # wire-to-canonical boundary.  Downstream time and placement logic only
+        # sees the established flat operands.
+        time_action = (
+            {
+                "type": "update",
+                **{
+                    field: changes[field]
+                    for field in ("start_time", "end_time")
+                    if field in changes
+                },
+            }
+            if kind == "update"
+            else action
+        )
         duration_absolute = action.get("duration_minutes") if kind == "resize" else None
         duration_delta = action.get("duration_delta_minutes") if kind == "resize" else None
         duration_mode = duration_absolute is not None or duration_delta is not None
@@ -574,10 +590,10 @@ def _normalize_actions(
         # Keep boundary move/resize behaviour centralized in the established
         # helper. Duration actions intentionally bypass its time arithmetic:
         # their end is derived below in integer-minute space.
-        new_start, new_end, wrapped = compute_move_resize_times(action, effective)
-        start_supplied = "start_time" in action
-        end_supplied = "end_time" in action
-        bare_move = kind == "move" and not end_supplied
+        new_start, new_end, wrapped = compute_move_resize_times(time_action, effective)
+        start_supplied = "start_time" in changes
+        end_supplied = "end_time" in changes
+        bare_move = kind in {"move", "update"} and start_supplied and not end_supplied
         duration_derived_end = False
         derived_end_minutes: int | None = None
         if duration_mode:
@@ -615,17 +631,17 @@ def _normalize_actions(
                 derived_end_minutes = prev.derived_end_minutes
 
         new_title = (
-            action["title"].strip()
-            if kind == "update" and isinstance(action.get("title"), str)
+            changes["title"].strip()
+            if kind == "update" and isinstance(changes.get("title"), str)
             else None
         )
-        new_category = action.get("category") if kind == "update" else None
+        new_category = changes.get("category") if kind == "update" else None
         # Direction is placement intent tied to THIS action's explicit
         # ``direction`` key. A later same-task action that supplies a time
         # but no ``direction`` must NOT clobber a prior action's later/earlier
         # with "exact" (regression: FIX-C). Only default to "exact" when
         # neither this action nor any prior action carried a direction.
-        this_direction = action.get("direction")
+        this_direction = action.get("placement_direction") if kind == "update" else None
         if this_direction is not None:
             direction = this_direction
         elif prev is not None:

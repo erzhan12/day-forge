@@ -25,6 +25,18 @@ ALLOWED_ACTION_TYPES = {"add", "move", "remove", "resize", "update"}
 # a misspelled ``start``/``end``) is rejected rather than silently ignored,
 # which would otherwise misclassify a mistyped explicit add as an untimed add.
 _ADD_ALLOWED_KEYS = {"type", "title", "category", "start_time", "end_time", "duration_minutes"}
+_MOVE_ALLOWED_KEYS = {"type", "task_id", "start_time", "end_time"}
+_RESIZE_ALLOWED_KEYS = {
+    "type",
+    "task_id",
+    "start_time",
+    "end_time",
+    "duration_minutes",
+    "duration_delta_minutes",
+}
+_REMOVE_ALLOWED_KEYS = {"type", "task_id"}
+_UPDATE_ALLOWED_KEYS = {"type", "task_id", "changes", "placement_direction"}
+_UPDATE_CHANGES_ALLOWED_KEYS = {"title", "category", "start_time", "end_time"}
 
 # Fields expected per action type. ``task_id`` is always an int; time fields
 # use HH:MM.
@@ -46,6 +58,17 @@ MAX_TITLE_LEN = 255
 
 def _is_hhmm(value) -> bool:
     return isinstance(value, str) and bool(_TIME_PATTERN.match(value))
+
+
+def _validate_title(value, errors: list[str], *, prefix: str = "") -> None:
+    if not isinstance(value, str):
+        errors.append(f"{prefix}title must be a string")
+    elif not value.strip():
+        errors.append(f"{prefix}title cannot be empty")
+    elif len(value) > MAX_TITLE_LEN:
+        errors.append(f"{prefix}title must be <= {MAX_TITLE_LEN} chars")
+    elif any(ord(c) < 32 and c not in "\t\n\r" for c in value):
+        errors.append(f"{prefix}title contains invalid control characters")
 
 
 def validate_action_shape(
@@ -92,7 +115,67 @@ def validate_action_shape(
             for field in _REQUIRED_FIELDS["add"]:
                 if field not in action:
                     errors.append(f"add action requires '{field}'")
-    else:
+
+    if action_type in {"move", "resize", "remove"}:
+        allowed = {
+            "move": _MOVE_ALLOWED_KEYS,
+            "resize": _RESIZE_ALLOWED_KEYS,
+            "remove": _REMOVE_ALLOWED_KEYS,
+        }[action_type]
+        unknown = set(action) - allowed
+        if unknown:
+            errors.append(f"{action_type} action has unknown key(s): {sorted(unknown)}")
+
+    if action_type == "update":
+        unknown = set(action) - _UPDATE_ALLOWED_KEYS
+        if unknown:
+            errors.append(f"update action has unknown top-level key(s): {sorted(unknown)}")
+        for field in _REQUIRED_FIELDS["update"]:
+            if field not in action:
+                errors.append(f"update action requires '{field}'")
+        if "changes" not in action:
+            errors.append("update action requires 'changes'")
+        elif type(action["changes"]) is not dict:
+            errors.append("update action 'changes' must be a plain object")
+        else:
+            changes = action["changes"]
+            unknown_changes = set(changes) - _UPDATE_CHANGES_ALLOWED_KEYS
+            if unknown_changes:
+                errors.append(
+                    f"update action has unknown key(s) inside changes: {sorted(unknown_changes)}"
+                )
+            if not _UPDATE_CHANGES_ALLOWED_KEYS.intersection(changes):
+                errors.append(
+                    "update action changes requires at least one of 'title', 'category', "
+                    "'start_time' or 'end_time'"
+                )
+            if "title" in changes:
+                _validate_title(changes["title"], errors, prefix="changes.")
+            if "category" in changes and (
+                not isinstance(changes["category"], str)
+                or changes["category"] not in allowed_categories
+            ):
+                errors.append(f"changes.category must be one of {sorted(allowed_categories)}")
+            for time_field in ("start_time", "end_time"):
+                if time_field in changes:
+                    value = changes[time_field]
+                    if not _is_hhmm(value):
+                        errors.append(f"changes.{time_field} must be HH:MM")
+                    elif int(value[-2:]) % GRID_MINUTES:
+                        errors.append(
+                            f"changes.{time_field} must use {GRID_MINUTES}-minute granularity"
+                        )
+            if "placement_direction" in action:
+                direction = action["placement_direction"]
+                if not isinstance(direction, str) or direction not in {"later", "earlier", "exact"}:
+                    errors.append(
+                        "placement_direction must be one of ['earlier', 'exact', 'later']"
+                    )
+                elif not ({"start_time", "end_time"} & set(changes)):
+                    errors.append(
+                        "placement_direction requires an accompanying 'start_time' or 'end_time'"
+                    )
+    elif action_type != "add":
         for field in _REQUIRED_FIELDS[action_type]:
             if field not in action:
                 errors.append(f"{action_type} action requires '{field}'")
@@ -157,51 +240,11 @@ def validate_action_shape(
         if action_type == "move" and not has_boundary_mode:
             errors.append("move action requires at least one of 'start_time' or 'end_time'")
 
-    if action_type == "update":
-        editable = {"title", "category", "start_time", "end_time"}
-        if not editable.intersection(action):
-            errors.append(
-                "update action requires at least one of 'title', 'category', "
-                "'start_time' or 'end_time'"
-            )
-        if "direction" in action:
-            if not isinstance(action["direction"], str) or action["direction"] not in {
-                "later",
-                "earlier",
-                "exact",
-            }:
-                errors.append("direction must be one of ['earlier', 'exact', 'later']")
-            # ``direction`` is placement intent for a TIME change. A
-            # metadata-only update carrying ``direction`` but no time field is
-            # a meaningless patch — the planner only reads direction alongside
-            # a supplied start/end. Reject it at the schema layer.
-            elif "start_time" not in action and "end_time" not in action:
-                errors.append("direction requires an accompanying 'start_time' or 'end_time'")
-
-    # ``direction`` is only meaningful on an ``update`` (the planner reads
-    # ``action.get('direction')`` on updates only). Reject it on any other
-    # action type so a move/resize can't silently carry an unvalidated,
-    # unhonored direction.
-    if action_type != "update" and "direction" in action:
-        errors.append(f"'direction' is not valid on a {action_type} action")
-
     if "task_id" in action and not is_plain_int(action["task_id"]):
         errors.append("task_id must be an integer")
 
     if "title" in action:
-        title = action["title"]
-        if not isinstance(title, str):
-            errors.append("title must be a string")
-        elif not title.strip():
-            errors.append("title cannot be empty")
-        elif len(title) > MAX_TITLE_LEN:
-            errors.append(f"title must be <= {MAX_TITLE_LEN} chars")
-        elif any(ord(c) < 32 and c not in "\t\n\r" for c in title):
-            # Reject NUL and other unprintable control chars that could
-            # corrupt downstream consumers (CSV exports, log scrapers).
-            # Tab/newline/CR are allowed since users may legitimately
-            # paste multi-line titles.
-            errors.append("title contains invalid control characters")
+        _validate_title(action["title"], errors)
 
     for time_field in ("start_time", "end_time"):
         if time_field in action and not _is_hhmm(action[time_field]):
