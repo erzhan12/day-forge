@@ -275,12 +275,40 @@ class TestChatSystemPromptRulePrecedence:
         # the losing side (lower-priority / ask) AFTER it. This rejects a reversed
         # clause (which independent-token presence alone would NOT catch) while
         # tolerating cosmetic rephrasing of the sentence.
-        pivot = low.find("overrides")
+        # Anchor the pivot to the precedence clause itself, so an unrelated future
+        # "overrides" elsewhere in the prompt can't shift the boundary silently.
+        clause_start = low.find("active rules are listed highest-priority first")
+        assert clause_start != -1
+        pivot = low.find("overrides", clause_start)
         assert pivot != -1
         # "higher-priority" is unique to the precedence clause, so requiring it
         # BEFORE the override verb is a real reversal guard. (Do NOT add an
         # `or "default"` branch — "default" also appears earlier, e.g. the
         # "25-minute default duration" auto-placement text, so it would be
         # trivially true and defeat the directional check.)
-        assert "higher-priority" in low[:pivot]
+        assert "higher-priority" in low[clause_start:pivot]
         assert "lower-priority" in low[pivot:] or "ask" in low[pivot:]
+
+
+class TestDraftSystemPromptRulePrecedence:
+    """Feature 0074 companion: the DRAFT system prompt carries the same
+    higher-priority-wins-on-conflict clause (prompts.py draft rule 3). RULES.md
+    warns not to drop the clause from *either* prompt — guard the draft side too."""
+
+    @staticmethod
+    def _prompt():
+        from ai.prompts import build_system_prompt_draft
+        from schedules.window import DEFAULT_WINDOW
+
+        return build_system_prompt_draft(DEFAULT_WINDOW)
+
+    def test_draft_states_higher_priority_wins_on_conflict(self):
+        low = self._prompt().lower()
+        assert "precedence" in low or "wins" in low
+        assert "conflict" in low
+        # Directional: the winner is the HIGHER-priority rule. A reversed clause
+        # ("lower-priority rules take precedence") would drop this phrase.
+        assert (
+            "higher-priority rules take precedence" in low
+            or "higher-priority rule wins" in low
+        )
