@@ -244,7 +244,13 @@ class TestChatSystemPromptRulePrecedence:
         assert "conflict" in low
         # Direction must be explicit: the HIGHER-priority rule is obeyed. A clause
         # that reversed this ("obey the lower-priority one") must fail this test.
-        assert "obey the higher-priority" in low
+        # Disjunction tolerates cosmetic re-wording of the verb; the stronger
+        # reversal guard lives in test_default_rule_overrides_ask_rule's pivot.
+        assert (
+            "obey the higher-priority" in low
+            or "follow the higher-priority" in low
+            or "higher-priority rule wins" in low
+        )
 
     def test_anchors_precedence_on_list_order(self):
         low = self._prompt().lower()
