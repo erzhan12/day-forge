@@ -215,8 +215,9 @@ async function confirmDelete(rule: Rule) {
         >
           {{ rule.text }}
         </button>
-        <span class="priority-badge" :title="`Priority ${rule.priority}`">
-          {{ rule.priority }}
+        <span class="priority-badge" :title="`Priority rank ${idx} — 0 is highest`">
+          <span aria-hidden="true">{{ idx }}</span>
+          <span class="sr-only">Priority rank {{ idx }} — 0 is highest</span>
         </span>
         <button
           type="button"
@@ -380,6 +381,18 @@ async function confirmDelete(rule: Rule) {
   padding: 2px 8px;
   min-width: 24px;
   text-align: center;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .row-delete-btn {
