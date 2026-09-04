@@ -81,8 +81,14 @@ Valid action types and required fields:
           Duration modes preserve the block's current start. The backend, not
           you, calculates and validates the derived end and conflicts; a
           duration that runs past the working-day end is rejected, not clamped.
-- update: type=update, task_id=int, with any non-empty subset of title,
-          category, start_time, end_time; direction may be earlier, later, or exact
+- update: type=update, task_id=int, changes={{...}}, where "changes" is a non-empty
+          object with one or more of exactly title, category, start_time, end_time. For example:
+          {{"type": "update", "task_id": 7, "changes": {{"title": "New", "start_time": "10:00"}}}}
+          Optionally set top-level placement_direction=earlier, later, or exact
+          ONLY with a time field in changes. Put all requested edits to one block
+          in one update action; omit unrequested fields (especially category).
+          start_time alone preserves the block's existing duration. start_time and end_time
+          together define the exact requested interval.
 
 Per-turn response shapes (you MUST pick exactly one):
 1. Confident — apply mutations now:
@@ -123,17 +129,22 @@ Hard rules:
 8. Combine a rename, recategorisation, and retiming of one existing block in
    one update action. Do not calculate alternative free slots yourself: the
    backend owns conflict resolution. When accepting a proposed slot, emit its
-   concrete HH:MM times; direction alone is never a valid action.
-9. Direction-answer protocol (two steps). ``direction`` is ONLY valid on an
-   update action — never on move/resize/add (it aborts the whole turn there).
+   concrete HH:MM times; placement_direction alone is never a valid action.
+   If titles are equal after case-folding and outer-whitespace trimming, emit
+   one update per matching block ID. Do not group merely-similar titles.
+9. Direction-answer protocol (two steps). ``placement_direction`` is ONLY valid
+   as a top-level field on an update action — never on move/resize/add (it
+   aborts the whole turn there).
    a. To accept a server slot proposal, re-emit the block as an update
-      carrying the CONCRETE proposed HH:MM times (no ``direction`` needed). A
-      ``direction`` alone is an empty patch and aborts the whole turn.
+      carrying the CONCRETE proposed HH:MM times inside changes (no
+      ``placement_direction`` needed). A placement_direction alone is an empty
+      patch and aborts the whole turn.
    b. When the prior server turn asked "earlier or later?" (a direction-required
       question with no concrete slot yet), your direction reply must re-emit the
-      block as an update with the ORIGINALLY-REQUESTED interval (recover it from
-      the transcript) PLUS the chosen ``direction`` (later/earlier) so the
-      backend can propose a concrete slot. Do NOT fabricate a slot.
+      block as an update with the ORIGINALLY-REQUESTED interval inside changes
+      (recover it from the transcript) PLUS the chosen placement_direction
+      (later/earlier) so the backend can propose a concrete slot. Do NOT
+      fabricate a slot.
    c. For a conflicting or out-of-window add (new block), re-emit a CONCRETE add
       with a specific free time — never a ``direction`` (adds have no direction
       flow).

@@ -275,6 +275,13 @@ class TestParsing:
             )
         assert exc.value.raw_response_text == "not-json"
 
+    def test_flat_update_from_provider_raises_parse(self, patch_client, fake_schedule, now):
+        """The service, not a patched view, validates model action wire shapes."""
+        raw = _ok_response(actions=[{"type": "update", "task_id": 1, "title": "Flat is invalid"}])
+        patch_client(raw)
+        with pytest.raises(AIParseError):
+            run_chat([{"role": "user", "content": "rename it"}], fake_schedule, [], [], now)
+
     @pytest.mark.parametrize(
         "payload",
         [

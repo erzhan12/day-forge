@@ -737,7 +737,11 @@ def _apply_actions_sync(
         # this pass exists solely to catch a slug deleted mid-request, so it
         # must not mis-report a non-category failure as "invalid category".
         for index, action in enumerate(result.parsed_actions):
-            category = action.get("category")
+            category = (
+                action["changes"].get("category")
+                if action.get("type") == "update"
+                else action.get("category")
+            )
             if isinstance(category, str) and category not in allowed_categories:
                 raise _Rollback(_action_error(index, "invalid category"))
         schedule_settings = get_schedule_settings(locked_schedule.user)

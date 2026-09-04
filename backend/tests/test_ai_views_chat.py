@@ -27,7 +27,7 @@ from asgiref.sync import sync_to_async
 from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.utils import timezone
-from schedules.models import Schedule, TimeBlock, UserScheduleSettings
+from schedules.models import Category, Schedule, TimeBlock, UserScheduleSettings
 from templates_mgr.models import Rule
 
 URL = "/api/ai/schedules/2026-04-18/chat/"
@@ -1430,11 +1430,13 @@ def test_chat_partially_applies_metadata_and_returns_one_resolution_ask(
                 {
                     "type": "update",
                     "task_id": target.id,
-                    "title": "Renamed",
-                    "category": "health",
-                    "start_time": "10:00",
-                    "end_time": "11:00",
-                    "direction": "later",
+                    "changes": {
+                        "title": "Renamed",
+                        "category": "health",
+                        "start_time": "10:00",
+                        "end_time": "11:00",
+                    },
+                    "placement_direction": "later",
                 }
             ],
             "Updated",
@@ -1479,8 +1481,7 @@ def test_chat_out_of_window_exact_move_yields_window_ask_not_direction(
                 {
                     "type": "update",
                     "task_id": target.id,
-                    "start_time": "23:30",
-                    "end_time": "23:59",
+                    "changes": {"start_time": "23:30", "end_time": "23:59"},
                 }
             ],
             "Moved",
@@ -1535,8 +1536,7 @@ def test_chat_exact_conflict_then_direction_yields_concrete_suggestion(
                 {
                     "type": "update",
                     "task_id": target.id,
-                    "start_time": "10:00",
-                    "end_time": "11:00",
+                    "changes": {"start_time": "10:00", "end_time": "11:00"},
                 }
             ],
             "Moved",
@@ -1563,9 +1563,8 @@ def test_chat_exact_conflict_then_direction_yields_concrete_suggestion(
                 {
                     "type": "update",
                     "task_id": target.id,
-                    "start_time": "10:00",
-                    "end_time": "11:00",
-                    "direction": "later",
+                    "changes": {"start_time": "10:00", "end_time": "11:00"},
+                    "placement_direction": "later",
                 }
             ],
             "Moved",
@@ -2095,3 +2094,219 @@ class TestResolutionAskNoSlotPrecedence:
         ask_b = _build_resolution_ask((generic, no_slot), {}, create_titles)
         assert ask_a == expected
         assert ask_b == expected
+
+
+@pytest.mark.django_db
+def test_chat_nested_update_applies_as_one_diff(auth_client, today_schedule, monkeypatch):
+    block = TimeBlock.objects.create(
+        schedule=today_schedule, title="Old", start_time="09:00", end_time="10:00", category="work"
+    )
+    _patch_run_chat(
+        monkeypatch,
+        AIChatResult(
+            "{}",
+            [
+                {
+                    "type": "update",
+                    "task_id": block.id,
+                    "changes": {"title": "New", "category": "health"},
+                }
+            ],
+            "Updated.",
+            None,
+        ),
+    )
+    response = _post(auth_client, {"messages": [_user_turn("rename it")]})
+    assert response.status_code == 200, response.content
+    block.refresh_from_db()
+    assert (block.title, block.category) == ("New", "health")
+
+
+@pytest.mark.django_db
+def test_chat_rejects_nested_update_for_another_users_task(
+    auth_client, today_schedule, monkeypatch
+):
+    other = User.objects.create_user(username="other", password="testpass123")
+    other_schedule = Schedule.objects.create(user=other, date="2026-04-18")
+    other_block = TimeBlock.objects.create(
+        schedule=other_schedule,
+        title="Private",
+        start_time="09:00",
+        end_time="10:00",
+        category="work",
+    )
+    _patch_run_chat(
+        monkeypatch,
+        AIChatResult(
+            "{}",
+            [{"type": "update", "task_id": other_block.id, "changes": {"title": "Nope"}}],
+            "x",
+            None,
+        ),
+    )
+    response = _post(auth_client, {"messages": [_user_turn("rename it")]})
+    assert response.status_code == 400
+    other_block.refresh_from_db()
+    assert other_block.title == "Private"
+
+
+@pytest.mark.django_db
+def test_chat_nested_update_revalidates_category_deleted_mid_request(
+    auth_client, today_schedule, monkeypatch, user
+):
+    block = TimeBlock.objects.create(
+        schedule=today_schedule,
+        title="Focus",
+        start_time="09:00",
+        end_time="10:00",
+        category="work",
+    )
+    # The model's response was generated while this slug existed; by apply time
+    # it has gone, so only live revalidation can prevent its persistence.
+    Category.objects.create(user=user, slug="focus", label="Focus", color_id="blue", sort_order=9)
+    Category.objects.filter(user=user, slug="focus").delete()
+    _patch_run_chat(
+        monkeypatch,
+        AIChatResult(
+            "{}",
+            [{"type": "update", "task_id": block.id, "changes": {"category": "focus"}}],
+            "x",
+            None,
+        ),
+    )
+    response = _post(auth_client, {"messages": [_user_turn("recategorize")]})
+    assert response.status_code == 400
+    assert "invalid category" in response.content.decode()
+    block.refresh_from_db()
+    assert block.category == "work"
+
+
+@pytest.mark.django_db
+def test_chat_nested_multi_action_turn_persists_one_mutation_diff(
+    auth_client, today_schedule, monkeypatch
+):
+    import ai.views as views
+
+    block = TimeBlock.objects.create(
+        schedule=today_schedule, title="Old", start_time="09:00", end_time="10:00", category="work"
+    )
+    _patch_run_chat(
+        monkeypatch,
+        AIChatResult(
+            "{}",
+            [
+                {"type": "update", "task_id": block.id, "changes": {"title": "Renamed"}},
+                {
+                    "type": "add",
+                    "title": "New",
+                    "category": "personal",
+                    "start_time": "11:00",
+                    "end_time": "11:30",
+                },
+            ],
+            "Updated both.",
+            None,
+        ),
+    )
+    original = views._persist_mutation_diff
+    diffs = []
+
+    def _spy(schedule, locked_blocks, diff):
+        diffs.append(diff)
+        return original(schedule, locked_blocks, diff)
+
+    monkeypatch.setattr(views, "_persist_mutation_diff", _spy)
+    response = _post(auth_client, {"messages": [_user_turn("rename and add")]})
+    assert response.status_code == 200, response.content
+    assert len(diffs) == 1
+    assert len(diffs[0].updates) == 1 and len(diffs[0].creates) == 1
+
+
+@pytest.mark.django_db
+def test_mocked_model_can_resolve_russian_inflection_to_explicit_id(
+    auth_client, today_schedule, monkeypatch
+):
+    work = TimeBlock.objects.create(
+        schedule=today_schedule,
+        title="Работа",
+        start_time="09:00",
+        end_time="10:00",
+        category="work",
+    )
+    _patch_run_chat(
+        monkeypatch,
+        AIChatResult(
+            "{}",
+            [{"type": "update", "task_id": work.id, "changes": {"title": "Работа важная"}}],
+            "Готово.",
+            None,
+        ),
+    )
+    response = _post(auth_client, {"messages": [_user_turn("переименуй работу")]})
+    assert response.status_code == 200
+    work.refresh_from_db()
+    assert work.title == "Работа важная"
+
+
+@pytest.mark.django_db
+def test_mocked_model_updates_each_exact_normalized_duplicate_title(
+    auth_client, today_schedule, monkeypatch
+):
+    first = TimeBlock.objects.create(
+        schedule=today_schedule,
+        title=" Work ",
+        start_time="09:00",
+        end_time="10:00",
+        category="work",
+    )
+    second = TimeBlock.objects.create(
+        schedule=today_schedule, title="work", start_time="11:00", end_time="12:00", category="work"
+    )
+    _patch_run_chat(
+        monkeypatch,
+        AIChatResult(
+            "{}",
+            [
+                {"type": "update", "task_id": first.id, "changes": {"category": "health"}},
+                {"type": "update", "task_id": second.id, "changes": {"category": "health"}},
+            ],
+            "Updated both.",
+            None,
+        ),
+    )
+    response = _post(auth_client, {"messages": [_user_turn("move work to health")]})
+    assert response.status_code == 200
+    first.refresh_from_db()
+    second.refresh_from_db()
+    assert (first.category, second.category) == ("health", "health")
+
+
+@pytest.mark.django_db
+def test_mocked_model_does_not_group_merely_similar_titles(
+    auth_client, today_schedule, monkeypatch
+):
+    target = TimeBlock.objects.create(
+        schedule=today_schedule, title="Work", start_time="09:00", end_time="10:00", category="work"
+    )
+    similar = TimeBlock.objects.create(
+        schedule=today_schedule,
+        title="Work planning",
+        start_time="11:00",
+        end_time="12:00",
+        category="work",
+    )
+    _patch_run_chat(
+        monkeypatch,
+        AIChatResult(
+            "{}",
+            [{"type": "update", "task_id": target.id, "changes": {"category": "health"}}],
+            "Updated.",
+            None,
+        ),
+    )
+    response = _post(auth_client, {"messages": [_user_turn("recategorize work")]})
+    assert response.status_code == 200
+    target.refresh_from_db()
+    similar.refresh_from_db()
+    assert target.category == "health"
+    assert similar.category == "work"

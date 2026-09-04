@@ -91,6 +91,13 @@ def _remove(task_id: int) -> dict:
     return {"type": "remove", "task_id": task_id}
 
 
+def _update(task_id: int, changes: dict, placement_direction: str | None = None) -> dict:
+    action = {"type": "update", "task_id": task_id, "changes": changes}
+    if placement_direction is not None:
+        action["placement_direction"] = placement_direction
+    return action
+
+
 def _add(title: str, start: str, end: str, category: str = "work") -> dict:
     return {
         "type": "add",
@@ -751,10 +758,12 @@ def test_update_metadata_persists_when_requested_time_conflicts():
             {
                 "type": "update",
                 "task_id": 1,
-                "title": "Renamed",
-                "category": "health",
-                "start_time": "10:00",
-                "end_time": "11:00",
+                "changes": {
+                    "title": "Renamed",
+                    "category": "health",
+                    "start_time": "10:00",
+                    "end_time": "11:00",
+                },
             }
         ],
         day_start=DAY_START,
@@ -777,7 +786,7 @@ def test_update_title_is_stripped():
     snap = _schedule([_block(1, "09:00", "10:00", title="Old")])
     result = plan_mutations(
         snap,
-        [{"type": "update", "task_id": 1, "title": "  Work  "}],
+        [{"type": "update", "task_id": 1, "changes": {"title": "  Work  "}}],
         day_start=DAY_START,
         day_end=DAY_END,
     )
@@ -799,10 +808,12 @@ def test_same_task_bare_move_preserves_prior_direction():
             {
                 "type": "update",
                 "task_id": 1,
-                "title": "Gym renamed",
-                "start_time": "11:00",
-                "end_time": "12:00",
-                "direction": "later",
+                "changes": {
+                    "title": "Gym renamed",
+                    "start_time": "11:00",
+                    "end_time": "12:00",
+                },
+                "placement_direction": "later",
             },
             # Bare move (no explicit direction) onto the still-conflicting slot.
             {"type": "move", "task_id": 1, "start_time": "11:00"},
@@ -834,7 +845,7 @@ def test_plan_update_unknown_task_id():
             {
                 "type": "update",
                 "task_id": 999,
-                "title": "Renamed",
+                "changes": {"title": "Renamed"},
             }
         ],
         day_start=DAY_START,
@@ -844,6 +855,88 @@ def test_plan_update_unknown_task_id():
     assert result.detail == (
         "Referenced block no longer exists; it may have been deleted. Please retry."
     )
+
+
+def test_nested_update_patches_metadata_and_exact_interval():
+    snap = _schedule([_block(1, "09:00", "10:00", title="Old", category="work")])
+    result = plan_mutations(
+        snap,
+        [
+            _update(
+                1,
+                {
+                    "title": "Renamed",
+                    "category": "health",
+                    "start_time": "10:30",
+                    "end_time": "11:15",
+                },
+            )
+        ],
+        day_start=DAY_START,
+        day_end=DAY_END,
+    )
+    assert isinstance(result, MutationPlan)
+    entry = result.diff.updates[0]
+    assert (entry.title, entry.category) == ("Renamed", "health")
+    assert (entry.start_time, entry.end_time) == (_t("10:30"), _t("11:15"))
+
+
+def test_nested_update_start_only_preserves_effective_duration_and_wrap_provenance():
+    snap = _schedule([_block(1, "22:00", "22:30")])
+    result = plan_mutations(
+        snap, [_update(1, {"start_time": "22:20"})], day_start=DAY_START, day_end="23:00"
+    )
+    assert isinstance(result, MutationPlan)
+    entry = result.diff.updates[0]
+    assert (entry.start_time, entry.end_time) == (_t("22:20"), _t("22:50"))
+
+    wrapped = plan_mutations(
+        _schedule([_block(1, "22:30", "23:00")]),
+        [_update(1, {"start_time": "23:30"})],
+        day_start=DAY_START,
+        day_end="23:59",
+    )
+    assert isinstance(wrapped, MutationPlan)
+    # The derived 00:00 end is marked as wrapped and consequently rejected
+    # against the working-day bounds rather than accepted as a short interval.
+    assert wrapped.outcomes[0].reason_code == "out_of_window"
+
+
+def test_nested_updates_same_task_inherit_direction_and_derived_end():
+    snap = _schedule([_block(1, "09:00", "10:00"), _block(2, "11:00", "12:00")])
+    directed = plan_mutations(
+        snap,
+        [
+            _update(1, {"start_time": "11:00", "end_time": "12:00"}, "later"),
+            _update(1, {"start_time": "11:00"}),
+        ],
+        day_start=DAY_START,
+        day_end=DAY_END,
+    )
+    assert isinstance(directed, MutationPlan)
+    assert directed.outcomes[0].attempted_direction == "later"
+
+    derived = plan_mutations(
+        _schedule([_block(1, "09:00", "10:00", title="Old")]),
+        [_update(1, {"start_time": "10:30"}), _update(1, {"title": "New"})],
+        day_start=DAY_START,
+        day_end=DAY_END,
+    )
+    assert isinstance(derived, MutationPlan)
+    entry = derived.diff.updates[0]
+    assert (entry.start_time, entry.end_time, entry.title) == (_t("10:30"), _t("11:30"), "New")
+
+
+def test_nested_updates_for_multiple_ids_form_one_diff():
+    snap = _schedule([_block(1, "09:00", "10:00"), _block(2, "11:00", "12:00")])
+    result = plan_mutations(
+        snap,
+        [_update(1, {"title": "One"}), _update(2, {"category": "health"})],
+        day_start=DAY_START,
+        day_end=DAY_END,
+    )
+    assert isinstance(result, MutationPlan)
+    assert len(result.diff.updates) == 2
 
 
 # ---------------------------------------------------------------------------
@@ -980,7 +1073,11 @@ class TestAutoPlacement:
         # must still avoid the reverted original 09:40-10:10.
         snap = _schedule([_block(1, "09:00", "09:30"), _block(2, "09:40", "10:10")])
         actions = [
-            {"type": "update", "task_id": 2, "start_time": "09:10", "end_time": "09:40"},
+            {
+                "type": "update",
+                "task_id": 2,
+                "changes": {"start_time": "09:10", "end_time": "09:40"},
+            },
             _auto_add("Auto"),
         ]
         result = plan_mutations(

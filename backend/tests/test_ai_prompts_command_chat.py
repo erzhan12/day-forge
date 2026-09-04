@@ -208,6 +208,42 @@ class TestChatSystemPromptDurationResize:
         assert "duration_minutes" in self._prompt()
 
 
+class TestChatSystemPromptNestedUpdates:
+    @staticmethod
+    def _prompt():
+        from ai.prompts import build_system_prompt_chat
+        from schedules.window import DEFAULT_WINDOW
+
+        return build_system_prompt_chat(DEFAULT_WINDOW)
+
+    def test_documents_nested_changes_and_placement_direction(self):
+        prompt = self._prompt()
+        assert "changes" in prompt
+        assert "placement_direction" in prompt
+        assert "type=update, task_id=int, changes" in prompt
+        assert "direction may be earlier" not in prompt
+
+    def test_update_contract_preserves_duration_and_uses_one_combined_action(self):
+        low = self._prompt().lower()
+        assert "one update action" in low
+        assert "start_time alone preserves" in low
+        assert "start_time and end_time" in low and "exact" in low
+        assert "omit unrequested" in low and "category" in low
+
+    def test_does_not_advertise_unsupported_update_fields(self):
+        prompt = self._prompt()
+        assert "is_completed" not in prompt
+        assert "sort_order" not in prompt
+
+    def test_keeps_legacy_move_resize_shapes_and_duplicate_title_protocol(self):
+        low = self._prompt().lower()
+        assert "move:" in low and "resize:" in low
+        assert "case-fold" in low
+        assert "outer-whitespace" in low
+        assert "one update per matching block id" in low
+        assert "do not group merely-similar titles" in low
+
+
 class TestChatUserMessageCurrentTimeAnnotation:
     def test_current_local_time_annotated_as_context(self):
         import datetime
@@ -308,7 +344,4 @@ class TestDraftSystemPromptRulePrecedence:
         assert "conflict" in low
         # Directional: the winner is the HIGHER-priority rule. A reversed clause
         # ("lower-priority rules take precedence") would drop this phrase.
-        assert (
-            "higher-priority rules take precedence" in low
-            or "higher-priority rule wins" in low
-        )
+        assert "higher-priority rules take precedence" in low or "higher-priority rule wins" in low
