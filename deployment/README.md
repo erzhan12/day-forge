@@ -120,6 +120,10 @@ key the pinned secret does not list, so any deploy in that window **fails closed
 host-key verification — this is the intended safety behavior, not a bug. Keep the window
 short (do steps 1–3 back to back) and avoid triggering a deploy mid-rotation.
 
+Provision `SSH_KNOWN_HOSTS` **before the first deploy**: the deploy job's very first
+remote action (the §3b `mkdir`/`chown` directory setup over SSH) already runs under the
+pinned host key, so a missing pin fails the job before any droplet setup happens.
+
 ### 3. Restrict public access to `:8006` (ufw + DOCKER-USER)
 
 The web container publishes `8006:8006` on `0.0.0.0` so the central Caddy can reach
@@ -166,9 +170,6 @@ curl -fsS -o /dev/null -w "%{http_code}\n" https://dayforge.habitreward.org/acco
 
 The container runs as **uid 1000** (`app`). Ensure `$DEPLOY_PATH/data` (and
 `staticfiles`) are writable by that uid on the host, e.g.:
-
-Prepare `SSH_KNOWN_HOSTS` first: the workflow must validate the host key before it
-can perform this SSH-based directory setup.
 
 ```bash
 mkdir -p "$DEPLOY_PATH/data" "$DEPLOY_PATH/staticfiles"

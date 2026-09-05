@@ -23,6 +23,24 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
+      # Security invariant (issue #194): the deploy job must never regress the
+      # SSH host-key pin. The regex anchors on a command position so this step's
+      # own prose/echoes that name the forbidden tool don't self-trip. A swap to
+      # a non-strict option (e.g. accept-new) is caught by the strict==total gate
+      # below, since it drops the strict count. Runs on every PR touching this file.
+      - name: Verify deploy SSH host-key pinning invariant
+        run: |
+          f=.github/workflows/deploy.yml
+          if grep -Eq '^[[:space:]]*(run:[[:space:]]+)?ssh-keyscan[[:space:]]' "$f"; then
+            echo "::error::deploy.yml reintroduced a runtime ssh-keyscan (TOFU)"; exit 1
+          fi
+          total=$(grep -cE '^[[:space:]]+(ssh|scp)[[:space:]]' "$f" || true)
+          strict=$(grep -cP '^\s+(ssh|scp)\s.*StrictHostKeyChecking=yes.*UserKnownHostsFile=\$HOME/\.ssh/known_hosts' "$f" || true)
+          echo "ssh/scp invocations: ${total:-0}; strict+pinned: ${strict:-0}"
+          if [ "${strict:-0}" -ne "${total:-0}" ] || [ "${total:-0}" -eq 0 ]; then
+            echo "::error::not every ssh/scp carries StrictHostKeyChecking=yes + UserKnownHostsFile"; exit 1
+          fi
+
       - name: Install uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d  # v10.0.1
 
