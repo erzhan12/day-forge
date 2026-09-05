@@ -28,12 +28,13 @@ from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.http import Http404, HttpResponseBadRequest, JsonResponse
+from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 from inertia import render as inertia_render
 from schedules.categories import ordered_categories, serialize_category, sink_category
 from schedules.http import reject_oversized_body
 from schedules.models import Schedule, TimeBlock
-from schedules.window import get_schedule_settings, user_local_now
+from schedules.window import get_schedule_settings, resolve_time_zone
 from templates_mgr.preferences import (
     get_user_preferences,
     ui_preferences_payload,
@@ -135,12 +136,16 @@ def analytics_view(request, date):
     except ValueError:
         return HttpResponseBadRequest("Invalid date format. Use YYYY-MM-DD.")
 
-    # Resolve the user-local instant ONCE from their persisted zone
-    # (schedules.window.user_local_now) and derive the date from it. A
-    # single wall-clock read avoids two independent ``timezone.now()``
-    # calls straddling local midnight, and one ``get_schedule_settings``
-    # lookup serves both the future-date gate and the stats layer below.
-    now_local = user_local_now(request.user)
+    # Resolve the user's persisted settings ONCE and reuse the object for
+    # the day-boundary math here AND the schedule_window prop below (one
+    # SELECT). Deriving now/today from a single ``timezone.now()`` read
+    # avoids two calls straddling local midnight; ``today`` feeds the
+    # future-date gate and the stats layer below. Mirrors the AI-view
+    # pattern (see schedules.window.user_local_now).
+    schedule_settings = get_schedule_settings(request.user)
+    now_local = timezone.localtime(
+        timezone.now(), resolve_time_zone(schedule_settings.time_zone)
+    )
     today = now_local.date()
     if parsed_date > today:
         return HttpResponseBadRequest("Analytics is past-only.")
@@ -183,7 +188,7 @@ def analytics_view(request, date):
 
     blocks = list(schedule.time_blocks.all().order_by("start_time", "sort_order"))
     prefs = get_user_preferences(request.user)
-    schedule_settings = get_schedule_settings(request.user)
+    # ``schedule_settings`` already resolved once above (day-boundary math).
     return inertia_render(
         request,
         "Analytics",

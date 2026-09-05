@@ -147,10 +147,10 @@ def get_schedule_settings(user) -> ScheduleSettings:
 def user_local_now(user) -> datetime.datetime:
     """User-local aware ``now`` from persisted settings.
 
-    Mirrors the AI-view pattern (ai/views.py:750,894,1124): loads settings via
-    ``get_schedule_settings`` and resolves the IANA zone via ``resolve_time_zone``
-    (which falls back to UTC on missing/corrupt values). Returns an aware datetime
-    in the user's zone.
+    Mirrors the AI-view pattern in ``ai/views.py`` (the apply / draft / chat
+    now() resolution): loads settings via ``get_schedule_settings`` and resolves
+    the IANA zone via ``resolve_time_zone`` (which falls back to UTC on
+    missing/corrupt values). Returns an aware datetime in the user's zone.
     """
     settings = get_schedule_settings(user)
     return timezone.localtime(timezone.now(), resolve_time_zone(settings.time_zone))

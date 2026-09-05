@@ -65,4 +65,5 @@ class TestRootLoginRedirect:
         # host clock and redirects, exactly as before this feature.
         resp = client.get("/", follow=False)
         assert resp.status_code == 302
-        assert resp.url.startswith("/schedule/")
+        # Host-clock fallback (`datetime.date.today()`), not a per-user lookup.
+        assert resp.url == f"/schedule/{datetime.date.today().isoformat()}/"
