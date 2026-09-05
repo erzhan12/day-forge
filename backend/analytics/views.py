@@ -28,13 +28,12 @@ from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.http import Http404, HttpResponseBadRequest, JsonResponse
-from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 from inertia import render as inertia_render
 from schedules.categories import ordered_categories, serialize_category, sink_category
 from schedules.http import reject_oversized_body
 from schedules.models import Schedule, TimeBlock
-from schedules.window import get_schedule_settings
+from schedules.window import get_schedule_settings, user_local_now
 from templates_mgr.preferences import (
     get_user_preferences,
     ui_preferences_payload,
@@ -96,9 +95,9 @@ def _normalized_category_minutes(values, categories):
     return result
 
 
-def _streak_payload(user) -> dict:
+def _streak_payload(user, *, today) -> dict:
     return {
-        "current": compute_streak(user),
+        "current": compute_streak(user, today=today),
         "threshold": settings.ANALYTICS_STREAK_THRESHOLD,
         "window_days": settings.ANALYTICS_STREAK_WINDOW_DAYS,
     }
@@ -136,12 +135,13 @@ def analytics_view(request, date):
     except ValueError:
         return HttpResponseBadRequest("Invalid date format. Use YYYY-MM-DD.")
 
-    # Use ``timezone.localdate()`` to match ``compute_review_stats`` /
-    # ``compute_streak`` — both go through ``timezone.localtime()``. With
-    # ``TIME_ZONE = "UTC"`` and a host in another zone, ``date.today()``
-    # would disagree around midnight, letting through dates the stats
-    # layer treats as future (or vice versa).
-    today = timezone.localdate()
+    # Resolve the user-local instant ONCE from their persisted zone
+    # (schedules.window.user_local_now) and derive the date from it. A
+    # single wall-clock read avoids two independent ``timezone.now()``
+    # calls straddling local midnight, and one ``get_schedule_settings``
+    # lookup serves both the future-date gate and the stats layer below.
+    now_local = user_local_now(request.user)
+    today = now_local.date()
     if parsed_date > today:
         return HttpResponseBadRequest("Analytics is past-only.")
 
@@ -158,9 +158,13 @@ def analytics_view(request, date):
         review = DailyReview.objects.filter(schedule=schedule).first()
         if review is None:
             # Back-compat one-shot recompute for pre-Phase-6 reviewed rows.
-            review = recompute_review_from_schedule(schedule, categories=categories)
+            review = recompute_review_from_schedule(
+                schedule, now=now_local, categories=categories
+            )
     else:
-        review = recompute_review_from_schedule(schedule, categories=categories)
+        review = recompute_review_from_schedule(
+            schedule, now=now_local, categories=categories
+        )
 
     # Cache the in-scope ``schedule`` on the review instance so
     # ``_review_to_dict`` doesn't issue an extra SELECT for the parent
@@ -185,7 +189,7 @@ def analytics_view(request, date):
         "Analytics",
         {
             "review": _review_to_dict(review),
-            "streak": _streak_payload(request.user),
+            "streak": _streak_payload(request.user, today=today),
             "schedule": {
                 "id": schedule.id,
                 "date": schedule.date.isoformat(),

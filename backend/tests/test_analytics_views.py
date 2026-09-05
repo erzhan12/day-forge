@@ -167,6 +167,119 @@ class TestAnalyticsView:
 
 
 @pytest.mark.django_db
+class TestAnalyticsFutureGateUsesUserTimezone:
+    """The future-date gate reads the user's persisted zone, not UTC."""
+
+    def _freeze(self, monkeypatch, fixed_utc):
+        from schedules import window
+
+        monkeypatch.setattr(window.timezone, "now", lambda: fixed_utc)
+
+    def test_allows_user_local_today_east_of_utc(
+        self, auth_inertia_client, user, monkeypatch
+    ):
+        UserScheduleSettings.objects.create(user=user, time_zone="Asia/Almaty")
+        # UTC 2026-05-03T20:00 → Almaty 2026-05-04 (local today).
+        Schedule.objects.create(user=user, date=datetime.date(2026, 5, 4))
+        self._freeze(
+            monkeypatch, datetime.datetime(2026, 5, 3, 20, 0, tzinfo=datetime.UTC)
+        )
+        resp = auth_inertia_client.get(ANALYTICS_URL.format(date="2026-05-04"))
+        assert resp.status_code != 400
+        assert resp.status_code == 200
+
+    def test_rejects_user_local_tomorrow(self, auth_inertia_client, user, monkeypatch):
+        UserScheduleSettings.objects.create(user=user, time_zone="Asia/Almaty")
+        # Almaty today = 05-04; 05-05 is local tomorrow.
+        self._freeze(
+            monkeypatch, datetime.datetime(2026, 5, 3, 20, 0, tzinfo=datetime.UTC)
+        )
+        resp = auth_inertia_client.get(ANALYTICS_URL.format(date="2026-05-05"))
+        assert resp.status_code == 400
+
+    def test_west_of_utc_rejects_utc_today_as_future(
+        self, auth_inertia_client, user, monkeypatch
+    ):
+        UserScheduleSettings.objects.create(user=user, time_zone="America/Los_Angeles")
+        # UTC 2026-05-04T03:00 → LA still 2026-05-03; 05-04 is LA tomorrow.
+        self._freeze(
+            monkeypatch, datetime.datetime(2026, 5, 4, 3, 0, tzinfo=datetime.UTC)
+        )
+        resp = auth_inertia_client.get(ANALYTICS_URL.format(date="2026-05-04"))
+        assert resp.status_code == 400
+
+
+@pytest.mark.django_db
+class TestAnalyticsWiringUsesUserTimezone:
+    """The view resolves the user-local instant/date once and threads it into
+    ``compute_streak`` (today=) and ``recompute_review_from_schedule`` (now=).
+
+    Isolated from the future-gate confound by requesting a PAST date (valid
+    under both clocks) and spying on the injected kwargs (approach (a)).
+    """
+
+    def _freeze(self, monkeypatch, fixed_utc):
+        from schedules import window
+
+        monkeypatch.setattr(window.timezone, "now", lambda: fixed_utc)
+
+    def test_streak_wiring_passes_user_local_today(
+        self, auth_inertia_client, user, monkeypatch
+    ):
+        from analytics import views as analytics_views
+
+        UserScheduleSettings.objects.create(user=user, time_zone="Asia/Almaty")
+        Schedule.objects.create(user=user, date=datetime.date(2026, 4, 1))
+        self._freeze(
+            monkeypatch, datetime.datetime(2026, 5, 3, 20, 0, tzinfo=datetime.UTC)
+        )
+
+        captured = {}
+
+        def fake_streak(user, *, today=None):
+            captured["today"] = today
+            return 0
+
+        monkeypatch.setattr(analytics_views, "compute_streak", fake_streak)
+        resp = auth_inertia_client.get(ANALYTICS_URL.format(date="2026-04-01"))
+        assert resp.status_code == 200
+        # Almaty local date at UTC 2026-05-03T20:00 is 2026-05-04, not the
+        # UTC service-fallback 2026-05-03.
+        assert captured["today"] == datetime.date(2026, 5, 4)
+
+    def test_skip_boundary_wiring_passes_user_local_now(
+        self, auth_inertia_client, user, monkeypatch
+    ):
+        from analytics import views as analytics_views
+        from analytics.services import recompute_review_from_schedule
+
+        UserScheduleSettings.objects.create(user=user, time_zone="Asia/Almaty")
+        Schedule.objects.create(user=user, date=datetime.date(2026, 4, 1))
+        self._freeze(
+            monkeypatch, datetime.datetime(2026, 5, 3, 20, 0, tzinfo=datetime.UTC)
+        )
+
+        captured = {}
+
+        def spy_recompute(schedule, *, now=None, categories=None):
+            captured["now"] = now
+            return recompute_review_from_schedule(
+                schedule, now=now, categories=categories
+            )
+
+        monkeypatch.setattr(
+            analytics_views, "recompute_review_from_schedule", spy_recompute
+        )
+        resp = auth_inertia_client.get(ANALYTICS_URL.format(date="2026-04-01"))
+        assert resp.status_code == 200
+        now = captured["now"]
+        assert now is not None
+        # Almaty-local instant: UTC 20:00 → 01:00 next local day.
+        assert now.date() == datetime.date(2026, 5, 4)
+        assert now.hour == 1
+
+
+@pytest.mark.django_db
 class TestMarkReviewed:
     def test_400_on_draft_schedule(self, auth_client, user, past_date):
         Schedule.objects.create(
