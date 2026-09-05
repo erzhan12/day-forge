@@ -169,6 +169,15 @@ Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010
 
 ## Follow-ups (discovered during manual testing)
 
+- [ ] **0076-followup: pre-merge (PR-time) enforcement of the SSH host-key pin invariant (PR #196, P2-optional).**
+  The `test` job's "Verify deploy SSH host-key pinning invariant" step only runs on
+  push-to-main / `workflow_dispatch` (the Deploy workflow has no `pull_request`
+  trigger), so a regression is caught on main, not before merge. Add a minimal
+  path-filtered `on: pull_request` guard workflow that runs only the grep assertion
+  (ideally sharing a single `deployment/verify-deploy-ssh-pinning.sh` so the invariant
+  lives in one place) for pre-merge protection. Deferred: the post-merge gate already
+  blocks the deploy chain; pre-merge is a defense-in-depth enhancement, not a fix.
+
 - [ ] **0072-followup: `useFocusIndicator.test.ts` listener hygiene (PR #190, P3).**
   Several tests call `useFocusIndicator(...)` directly without `fi.dispose()`, so
   each registers `beforeunload`/`pagehide`/`pageshow` listeners on the shared jsdom
