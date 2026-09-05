@@ -123,8 +123,16 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      - name: Add server to known_hosts
-        run: ssh-keyscan -H "${{ secrets.SERVER_HOST }}" >> ~/.ssh/known_hosts
+      - name: Pin SSH host key
+        env:
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          test -n "$SSH_KNOWN_HOSTS"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+          test -s "$HOME/.ssh/known_hosts"
 
       - name: Copy deployment files to droplet
         env:
@@ -132,8 +140,8 @@ jobs:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
           # One-time host prep (deploy owns DEPLOY_PATH; data/staticfiles uid 1000) — deployment/README.md §3b.
-          ssh "$SSH_TARGET" "mkdir -p \"$DEPLOY_PATH/data\" \"$DEPLOY_PATH/staticfiles\""
-          scp deployment/docker/docker-compose.yml "$SSH_TARGET:$DEPLOY_PATH/docker-compose.yml"
+          ssh -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$HOME/.ssh/known_hosts" "$SSH_TARGET" "mkdir -p \"$DEPLOY_PATH/data\" \"$DEPLOY_PATH/staticfiles\""
+          scp -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$HOME/.ssh/known_hosts" deployment/docker/docker-compose.yml "$SSH_TARGET:$DEPLOY_PATH/docker-compose.yml"
 
       - name: Write .env, pull image, restart stack
         env:
@@ -234,10 +242,10 @@ jobs:
           with open(path, "w", encoding="utf-8") as f:
               f.write("\n".join(lines) + "\n")
           PY
-          scp /tmp/day-forge.env "$SSH_TARGET:$DEPLOY_PATH/.env"
+          scp -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$HOME/.ssh/known_hosts" /tmp/day-forge.env "$SSH_TARGET:$DEPLOY_PATH/.env"
           rm -f /tmp/day-forge.env
-          ssh "$SSH_TARGET" "grep -q '^DEBUG=0$' '$DEPLOY_PATH/.env'"
-          ssh "$SSH_TARGET" "bash -s" <<EOF
+          ssh -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$HOME/.ssh/known_hosts" "$SSH_TARGET" "grep -q '^DEBUG=0$' '$DEPLOY_PATH/.env'"
+          ssh -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$HOME/.ssh/known_hosts" "$SSH_TARGET" "bash -s" <<EOF
           set -e
           cd "$DEPLOY_PATH"
           echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin

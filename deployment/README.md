@@ -28,6 +28,7 @@ Add an **A record**: host `dayforge` → the droplet's public IP. (Subdomain of
 |---|---|
 | `SSH_PRIVATE_KEY` | deploy key for the droplet |
 | `SERVER_HOST` | droplet public IP |
+| `SSH_KNOWN_HOSTS` | verified pinned SSH host key(s), keyed by the exact `SERVER_HOST` value |
 | `SSH_USER` | e.g. `deploy` — must own `$DEPLOY_PATH` and be able to `mkdir`/`scp` there (see §3b one-time `chown`) |
 | `DEPLOY_PATH` | e.g. `/home/deploy/day-forge` |
 | `DJANGO_SECRET_KEY` | 50+ random chars |
@@ -61,6 +62,63 @@ Add an **A record**: host `dayforge` → the droplet's public IP. (Subdomain of
 > Calendar — `gcal_sync.E001` blocks startup if any is unset/malformed (a
 > stricter divergence from CalDAV/Todoist, whose checks cover only the
 > encryption key). A Google-less prod env must still set all four.
+
+#### `SSH_KNOWN_HOSTS` host-key pin
+
+**Pin the Ed25519 key alone (recommended):** modern OpenSSH always offers it, and one
+verified line is easy to inspect and rotate. Capture exactly that one key **once** to a
+file, using the exact value stored in `SERVER_HOST`, and fingerprint **that same file** —
+never a second live scan (re-scanning would fingerprint a different capture than the one
+you paste, so an intermittent on-path attacker could poison the stored line while a later
+clean scan passes the check):
+
+```bash
+ssh-keyscan -t ed25519 "$SERVER_HOST" > /tmp/dayforge_known_hosts   # capture ONCE, ed25519 only
+ssh-keygen -lf /tmp/dayforge_known_hosts                            # fingerprint the captured file
+```
+
+Read the authoritative fingerprint **on the droplet itself** — reached via an
+already-trusted SSH session or, if you have no prior trusted connection, the provider
+console (DigitalOcean web console):
+
+```bash
+ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
+```
+
+Compare only the `SHA256:…` field of each fingerprint (the trailing comment differs —
+the captured line is keyed by IP, the droplet's `.pub` carries a host comment — so the
+full lines will not be byte-identical even for a matching key). The `SHA256:…` values
+must match before you paste the **exact contents of `/tmp/dayforge_known_hosts`** (the
+single verified `<ip> ssh-ed25519 AAAA...` line) into the secret. Do not capture the key
+over an untrusted network and pin it without this check — that only bakes in TOFU once.
+
+Only pin ECDSA/RSA in addition if the client might negotiate them; if you do, scan those
+types **into the same file** and **verify every added line's `SHA256:` fingerprint**
+against the droplet's `/etc/ssh/ssh_host_ecdsa_key.pub` / `ssh_host_rsa_key.pub` before
+pasting. Never paste an unverified line — an unverified ECDSA/RSA entry captured over a
+hostile network becomes a second, un-attested trust anchor, reintroducing the TOFU gap
+this pin removes.
+
+Each entry's host field must be the exact `SERVER_HOST` string used by the workflow
+(the droplet IP on implicit port 22); hostname-keyed or `[host]:port` entries will not
+match and will block deployment. Hashed (`ssh-keyscan -H`) entries are supported, but
+plaintext IP entries are easier to inspect and rotate. Runtime `ssh-keyscan` is
+forbidden in the deploy workflow.
+
+Treat host-key rotation like `SSH_PRIVATE_KEY` rotation, in this order:
+
+1. On the droplet, regenerate the host keys (`sudo rm /etc/ssh/ssh_host_*_key* && sudo
+   ssh-keygen -A`) and **reload sshd so the new keys take effect** (`sudo systemctl
+   restart ssh`) — until sshd restarts it keeps serving the *old* key from memory.
+2. Recapture from a trusted machine and verify the new fingerprints (same capture-once /
+   fingerprint-the-file / compare-`SHA256` procedure as above).
+3. Replace the `SSH_KNOWN_HOSTS` secret with the new line(s).
+4. Run the next deployment.
+
+Between the sshd restart (step 1) and the secret update (step 3) the droplet presents a
+key the pinned secret does not list, so any deploy in that window **fails closed** at
+host-key verification — this is the intended safety behavior, not a bug. Keep the window
+short (do steps 1–3 back to back) and avoid triggering a deploy mid-rotation.
 
 ### 3. Restrict public access to `:8006` (ufw + DOCKER-USER)
 
@@ -108,6 +166,9 @@ curl -fsS -o /dev/null -w "%{http_code}\n" https://dayforge.habitreward.org/acco
 
 The container runs as **uid 1000** (`app`). Ensure `$DEPLOY_PATH/data` (and
 `staticfiles`) are writable by that uid on the host, e.g.:
+
+Prepare `SSH_KNOWN_HOSTS` first: the workflow must validate the host key before it
+can perform this SSH-based directory setup.
 
 ```bash
 mkdir -p "$DEPLOY_PATH/data" "$DEPLOY_PATH/staticfiles"
