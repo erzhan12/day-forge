@@ -140,8 +140,10 @@ def analytics_view(request, date):
     # the day-boundary math here AND the schedule_window prop below (one
     # SELECT). Deriving now/today from a single ``timezone.now()`` read
     # avoids two calls straddling local midnight; ``today`` feeds the
-    # future-date gate and the stats layer below. Mirrors the AI-view
-    # pattern (see schedules.window.user_local_now).
+    # future-date gate and the stats layer below.
+    # Inlined (not schedules.window.user_local_now) on purpose: the helper
+    # would issue its own get_schedule_settings, and we already need the
+    # settings object for schedule_window — do NOT "simplify" to the helper.
     schedule_settings = get_schedule_settings(request.user)
     now_local = timezone.localtime(
         timezone.now(), resolve_time_zone(schedule_settings.time_zone)
@@ -188,7 +190,7 @@ def analytics_view(request, date):
 
     blocks = list(schedule.time_blocks.all().order_by("start_time", "sort_order"))
     prefs = get_user_preferences(request.user)
-    # ``schedule_settings`` already resolved once above (day-boundary math).
+    # schedule_settings already resolved above; reused here for schedule_window prop.
     return inertia_render(
         request,
         "Analytics",
