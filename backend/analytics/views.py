@@ -144,6 +144,9 @@ def analytics_view(request, date):
     # Inlined (not schedules.window.user_local_now) on purpose: the helper
     # would issue its own get_schedule_settings, and we already need the
     # settings object for schedule_window — do NOT "simplify" to the helper.
+    # NOTE: resolved before the future-date gate, so a 400 on a future date
+    # still issues the get_or_create write inside get_schedule_settings
+    # (idempotent settings-row ensure; negligible, same as schedule_view).
     schedule_settings = get_schedule_settings(request.user)
     now_local = timezone.localtime(
         timezone.now(), resolve_time_zone(schedule_settings.time_zone)

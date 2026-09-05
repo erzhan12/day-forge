@@ -16,6 +16,14 @@ from django.test import Client
 from django.utils import timezone
 from schedules.models import Schedule, TimeBlock, UserScheduleSettings
 
+
+def _freeze(monkeypatch, fixed_utc):
+    """Freeze ``now`` on the shared ``django.utils.timezone`` module that every
+    changed clock-read path resolves through (``schedules.window.timezone``)."""
+    from schedules import window
+
+    monkeypatch.setattr(window.timezone, "now", lambda: fixed_utc)
+
 ANALYTICS_URL = "/analytics/{date}/"
 MARK_REVIEWED_URL = "/api/analytics/schedules/{date}/mark-reviewed/"
 NOTES_URL = "/api/analytics/reviews/{pk}/notes/"
@@ -170,18 +178,13 @@ class TestAnalyticsView:
 class TestAnalyticsFutureGateUsesUserTimezone:
     """The future-date gate reads the user's persisted zone, not UTC."""
 
-    def _freeze(self, monkeypatch, fixed_utc):
-        from schedules import window
-
-        monkeypatch.setattr(window.timezone, "now", lambda: fixed_utc)
-
     def test_allows_user_local_today_east_of_utc(
         self, auth_inertia_client, user, monkeypatch
     ):
         UserScheduleSettings.objects.create(user=user, time_zone="Asia/Almaty")
         # UTC 2026-05-03T20:00 → Almaty 2026-05-04 (local today).
         Schedule.objects.create(user=user, date=datetime.date(2026, 5, 4))
-        self._freeze(
+        _freeze(
             monkeypatch, datetime.datetime(2026, 5, 3, 20, 0, tzinfo=datetime.UTC)
         )
         resp = auth_inertia_client.get(ANALYTICS_URL.format(date="2026-05-04"))
@@ -191,7 +194,7 @@ class TestAnalyticsFutureGateUsesUserTimezone:
     def test_rejects_user_local_tomorrow(self, auth_inertia_client, user, monkeypatch):
         UserScheduleSettings.objects.create(user=user, time_zone="Asia/Almaty")
         # Almaty today = 05-04; 05-05 is local tomorrow.
-        self._freeze(
+        _freeze(
             monkeypatch, datetime.datetime(2026, 5, 3, 20, 0, tzinfo=datetime.UTC)
         )
         resp = auth_inertia_client.get(ANALYTICS_URL.format(date="2026-05-05"))
@@ -202,7 +205,7 @@ class TestAnalyticsFutureGateUsesUserTimezone:
     ):
         UserScheduleSettings.objects.create(user=user, time_zone="America/Los_Angeles")
         # UTC 2026-05-04T03:00 → LA still 2026-05-03; 05-04 is LA tomorrow.
-        self._freeze(
+        _freeze(
             monkeypatch, datetime.datetime(2026, 5, 4, 3, 0, tzinfo=datetime.UTC)
         )
         resp = auth_inertia_client.get(ANALYTICS_URL.format(date="2026-05-04"))
@@ -218,11 +221,6 @@ class TestAnalyticsWiringUsesUserTimezone:
     under both clocks) and spying on the injected kwargs (approach (a)).
     """
 
-    def _freeze(self, monkeypatch, fixed_utc):
-        from schedules import window
-
-        monkeypatch.setattr(window.timezone, "now", lambda: fixed_utc)
-
     def test_streak_wiring_passes_user_local_today(
         self, auth_inertia_client, user, monkeypatch
     ):
@@ -230,7 +228,7 @@ class TestAnalyticsWiringUsesUserTimezone:
 
         UserScheduleSettings.objects.create(user=user, time_zone="Asia/Almaty")
         Schedule.objects.create(user=user, date=datetime.date(2026, 4, 1))
-        self._freeze(
+        _freeze(
             monkeypatch, datetime.datetime(2026, 5, 3, 20, 0, tzinfo=datetime.UTC)
         )
 
@@ -255,7 +253,7 @@ class TestAnalyticsWiringUsesUserTimezone:
 
         UserScheduleSettings.objects.create(user=user, time_zone="Asia/Almaty")
         Schedule.objects.create(user=user, date=datetime.date(2026, 4, 1))
-        self._freeze(
+        _freeze(
             monkeypatch, datetime.datetime(2026, 5, 3, 20, 0, tzinfo=datetime.UTC)
         )
 
