@@ -34,7 +34,7 @@ from inertia import render as inertia_render
 from schedules.categories import ordered_categories, serialize_category, sink_category
 from schedules.http import reject_oversized_body
 from schedules.models import Schedule, TimeBlock
-from schedules.window import get_schedule_settings
+from schedules.window import get_schedule_settings, resolve_time_zone
 from templates_mgr.preferences import (
     get_user_preferences,
     ui_preferences_payload,
@@ -96,9 +96,9 @@ def _normalized_category_minutes(values, categories):
     return result
 
 
-def _streak_payload(user) -> dict:
+def _streak_payload(user, *, today) -> dict:
     return {
-        "current": compute_streak(user),
+        "current": compute_streak(user, today=today),
         "threshold": settings.ANALYTICS_STREAK_THRESHOLD,
         "window_days": settings.ANALYTICS_STREAK_WINDOW_DAYS,
     }
@@ -136,12 +136,22 @@ def analytics_view(request, date):
     except ValueError:
         return HttpResponseBadRequest("Invalid date format. Use YYYY-MM-DD.")
 
-    # Use ``timezone.localdate()`` to match ``compute_review_stats`` /
-    # ``compute_streak`` — both go through ``timezone.localtime()``. With
-    # ``TIME_ZONE = "UTC"`` and a host in another zone, ``date.today()``
-    # would disagree around midnight, letting through dates the stats
-    # layer treats as future (or vice versa).
-    today = timezone.localdate()
+    # Resolve the user's persisted settings ONCE and reuse the object for
+    # the day-boundary math here AND the schedule_window prop below (one
+    # SELECT). Deriving now/today from a single ``timezone.now()`` read
+    # avoids two calls straddling local midnight; ``today`` feeds the
+    # future-date gate and the stats layer below.
+    # Inlined (not schedules.window.user_local_now) on purpose: the helper
+    # would issue its own get_schedule_settings, and we already need the
+    # settings object for schedule_window — do NOT "simplify" to the helper.
+    # NOTE: resolved before the future-date gate, so a 400 on a future date
+    # still issues the get_or_create write inside get_schedule_settings
+    # (idempotent settings-row ensure; negligible, same as schedule_view).
+    schedule_settings = get_schedule_settings(request.user)
+    now_local = timezone.localtime(
+        timezone.now(), resolve_time_zone(schedule_settings.time_zone)
+    )
+    today = now_local.date()
     if parsed_date > today:
         return HttpResponseBadRequest("Analytics is past-only.")
 
@@ -158,9 +168,13 @@ def analytics_view(request, date):
         review = DailyReview.objects.filter(schedule=schedule).first()
         if review is None:
             # Back-compat one-shot recompute for pre-Phase-6 reviewed rows.
-            review = recompute_review_from_schedule(schedule, categories=categories)
+            review = recompute_review_from_schedule(
+                schedule, now=now_local, categories=categories
+            )
     else:
-        review = recompute_review_from_schedule(schedule, categories=categories)
+        review = recompute_review_from_schedule(
+            schedule, now=now_local, categories=categories
+        )
 
     # Cache the in-scope ``schedule`` on the review instance so
     # ``_review_to_dict`` doesn't issue an extra SELECT for the parent
@@ -179,13 +193,13 @@ def analytics_view(request, date):
 
     blocks = list(schedule.time_blocks.all().order_by("start_time", "sort_order"))
     prefs = get_user_preferences(request.user)
-    schedule_settings = get_schedule_settings(request.user)
+    # schedule_settings already resolved above; reused here for schedule_window prop.
     return inertia_render(
         request,
         "Analytics",
         {
             "review": _review_to_dict(review),
-            "streak": _streak_payload(request.user),
+            "streak": _streak_payload(request.user, today=today),
             "schedule": {
                 "id": schedule.id,
                 "date": schedule.date.isoformat(),

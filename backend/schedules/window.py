@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 
 from schedules.models import UserScheduleSettings
 
@@ -141,6 +142,23 @@ def get_schedule_settings(user) -> ScheduleSettings:
     return ScheduleSettings(
         ScheduleWindow(settings.day_start, settings.day_end), settings.time_zone
     )
+
+
+def user_local_now(user) -> datetime.datetime:
+    """User-local aware ``now`` from persisted settings.
+
+    Mirrors the AI-view pattern in ``ai/views.py`` (the apply / draft / chat
+    now() resolution): loads settings via ``get_schedule_settings`` and resolves
+    the IANA zone via ``resolve_time_zone`` (which falls back to UTC on
+    missing/corrupt values). Returns an aware datetime in the user's zone.
+    """
+    settings = get_schedule_settings(user)
+    return timezone.localtime(timezone.now(), resolve_time_zone(settings.time_zone))
+
+
+def user_local_date(user) -> datetime.date:
+    """User-local calendar date. Thin ``.date()`` over ``user_local_now``."""
+    return user_local_now(user).date()
 
 
 def get_schedule_window(user) -> ScheduleWindow:

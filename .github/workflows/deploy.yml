@@ -23,6 +23,27 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
+      # Security invariant (issue #194): the deploy job must never regress the
+      # SSH host-key pin. The regex anchors on a command position so this step's
+      # own prose/echoes that name the forbidden tool don't self-trip. A swap to
+      # a non-strict option (e.g. accept-new) is caught by the strict==total gate
+      # below, since it drops the strict count. This runs in the `test` job on
+      # every push to main and workflow_dispatch (the Deploy workflow does not
+      # trigger on pull_request); a failure blocks the whole build/push/deploy
+      # chain. Pre-merge (PR-time) enforcement is a deferred follow-up.
+      - name: Verify deploy SSH host-key pinning invariant
+        run: |
+          f=.github/workflows/deploy.yml
+          if grep -Eq '^[[:space:]]*(run:[[:space:]]+)?ssh-keyscan[[:space:]]' "$f"; then
+            echo "::error::deploy.yml reintroduced a runtime ssh-keyscan (TOFU)"; exit 1
+          fi
+          total=$(grep -cE '^[[:space:]]+(ssh|scp)[[:space:]]' "$f" || true)
+          strict=$(grep -cE '^[[:space:]]+(ssh|scp)[[:space:]].*StrictHostKeyChecking=yes.*UserKnownHostsFile=\$HOME/\.ssh/known_hosts' "$f" || true)
+          echo "ssh/scp invocations: ${total:-0}; strict+pinned: ${strict:-0}"
+          if [ "${strict:-0}" -ne "${total:-0}" ] || [ "${total:-0}" -eq 0 ]; then
+            echo "::error::not every ssh/scp carries StrictHostKeyChecking=yes + UserKnownHostsFile"; exit 1
+          fi
+
       - name: Install uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d  # v10.0.1
 
@@ -123,8 +144,16 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      - name: Add server to known_hosts
-        run: ssh-keyscan -H "${{ secrets.SERVER_HOST }}" >> ~/.ssh/known_hosts
+      - name: Pin SSH host key
+        env:
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          test -n "$SSH_KNOWN_HOSTS"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+          test -s "$HOME/.ssh/known_hosts"
 
       - name: Copy deployment files to droplet
         env:
@@ -132,8 +161,8 @@ jobs:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
           # One-time host prep (deploy owns DEPLOY_PATH; data/staticfiles uid 1000) — deployment/README.md §3b.
-          ssh "$SSH_TARGET" "mkdir -p \"$DEPLOY_PATH/data\" \"$DEPLOY_PATH/staticfiles\""
-          scp deployment/docker/docker-compose.yml "$SSH_TARGET:$DEPLOY_PATH/docker-compose.yml"
+          ssh -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$HOME/.ssh/known_hosts" "$SSH_TARGET" "mkdir -p \"$DEPLOY_PATH/data\" \"$DEPLOY_PATH/staticfiles\""
+          scp -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$HOME/.ssh/known_hosts" deployment/docker/docker-compose.yml "$SSH_TARGET:$DEPLOY_PATH/docker-compose.yml"
 
       - name: Write .env, pull image, restart stack
         env:
@@ -234,10 +263,10 @@ jobs:
           with open(path, "w", encoding="utf-8") as f:
               f.write("\n".join(lines) + "\n")
           PY
-          scp /tmp/day-forge.env "$SSH_TARGET:$DEPLOY_PATH/.env"
+          scp -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$HOME/.ssh/known_hosts" /tmp/day-forge.env "$SSH_TARGET:$DEPLOY_PATH/.env"
           rm -f /tmp/day-forge.env
-          ssh "$SSH_TARGET" "grep -q '^DEBUG=0$' '$DEPLOY_PATH/.env'"
-          ssh "$SSH_TARGET" "bash -s" <<EOF
+          ssh -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$HOME/.ssh/known_hosts" "$SSH_TARGET" "grep -q '^DEBUG=0$' '$DEPLOY_PATH/.env'"
+          ssh -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$HOME/.ssh/known_hosts" "$SSH_TARGET" "bash -s" <<EOF
           set -e
           cd "$DEPLOY_PATH"
           echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin

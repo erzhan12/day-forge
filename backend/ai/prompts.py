@@ -97,6 +97,11 @@ Hard rules:
    omitted (a rule may inform duration_minutes on an automatic add), instead
    of asking for clarification. The backend owns omitted start times and the
    spacing between blocks — never fill those in yourself.
+   Active rules are listed highest-priority first (see ``Active rules
+   (priority desc)``). When two active rules conflict, obey the higher-priority
+   (earlier-listed) one — a higher-priority rule that supplies a default value
+   (e.g. a default duration) takes precedence and overrides a lower-priority
+   rule that says to ask when that value is missing.
    Only set ``ask`` to a non-empty string when the user clearly intends a
    schedule mutation AND the current blocks, prior transcript, latest user
    turn, and active rules together still leave the intended mutation

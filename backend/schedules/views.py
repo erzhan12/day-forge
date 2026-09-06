@@ -17,7 +17,7 @@ from templates_mgr.preferences import (
 
 from schedules.categories import ordered_categories, serialize_category
 from schedules.models import Schedule, TimeBlock
-from schedules.window import get_schedule_settings
+from schedules.window import get_schedule_settings, user_local_date
 
 # Login renders Strategic statically — no user preference exists pre-auth.
 # Centralized so every login render path gets the same template_data; a
@@ -30,7 +30,14 @@ def _render_login(request, props: dict):
 
 
 def root_redirect(request):
-    today = datetime.date.today().isoformat()
+    # `root_redirect` is undecorated, so anonymous requests reach it. Only
+    # authenticated users have persisted settings; unauthenticated `/` stays
+    # on the host clock (as before feature 0077) — resolving user-local for
+    # AnonymousUser would hit `get_or_create(user=AnonymousUser)` → TypeError.
+    if request.user.is_authenticated:
+        today = user_local_date(request.user).isoformat()
+    else:
+        today = datetime.date.today().isoformat()
     return redirect("schedule", date=today)
 
 
@@ -57,7 +64,7 @@ def login_view(request):
     user = authenticate(request, username=username, password=password)
     if user is not None:
         login(request, user)
-        today = datetime.date.today().isoformat()
+        today = user_local_date(user).isoformat()
         return redirect("schedule", date=today)
     return _render_login(request, {"errors": {"non_field": "Invalid credentials"}})
 
