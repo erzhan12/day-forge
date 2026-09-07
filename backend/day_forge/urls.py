@@ -23,6 +23,11 @@ urlpatterns = [
     path("", schedules_views.root_redirect, name="root"),
     path("schedule/<str:date>/", schedules_views.schedule_view, name="schedule"),
     path("settings/", templates_views.settings_view, name="settings"),
+    # Public legal pages — no login_required, unlike every other page route.
+    # The Google OAuth consent screen (project clear-radio-500612-j0) links
+    # to these URLs, so they must resolve for anonymous visitors.
+    path("privacy/", schedules_views.privacy_view, name="privacy"),
+    path("terms/", schedules_views.terms_view, name="terms"),
     # API: schedules + blocks
     path(
         "api/schedules/<str:date>/blocks/",

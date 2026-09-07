@@ -128,6 +128,13 @@ if not DEBUG:
 # Auth
 LOGIN_URL = "/accounts/login/"
 
+# Contact address printed on the public /privacy/ and /terms/ pages. Optional:
+# when empty the templates fall back to pointing the reader at the support
+# address on the Google OAuth consent screen, so an unconfigured deploy never
+# renders a blank or placeholder mailto link. Kept out of the source tree on
+# purpose — the pages are public, so the address is published to crawlers.
+LEGAL_CONTACT_EMAIL = os.environ.get("LEGAL_CONTACT_EMAIL", "").strip()
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Cache / rate-limit backend. The two AI rate-limit buckets

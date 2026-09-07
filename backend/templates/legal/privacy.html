@@ -1,0 +1,154 @@
+{% extends "legal/_layout.html" %}
+
+{% block page_title %}Privacy Policy — Day Forge{% endblock %}
+{% block page_description %}What Day Forge stores, where it is sent, and how to delete it.{% endblock %}
+{% block heading %}Privacy Policy{% endblock %}
+
+{% block content %}
+<p>
+    Day Forge is a personal daily-schedule assistant. You plan a day as a list
+    of time blocks, optionally pull in tasks and calendar events from services
+    you connect, and optionally ask an AI assistant to draft or adjust the day.
+    This page describes exactly what that stores, what leaves the server, and
+    how to get rid of it.
+</p>
+
+<h2>1. Data you give us</h2>
+
+<h3>Account</h3>
+<ul>
+    <li>Your username and a salted hash of your password (the password itself is never stored in a readable form).</li>
+    <li>A session cookie and a CSRF cookie, used to keep you signed in and to protect form submissions. There are no advertising, tracking, or third-party analytics cookies.</li>
+</ul>
+
+<h3>Schedule content</h3>
+<ul>
+    <li>Your schedules and their time blocks: title, start and end time, category, completion state, and ordering.</li>
+    <li>Your categories, day templates, and planning rules.</li>
+    <li>Your settings: time zone, day-window start and end, and interface preferences such as the selected theme.</li>
+    <li>Daily reviews, including any notes you write and the computed completion ratio for the day.</li>
+</ul>
+
+<h3>AI interactions</h3>
+<p>
+    When you use the AI assistant, an audit row is written for each request. It
+    records your most recent message verbatim, a SHA-256 fingerprint of the
+    conversation it belonged to, the model's response, and the outcome. Because
+    your message is stored verbatim, <strong>do not type passwords, API keys, or
+    other secrets into the assistant.</strong>
+</p>
+
+<h3>Credentials for services you connect</h3>
+<p>
+    Every integration is optional and off until you connect it. When you do
+    connect one, the credential is encrypted at rest with a symmetric key held
+    in the server's environment, and is decrypted only at the moment a request
+    to that provider is made:
+</p>
+<ul>
+    <li><strong>Apple Calendar / CalDAV</strong> — the server URL, your username, and an app-specific password.</li>
+    <li><strong>Todoist</strong> — your personal API token.</li>
+    <li><strong>Habitica</strong> — your Habitica user ID and API token.</li>
+    <li><strong>Google Calendar</strong> — your Google account identifier and email address, plus OAuth refresh and access tokens.</li>
+</ul>
+
+<h2>2. Google Calendar and Google user data</h2>
+<p>
+    If you connect Google Calendar, Day Forge requests these scopes and no
+    others:
+</p>
+<ul>
+    <li><code>calendar.readonly</code> — list your calendars and read events. This scope <strong>cannot create, change, or delete anything</strong> in your Google Calendar, and Day Forge never attempts to.</li>
+    <li><code>openid</code> and <code>userinfo.email</code> — identify which Google account was connected, so multiple accounts can be told apart and disconnected individually.</li>
+</ul>
+<p>
+    Events are fetched on demand for the day you are viewing and held in a
+    short-lived server-side cache (five minutes by default) so that repeated
+    views do not re-query Google. Event titles and times are shown to you in the
+    calendar panel and are used only for display and for the optional
+    "add this event to my schedule" action. Google Calendar data is never
+    included in any prompt sent to an AI provider.
+</p>
+<div class="callout">
+    <p>
+        Day Forge's use of information received from Google APIs adheres to the
+        <a href="https://developers.google.com/terms/api-services-user-data-policy" rel="noopener noreferrer">Google API Services User Data Policy</a>,
+        including the Limited Use requirements.
+    </p>
+</div>
+<p>
+    You can disconnect a Google account at any time from the Settings page,
+    which deletes the stored tokens, or revoke access directly at
+    <a href="https://myaccount.google.com/permissions" rel="noopener noreferrer">myaccount.google.com/permissions</a>.
+</p>
+
+<h2>3. What leaves the server</h2>
+
+<h3>The AI provider</h3>
+<p>
+    The AI features send data to a third-party large-language-model provider
+    over an OpenAI-compatible API. The operator of this deployment chooses that
+    provider, so the exact company depends on how this instance is configured.
+    Two features send data there:
+</p>
+<ul>
+    <li><strong>Draft generation</strong> sends your day template, your planning rules, and a summary of recent days — block titles, times, categories, and completion ratios — so the model can propose a schedule.</li>
+    <li>
+        <strong>Chat</strong> sends the current day's blocks together with the
+        <em>entire visible conversation</em> — not just your latest message — on
+        every turn. The conversation lives only in your browser tab; clearing
+        the thread, reloading the page, or moving to a different date resets it.
+        If you have discussed something you would rather not send again, clear
+        the thread before your next message.
+    </li>
+</ul>
+<p>
+    Task text from Todoist and Habitica, and event titles from any calendar, are
+    <strong>never</strong> included in AI prompts. They are display-only.
+</p>
+
+<h3>Services you connected</h3>
+<p>
+    When a task or calendar panel is open, the server makes requests to iCloud,
+    Todoist, Habitica, or Google on your behalf using the credentials you
+    supplied. Marking a Todoist or Habitica task complete from Day Forge sends
+    that completion to the provider. Each of those providers has its own privacy
+    policy governing what it does with the request.
+</p>
+
+<h3>Nothing else</h3>
+<p>
+    Day Forge does not sell or rent your data, does not share it for
+    advertising, and runs no third-party analytics or tracking scripts. Data may
+    be disclosed only if required by law.
+</p>
+
+<h2>4. Retention and deletion</h2>
+<ul>
+    <li>Schedules, reviews, templates, rules, and AI audit rows are kept until they are deleted.</li>
+    <li>Disconnecting an integration in Settings deletes the stored credential or token for it immediately.</li>
+    <li>Deleting a time block or schedule in the app deletes it from the database.</li>
+    <li>To have your whole account and its data removed, use the contact route below. Backups of the underlying database, where the operator keeps them, may retain copies for a short period after deletion.</li>
+</ul>
+
+<h2>5. Security</h2>
+<ul>
+    <li>All traffic is served over HTTPS.</li>
+    <li>Third-party credentials and OAuth tokens are encrypted at rest with Fernet (AES-128-CBC with an HMAC), keyed from the server environment rather than from the database.</li>
+    <li>Passwords are stored using Django's password hashing.</li>
+    <li>No system is perfectly secure, and no absolute guarantee of security can be given.</li>
+</ul>
+
+<h2>6. Children</h2>
+<p>
+    Day Forge is not directed at children and is not intended for use by anyone
+    under 16.
+</p>
+
+<h2>7. Changes to this policy</h2>
+<p>
+    This policy may be updated as the application changes. The date at the top
+    of the page reflects the most recent revision. Continuing to use Day Forge
+    after a change means you accept the revised policy.
+</p>
+{% endblock %}
