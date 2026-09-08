@@ -1000,3 +1000,17 @@ re-raised these as P2/P3 hardening. Add in a focused follow-up pass:
   `validate_action_shape` (defined twice: add-branch + outer resize logic).
 - PR #179 finding #5 (comment on the `compute_move_resize_times` duration
   bypass) is already satisfied at `mutation_planner.py:523-525` — no action.
+
+### 0078 public legal pages — follow-ups
+
+Shipped: `/privacy/` and `/terms/` as unauthenticated Django-template pages
+(`backend/templates/legal/`), wired into `urls.py` and linked from the Login
+footer. Plan: `docs/features/0078_PLAN.md`.
+
+- [ ] Set the `LEGAL_CONTACT_EMAIL` GitHub secret (the workflow already passes it
+      through) if the deployment should print a contact address instead of
+      pointing readers at the consent-screen support address.
+- [ ] Decide whether the Terms need a governing-law / jurisdiction clause. Left
+      out deliberately — naming a jurisdiction is the operator's legal choice.
+- [ ] Bump `LEGAL_LAST_UPDATED` in `backend/schedules/legal_views.py` in the same
+      commit as any future wording change; nothing derives it from git.
