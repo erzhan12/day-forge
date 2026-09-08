@@ -34,8 +34,11 @@ export default defineConfig({
       "/admin": "http://localhost:8006",
       // Public legal pages — Django-rendered, no Vue page to resolve, so
       // without these entries the dev server 404s the Login footer links.
-      "/privacy": "http://localhost:8006",
-      "/terms": "http://localhost:8006",
+      // Anchored regexes (a key starting with ^ is treated as one) rather
+      // than the prefix matching the keys above use: a future /terms-of-sale
+      // or /privacy-settings route must not be swallowed by these.
+      "^/privacy(/.*)?$": "http://localhost:8006",
+      "^/terms(/.*)?$": "http://localhost:8006",
       "^/$": "http://localhost:8006",
     },
   },

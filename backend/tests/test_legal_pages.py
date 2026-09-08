@@ -51,7 +51,11 @@ class TestPublicAccess:
     @pytest.mark.parametrize("url", LEGAL_URLS)
     def test_anonymous_get_does_not_redirect_to_login(self, client, url):
         response = client.get(url, follow=False)
-        assert response.status_code != 302
+        # The page itself, not a bounce to /accounts/login/. Checking the
+        # Location header (``in response`` looks at response headers) as well
+        # as the status catches a redirect issued with any other 3xx, which a
+        # bare ``!= 302`` would wave through.
+        assert response.status_code == 200
         assert "Location" not in response
 
     @pytest.mark.parametrize("url", LEGAL_URLS)
@@ -86,6 +90,19 @@ class TestRendering:
         assert body.lstrip().startswith("<!DOCTYPE html>")
         assert "data-page" not in body
         assert "/src/app.ts" not in body
+
+    @pytest.mark.parametrize("url", LEGAL_URLS)
+    def test_maintainer_comments_never_reach_the_rendered_page(self, client, url):
+        # Django's ``{# … #}`` is single-line only: a multi-line note written
+        # that way is not parsed as a comment and renders verbatim into a
+        # public page (it did, once — hence this test). Multi-line notes must
+        # use ``{% comment %}``. Unrendered tag markers would betray either
+        # mistake, as would the settings names those notes cite.
+        body = _text(client.get(url))
+        assert "{#" not in body
+        assert "{%" not in body
+        for internal in ("settings.py", "CACHE_TTL_SECONDS", "STATICFILES_DIRS", "INERTIA_LAYOUT"):
+            assert internal not in body
 
     @pytest.mark.parametrize("url", LEGAL_URLS)
     def test_pages_cross_link_and_link_home(self, client, url):

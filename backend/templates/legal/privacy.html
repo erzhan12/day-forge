@@ -63,6 +63,14 @@
 </ul>
 <p>
     Events are fetched on demand for the day you are viewing and held in a
+    {% comment %}
+    "five minutes" tracks the GOOGLE_CACHE_TTL_SECONDS and
+    CALDAV_CACHE_TTL_SECONDS defaults of 300 in settings.py — update this
+    sentence if either default changes. Kept as a template comment (stripped
+    at render) rather than an HTML one: this page is public, and the note is
+    for maintainers, not readers. Note {# … #} is single-line only in Django,
+    so a multi-line note must use this tag or it renders into the page.
+    {% endcomment %}
     short-lived server-side cache (five minutes by default) so that repeated
     views do not re-query Google. Event titles and times are shown to you in the
     calendar panel and are used only for display and for the optional
