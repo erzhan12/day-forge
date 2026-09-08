@@ -36,6 +36,12 @@ def _prose(response):
 
 
 class TestPublicAccess:
+    # Only the authenticated case carries ``django_db``. The anonymous cases
+    # deliberately do not: these views touch no model, and an unmarked test
+    # makes pytest-django fail loudly the moment one starts issuing queries
+    # (a login gate reintroduced, a template that reads ``request.user``).
+    # Marking them for consistency would trade that canary for nothing.
+
     @pytest.mark.parametrize("url", LEGAL_URLS)
     def test_anonymous_get_returns_200(self, client, url):
         # The whole point of the feature: no session, no redirect.
@@ -90,7 +96,7 @@ class TestRendering:
 
     @pytest.mark.parametrize("url", LEGAL_URLS)
     def test_shows_the_revision_date(self, client, url):
-        from schedules.views import LEGAL_LAST_UPDATED
+        from schedules.legal_views import LEGAL_LAST_UPDATED
 
         assert LEGAL_LAST_UPDATED in _text(client.get(url))
 

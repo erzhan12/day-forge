@@ -5,7 +5,7 @@ from django.conf import settings
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponseBadRequest
-from django.shortcuts import redirect, render
+from django.shortcuts import redirect
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
 from inertia import render as inertia_render
@@ -39,48 +39,6 @@ def root_redirect(request):
     else:
         today = datetime.date.today().isoformat()
     return redirect("schedule", date=today)
-
-
-# Revision date shown on both legal pages. Bump it in the same commit that
-# changes the wording of either template — nothing derives it from git, so a
-# stale date here is the only failure mode.
-LEGAL_LAST_UPDATED = "7 September 2026"
-
-
-def _render_legal(request, template_name):
-    """Render a public legal page.
-
-    Deliberately **not** ``@login_required``: the Google OAuth consent
-    screen for this deployment links to ``/privacy/`` and ``/terms/``, and
-    Google's reviewers (plus any user reading the consent screen before
-    they have an account) must reach them anonymously. Every other page
-    view in this module is login-gated; these two are the exception, so
-    the absence of the decorator is intentional rather than an oversight.
-
-    Plain ``django.shortcuts.render`` rather than ``inertia_render``: the
-    content is static, needs no props, and must survive a deploy where the
-    Vue bundle has not been rebuilt.
-    """
-    return render(
-        request,
-        template_name,
-        {
-            "last_updated": LEGAL_LAST_UPDATED,
-            "contact_email": settings.LEGAL_CONTACT_EMAIL,
-        },
-    )
-
-
-# HEAD is allowed alongside GET because crawlers and link checkers (Google's
-# among them) probe these URLs with HEAD; Django does not fold HEAD into GET.
-@require_http_methods(["GET", "HEAD"])
-def privacy_view(request):
-    return _render_legal(request, "legal/privacy.html")
-
-
-@require_http_methods(["GET", "HEAD"])
-def terms_view(request):
-    return _render_legal(request, "legal/terms.html")
 
 
 @ensure_csrf_cookie

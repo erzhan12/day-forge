@@ -1012,5 +1012,5 @@ footer. Plan: `docs/features/0078_PLAN.md`.
       pointing readers at the consent-screen support address.
 - [ ] Decide whether the Terms need a governing-law / jurisdiction clause. Left
       out deliberately — naming a jurisdiction is the operator's legal choice.
-- [ ] Bump `LEGAL_LAST_UPDATED` in `backend/schedules/views.py` in the same
+- [ ] Bump `LEGAL_LAST_UPDATED` in `backend/schedules/legal_views.py` in the same
       commit as any future wording change; nothing derives it from git.
