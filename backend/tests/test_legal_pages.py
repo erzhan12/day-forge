@@ -15,6 +15,7 @@ leaving normal copy edits free.
 import re
 
 import pytest
+from django.conf import settings
 from django.test import override_settings
 from django.urls import reverse
 
@@ -117,6 +118,14 @@ class TestRendering:
 
         assert LEGAL_LAST_UPDATED in _text(client.get(url))
 
+    def test_revision_date_keeps_the_documented_format(self):
+        # "D Month YYYY", per the comment on the constant. Catches a blank or
+        # placeholder value, which would otherwise render as a bare "Last
+        # updated:" on both public pages.
+        from schedules.legal_views import LEGAL_LAST_UPDATED
+
+        assert re.fullmatch(r"\d{1,2} [A-Z][a-z]+ \d{4}", LEGAL_LAST_UPDATED)
+
     def test_titles_are_distinct(self, client):
         assert "<title>Privacy Policy — Day Forge</title>" in _text(client.get("/privacy/"))
         assert "<title>Terms of Service — Day Forge</title>" in _text(client.get("/terms/"))
@@ -183,6 +192,16 @@ class TestPrivacyDisclosures:
 
     def test_covers_deletion(self, body):
         assert "Retention and deletion" in body
+
+    def test_cache_window_prose_matches_the_settings_it_describes(self, body):
+        # The page tells readers events are cached "five minutes by default".
+        # Pinning the prose to the two settings it paraphrases turns the
+        # maintainer note in privacy.html into an enforced invariant: change
+        # either default and this fails, instead of the policy quietly
+        # becoming untrue.
+        assert "five minutes by default" in body
+        assert settings.GOOGLE_CACHE_TTL_SECONDS == 300
+        assert settings.CALDAV_CACHE_TTL_SECONDS == 300
 
 
 class TestTermsDisclosures:
