@@ -196,5 +196,15 @@ class TestTermsDisclosures:
     def test_disclaims_warranties(self, body):
         assert "without warranties" in body
 
+    def test_states_the_service_is_provided_as_is(self, body):
+        assert "as is" in body.lower()
+
+    def test_states_the_account_holder_owns_their_credentials(self, body):
+        assert "responsible for keeping your password" in body
+
+    def test_makes_no_uptime_or_backup_promise(self, body):
+        assert "no uptime commitment" in body
+        assert "Backups are not guaranteed" in body
+
     def test_links_to_the_privacy_policy(self, body):
         assert "Privacy Policy" in body
