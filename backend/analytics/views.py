@@ -257,6 +257,14 @@ def mark_reviewed(request, date):
     if schedule is None:
         return JsonResponse({"errors": {"detail": "Not found."}}, status=404)
 
+    # Same user-local instant as ``analytics_view`` — ``mark_reviewed`` freezes
+    # the snapshot; UTC/default ``now`` would disagree with the GET panel the
+    # user just saw (0077 wiring) around non-UTC day boundaries.
+    schedule_settings = get_schedule_settings(request.user)
+    now_local = timezone.localtime(
+        timezone.now(), resolve_time_zone(schedule_settings.time_zone)
+    )
+
     # Pre-lock fast paths. Cheap early-out, NOT load-bearing for
     # correctness — the under-lock recheck below is what closes the race.
     if schedule.status == Schedule.Status.DRAFT:
@@ -276,7 +284,7 @@ def mark_reviewed(request, date):
         if review is None:
             # Back-compat one-shot recompute for pre-Phase-6 reviewed
             # rows that have no DailyReview yet.
-            review = recompute_review_from_schedule(schedule)
+            review = recompute_review_from_schedule(schedule, now=now_local)
         review.schedule = schedule  # avoid an extra SELECT in serialiser
         return JsonResponse(_review_to_dict(review))
 
@@ -299,7 +307,7 @@ def mark_reviewed(request, date):
         if locked.status == Schedule.Status.REVIEWED:
             review = DailyReview.objects.filter(schedule=locked).first()
             if review is None:
-                review = recompute_review_from_schedule(locked)
+                review = recompute_review_from_schedule(locked, now=now_local)
             review.schedule = locked  # avoid extra SELECT in serialiser
             return JsonResponse(_review_to_dict(review))
         if locked.status == Schedule.Status.DRAFT:
@@ -332,7 +340,7 @@ def mark_reviewed(request, date):
         if notes_err is not None:
             return notes_err
 
-        review = recompute_review_from_schedule(locked)
+        review = recompute_review_from_schedule(locked, now=now_local)
         if notes_value is not None:
             review.notes = notes_value
             review.save(update_fields=["notes"])
