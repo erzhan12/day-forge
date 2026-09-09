@@ -304,6 +304,35 @@ class TestMarkReviewed:
         assert review.planned_count == 2
         assert review.completed_count == 1
 
+    def test_mark_reviewed_uses_user_local_skip_boundary(
+        self, auth_client, user, monkeypatch
+    ):
+        """POST freeze must match GET analytics skip math (0077 wiring).
+
+        At UTC 2026-05-03T20:00, Almaty is already 2026-05-04 01:00, so a
+        May-3 schedule is a past day and an uncompleted 22:00–23:00 block is
+        skipped. UTC-default ``now`` would still treat May 3 as today and
+        under-count skips in the frozen snapshot.
+        """
+        UserScheduleSettings.objects.create(user=user, time_zone="Asia/Almaty")
+        schedule_date = datetime.date(2026, 5, 3)
+        schedule = Schedule.objects.create(
+            user=user, date=schedule_date, status=Schedule.Status.ACTIVE
+        )
+        _make_block(schedule, "22:00", "23:00", completed=False)
+        _freeze(
+            monkeypatch, datetime.datetime(2026, 5, 3, 20, 0, tzinfo=datetime.UTC)
+        )
+
+        resp = auth_client.post(
+            MARK_REVIEWED_URL.format(date=schedule_date),
+            "",
+            content_type="application/json",
+        )
+        assert resp.status_code == 200
+        review = DailyReview.objects.get(schedule=schedule)
+        assert review.skipped_count == 1
+
     def test_idempotent_returns_same_snapshot_unchanged_updated_at(
         self, auth_client, active_schedule, past_date
     ):
