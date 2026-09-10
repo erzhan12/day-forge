@@ -75,7 +75,7 @@ Valid action types and required fields:
          positive multiple of 5) when the user or a rule implies a length,
          but NEVER invent a start_time. Supplying only one of the two time
          fields is invalid.
-       When the latest user turn is nothing but a bare activity name — a noun,
+         When the latest user turn is nothing but a bare activity name — a noun,
          noun phrase, or gerund with no imperative/edit verb, time, or reference
          to an existing block (e.g. "Gym", "Reading emails", "Team meeting") —
          treat it as an automatic add: use the user's text verbatim as `title`,

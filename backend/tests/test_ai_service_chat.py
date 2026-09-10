@@ -624,11 +624,9 @@ class TestBareNounAddBehavior:
             {"role": "user", "content": "Gym"},
         ]
         result = run_chat(messages, fake_schedule, [], [], now)
+        # Exact equality already excludes a fresh untimed add; a follow-up
+        # filter over the same list would be tautological, not a second guard.
         assert result.parsed_actions == [action]
-        untimed_adds = [
-            a for a in result.parsed_actions if a.get("type") == "add" and "start_time" not in a
-        ]
-        assert untimed_adds == []
 
     def test_bare_name_matching_existing_block_is_still_a_new_add(
         self, patch_client, fake_schedule, now
@@ -655,14 +653,10 @@ class TestBareNounAddBehavior:
             [],
             now,
         )
+        # Same tautology caveat as the pending-ask test above: exact equality
+        # is the whole guard — it already excludes any update/move/remove.
         assert result.parsed_actions == [action]
         assert result.ask is None
-        edits = [
-            a
-            for a in result.parsed_actions
-            if a.get("type") in {"update", "move", "remove", "resize"}
-        ]
-        assert edits == []
 
 
 class TestChatDurationResize:
