@@ -15,7 +15,10 @@ import FocusIndicatorView from "../src/components/FocusIndicatorView.vue"
 // are.
 const PRIVATE = ["2026-08-12", "09:00", "10:00"]
 
-const WORK = "oklch(0.72 0.12 250)"
+// A sentinel, NOT what the app resolves: `getCategoryColor("work")` returns the
+// hex `#3B82F6`. This oklch value only ever existed in the 5a mock, so asserting
+// on it proves the prop is threaded through without pinning a live palette.
+const SENTINEL_CATEGORY_COLOR = "oklch(0.72 0.12 250)"
 
 function mountView(props: Record<string, unknown> = {}) {
   return mount(FocusIndicatorView, {
@@ -85,37 +88,37 @@ describe("FocusIndicatorView — active state", () => {
   })
 
   it("shows the block title and the timeline's remaining-minutes copy", () => {
-    const w = mountView({ blockTitle: "LeverX [2]", remainingMinutes: 18 })
+    const w = mountView({ active: true, blockTitle: "LeverX [2]", remainingMinutes: 18 })
     expect(w.find(".fi-title").text()).toBe("LeverX [2]")
     expect(w.find(".fi-remaining").text()).toBe("18m left")
     for (const s of PRIVATE) expect(w.html()).not.toContain(s)
   })
 
   it("formats hour-plus remaining the same as the timeline badge", () => {
-    expect(mountView({ remainingMinutes: 90 }).find(".fi-remaining").text()).toBe("1h 30m left")
+    expect(mountView({ active: true, remainingMinutes: 90 }).find(".fi-remaining").text()).toBe("1h 30m left")
   })
 
   it("paints the rail and the fill in the category colour", () => {
-    const w = mountView({ categoryColor: WORK })
-    expect(w.find(".fi-rail").attributes("style")).toContain(WORK)
-    expect(w.find(".fi-fill").attributes("style")).toContain(WORK)
+    const w = mountView({ active: true, categoryColor: SENTINEL_CATEGORY_COLOR })
+    expect(w.find(".fi-rail").attributes("style")).toContain(SENTINEL_CATEGORY_COLOR)
+    expect(w.find(".fi-fill").attributes("style")).toContain(SENTINEL_CATEGORY_COLOR)
     // The raw category slug is a colour here, never a label.
     expect(w.text()).not.toContain("work")
   })
 
   it("falls back to the neutral grey when no category colour is supplied", () => {
-    const w = mountView({ categoryColor: null })
+    const w = mountView({ active: true, categoryColor: null })
     expect(w.find(".fi-rail").attributes("style")).toContain("#8E9299")
   })
 
   it.each(["", "   "])("renders Untitled for an empty block title", (blockTitle) => {
-    expect(mountView({ blockTitle }).find(".fi-title").text()).toBe("Untitled")
+    expect(mountView({ active: true, blockTitle }).find(".fi-title").text()).toBe("Untitled")
   })
 
   it.each([null, undefined, Number.NaN, 0, -1])(
     "hides the countdown when remaining minutes are invalid (%s)",
     (remainingMinutes) => {
-      const w = mountView({ remainingMinutes })
+      const w = mountView({ active: true, remainingMinutes })
       expect(w.find(".fi-remaining").exists()).toBe(false)
       // The bar itself still renders — progress is independent of the label.
       expect(w.find('[role="progressbar"]').exists()).toBe(true)
@@ -190,8 +193,8 @@ describe("FocusIndicatorView — pause state", () => {
   })
 
   it("uses no category colour anywhere — the whole window reads grey", () => {
-    const w = mountPause({ categoryColor: WORK })
-    expect(w.html()).not.toContain(WORK)
+    const w = mountPause({ categoryColor: SENTINEL_CATEGORY_COLOR })
+    expect(w.html()).not.toContain(SENTINEL_CATEGORY_COLOR)
     expect(w.find(".fi-rail").exists()).toBe(false)
     // #ECEAE6 is the in-block foreground and must not leak into a pause.
     expect(w.html()).not.toContain("#ECEAE6")
@@ -205,7 +208,7 @@ describe("FocusIndicatorView — pause state", () => {
   })
 
   it.each([null, undefined, Number.NaN, 0, -1])(
-    "falls closed to neutral when the next countdown is invalid (%s)",
+    "fails closed to neutral when the next countdown is invalid (%s)",
     (nextBlockRemainingMinutes) => {
       const w = mountPause({ nextBlockRemainingMinutes })
       expect(w.find(".fi-next-title").exists()).toBe(false)

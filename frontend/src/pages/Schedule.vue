@@ -586,9 +586,11 @@ const currentBlockRemaining = computed(() =>
 // The production root provides this long-lived owner. Direct Schedule mounts
 // in focused component tests retain a component-scoped fallback.
 const focusIndicatorController = inject(FocusIndicatorControllerKey, null) ?? useFocusIndicatorController()
-watch([() => props.date, effectiveBlocks], ([date, blocks]) => {
-  // Categories ride along so the PiP rail resolves the same colour the
-  // timeline shows for user-defined categories (feature 0079).
+// `categories` is a watched source, not just read at trigger time: recolouring a
+// category in Settings changes neither the date nor the blocks, so without it
+// the PiP rail would keep the old colour until an unrelated edit fired the
+// watcher (feature 0079).
+watch([() => props.date, effectiveBlocks, () => props.categories], ([date, blocks]) => {
   focusIndicatorController.publish(date, blocks, props.categories)
 }, { immediate: true, deep: true })
 onBeforeUnmount(() => {
