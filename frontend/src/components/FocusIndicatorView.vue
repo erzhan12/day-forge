@@ -103,7 +103,7 @@ const pauseMeasurable = computed(
         <!-- Two bars drawn in CSS: a literal "||" reads as two pipes in a mono
              face and is nonsense to a screen reader. The glyph mirrors the
              active state's single `.fi-rail`, in grey. -->
-        <span class="fi-pause-glyph" aria-hidden="true"><i /><i /></span>
+        <span class="fi-pause-glyph" aria-hidden="true"><span /><span /></span>
         <span class="fi-sr-only">Pause</span>
         <template v-if="dayFinished">
           <span class="fi-pause-done">· day finished</span>

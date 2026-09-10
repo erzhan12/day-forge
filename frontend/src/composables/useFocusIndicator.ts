@@ -83,7 +83,7 @@ const PIP_STYLES = `
     gap: 2px;
     align-items: center;
   }
-  .fi-pause-glyph i {
+  .fi-pause-glyph span {
     display: block;
     width: 3px;
     height: 11px;

@@ -163,7 +163,7 @@ describe("FocusIndicatorView — pause state", () => {
 
   it("labels the pause and names the next block with an arrow", () => {
     const w = mountPause()
-    expect(w.findAll(".fi-pause-glyph i")).toHaveLength(2)
+    expect(w.findAll(".fi-pause-glyph span")).toHaveLength(2)
     expect(w.find(".fi-sr-only").text()).toBe("Pause")
     expect(w.find(".fi-arrow").text()).toBe("→")
     expect(w.find(".fi-next-title").text()).toBe("vibe")
@@ -226,7 +226,7 @@ describe("FocusIndicatorView — pause state", () => {
 
   it("shows the day-finished label with an empty, non-measuring track", () => {
     const w = mountView({ active: false, dayFinished: true })
-    expect(w.findAll(".fi-pause-glyph i")).toHaveLength(2)
+    expect(w.findAll(".fi-pause-glyph span")).toHaveLength(2)
     expect(w.find(".fi-sr-only").text()).toBe("Pause")
     expect(w.find(".fi-pause-done").text()).toBe("· day finished")
     expect(w.find(".fi-next-title").exists()).toBe(false)
@@ -234,6 +234,21 @@ describe("FocusIndicatorView — pause state", () => {
     expect(track.classes()).toContain("fi-track--dashed")
     expect(track.attributes("role")).toBeUndefined()
     expect(w.find(".fi-fill").exists()).toBe(false)
+  })
+
+  it("suppresses a next block entirely once the day is finished", () => {
+    // dayFinished wins over a supplied next block: a finished day has no "up
+    // next", so neither the title nor its countdown may leak through.
+    const w = mountView({
+      active: false,
+      dayFinished: true,
+      nextBlockTitle: "Deep work",
+      nextBlockRemainingMinutes: 90,
+    })
+    expect(w.find(".fi-pause-done").text()).toBe("· day finished")
+    expect(w.find(".fi-next-title").exists()).toBe(false)
+    expect(w.find(".fi-next-remaining").exists()).toBe(false)
+    expect(w.text()).not.toContain("Deep work")
   })
 
   it("keeps the neutral off-today state decorative, not a progressbar", () => {

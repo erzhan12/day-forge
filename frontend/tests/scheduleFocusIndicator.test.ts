@@ -432,6 +432,7 @@ describe("Schedule.vue focus indicator", () => {
     expect(win.document.title).toBe("Focus")
     // Nothing has ended yet today, so the pause has no measurable origin: the
     // dashed track renders decoratively, without a progressbar role.
+    expect(vm().indicatorPausePercent).toBeNull()
     expect(win.document.querySelector('[role="progressbar"]')).toBeNull()
     expect(win.document.querySelector(".fi-track--dashed")).not.toBeNull()
     expect(win.document.querySelector(".fi-fill")).toBeNull()
@@ -460,6 +461,7 @@ describe("Schedule.vue focus indicator", () => {
     expect(win.document.body.textContent).toContain("1h left")
     // The 09:00–10:00 block ended exactly now, so this pause IS measurable:
     // dashed track, zero fill, and a progressbar reporting 0%.
+    expect(vm().indicatorPausePercent).toBe(0)
     expect(win.document.querySelector(".fi-track--dashed")).not.toBeNull()
     expect(
       win.document.querySelector('[role="progressbar"]')?.getAttribute("aria-valuenow"),

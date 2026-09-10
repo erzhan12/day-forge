@@ -250,6 +250,15 @@ describe("isDayFinished", () => {
     ).toBe(false)
   })
 
+  it("treats a zero-duration block as ended once now passes it", () => {
+    // start === end is malformed-adjacent but not inverted, so it survives the
+    // `end < start` guard and is judged purely on whether it has ended.
+    const zero = block({ start_time: "10:00", end_time: "10:00" })
+    expect(isDayFinished([zero], 660, TODAY)).toBe(true)
+    expect(isDayFinished([zero], 600, TODAY)).toBe(true)
+    expect(isDayFinished([zero], 540, TODAY)).toBe(false)
+  })
+
   it("is false for an empty day — nothing was scheduled to finish", () => {
     expect(isDayFinished([], 660, TODAY)).toBe(false)
   })

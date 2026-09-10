@@ -35,6 +35,16 @@ function copiedBlocks(blocks: TimeBlock[]): TimeBlock[] {
   return blocks.map((block) => ({ ...block }))
 }
 
+/**
+ * Snapshot categories the same way blocks are snapshotted. No caller mutates a
+ * category array in place today (unlike drag previews, which is why blocks are
+ * copied), so this is symmetry rather than a live fix — it just keeps the
+ * retained snapshot immune to aliasing if one ever does.
+ */
+function copiedCategories(categories: UserCategory[]): UserCategory[] {
+  return categories.map((category) => ({ ...category }))
+}
+
 /** Minutes from `nowMinutes` to `hhmm`, or `null` when that is not a positive finite span. */
 function minutesUntil(hhmm: string, nowMinutes: number | null): number | null {
   if (nowMinutes === null) return null
@@ -114,7 +124,7 @@ export function useFocusIndicatorController(): FocusIndicatorController {
   function publish(date: string, blocks: TimeBlock[], categories?: UserCategory[]): void {
     retainedDate.value = date
     retainedBlocks.value = copiedBlocks(blocks)
-    if (categories) retainedCategories.value = categories
+    if (categories) retainedCategories.value = copiedCategories(categories)
   }
 
   function clearSnapshot(): void {
