@@ -17,7 +17,7 @@ from types import SimpleNamespace
 
 import openai
 import pytest
-from ai.prompts import CHAT_TRANSCRIPT_HEADER
+from ai.prompts import CHAT_TRANSCRIPT_HEADER, build_system_prompt_chat
 from ai.service import (
     AIChatResult,
     AIInvalidInputError,
@@ -30,6 +30,7 @@ from ai.service import (
     run_chat as _async_run_chat,
 )
 from asgiref.sync import async_to_sync
+from schedules.window import DEFAULT_WINDOW
 
 
 def run_chat(*args, **kwargs):
@@ -472,7 +473,7 @@ _REFERENT_PIN = "MUST reference a task_id"
 
 
 class TestBareNounAddPrompt:
-    """Group A — prompt-text assertions for feature 0078.
+    """Group A — prompt-text assertions for feature 0080.
 
     ``build_system_prompt_chat`` is a pure function whose rendered text is
     directly assertable. These pin the new Edit-1 / Edit-2 wording and guard
@@ -480,8 +481,6 @@ class TestBareNounAddPrompt:
     """
 
     def test_prompt_instructs_bare_noun_untimed_add(self):
-        from ai.prompts import build_system_prompt_chat
-        from schedules.window import DEFAULT_WINDOW
 
         prompt = build_system_prompt_chat(DEFAULT_WINDOW, sink_slug="other")
         # Phrases UNIQUE to Edit 1 (do NOT pin "OMIT both time fields" — it
@@ -493,8 +492,6 @@ class TestBareNounAddPrompt:
         assert 'default `category` to "other"' in prompt
 
     def test_prompt_ask_carveout_scoped_to_bare_names(self):
-        from ai.prompts import build_system_prompt_chat
-        from schedules.window import DEFAULT_WINDOW
 
         prompt = build_system_prompt_chat(DEFAULT_WINDOW, sink_slug="other")
         assert _BARE_NAME_PHRASE in prompt
@@ -506,8 +503,6 @@ class TestBareNounAddPrompt:
         assert "existing block" in prompt
 
     def test_prompt_preserves_existing_guards(self):
-        from ai.prompts import build_system_prompt_chat
-        from schedules.window import DEFAULT_WINDOW
 
         prompt = build_system_prompt_chat(DEFAULT_WINDOW, sink_slug="other")
         # Preservation pins: chit-chat sentence, rule-6 untrusted-transcript
@@ -520,7 +515,7 @@ class TestBareNounAddPrompt:
 
 
 class TestBareNounAddBehavior:
-    """Group B — behavior round-trip tests for feature 0078.
+    """Group B — behavior round-trip tests for feature 0080.
 
     Each stubs the model envelope the LLM is expected to emit under the new
     prompt and asserts ``run_chat`` round-trips it. These pin the service
