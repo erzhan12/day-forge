@@ -84,8 +84,13 @@ export interface PauseWindow {
  * ended block to the start of the next one (feature 0079).
  *
  * `null` means there is no measurable pause at all — off-today, no block starts
- * after now (see `isDayFinished`), or any `end_time` is unparseable. Malformed
- * data fails closed rather than inventing a window, matching `nextBlockAfter`.
+ * after now (see `isDayFinished`), or any block is malformed: an unparseable
+ * `end_time`, or an inverted block (`end < start`). Failing closed rather than
+ * inventing a window matches `nextBlockAfter` and `isDayFinished`.
+ *
+ * The inverted case matters because the origin is a `max` over ended blocks: an
+ * inverted block's end can sit at or below now while its start does not, which
+ * would make it the "latest ended" block and drag the origin forward.
  */
 export function pauseWindow(
   blocks: TimeBlock[],
@@ -95,8 +100,9 @@ export function pauseWindow(
   const next = nextBlockAfter(blocks, nowMinutes, nowDate)
   if (next === null || nowMinutes === null) return null
 
+  const starts = blocks.map((block) => timeToMinutes(block.start_time))
   const ends = blocks.map((block) => timeToMinutes(block.end_time))
-  if (ends.some((end) => !Number.isFinite(end))) return null
+  if (ends.some((end, i) => !Number.isFinite(end) || end < starts[i])) return null
 
   // A block ending exactly now is the pause origin; one still running is not.
   const ended = ends.filter((end) => end <= nowMinutes)

@@ -124,7 +124,9 @@ export function useFocusIndicatorController(): FocusIndicatorController {
   function publish(date: string, blocks: TimeBlock[], categories?: UserCategory[]): void {
     retainedDate.value = date
     retainedBlocks.value = copiedBlocks(blocks)
-    if (categories) retainedCategories.value = copiedCategories(categories)
+    // Explicit undefined check: an empty array is a real value here (it clears
+    // the retained list), and only an omitted argument leaves it untouched.
+    if (categories !== undefined) retainedCategories.value = copiedCategories(categories)
   }
 
   function clearSnapshot(): void {

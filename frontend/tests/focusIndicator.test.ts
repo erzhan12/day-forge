@@ -229,6 +229,15 @@ describe("pauseWindow", () => {
     const broken = block({ id: 4, start_time: "08:00", end_time: "not-a-time" })
     expect(pauseWindow([broken, morning, afternoon], 660, TODAY)).toBeNull()
   })
+
+  it("fails closed when any block is inverted (end < start)", () => {
+    // 12:00–11:00 at 12:10. The start is in the past, so `nextBlockAfter` never
+    // considers it and cannot reject it for a negative duration — this reaches
+    // the origin scan, where its end (660) beats morning's 10:00 and would
+    // become the pause origin. Only this guard rejects it.
+    const inverted = block({ id: 5, start_time: "12:00", end_time: "11:00" })
+    expect(pauseWindow([inverted, morning, afternoon], 730, TODAY)).toBeNull()
+  })
 })
 
 describe("isDayFinished", () => {
