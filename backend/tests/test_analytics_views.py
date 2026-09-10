@@ -520,6 +520,99 @@ class TestMarkReviewed:
 
 
 @pytest.mark.django_db
+class TestMarkReviewedUsesUserTimezone:
+    """The frozen snapshot must use the same user-local ``now`` the GET panel
+    uses — feature 0077 wired the GET only.
+
+    ``compute_review_stats`` defaults to ``timezone.localtime()``, the SERVER
+    zone (``settings.TIME_ZONE`` is UTC here), not the user's. The skipped rule
+    is day-boundary sensitive (past day → every uncompleted block is skipped;
+    today → only blocks ending before ``now.time()``), so away from UTC the
+    POST freezes a different snapshot than the GET just showed — permanently,
+    because it is frozen.
+    """
+
+    def test_freeze_uses_user_local_day_east_of_utc(
+        self, auth_client, user, monkeypatch
+    ):
+        # UTC 2026-05-03T20:00 → Almaty is already 2026-05-04T01:00, so a
+        # May-3 schedule is a PAST day and its uncompleted 22:00–23:00 block
+        # is skipped. On UTC ``now``, May 3 is still today and 22:00 has not
+        # arrived, so the block would not be counted skipped.
+        UserScheduleSettings.objects.create(user=user, time_zone="Asia/Almaty")
+        schedule = Schedule.objects.create(
+            user=user, date=datetime.date(2026, 5, 3), status=Schedule.Status.ACTIVE
+        )
+        _make_block(schedule, "22:00", "23:00", completed=False)
+        _freeze(monkeypatch, datetime.datetime(2026, 5, 3, 20, 0, tzinfo=datetime.UTC))
+
+        resp = auth_client.post(
+            MARK_REVIEWED_URL.format(date="2026-05-03"),
+            "",
+            content_type="application/json",
+        )
+
+        assert resp.status_code == 200
+        review = DailyReview.objects.get(schedule=schedule)
+        assert review.skipped_count == 1
+
+    def test_freeze_uses_user_local_day_west_of_utc(
+        self, auth_client, user, monkeypatch
+    ):
+        # Mirror image: UTC 2026-05-04T03:00 → Los Angeles is still
+        # 2026-05-03T20:00, so May 3 is TODAY there and a 22:00–23:00 block
+        # has not ended yet — not skipped. On UTC ``now`` May 3 is already a
+        # past day and the block would be counted skipped.
+        UserScheduleSettings.objects.create(user=user, time_zone="America/Los_Angeles")
+        schedule = Schedule.objects.create(
+            user=user, date=datetime.date(2026, 5, 3), status=Schedule.Status.ACTIVE
+        )
+        _make_block(schedule, "22:00", "23:00", completed=False)
+        _freeze(monkeypatch, datetime.datetime(2026, 5, 4, 3, 0, tzinfo=datetime.UTC))
+
+        resp = auth_client.post(
+            MARK_REVIEWED_URL.format(date="2026-05-03"),
+            "",
+            content_type="application/json",
+        )
+
+        assert resp.status_code == 200
+        review = DailyReview.objects.get(schedule=schedule)
+        assert review.skipped_count == 0
+
+    def test_frozen_snapshot_matches_the_get_panel(
+        self, auth_inertia_client, user, monkeypatch
+    ):
+        """The point of the fix: POST freeze == GET recompute.
+
+        Asserts the two agree rather than pinning a hardcoded number, so the
+        test keeps its meaning if the skipped rule itself ever changes.
+        """
+        UserScheduleSettings.objects.create(user=user, time_zone="Asia/Almaty")
+        schedule = Schedule.objects.create(
+            user=user, date=datetime.date(2026, 5, 3), status=Schedule.Status.ACTIVE
+        )
+        _make_block(schedule, "22:00", "23:00", completed=False)
+        _make_block(schedule, "09:00", "10:00", completed=True)
+        _freeze(monkeypatch, datetime.datetime(2026, 5, 3, 20, 0, tzinfo=datetime.UTC))
+
+        panel = auth_inertia_client.get(ANALYTICS_URL.format(date="2026-05-03"))
+        assert panel.status_code == 200
+        shown = _props(panel)["review"]
+
+        resp = auth_inertia_client.post(
+            MARK_REVIEWED_URL.format(date="2026-05-03"),
+            "",
+            content_type="application/json",
+        )
+        assert resp.status_code == 200
+        frozen = json.loads(resp.content)
+
+        for field in ("planned_count", "completed_count", "skipped_count"):
+            assert frozen[field] == shown[field], field
+
+
+@pytest.mark.django_db
 class TestUpdateReviewNotes:
     @pytest.fixture
     def review(self, active_schedule):

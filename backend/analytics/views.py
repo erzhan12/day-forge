@@ -34,7 +34,7 @@ from inertia import render as inertia_render
 from schedules.categories import ordered_categories, serialize_category, sink_category
 from schedules.http import reject_oversized_body
 from schedules.models import Schedule, TimeBlock
-from schedules.window import get_schedule_settings, resolve_time_zone
+from schedules.window import get_schedule_settings, resolve_time_zone, user_local_now
 from templates_mgr.preferences import (
     get_user_preferences,
     ui_preferences_payload,
@@ -257,6 +257,21 @@ def mark_reviewed(request, date):
     if schedule is None:
         return JsonResponse({"errors": {"detail": "Not found."}}, status=404)
 
+    # Same user-local instant ``analytics_view`` computes (0077 wiring). The
+    # snapshot this view freezes is permanent, so a server/UTC ``now`` would
+    # bake in a skipped-count that disagrees with the panel the user just saw
+    # whenever their zone is on the other side of a day boundary.
+    #
+    # Unlike ``analytics_view`` this uses the ``user_local_now`` helper rather
+    # than inlining it: that view inlines because it needs the settings object
+    # anyway for ``schedule_window``, and nothing here does.
+    #
+    # Resolved once, before the branches below, so all three recompute call
+    # sites share one instant. The cost is one idempotent settings
+    # get_or_create on the DRAFT-400 path too — same tradeoff the GET
+    # documents.
+    now_local = user_local_now(request.user)
+
     # Pre-lock fast paths. Cheap early-out, NOT load-bearing for
     # correctness — the under-lock recheck below is what closes the race.
     if schedule.status == Schedule.Status.DRAFT:
@@ -276,7 +291,7 @@ def mark_reviewed(request, date):
         if review is None:
             # Back-compat one-shot recompute for pre-Phase-6 reviewed
             # rows that have no DailyReview yet.
-            review = recompute_review_from_schedule(schedule)
+            review = recompute_review_from_schedule(schedule, now=now_local)
         review.schedule = schedule  # avoid an extra SELECT in serialiser
         return JsonResponse(_review_to_dict(review))
 
@@ -299,7 +314,7 @@ def mark_reviewed(request, date):
         if locked.status == Schedule.Status.REVIEWED:
             review = DailyReview.objects.filter(schedule=locked).first()
             if review is None:
-                review = recompute_review_from_schedule(locked)
+                review = recompute_review_from_schedule(locked, now=now_local)
             review.schedule = locked  # avoid extra SELECT in serialiser
             return JsonResponse(_review_to_dict(review))
         if locked.status == Schedule.Status.DRAFT:
@@ -332,7 +347,7 @@ def mark_reviewed(request, date):
         if notes_err is not None:
             return notes_err
 
-        review = recompute_review_from_schedule(locked)
+        review = recompute_review_from_schedule(locked, now=now_local)
         if notes_value is not None:
             review.notes = notes_value
             review.save(update_fields=["notes"])
