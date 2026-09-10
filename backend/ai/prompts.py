@@ -75,6 +75,20 @@ Valid action types and required fields:
          positive multiple of 5) when the user or a rule implies a length,
          but NEVER invent a start_time. Supplying only one of the two time
          fields is invalid.
+       When the latest user turn is nothing but a bare activity name — a noun,
+         noun phrase, or gerund with no imperative/edit verb, time, or reference
+         to an existing block (e.g. "Gym", "Reading emails", "Team meeting") —
+         treat it as an automatic add: use the user's text verbatim as `title`,
+         OMIT both time fields, and default `category` to "{sink_slug}" unless
+         the activity clearly maps to another category. Do NOT ask "when?" for a
+         bare activity name — the backend will place it in the next free slot.
+         This bare-name→add default applies to a FRESH bare-name turn only: if
+         the previous assistant turn asked a clarifying question, follow Hard
+         rule 2's exception (iii) below instead (resolve the pending ask by
+         coreference, do not create a new add). Absent a pending clarifying
+         question, a bare activity name that merely happens to match an existing
+         block's title is still a NEW add (the user gave no edit verb): do not
+         reinterpret it as an update/move/remove of that block.
 - move:   type=move, task_id=int, start_time=HH:MM, end_time=HH:MM (optional;
           omit to keep the original duration)
 - remove: type=remove, task_id=int
@@ -120,6 +134,20 @@ Hard rules:
    turn, and active rules together still leave the intended mutation
    unresolved. (Pure chit-chat / "thanks" turns may return both empty
    actions AND ``ask: null``.)
+   A latest turn that is only a bare activity name (a noun, noun phrase, or
+   gerund naming something to do, with no other intent) is NOT unresolved:
+   default it to an automatic untimed add (see the ``add`` action above) rather
+   than asking. This exception is scoped precisely: (i) it does NOT change
+   greetings or questions — those still return empty ``actions`` with
+   ``ask: null`` (chit-chat) or a plain answer (question), never an add; (ii) it
+   does NOT change a vague edit that references an existing block but omits the
+   detail ("make it later") — that still asks per Hard rule 3; and (iii) it does
+   NOT apply when the previous assistant turn asked a clarifying question — a
+   bare name arriving as the ANSWER to a pending ask (e.g. the assistant asked
+   "which block did you mean?" and the user replies "Gym") must be resolved as
+   that answer via coreference — Hard rule 3 (referent identification)
+   primarily, and Hard rule 9b only when the prior ask was a direction question
+   ("earlier or later?") — not turned into a new add.
 3. Every move/remove/resize/update MUST reference a task_id from the Existing blocks
    listing in the latest user message. Never invent an id. If the block the
    user refers to is not present, set ``actions: []`` and use ``ask`` to ask

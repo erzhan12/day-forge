@@ -461,6 +461,181 @@ class TestChatUntimedAdd:
             )
 
 
+# Phase 3 refactor: literal phrases shared across the Group A prompt-text
+# assertions, extracted to module constants so the pins stay in one place.
+_BARE_NAME_PHRASE = "bare activity name"
+_WHEN_GUIDANCE = 'Do NOT ask "when?"'
+_MAKE_IT_LATER = "make it later"
+_CHITCHAT_PIN = "Pure chit-chat"
+_UNTRUSTED_TRANSCRIPT_PIN = "Untrusted prior transcript"
+_REFERENT_PIN = "MUST reference a task_id"
+
+
+class TestBareNounAddPrompt:
+    """Group A — prompt-text assertions for feature 0078.
+
+    ``build_system_prompt_chat`` is a pure function whose rendered text is
+    directly assertable. These pin the new Edit-1 / Edit-2 wording and guard
+    against accidental deletion/weakening of the preserved guards.
+    """
+
+    def test_prompt_instructs_bare_noun_untimed_add(self):
+        from ai.prompts import build_system_prompt_chat
+        from schedules.window import DEFAULT_WINDOW
+
+        prompt = build_system_prompt_chat(DEFAULT_WINDOW, sink_slug="other")
+        # Phrases UNIQUE to Edit 1 (do NOT pin "OMIT both time fields" — it
+        # already appears in the resize duration-mode bullets).
+        assert _BARE_NAME_PHRASE in prompt
+        assert _WHEN_GUIDANCE in prompt
+        # {sink_slug} interpolates to the literal sink slug, not the token.
+        assert "{sink_slug}" not in prompt
+        assert 'default `category` to "other"' in prompt
+
+    def test_prompt_ask_carveout_scoped_to_bare_names(self):
+        from ai.prompts import build_system_prompt_chat
+        from schedules.window import DEFAULT_WINDOW
+
+        prompt = build_system_prompt_chat(DEFAULT_WINDOW, sink_slug="other")
+        assert _BARE_NAME_PHRASE in prompt
+        # The carve-out explicitly still defers vague edits to the ask rules.
+        assert _MAKE_IT_LATER in prompt
+        # ...and references Hard rule 3 / an existing block so it cannot be
+        # misread as overriding the referent guard.
+        assert "Hard rule 3" in prompt
+        assert "existing block" in prompt
+
+    def test_prompt_preserves_existing_guards(self):
+        from ai.prompts import build_system_prompt_chat
+        from schedules.window import DEFAULT_WINDOW
+
+        prompt = build_system_prompt_chat(DEFAULT_WINDOW, sink_slug="other")
+        # Preservation pins: chit-chat sentence, rule-6 untrusted-transcript
+        # substring, and rule-3 referent substring must remain verbatim.
+        # NOTE: assert the short literal substring, NOT CHAT_TRANSCRIPT_HEADER
+        # (its full text lives only in serialise_prior_turns output).
+        assert _CHITCHAT_PIN in prompt
+        assert _UNTRUSTED_TRANSCRIPT_PIN in prompt
+        assert _REFERENT_PIN in prompt
+
+
+class TestBareNounAddBehavior:
+    """Group B — behavior round-trip tests for feature 0078.
+
+    Each stubs the model envelope the LLM is expected to emit under the new
+    prompt and asserts ``run_chat`` round-trips it. These pin the service
+    contract the new prompt relies on; they do NOT assert the LLM's
+    classification decision (that is LLM-owned and untestable offline).
+    """
+
+    def test_bare_noun_gym_produces_untimed_add(self, patch_client, fake_schedule, now):
+        action = {"type": "add", "title": "Gym", "category": "other"}
+        patch_client(_ok_response(actions=[action]))
+        result = run_chat(
+            [{"role": "user", "content": "Gym"}],
+            fake_schedule,
+            [],
+            [],
+            now,
+        )
+        assert result.parsed_actions == [action]
+        assert result.ask is None
+
+    @pytest.mark.parametrize("title", ("Reading emails", "Team meeting"))
+    def test_bare_gerund_or_phrase_produces_untimed_add(
+        self, patch_client, fake_schedule, now, title
+    ):
+        action = {"type": "add", "title": title, "category": "other"}
+        patch_client(_ok_response(actions=[action]))
+        result = run_chat(
+            [{"role": "user", "content": title}],
+            fake_schedule,
+            [],
+            [],
+            now,
+        )
+        assert result.parsed_actions == [action]
+        assert result.ask is None
+
+    @pytest.mark.parametrize("greeting", ("thanks", "hi"))
+    def test_greeting_is_noop(self, patch_client, fake_schedule, now, greeting):
+        patch_client(_ok_response(actions=[], ask=None))
+        result = run_chat(
+            [{"role": "user", "content": greeting}],
+            fake_schedule,
+            [],
+            [],
+            now,
+        )
+        assert result.parsed_actions == []
+        assert result.ask is None
+
+    def test_question_answer_no_add(self, patch_client, fake_schedule, now):
+        patch_client(_ok_response(actions=[], explanation="You have 3 blocks left.", ask=None))
+        result = run_chat(
+            [{"role": "user", "content": "how many blocks left?"}],
+            fake_schedule,
+            [],
+            [],
+            now,
+        )
+        assert result.parsed_actions == []
+        assert result.ask is None
+        assert result.explanation == "You have 3 blocks left."
+
+    def test_explicit_timed_add_unchanged(self, patch_client, fake_schedule, now):
+        action = {
+            "type": "add",
+            "title": "Gym",
+            "start_time": "10:00",
+            "end_time": "11:00",
+            "category": "personal",
+        }
+        patch_client(_ok_response(actions=[action]))
+        result = run_chat(
+            [{"role": "user", "content": "Add Gym 10-11"}],
+            fake_schedule,
+            [],
+            [],
+            now,
+        )
+        assert result.parsed_actions == [action]
+        assert result.ask is None
+
+    def test_vague_edit_with_referent_still_asks(self, patch_client, fake_schedule, now):
+        patch_client(_ok_response(actions=[], ask="Which direction — earlier or later?"))
+        result = run_chat(
+            [{"role": "user", "content": "make it later"}],
+            fake_schedule,
+            [],
+            [],
+            now,
+        )
+        assert result.parsed_actions == []
+        assert result.ask == "Which direction — earlier or later?"
+
+    def test_bare_name_answering_pending_ask_resolves_not_new_add(
+        self, patch_client, fake_schedule, now
+    ):
+        # Edit-2 clause (iii): a bare name arriving as the ANSWER to a pending
+        # ask must resolve the referent, not create a new untimed add. Stub the
+        # resolution envelope (a remove by task_id) and assert it round-trips
+        # with no fresh untimed add for "Gym".
+        action = {"type": "remove", "task_id": 1}
+        patch_client(_ok_response(actions=[action]))
+        messages = [
+            {"role": "user", "content": "remove the gym block"},
+            {"role": "assistant", "content": "Which block did you mean?"},
+            {"role": "user", "content": "Gym"},
+        ]
+        result = run_chat(messages, fake_schedule, [], [], now)
+        assert result.parsed_actions == [action]
+        untimed_adds = [
+            a for a in result.parsed_actions if a.get("type") == "add" and "start_time" not in a
+        ]
+        assert untimed_adds == []
+
+
 class TestChatDurationResize:
     def test_accepts_absolute_duration_resize_action(self, patch_client, fake_schedule, now):
         action = {"type": "resize", "task_id": 1, "duration_minutes": 20}
