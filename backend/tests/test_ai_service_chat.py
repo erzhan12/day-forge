@@ -630,6 +630,40 @@ class TestBareNounAddBehavior:
         ]
         assert untimed_adds == []
 
+    def test_bare_name_matching_existing_block_is_still_a_new_add(
+        self, patch_client, fake_schedule, now
+    ):
+        # Edit-1 tail clause: absent a pending clarifying question, a bare name
+        # that merely collides with an existing block's title is a NEW add —
+        # the user supplied no edit verb — not an update/move/remove of it.
+        # Like every Group B case this stubs the envelope: it pins the service
+        # contract for that add, not the model's classification.
+        existing = SimpleNamespace(
+            id=1,
+            start_time=datetime.time(7, 0),
+            end_time=datetime.time(8, 0),
+            category="personal",
+            is_completed=False,
+            title="Gym",
+        )
+        action = {"type": "add", "title": "Gym", "category": "other"}
+        patch_client(_ok_response(actions=[action]))
+        result = run_chat(
+            [{"role": "user", "content": "Gym"}],
+            fake_schedule,
+            [existing],
+            [],
+            now,
+        )
+        assert result.parsed_actions == [action]
+        assert result.ask is None
+        edits = [
+            a
+            for a in result.parsed_actions
+            if a.get("type") in {"update", "move", "remove", "resize"}
+        ]
+        assert edits == []
+
 
 class TestChatDurationResize:
     def test_accepts_absolute_duration_resize_action(self, patch_client, fake_schedule, now):
