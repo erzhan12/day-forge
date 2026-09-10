@@ -257,21 +257,6 @@ def mark_reviewed(request, date):
     if schedule is None:
         return JsonResponse({"errors": {"detail": "Not found."}}, status=404)
 
-    # Same user-local instant ``analytics_view`` computes (0077 wiring). The
-    # snapshot this view freezes is permanent, so a server/UTC ``now`` would
-    # bake in a skipped-count that disagrees with the panel the user just saw
-    # whenever their zone is on the other side of a day boundary.
-    #
-    # Unlike ``analytics_view`` this uses the ``user_local_now`` helper rather
-    # than inlining it: that view inlines because it needs the settings object
-    # anyway for ``schedule_window``, and nothing here does.
-    #
-    # Resolved once, before the branches below, so all three recompute call
-    # sites share one instant. The cost is one idempotent settings
-    # get_or_create on the DRAFT-400 path too — same tradeoff the GET
-    # documents.
-    now_local = user_local_now(request.user)
-
     # Pre-lock fast paths. Cheap early-out, NOT load-bearing for
     # correctness — the under-lock recheck below is what closes the race.
     if schedule.status == Schedule.Status.DRAFT:
@@ -283,6 +268,21 @@ def mark_reviewed(request, date):
             },
             status=400,
         )
+
+    # Same user-local instant ``analytics_view`` computes (0077 wiring). The
+    # snapshot this view freezes is permanent, so a server/UTC ``now`` would
+    # bake in a skipped-count that disagrees with the panel the user just saw
+    # whenever their zone is on the other side of a day boundary.
+    #
+    # Unlike ``analytics_view`` this uses the ``user_local_now`` helper rather
+    # than inlining it: that view inlines because it needs the settings object
+    # anyway for ``schedule_window``, and nothing here does.
+    #
+    # Resolved once here so all three recompute call sites below share one
+    # instant, and after the DRAFT early-out so that 400 does not pay the
+    # settings get_or_create — no call site below it is reachable on that path.
+    now_local = user_local_now(request.user)
+
     if schedule.status == Schedule.Status.REVIEWED:
         # Hard idempotency: do NOT parse the body, do NOT acquire the
         # lock, do NOT recompute. A retry with a stale or corrupted

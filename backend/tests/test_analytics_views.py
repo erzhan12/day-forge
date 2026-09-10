@@ -580,6 +580,33 @@ class TestMarkReviewedUsesUserTimezone:
         review = DailyReview.objects.get(schedule=schedule)
         assert review.skipped_count == 0
 
+    def test_back_compat_recompute_uses_user_local_day(
+        self, auth_client, user, monkeypatch
+    ):
+        """The pre-Phase-6 back-compat path persists a snapshot too.
+
+        A REVIEWED schedule with no ``DailyReview`` row recomputes once and
+        stores the result, so it needs the same user-local ``now`` as the
+        ACTIVE freeze — same UTC 20:00 / Almaty next-day setup.
+        """
+        UserScheduleSettings.objects.create(user=user, time_zone="Asia/Almaty")
+        schedule = Schedule.objects.create(
+            user=user, date=datetime.date(2026, 5, 3), status=Schedule.Status.REVIEWED
+        )
+        _make_block(schedule, "22:00", "23:00", completed=False)
+        assert not DailyReview.objects.filter(schedule=schedule).exists()
+        _freeze(monkeypatch, datetime.datetime(2026, 5, 3, 20, 0, tzinfo=datetime.UTC))
+
+        resp = auth_client.post(
+            MARK_REVIEWED_URL.format(date="2026-05-03"),
+            "",
+            content_type="application/json",
+        )
+
+        assert resp.status_code == 200
+        assert json.loads(resp.content)["skipped_count"] == 1
+        assert DailyReview.objects.get(schedule=schedule).skipped_count == 1
+
     def test_frozen_snapshot_matches_the_get_panel(
         self, auth_inertia_client, user, monkeypatch
     ):
