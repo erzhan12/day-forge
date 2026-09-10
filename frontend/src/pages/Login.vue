@@ -60,6 +60,16 @@ function submit() {
           {{ form.processing ? "Signing in..." : "Sign in" }}
         </button>
       </form>
+
+      <!-- Plain anchors, not Inertia <Link>: /privacy/ and /terms/ are
+           server-rendered Django templates outside the Inertia app, so an
+           Inertia visit would get HTML back where it expects a page
+           payload. A full navigation is the correct behaviour here. -->
+      <p class="legal-links">
+        <a href="/privacy/">Privacy Policy</a>
+        <span aria-hidden="true">·</span>
+        <a href="/terms/">Terms of Service</a>
+      </p>
     </div>
   </div>
 </template>
@@ -158,5 +168,23 @@ function submit() {
 .login-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.legal-links {
+  margin: 20px 0 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.legal-links a {
+  color: var(--text-muted);
+  text-decoration: none;
+  margin: 0 6px;
+}
+
+.legal-links a:hover {
+  color: var(--text-primary);
+  text-decoration: underline;
 }
 </style>
