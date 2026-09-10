@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest"
 import type { TimeBlock } from "../src/types"
 import {
   activeUnfinishedBlock,
+  isDayFinished,
   nextBlockAfter,
+  pauseProgressRatio,
+  pauseWindow,
   progressRatio,
   progressPercentFromRatio,
 } from "../src/utils/focusIndicator"
@@ -165,5 +168,151 @@ describe("progressPercentFromRatio", () => {
 
   it("returns 0 for a null (neutral) ratio", () => {
     expect(progressPercentFromRatio(null)).toBe(0)
+  })
+})
+
+describe("pauseWindow", () => {
+  const morning = block({ id: 1, start_time: "09:00", end_time: "10:00" })
+  const afternoon = block({ id: 2, start_time: "14:00", end_time: "15:00" })
+
+  it("spans the previous block's end to the next block's start", () => {
+    // 11:00 = 660, inside the 10:00–14:00 gap.
+    expect(pauseWindow([morning, afternoon], 660, TODAY)).toEqual({
+      startMinutes: 600,
+      endMinutes: 840,
+    })
+  })
+
+  it("takes the latest end among several finished blocks", () => {
+    const early = block({ id: 3, start_time: "07:00", end_time: "08:00" })
+    expect(pauseWindow([early, morning, afternoon], 660, TODAY)).toEqual({
+      startMinutes: 600,
+      endMinutes: 840,
+    })
+  })
+
+  it("has a null start before the day's first block (no honest pause origin)", () => {
+    expect(pauseWindow([morning], 480, TODAY)).toEqual({
+      startMinutes: null,
+      endMinutes: 540,
+    })
+  })
+
+  it("measures from the last finished end when now sits inside a completed block", () => {
+    // 09:30 inside a completed 09:00–10:00; the containing block has not ended,
+    // so the pause origin is the previous block's end, not this one's.
+    const completed = block({ id: 1, start_time: "09:00", end_time: "10:00", is_completed: true })
+    const early = block({ id: 3, start_time: "07:00", end_time: "08:00" })
+    expect(pauseWindow([early, completed, afternoon], 570, TODAY)).toEqual({
+      startMinutes: 480,
+      endMinutes: 840,
+    })
+  })
+
+  it("treats a block ending exactly now as the pause origin", () => {
+    expect(pauseWindow([morning, afternoon], 600, TODAY)).toEqual({
+      startMinutes: 600,
+      endMinutes: 840,
+    })
+  })
+
+  it("returns null once no block starts after now (day finished)", () => {
+    expect(pauseWindow([morning], 660, TODAY)).toBeNull()
+  })
+
+  it("returns null off-today or without a now signal", () => {
+    expect(pauseWindow([morning, afternoon], 660, null)).toBeNull()
+    expect(pauseWindow([morning, afternoon], null, TODAY)).toBeNull()
+  })
+
+  it("fails closed when any end is unparseable", () => {
+    const broken = block({ id: 4, start_time: "08:00", end_time: "not-a-time" })
+    expect(pauseWindow([broken, morning, afternoon], 660, TODAY)).toBeNull()
+  })
+
+  it("fails closed when any block is inverted (end < start)", () => {
+    // 12:00–11:00 at 12:10. The start is in the past, so `nextBlockAfter` never
+    // considers it and cannot reject it for a negative duration — this reaches
+    // the origin scan, where its end (660) beats morning's 10:00 and would
+    // become the pause origin. Only this guard rejects it.
+    const inverted = block({ id: 5, start_time: "12:00", end_time: "11:00" })
+    expect(pauseWindow([inverted, morning, afternoon], 730, TODAY)).toBeNull()
+  })
+})
+
+describe("isDayFinished", () => {
+  const morning = block({ id: 1, start_time: "09:00", end_time: "10:00" })
+
+  it("is true once every block has ended", () => {
+    const early = block({ id: 2, start_time: "07:00", end_time: "08:00" })
+    expect(isDayFinished([early, morning], 660, TODAY)).toBe(true)
+  })
+
+  it("counts a block ending exactly now as ended", () => {
+    expect(isDayFinished([morning], 600, TODAY)).toBe(true)
+  })
+
+  it("is false while any block still has time left, completed or not", () => {
+    expect(isDayFinished([morning], 570, TODAY)).toBe(false)
+    expect(
+      isDayFinished([block({ start_time: "09:00", end_time: "10:00", is_completed: true })], 570, TODAY),
+    ).toBe(false)
+  })
+
+  it("treats a zero-duration block as ended once now passes it", () => {
+    // start === end is malformed-adjacent but not inverted, so it survives the
+    // `end < start` guard and is judged purely on whether it has ended.
+    const zero = block({ start_time: "10:00", end_time: "10:00" })
+    expect(isDayFinished([zero], 660, TODAY)).toBe(true)
+    expect(isDayFinished([zero], 600, TODAY)).toBe(true)
+    expect(isDayFinished([zero], 540, TODAY)).toBe(false)
+  })
+
+  it("is false for an empty day — nothing was scheduled to finish", () => {
+    expect(isDayFinished([], 660, TODAY)).toBe(false)
+  })
+
+  it("is false off-today or without a now signal", () => {
+    expect(isDayFinished([morning], 660, null)).toBe(false)
+    expect(isDayFinished([morning], null, TODAY)).toBe(false)
+  })
+
+  it("fails closed on malformed data rather than claiming a finished day", () => {
+    expect(isDayFinished([block({ start_time: "bad", end_time: "10:00" })], 660, TODAY)).toBe(false)
+    expect(isDayFinished([block({ start_time: "09:00", end_time: "bad" })], 660, TODAY)).toBe(false)
+    // end < start: an inverted block has no meaningful "has ended".
+    expect(isDayFinished([block({ start_time: "11:00", end_time: "10:00" })], 660, TODAY)).toBe(
+      false,
+    )
+  })
+})
+
+describe("pauseProgressRatio", () => {
+  // 10:00 → 14:00 pause.
+  const window = { startMinutes: 600, endMinutes: 840 }
+
+  it("returns the clamped elapsed fraction", () => {
+    // 11:00 = 660, one hour into a four-hour pause.
+    expect(pauseProgressRatio(window, 660)).toBeCloseTo(0.25, 10)
+    expect(pauseProgressRatio(window, 720)).toBeCloseTo(0.5, 10)
+  })
+
+  it("returns 0 at the exact pause start", () => {
+    expect(pauseProgressRatio(window, 600)).toBe(0)
+  })
+
+  it("clamps to [0, 1] outside the window", () => {
+    expect(pauseProgressRatio(window, 500)).toBe(0)
+    expect(pauseProgressRatio(window, 1_000)).toBe(1)
+  })
+
+  it("returns null when there is no measurable pause", () => {
+    expect(pauseProgressRatio(null, 660)).toBeNull()
+    expect(pauseProgressRatio(window, null)).toBeNull()
+    // Before the day's first block: a start-less window has no origin to measure from.
+    expect(pauseProgressRatio({ startMinutes: null, endMinutes: 540 }, 500)).toBeNull()
+    // Zero / negative duration fails closed rather than dividing.
+    expect(pauseProgressRatio({ startMinutes: 600, endMinutes: 600 }, 600)).toBeNull()
+    expect(pauseProgressRatio({ startMinutes: 700, endMinutes: 600 }, 600)).toBeNull()
   })
 })

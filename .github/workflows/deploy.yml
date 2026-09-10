@@ -177,6 +177,7 @@ jobs:
           HABITICA_ENCRYPTION_KEY: ${{ secrets.HABITICA_ENCRYPTION_KEY }}
           HABITICA_CLIENT_ID: ${{ secrets.HABITICA_CLIENT_ID }}
           EXTERNAL_TASKS_POLL_INTERVAL_SECONDS: ${{ secrets.EXTERNAL_TASKS_POLL_INTERVAL_SECONDS }}
+          LEGAL_CONTACT_EMAIL: ${{ secrets.LEGAL_CONTACT_EMAIL }}
           GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
           GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
           GOOGLE_OAUTH_REDIRECT_URI: ${{ secrets.GOOGLE_OAUTH_REDIRECT_URI }}
@@ -259,6 +260,13 @@ jobs:
               lines.append(
                   dotenv_line("EXTERNAL_TASKS_POLL_INTERVAL_SECONDS", _poll)
               )
+          # Optional: unset -> /privacy/ and /terms/ point the reader at the
+          # support address on the Google consent screen instead of printing a
+          # mailto. Same wholesale-.env caveat as the poll interval — omitted
+          # here means erased on the droplet.
+          _legal_email = optional("LEGAL_CONTACT_EMAIL")
+          if _legal_email is not None:
+              lines.append(dotenv_line("LEGAL_CONTACT_EMAIL", _legal_email))
           path = "/tmp/day-forge.env"
           with open(path, "w", encoding="utf-8") as f:
               f.write("\n".join(lines) + "\n")

@@ -152,7 +152,10 @@ describe("FocusIndicatorHost", () => {
 
     expect(requestWindow).toHaveBeenCalledTimes(1)
     expect(win.close).not.toHaveBeenCalled()
-    expect(win.document.querySelector(".fi-neutral")?.textContent).toBe("—")
+    // The retained 09:00–10:00 block has ended by 10:00, so the idle state is
+    // the day-finished pause rather than the neutral off-today dash (0079).
+    expect(win.document.querySelector('[role="progressbar"]')).toBeNull()
+    expect(win.document.querySelector(".fi-pause-done")?.textContent).toBe("· day finished")
     wrapper.unmount()
   })
 

@@ -1,0 +1,171 @@
+{% comment %}
+Shared shell for the two public legal pages (/privacy/, /terms/).
+
+Deliberately does NOT extend ``base.html``: that template is the Inertia
+layout (``INERTIA_LAYOUT``) and boots the Vue app bundle, which these
+pages neither need nor should depend on. The Google OAuth consent screen
+points at these URLs, so they must render for an anonymous visitor with
+no session and no JavaScript — and must keep rendering even when the
+frontend bundle has not been rebuilt.
+
+For the same reason the CSS is inlined rather than loaded through the
+static tag: ``STATICFILES_DIRS`` points at ``frontend/dist``, which does
+not exist until someone runs ``npm run build``.
+{% endcomment %}<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block page_title %}Day Forge{% endblock %}</title>
+    <meta name="description" content="{% block page_description %}Day Forge legal information.{% endblock %}">
+    <meta name="color-scheme" content="light dark">
+    <style>
+        :root {
+            --legal-bg: #f7f7f5;
+            --legal-surface: #ffffff;
+            --legal-text: #1c1c1a;
+            --legal-muted: #5c5c58;
+            --legal-border: #e2e2dd;
+            --legal-link: #8a5a2b;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --legal-bg: #16181c;
+                --legal-surface: #1e2127;
+                --legal-text: #e8e8e4;
+                --legal-muted: #a0a09a;
+                --legal-border: #32363e;
+                --legal-link: #d8a35f;
+            }
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            padding: 0 20px 64px;
+            background: var(--legal-bg);
+            color: var(--legal-text);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                Helvetica, Arial, sans-serif;
+            font-size: 16px;
+            line-height: 1.65;
+        }
+
+        .legal-wrap {
+            max-width: 720px;
+            margin: 0 auto;
+        }
+
+        header.legal-head {
+            padding: 32px 0 24px;
+            border-bottom: 1px solid var(--legal-border);
+            margin-bottom: 32px;
+        }
+
+        .brand {
+            font-size: 15px;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            text-transform: uppercase;
+            color: var(--legal-muted);
+            text-decoration: none;
+        }
+
+        .brand:hover { color: var(--legal-text); }
+
+        h1 {
+            font-size: 30px;
+            line-height: 1.25;
+            margin: 16px 0 4px;
+        }
+
+        h2 {
+            font-size: 20px;
+            margin: 36px 0 8px;
+        }
+
+        h3 {
+            font-size: 16px;
+            margin: 24px 0 4px;
+        }
+
+        .updated {
+            color: var(--legal-muted);
+            font-size: 14px;
+            margin: 0;
+        }
+
+        p, li { color: var(--legal-text); }
+
+        ul { padding-left: 22px; }
+
+        li { margin-bottom: 6px; }
+
+        a { color: var(--legal-link); }
+
+        code {
+            background: var(--legal-surface);
+            border: 1px solid var(--legal-border);
+            border-radius: 4px;
+            padding: 1px 5px;
+            font-size: 14px;
+        }
+
+        .callout {
+            background: var(--legal-surface);
+            border: 1px solid var(--legal-border);
+            border-left: 3px solid var(--legal-link);
+            border-radius: 6px;
+            padding: 14px 18px;
+            margin: 20px 0;
+        }
+
+        .callout p { margin: 0; }
+
+        footer.legal-foot {
+            margin-top: 48px;
+            padding-top: 20px;
+            border-top: 1px solid var(--legal-border);
+            font-size: 14px;
+            color: var(--legal-muted);
+        }
+
+        footer.legal-foot a { margin-right: 16px; }
+    </style>
+</head>
+<body>
+    <div class="legal-wrap">
+        <header class="legal-head">
+            <a class="brand" href="{% url 'root' %}">Day Forge</a>
+            <h1>{% block heading %}{% endblock %}</h1>
+            <p class="updated">Last updated: {{ last_updated }}</p>
+        </header>
+
+        <main>
+            {% block content %}{% endblock %}
+
+            <h2>Contact</h2>
+            <p>
+                Questions about this document, or a request to access or delete
+                your data, can be sent to
+                {% if contact_email %}
+                    <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>.
+                {% else %}
+                    the support email address listed for this application on the
+                    Google OAuth consent screen you saw when connecting Google
+                    Calendar. If you did not connect Google Calendar, contact the
+                    person who gave you access to this deployment.
+                {% endif %}
+            </p>
+        </main>
+
+        <footer class="legal-foot">
+            <a href="{% url 'root' %}">Home</a>
+            <a href="{% url 'privacy' %}">Privacy Policy</a>
+            <a href="{% url 'terms' %}">Terms of Service</a>
+        </footer>
+    </div>
+</body>
+</html>

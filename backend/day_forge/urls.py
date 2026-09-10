@@ -8,6 +8,7 @@ from gcal_sync import views as gcal_views
 from habitica_sync import views as habitica_views
 from schedules import api as schedules_api
 from schedules import category_api
+from schedules import legal_views as schedules_legal_views
 from schedules import settings_api as schedule_settings_api
 from schedules import views as schedules_views
 from templates_mgr import api as templates_api
@@ -23,6 +24,11 @@ urlpatterns = [
     path("", schedules_views.root_redirect, name="root"),
     path("schedule/<str:date>/", schedules_views.schedule_view, name="schedule"),
     path("settings/", templates_views.settings_view, name="settings"),
+    # Public legal pages — no login_required, unlike every other page route.
+    # The Google OAuth consent screen (project clear-radio-500612-j0) links
+    # to these URLs, so they must resolve for anonymous visitors.
+    path("privacy/", schedules_legal_views.privacy_view, name="privacy"),
+    path("terms/", schedules_legal_views.terms_view, name="terms"),
     # API: schedules + blocks
     path(
         "api/schedules/<str:date>/blocks/",

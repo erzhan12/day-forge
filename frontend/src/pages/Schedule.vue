@@ -586,12 +586,16 @@ const currentBlockRemaining = computed(() =>
 // The production root provides this long-lived owner. Direct Schedule mounts
 // in focused component tests retain a component-scoped fallback.
 const focusIndicatorController = inject(FocusIndicatorControllerKey, null) ?? useFocusIndicatorController()
-watch([() => props.date, effectiveBlocks], ([date, blocks]) => {
-  focusIndicatorController.publish(date, blocks)
+// `categories` is a watched source, not just read at trigger time: recolouring a
+// category in Settings changes neither the date nor the blocks, so without it
+// the PiP rail would keep the old colour until an unrelated edit fired the
+// watcher (feature 0079).
+watch([() => props.date, effectiveBlocks, () => props.categories], ([date, blocks]) => {
+  focusIndicatorController.publish(date, blocks, props.categories)
 }, { immediate: true, deep: true })
 onBeforeUnmount(() => {
   // A drag preview can be abandoned during page swap; retain canonical data.
-  focusIndicatorController.publish(props.date, props.blocks)
+  focusIndicatorController.publish(props.date, props.blocks, props.categories)
 })
 const focusIndicator = focusIndicatorController.focusIndicator
 const indicatorActive = focusIndicatorController.indicatorActive
@@ -599,6 +603,8 @@ const indicatorPercent = focusIndicatorController.indicatorPercent
 const indicatorNextBlock = focusIndicatorController.indicatorNextBlock
 const indicatorNextBlockTitle = focusIndicatorController.indicatorNextBlockTitle
 const indicatorNextBlockRemaining = focusIndicatorController.indicatorNextBlockRemaining
+const indicatorPausePercent = focusIndicatorController.indicatorPausePercent
+const indicatorDayFinished = focusIndicatorController.indicatorDayFinished
 const focusIndicatorSupported = focusIndicator.supported
 const focusIndicatorOpen = focusIndicator.isOpen
 const focusIndicatorOpenError = focusIndicator.openError
@@ -681,14 +687,16 @@ defineExpose({
   calendarsBranch,
   refreshExternalTasks,
   refreshExternalCalendars,
-  // Focus-indicator seam (features 0049/0066) — asserted by integration tests;
-  // not a parent-facing API.
+  // Focus-indicator seam (features 0049/0066/0079) — asserted by integration
+  // tests; not a parent-facing API.
   focusIndicator,
   indicatorActive,
   indicatorPercent,
   indicatorNextBlock,
   indicatorNextBlockTitle,
   indicatorNextBlockRemaining,
+  indicatorPausePercent,
+  indicatorDayFinished,
 })
 </script>
 
