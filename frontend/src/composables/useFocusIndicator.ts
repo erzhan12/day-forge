@@ -3,7 +3,8 @@ import { clearFocusIndicatorShouldBeOpen, readFocusIndicatorShouldBeOpen, writeF
 
 const PIP_WIDTH = 280
 const PIP_HEIGHT = 60
-// Generic, block-agnostic — never the block title (privacy invariant).
+// Generic, block-agnostic — never the block title. 0079 un-privated the title
+// in the PiP *body*; `document.title` stays block-agnostic in every state.
 const PIP_TITLE = "Focus"
 const PIP_OPEN_ERROR = "Could not open indicator. Please try again."
 const PIP_OPEN_ERROR_DURATION_MS = 5_000
@@ -11,68 +12,140 @@ const PIP_OPEN_ERROR_DURATION_MS = 5_000
 // The PiP document is a separate Document with no app stylesheet. Inject the
 // view's layout rules here rather than cloning app.css — Vue scoped CSS never
 // reaches a foreign Document.
+// Feature 0079: a fixed dark frame rather than the system Canvas/CanvasText
+// pair, so the in-block and in-pause states read as one designed object. The
+// two fonts are named with a system fallback — the app ships no webfont, and a
+// PiP document must not reach out to a third-party CDN on open.
+const PIP_FONT_BODY = `"Public Sans", system-ui, -apple-system, sans-serif`
+const PIP_FONT_MONO = `"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace`
+// No pure white, no pure black anywhere.
+const PIP_INK = "#ECEAE6"
+const PIP_MUTED = "#8E9299"
+const PIP_SURFACE = "#17181A"
+const PIP_BORDER = "#2A2D31"
+const PIP_DASH = "#3A3E44"
+
 const PIP_STYLES = `
-  :root { color-scheme: light dark; }
+  :root { color-scheme: dark; }
   html, body { margin: 0; width: 100%; height: 100%; background: transparent; }
-  body { color: CanvasText; }
-  .fi-root { width: 100%; height: 100%; flex: 1; min-width: 0; display: flex; align-items: center; background: Canvas; }
+  body { color: ${PIP_INK}; }
+  .fi-root { width: 100%; height: 100%; flex: 1; min-width: 0; display: flex; align-items: stretch; background: ${PIP_SURFACE}; }
   .focus-indicator {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 9px;
+    width: 100%;
+    box-sizing: border-box;
+    /* The window stays 280x60, tighter than the 320x64 mock, so the padding
+       comes down from 12px/14px to keep both rows and the gap unclipped. */
+    padding: 9px 11px;
+    background: ${PIP_SURFACE};
+    border: 1px solid ${PIP_BORDER};
+    border-radius: 12px;
+    font-family: ${PIP_FONT_BODY};
+  }
+  .fi-row--head {
     display: flex;
     align-items: center;
     gap: 8px;
-    width: 100%;
-    box-sizing: border-box;
-    padding: 0 12px;
-    font-family: system-ui, sans-serif;
-  }
-  .fi-bar {
-    flex: 1;
     min-width: 0;
-    height: 12px;
-    border-radius: 6px;
-    background: rgba(128, 128, 128, 0.3);
-    overflow: hidden;
   }
-  .fi-remaining {
+  .fi-spacer { flex: 1; min-width: 0; }
+  .fi-rail {
     flex: none;
-    font-size: 12px;
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
+    width: 3px;
+    height: 14px;
+    border-radius: 2px;
+    transition: background 200ms ease, box-shadow 200ms ease;
   }
-  .fi-next-title {
-    flex: 1;
+  .fi-title {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     font-size: 13px;
     font-weight: 600;
+    color: ${PIP_INK};
+  }
+  .fi-remaining {
+    flex: none;
+    font-family: ${PIP_FONT_MONO};
+    font-size: 13px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    color: ${PIP_INK};
+  }
+  .fi-pause-glyph {
+    flex: none;
+    display: flex;
+    gap: 2px;
+    align-items: center;
+  }
+  .fi-pause-glyph i {
+    display: block;
+    width: 3px;
+    height: 11px;
+    border-radius: 1px;
+    background: ${PIP_MUTED};
+  }
+  .fi-pause-done, .fi-arrow {
+    flex: none;
+    font-size: 13px;
+    font-weight: 400;
+    white-space: nowrap;
+    color: ${PIP_MUTED};
+  }
+  .fi-next-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+    font-weight: 400;
+    color: ${PIP_MUTED};
   }
   .fi-next-remaining {
     flex: none;
-    font-size: 12px;
+    font-family: ${PIP_FONT_MONO};
+    font-size: 13px;
+    font-weight: 500;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
+    color: ${PIP_MUTED};
+  }
+  .fi-row--track { display: block; }
+  .fi-track {
+    width: 100%;
+    height: 5px;
+    border-radius: 3px;
+    background: ${PIP_BORDER};
+    overflow: hidden;
+  }
+  .fi-track--dashed {
+    background: repeating-linear-gradient(90deg, ${PIP_DASH} 0 6px, transparent 6px 10px);
   }
   .fi-fill {
     height: 100%;
-    background: currentColor;
-    transition: width 0.25s ease;
+    transition: width 200ms ease, background 200ms ease;
   }
+  .fi-fill--pause { background: ${PIP_MUTED}; }
   .focus-indicator[data-state="error"] {
-    outline: 2px solid currentColor;
-    outline-offset: 2px;
+    outline: 2px solid ${PIP_MUTED};
+    outline-offset: -3px;
   }
   .fi-retry {
     flex: none;
-    font-size: 11px;
+    font-family: ${PIP_FONT_MONO};
+    font-size: 10px;
     text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: .1em;
+    color: ${PIP_MUTED};
   }
-  .fi-close { flex: none; border: 0; background: transparent; color: inherit; font: inherit; font-size: 18px; line-height: 1; padding: 2px; cursor: pointer; }
   .fi-neutral {
-    flex: 1;
-    text-align: center;
+    flex: none;
+    color: ${PIP_MUTED};
   }
   .fi-sr-only {
     position: absolute;
@@ -86,7 +159,7 @@ const PIP_STYLES = `
     border: 0;
   }
   @media (prefers-reduced-motion: reduce) {
-    .fi-fill { transition: none; }
+    .fi-fill, .fi-rail { transition: none; }
   }
 `
 
@@ -160,8 +233,8 @@ export function useFocusIndicator(config: FocusIndicatorConfig) {
     // The PiP window is going away via browser chrome (Chrome's "Back to tab",
     // its window-close button) or a main-window reload — NOT a deliberate
     // dismissal. Preserve the device restore intent so one Show click brings it
-    // back; only our in-PiP X and the header Hide (both via cleanup()) are
-    // sticky explicit closes that clear the intent.
+    // back; since 0079 dropped the in-PiP X, the header Hide (via cleanup()) is
+    // the only sticky explicit close that clears the intent.
     teardown(false)
   }
 
@@ -198,7 +271,9 @@ export function useFocusIndicator(config: FocusIndicatorConfig) {
       win.document.body.appendChild(rootEl)
       // Render function re-reads config.props() each render → the shared refs it
       // dereferences are tracked, so the PiP repaints on every reactive change.
-      app = createApp({ render: () => h(config.component, { ...config.props(), onClose: cleanup }) })
+      // The view renders no control of its own (0079): dismissal is the PiP
+      // chrome's own close button (non-intent, restorable) or the header Hide.
+      app = createApp({ render: () => h(config.component, config.props()) })
       app.mount(rootEl)
       win.addEventListener("pagehide", onPagehide)
       isOpen.value = true

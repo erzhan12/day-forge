@@ -855,21 +855,50 @@ no Service Worker, no closed-tab alerts.
   clears `saving`/`errorState`; `dispose()` (unmount) aborts + bumps
   generation only. Composables guard `onUnmounted` with `getCurrentInstance()`
   so they're unit-testable by direct call.
-- **PiP privacy invariant.** For an active unfinished block, never put its
-  title/category/date/clock-times into the PiP document — DOM, `aria-*`,
-  `data-testid`, error copy, or `document.title` (the generic constant
-  `"Focus"`). Only progress plus a derived remaining-minutes countdown
-  (`"23m left"`, same `formatRemainingMinutes` as the timeline badge) is
-  allowed. In the idle gap state, a valid later block's title (or `Untitled`)
-  and its minutes-until-start are the deliberate, body-only exception. Its
-  category, date, clock times, current-block identity, unrelated identities,
-  and the document title remain prohibited; there is no settings toggle for
-  this always-on-top/screen-share tradeoff. `FocusIndicatorView.vue` props are
-  `active/progressPercent/remainingMinutes/errorState/nextBlockTitle/`
-  `nextBlockRemainingMinutes`. The isolated-view privacy test is
-  necessary-but-not-sufficient; the load-bearing integration test
-  (`scheduleFocusIndicator.test.ts`) must cover active and gap states
-  separately against the REAL mounted PiP `document.body` + `document.title`.
+- **PiP privacy invariant (narrowed by feature 0079).** The active state now
+  shows the current block's **title** and its **category colour** — 0079
+  deliberately reversed the 0066 rule so "in a block" and "in a pause" are
+  distinguishable without reading the text. Still prohibited everywhere, in
+  every state: the **date**, **wall-clock times**, the raw category **slug**
+  (only the resolved colour ships), unrelated block identities, and any of the
+  above in `document.title` (the generic constant `"Focus"`), `aria-*`,
+  `data-testid` or error copy. Derived countdowns are allowed and use the
+  timeline badge's own `formatRemainingMinutes` copy (`"18m left"`,
+  `"1h 30m left"`) — a `mm:ss` countdown was tried in 0079 and rejected.
+  There is no settings toggle for this always-on-top/screen-share tradeoff.
+  `FocusIndicatorView.vue` props are `active/progressPercent/errorState/`
+  `blockTitle/categoryColor/remainingMinutes/nextBlockTitle/`
+  `nextBlockRemainingMinutes/pausePercent/dayFinished`. The isolated-view
+  privacy test is necessary-but-not-sufficient; the load-bearing integration
+  test (`scheduleFocusIndicator.test.ts`) must cover active, pause and
+  day-finished states separately against the REAL mounted PiP `document.body`
+  + `document.title`.
+- **PiP two-state visual contract (feature 0079).** Both states render exactly
+  **two `.fi-row`s and one `.fi-track`**, so a block boundary never changes the
+  window height. Active: category-coloured `.fi-rail` + solid `.fi-track` fill,
+  `#ECEAE6` ink. Pause: everything `#8E9299`, a two-bar `.fi-pause-glyph`
+  (CSS bars mirroring the active rail — never a literal `||`, which reads as
+  two pipes and is nonsense to a screen reader) with an `.fi-sr-only` "Pause",
+  dashed track
+  (`repeating-linear-gradient`, not a border style) — **no category colour and
+  no `#ECEAE6` anywhere**. `pausePercent === null` means the pause has no
+  measurable origin (nothing has ended yet today): the dashed track then
+  renders decoratively, with **no `progressbar` role and no fill**. Copy in
+  this window is English (`· day finished`) like the rest of the app — the 5a
+  mock's Russian labels were deliberately not carried over.
+- **The PiP body carries no control of its own (0079).** The view renders no
+  button and emits nothing; `useFocusIndicator` mounts it with plain
+  `config.props()`. Dismissal is either the PiP chrome's own close button
+  (`pagehide` → non-intent, restorable with one Show click) or the header Hide
+  (explicit, clears the device flag). This **narrows the explicit-close list**
+  below: the in-PiP X is gone, so header Hide and a definite `Login`
+  transition are the only explicit closes left. Re-adding a control means
+  re-adding `onClose` wiring in `useFocusIndicator`, not just a button.
+- **`isDayFinished` fails closed.** `Pause · day finished` requires a
+  non-empty day where every block parses, no block is inverted (`end < start`),
+  and every block has ended. Malformed times, an empty day, or a still-running
+  (even completed) block all fall back to the neutral `—` state rather than
+  claiming a finished day. "No block starts after now" alone is NOT sufficient.
 - **PiP view CSS must be injected into the PiP document.** Document
   Picture-in-Picture is a separate `Document`. Vue SFC `<style scoped>` is
   injected into the opener by Vite and does not apply inside the PiP. Any
@@ -880,9 +909,9 @@ no Service Worker, no closed-tab alerts.
 - **Persistent PiP ownership and close semantics.** `FocusIndicatorHost` is
   the application-root owner around Inertia `<App>`; pages only publish copied
   schedule snapshots to its controller, so swaps and idle gaps never unmount
-  the PiP. Only the in-PiP X, the header Hide, and a definite `Login` component
-  transition are **explicit** closes (via `cleanup()`): they clear retained data
-  and the device flag. Browser PiP chrome dismissal (Chrome's "Back to tab" /
+  the PiP. Since 0079 dropped the in-PiP X, only the header Hide and a definite
+  `Login` component transition are **explicit** closes (via `cleanup()`): they
+  clear retained data and the device flag. Browser PiP chrome dismissal (Chrome's "Back to tab" /
   window-close → `pagehide`) and root disposal are **non-intent**: the window
   closes but the flag is preserved, so the dismissal is restorable with one Show
   click (and survives a reload).
@@ -899,6 +928,13 @@ no Service Worker, no closed-tab alerts.
   props()) })`, mirroring `app.ts:29`) whose `props()` re-reads the shared refs'
   `.value` each render, so `nowMinutes` ticks repaint it live. Teardown calls
   `app.unmount()` before `window.close()`.
+- **One clock: `useNowMinutes`, 60s.** 0079 briefly added a second-resolution
+  `useNowSeconds` for a `mm:ss` countdown and then removed it with the format.
+  Do not reintroduce a second timer beside `useNowMinutes`: block selection on
+  one clock and a countdown on another drift by up to 59s at a boundary and
+  show a live block with a spent countdown. With a minute-granularity label a
+  1Hz tick buys nothing visually either — one second moves a progress fill by
+  well under a tenth of a percent.
 - **Just-completed suppression.** On a `"success"` PiP completion, `Schedule`
   sets `justCompletedId` so the indicator goes neutral immediately (bridging the
   gap before the async `router.reload` lands). It is cleared on the next

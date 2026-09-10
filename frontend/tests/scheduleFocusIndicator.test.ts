@@ -124,7 +124,9 @@ import {
   readFocusIndicatorShouldBeOpen,
 } from "../src/utils/focusIndicatorStorage"
 
-const PRIVATE = ["Standup with Bob", "work", "2026-08-12", "09:00", "10:00"]
+// Feature 0079 deliberately un-privates the block title. Wall-clock times and
+// the date stay out of the PiP document in every state.
+const PRIVATE = ["2026-08-12", "09:00", "10:00"]
 
 function makeBlock(overrides: Partial<TimeBlock> = {}): TimeBlock {
   return {
@@ -276,7 +278,7 @@ describe("Schedule.vue focus indicator", () => {
     expect(wrapper!.text()).toContain("Hide indicator")
   })
 
-  it("the in-PiP close control returns the schedule header to Show", async () => {
+  it("puts no control inside the PiP document — the chrome and Hide own dismissal", async () => {
     const win = makeFakeWindow()
     installFakePip(win)
     mountPage([makeBlock()])
@@ -284,11 +286,10 @@ describe("Schedule.vue focus indicator", () => {
     await flushPromises()
     expect(wrapper!.text()).toContain("Hide indicator")
 
-    ;(win.document.querySelector(".fi-close") as HTMLButtonElement).click()
-    await flushPromises()
-
-    expect(win.close).toHaveBeenCalledTimes(1)
-    expect(wrapper!.text()).toContain("Show indicator")
+    // 0079 dropped the in-PiP X: the window's own close button (pagehide, a
+    // restorable non-intent close) and the header Hide are the two ways out.
+    expect(win.document.querySelector("button")).toBeNull()
+    expect(win.close).not.toHaveBeenCalled()
   })
 
   it("browser PiP pagehide (Back to tab) preserves restore intent and returns the header to Show", async () => {
@@ -326,7 +327,7 @@ describe("Schedule.vue focus indicator", () => {
     )
   })
 
-  it("leaks NO private block data into the real PiP document (body or title)", async () => {
+  it("shows the block title and countdown but never clock times or the date", async () => {
     const win = makeFakeWindow()
     installFakePip(win)
     mountPage([makeBlock()])
@@ -335,13 +336,32 @@ describe("Schedule.vue focus indicator", () => {
     await flushPromises()
     expect(win.document.querySelector('[role="progressbar"]')).not.toBeNull()
     const html = win.document.body.innerHTML
-    // Derived countdown is allowed; clock times / title / category / date are not.
+    // 0079: the title and its category colour are now shown on purpose.
+    expect(win.document.body.textContent).toContain("Standup with Bob")
+    expect(win.document.querySelector(".fi-rail")).not.toBeNull()
+    // Same countdown copy as the timeline badge.
     expect(win.document.body.textContent).toContain("30m left")
     for (const s of PRIVATE) expect(html).not.toContain(s)
     const headHtml = win.document.head.innerHTML
     for (const s of PRIVATE) expect(headHtml).not.toContain(s)
+    // The document title stays block-agnostic even though the body is not.
     expect(win.document.title).toBe("Focus")
+    expect(win.document.title).not.toContain("Standup with Bob")
     for (const s of PRIVATE) expect(win.document.title).not.toContain(s)
+  })
+
+  it("counts the active block down as the clock advances", async () => {
+    const win = makeFakeWindow()
+    installFakePip(win)
+    mountPage([makeBlock()])
+    await flushPromises()
+    await vm().focusIndicator.open()
+    await flushPromises()
+    expect(win.document.body.textContent).toContain("30m left")
+
+    nowMinutes.value = 588 // 09:48
+    await flushPromises()
+    expect(win.document.body.textContent).toContain("12m left")
   })
 
   it("is inactive for a completed current block and re-activates when that block is restored incomplete", async () => {
@@ -367,13 +387,18 @@ describe("Schedule.vue focus indicator", () => {
     expect(vm().indicatorNextBlockRemaining).toBe(60)
     await vm().focusIndicator.open()
     await flushPromises()
+    expect(win.document.body.textContent).toContain("Pause")
     expect(win.document.body.textContent).toContain("Deep focus")
     expect(win.document.body.textContent).toContain("1h left")
     expect(win.document.body.textContent).not.toContain("Unrelated private plan")
     expect(win.document.body.textContent).not.toContain("2026-08-12")
     expect(win.document.body.textContent).not.toContain("11:00")
     expect(win.document.title).toBe("Focus")
+    // Nothing has ended yet today, so the pause has no measurable origin: the
+    // dashed track renders decoratively, without a progressbar role.
     expect(win.document.querySelector('[role="progressbar"]')).toBeNull()
+    expect(win.document.querySelector(".fi-track--dashed")).not.toBeNull()
+    expect(win.document.querySelector(".fi-fill")).toBeNull()
 
     nowMinutes.value = 630
     await flushPromises()
@@ -394,12 +419,19 @@ describe("Schedule.vue focus indicator", () => {
 
     nowMinutes.value = 600
     await flushPromises()
-    expect(win.document.querySelector('[role="progressbar"]')).toBeNull()
+    expect(win.document.body.textContent).toContain("Pause")
     expect(win.document.body.textContent).toContain("Deep work")
     expect(win.document.body.textContent).toContain("1h left")
+    // The 09:00–10:00 block ended exactly now, so this pause IS measurable:
+    // dashed track, zero fill, and a progressbar reporting 0%.
+    expect(win.document.querySelector(".fi-track--dashed")).not.toBeNull()
+    expect(
+      win.document.querySelector('[role="progressbar"]')?.getAttribute("aria-valuenow"),
+    ).toBe("0")
+    expect(win.document.querySelector(".fi-rail")).toBeNull()
   })
 
-  it("keeps active PiP state title-free even when a later block exists", async () => {
+  it("shows the current block's title, not a later block's, while active", async () => {
     const win = makeFakeWindow()
     installFakePip(win)
     mountPage([
@@ -411,8 +443,9 @@ describe("Schedule.vue focus indicator", () => {
     await vm().focusIndicator.open()
     await flushPromises()
     expect(win.document.querySelector('[role="progressbar"]')).not.toBeNull()
-    expect(win.document.body.textContent).not.toContain("Standup with Bob")
+    expect(win.document.body.textContent).toContain("Standup with Bob")
     expect(win.document.body.textContent).not.toContain("Deep work")
+    expect(win.document.body.textContent).not.toContain("Pause")
   })
 
   it("shows a completed future block's real title (not Untitled)", async () => {
@@ -476,17 +509,34 @@ describe("Schedule.vue focus indicator", () => {
     expect(win.document.body.textContent).not.toContain("Morning routine")
   })
 
-  it("keeps PiP neutral when no block starts after now", async () => {
+  it("reports the day finished once every block has ended", async () => {
     const win = makeFakeWindow()
     installFakePip(win)
     nowMinutes.value = 800 // 13:20, after the only block has ended
     mountPage([makeBlock({ title: "Deep work", start_time: "11:00", end_time: "12:00" })])
     await flushPromises()
     expect(vm().indicatorNextBlock).toBeNull()
+    expect(vm().indicatorDayFinished).toBe(true)
+    await vm().focusIndicator.open()
+    await flushPromises()
+    expect(win.document.querySelector(".fi-pause-done")?.textContent).toBe("· day finished")
+    expect(win.document.querySelector(".fi-neutral")).toBeNull()
+    expect(win.document.querySelector(".fi-track--dashed")).not.toBeNull()
+    expect(win.document.querySelector(".fi-fill")).toBeNull()
+    expect(win.document.body.textContent).not.toContain("Deep work")
+  })
+
+  it("stays neutral, not day-finished, while sitting inside a completed final block", async () => {
+    const win = makeFakeWindow()
+    installFakePip(win)
+    nowMinutes.value = 570 // 09:30, inside the completed 09:00–10:00 block
+    mountPage([makeBlock({ title: "Deep work", is_completed: true })])
+    await flushPromises()
+    expect(vm().indicatorDayFinished).toBe(false)
     await vm().focusIndicator.open()
     await flushPromises()
     expect(win.document.querySelector(".fi-neutral")?.textContent).toBe("—")
-    expect(win.document.body.textContent).toContain("No active block")
+    expect(win.document.querySelector(".fi-pause-done")).toBeNull()
     expect(win.document.body.textContent).not.toContain("Deep work")
   })
 
@@ -516,14 +566,17 @@ describe("Schedule.vue focus indicator", () => {
     nowMinutes.value = minute as number
     mountPage([makeBlock({ title: "Deep work", start_time, end_time })])
     await flushPromises()
+    // Broken data is not a finished day: it must not claim "day finished".
+    expect(vm().indicatorDayFinished).toBe(false)
     await vm().focusIndicator.open()
     await flushPromises()
+    expect(win.document.querySelector(".fi-pause-done")).toBeNull()
     expect(win.document.querySelector(".fi-neutral")?.textContent).toBe("—")
     expect(win.document.body.textContent).toContain("No active block")
     expect(win.document.body.textContent).not.toContain("Deep work")
   })
 
-  it("replaces next-block details with a private active state when the clock reaches its start", async () => {
+  it("switches pause → active at the block boundary, keeping the two-row frame", async () => {
     const win = makeFakeWindow()
     installFakePip(win)
     nowMinutes.value = 600
@@ -531,13 +584,18 @@ describe("Schedule.vue focus indicator", () => {
     await flushPromises()
     await vm().focusIndicator.open()
     await flushPromises()
-    expect(win.document.body.textContent).toContain("Deep work")
+    expect(win.document.body.textContent).toContain("Pause")
+    expect(win.document.querySelectorAll(".fi-row")).toHaveLength(2)
 
     nowMinutes.value = 660
     await flushPromises()
     expect(win.document.querySelector('[role="progressbar"]')).not.toBeNull()
     expect(win.document.body.textContent).toContain("1h left")
-    expect(win.document.body.textContent).not.toContain("Deep work")
+    // Same title, now under the active treatment: rail on, pause label gone.
+    expect(win.document.body.textContent).toContain("Deep work")
+    expect(win.document.body.textContent).not.toContain("Pause")
+    expect(win.document.querySelector(".fi-rail")).not.toBeNull()
+    expect(win.document.querySelectorAll(".fi-row")).toHaveLength(2)
   })
 
   it("updates an open gap indicator when effective blocks change", async () => {

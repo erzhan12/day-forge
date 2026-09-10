@@ -383,20 +383,30 @@ describe("useFocusIndicator", () => {
       .map((el) => el.textContent ?? "")
       .join("\n")
 
-    expect(css).toMatch(/\.fi-bar/)
-    expect(css).toMatch(/height:\s*12px/)
+    expect(css).toMatch(/\.fi-track/)
+    expect(css).toMatch(/height:\s*5px/)
     expect(css).toMatch(/\.fi-fill/)
     expect(css).toMatch(/\.fi-remaining/)
     expect(css).toMatch(/tabular-nums/)
-    expect(css).toMatch(/color:\s*CanvasText/)
-    expect(css).toMatch(/background:\s*Canvas/)
-    expect(css).toMatch(/background:\s*currentColor/)
+    // 0079: a fixed dark frame, no pure black and no pure white.
+    expect(css).toMatch(/#17181A/i)
+    expect(css).toMatch(/#2A2D31/i)
+    // `white-space` is a property name, not a colour — match values only.
+    expect(css).not.toMatch(/#fff\b|#ffffff\b|:\s*white\b/i)
+    expect(css).not.toMatch(/#000\b|#000000\b|:\s*black\b/i)
+    // Fonts are named with a system fallback — the app ships no webfont.
+    expect(css).toMatch(/"Public Sans"/)
+    expect(css).toMatch(/"IBM Plex Mono"/)
+    expect(css).toMatch(/ui-monospace|monospace/)
+    // 200ms state transition, disabled under reduced motion.
+    expect(css).toMatch(/transition:[^;]*200ms/)
+    expect(css).toMatch(/prefers-reduced-motion/)
     // 0049: inject a dedicated sheet — do not clone app.css (imports or filename).
     expect(css).not.toMatch(/\.time-block/)
     expect(css).not.toMatch(/@import/)
     expect(css).not.toMatch(/app\.css/)
 
-    expect(win.document.querySelector(".fi-bar")).not.toBeNull()
+    expect(win.document.querySelector(".fi-track")).not.toBeNull()
     expect(win.document.querySelector(".fi-complete")).toBeNull()
     expect(win.document.querySelector(".fi-fill")?.getAttribute("style")).toContain(
       "83%",
@@ -415,6 +425,7 @@ describe("useFocusIndicator", () => {
         errorState: false,
         nextBlockTitle: "Deep work",
         nextBlockRemainingMinutes: 23,
+        pausePercent: 40,
       }),
     })
     await fi.open()
@@ -425,6 +436,9 @@ describe("useFocusIndicator", () => {
       .join("\n")
     expect(win.document.querySelector(".fi-next-title")?.textContent).toBe("Deep work")
     expect(win.document.querySelector(".fi-next-remaining")?.textContent).toBe("23m left")
+    expect(win.document.querySelector(".fi-track")?.classList.contains("fi-track--dashed")).toBe(
+      true,
+    )
     expect(css).toMatch(/\.fi-next-title\s*\{[^}]*min-width:\s*0/)
     expect(css).toMatch(/\.fi-next-title\s*\{[^}]*overflow:\s*hidden/)
     expect(css).toMatch(/\.fi-next-title\s*\{[^}]*text-overflow:\s*ellipsis/)
@@ -432,14 +446,16 @@ describe("useFocusIndicator", () => {
     expect(css).toMatch(/\.fi-next-remaining\s*\{[^}]*flex:\s*none/)
     expect(css).toMatch(/\.fi-next-remaining\s*\{[^}]*white-space:\s*nowrap/)
     expect(css).toMatch(/\.fi-next-remaining\s*\{[^}]*tabular-nums/)
+    // The dashed pause track is a CSS gradient, not a border style.
+    expect(css).toMatch(/\.fi-track--dashed\s*\{[^}]*repeating-linear-gradient/)
     expect(css).not.toContain("Deep work")
     fi.cleanup()
   })
 
-  it("makes the PiP mount host fill the window so .fi-bar can flex instead of collapsing to 0px", async () => {
+  it("makes the PiP mount host fill the window so .fi-track can stretch instead of collapsing to 0px", async () => {
     // Chrome Document PiP is a flex body. The Vue mount node is an unstyled
     // wrapper; without width:100%/flex:1 it shrink-wraps to its contents
-    // and .fi-bar { flex: 1 } receives 0px. Playwright measured this
+    // and the full-width track receives 0px. Playwright measured this
     // in a real Chrome PiP: aria-valuenow=83, fill inline width 83%, bar
     // getBoundingClientRect().width === 0.
     const win = makeFakeWindow()
