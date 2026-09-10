@@ -118,7 +118,7 @@ vi.mock("../src/composables/useExternalSourcePoll", () => ({
 }))
 
 import Schedule from "../src/pages/Schedule.vue"
-import type { Schedule as ScheduleType, TimeBlock } from "../src/types"
+import type { Schedule as ScheduleType, TimeBlock, UserCategory } from "../src/types"
 import {
   clearFocusIndicatorShouldBeOpen,
   readFocusIndicatorShouldBeOpen,
@@ -188,12 +188,29 @@ function stubMatchMedia(): void {
 
 let wrapper: VueWrapper | null = null
 
-function mountPage(blocks: TimeBlock[], date = "2026-08-12") {
+function makeCategory(color_id: UserCategory["color_id"]): UserCategory {
+  return {
+    id: 1,
+    slug: "work",
+    label: "Work",
+    color_id,
+    sort_order: 0,
+    is_sink: false,
+    is_new_block_default: false,
+  }
+}
+
+function mountPage(
+  blocks: TimeBlock[],
+  date = "2026-08-12",
+  categories: UserCategory[] = [],
+) {
   wrapper = mount(Schedule, {
     props: {
       schedule: { id: 1, date, status: "active" } as ScheduleType,
       blocks,
       date,
+      categories,
       auto_draft_pending: false,
       has_template_for_type: true,
       slot_type: "weekday" as const,
@@ -348,6 +365,25 @@ describe("Schedule.vue focus indicator", () => {
     expect(win.document.title).toBe("Focus")
     expect(win.document.title).not.toContain("Standup with Bob")
     for (const s of PRIVATE) expect(win.document.title).not.toContain(s)
+  })
+
+  it("repaints the rail when only the category's colour changes", async () => {
+    // Recolouring a category in Settings moves neither the date nor the blocks,
+    // so `props.categories` has to be a watched source of the publish watcher —
+    // otherwise the open PiP keeps the old colour until an unrelated edit.
+    const win = makeFakeWindow()
+    installFakePip(win)
+    mountPage([makeBlock()], "2026-08-12", [makeCategory("blue")])
+    await flushPromises()
+    await vm().focusIndicator.open()
+    await flushPromises()
+    expect(win.document.querySelector(".fi-rail")?.getAttribute("style")).toContain("#3B82F6")
+
+    await wrapper!.setProps({ categories: [makeCategory("rose")] })
+    await flushPromises()
+    const style = win.document.querySelector(".fi-rail")?.getAttribute("style")
+    expect(style).toContain("#E11D48")
+    expect(style).not.toContain("#3B82F6")
   })
 
   it("counts the active block down as the clock advances", async () => {

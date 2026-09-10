@@ -136,6 +136,9 @@ export function isDayFinished(
   nowMinutes: number | null,
   nowDate: string | null,
 ): boolean {
+  // `nowDate` is null exactly when the retained date is not today (the
+  // `useNowMinutes` contract), so this doubles as the off-today guard — another
+  // day is never "finished". Its value is deliberately never read.
   if (nowMinutes === null || nowDate === null || blocks.length === 0) return false
   return blocks.every((block) => {
     const start = timeToMinutes(block.start_time)
