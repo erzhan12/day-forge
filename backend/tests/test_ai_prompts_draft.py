@@ -164,6 +164,90 @@ def test_build_draft_user_message_full_context(user):
     assert "Should be hidden" not in msg
 
 
+def _squash(text: str) -> str:
+    """Collapse every whitespace run (newlines included) to a single space.
+
+    The draft system prompt is hard-wrapped at ~72 columns with 3-space
+    continuation indents, so a multi-word phrase is not a contiguous
+    substring of the raw text. Normalising before a substring assertion
+    keeps these tests pinned to prompt *wording* rather than to the
+    incidental line breaks, which a re-wrap would otherwise break.
+    """
+    return " ".join(text.split())
+
+
+@pytest.mark.django_db
+def test_draft_user_message_renders_current_local_date_not_schedule_date(user):
+    schedule = Schedule.objects.create(user=user, date=datetime.date(2026, 5, 5))
+
+    msg = build_draft_user_message(
+        schedule, None, [], [], datetime.datetime(2026, 5, 4, 12, 0)
+    )
+
+    current_local_time_line = next(
+        line for line in msg.splitlines() if line.startswith("Current local time:")
+    )
+    assert (
+        current_local_time_line
+        == "Current local time: 12:00 on 2026-05-04 (context only — not a cutoff)"
+    )
+    assert "2026-05-05" not in current_local_time_line
+
+
+@pytest.mark.django_db
+def test_draft_prompt_keeps_past_template_block_at_noon(user):
+    schedule = Schedule.objects.create(user=user, date=datetime.date(2026, 5, 4))
+    template = Template.objects.create(
+        user=user,
+        name="WD",
+        type="weekday",
+        blocks=[
+            {
+                "title": "Gym",
+                "start_time": "07:30",
+                "end_time": "08:30",
+                "category": "health",
+            }
+        ],
+    )
+
+    msg = build_draft_user_message(
+        schedule, template, [], [], datetime.datetime(2026, 5, 4, 12, 0)
+    )
+
+    assert 'id=-1 07:30-08:30 health completed=false title="Gym"' in msg
+    prompt = _squash(build_system_prompt_draft(DEFAULT_WINDOW))
+    assert "never a reason to leave a block out" in prompt
+    assert "Past blocks must stay in the draft" in prompt
+
+
+def test_draft_prompt_past_keep_overrides_history_skip_permission():
+    prompt = build_system_prompt_draft(DEFAULT_WINDOW)
+    # Slice the RAW prompt on the line-start rule markers so the test still
+    # pins rule *locality*; normalise only afterwards, for the wrapping.
+    rule_two = _squash(prompt.split("\n2. ", 1)[1].split("\n3. ", 1)[0])
+
+    assert "consistently shifted" in rule_two
+    assert "routinely skipped" in rule_two
+    assert "overrides the permission above to drop routinely skipped blocks" in rule_two
+    assert "active user rule" in rule_two
+    assert "takes precedence" in rule_two
+    assert "Working day window" in _squash(prompt)
+    assert "must not overlap" in _squash(prompt)
+
+
+def test_draft_prompt_scopes_past_rule_and_forbids_moving_past_blocks():
+    prompt = _squash(build_system_prompt_draft(DEFAULT_WINDOW))
+
+    assert "schedule date is today" in prompt
+    assert "schedule date is already past" in prompt
+    # "Past" must be keyed on the block's START time, not its end time: an
+    # end_time-based rule would still satisfy every other assertion here while
+    # silently dropping a currently-running block (07:30-13:00 at now=12:00).
+    assert "whose start_time is earlier than the current local time" in prompt
+    assert "Do not move, shift or omit a block solely because its time has passed" in prompt
+
+
 @pytest.mark.django_db
 def test_build_draft_user_message_includes_completion_suffix(user):
     """A history schedule with a ``DailyReview`` whose ``planned_count >
@@ -270,3 +354,4 @@ def test_draft_add_schema_unchanged_requires_explicit_times():
     # Chat-only auto-placement vocabulary must NOT appear in the draft prompt.
     assert "duration_minutes" not in prompt
     assert "auto" not in prompt.lower() and "automatic" not in prompt.lower()
+    assert "complet" not in prompt.lower()

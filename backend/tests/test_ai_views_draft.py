@@ -124,6 +124,37 @@ class TestHappyPath:
         assert log.kind == AIInteraction.Kind.DRAFT
         assert log.success is True
 
+    def test_draft_persists_past_block_incomplete(
+        self, auth_client, user, template, monkeypatch
+    ):
+        import ai.views as views
+
+        fixed_utc = datetime.datetime(2026, 5, 4, 12, 0, tzinfo=datetime.UTC)
+        _patch_run(
+            monkeypatch,
+            AIDraftResult(
+                raw_response_text='{"actions":[...],"explanation":"ok"}',
+                parsed_actions=[
+                    {
+                        "type": "add",
+                        "title": "Gym",
+                        "start_time": "07:30",
+                        "end_time": "08:30",
+                        "category": "health",
+                    }
+                ],
+                explanation="Generated draft",
+            ),
+        )
+        monkeypatch.setattr(views.timezone, "now", lambda: fixed_utc)
+
+        response = _post(auth_client)
+
+        assert response.status_code == 200, response.content
+        schedule = Schedule.objects.get(user=user, date="2026-05-04")
+        block = TimeBlock.objects.get(schedule=schedule, title="Gym")
+        assert block.is_completed is False
+
     def test_draft_bucket_independent_of_chat_bucket(
         self, auth_client, user, template, monkeypatch
     ):

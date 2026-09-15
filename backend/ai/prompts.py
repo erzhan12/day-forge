@@ -217,7 +217,19 @@ Rules:
    the day. Start there.
 2. Look at the recent history. If the user has consistently shifted a
    block (e.g. moved gym from 17:30 to 18:00 every weekday), reflect that
-   in the draft. If a block has been routinely skipped, you may drop it.
+   in the draft. If a block has been routinely skipped and is not already
+   past, you may drop it. The current local date and time are context only
+   — never a reason to leave a block out; use them solely to tell which
+   template blocks are already past. When the schedule date is today,
+   always include every otherwise-valid template block whose start_time is
+   earlier than the current local time; when the schedule date is already
+   past, treat the whole day this way. Past blocks must stay in the draft so
+   the user can record them afterwards. For those past template blocks, this
+   requirement overrides the permission above to drop routinely skipped
+   blocks — but it never overrides an active user rule, which still takes
+   precedence. Do not move, shift or omit a block solely because its time
+   has passed. Working-day-window and non-overlap rules still apply, and the
+   add schema is unchanged — emit only the listed fields.
 3. Respect every active rule. Rules may be in English or Russian; obey
    them either way. Higher-priority rules take precedence on conflict.
 4. 'category' must be one of {_category_text(categories)}. Default to "{sink_slug}" if
@@ -308,7 +320,13 @@ def build_draft_user_message(schedule, template, history_schedules, rules, now) 
 
     Pure function. Sections:
       1. Schedule date + weekday
-      2. Current local time
+      2. Current local date + time, explicitly annotated as context. The
+         date is ``now.date()`` — the CURRENT LOCAL date, never
+         ``schedule.date`` — because this endpoint drafts any date and
+         the model otherwise cannot tell today from a future or
+         backfilled day (feature 0082). The date and annotation are
+         appended AFTER the ``HH:MM`` so the format stays
+         prefix-preserving for existing substring assertions.
       3. Active template (weekday or weekend), block-by-block
       4. Recent history (last N days), each schedule's blocks. Schedules
          with ``status="draft"`` are intentionally skipped — they
@@ -357,7 +375,8 @@ def build_draft_user_message(schedule, template, history_schedules, rules, now) 
 
     return (
         f"Schedule date: {schedule.date.isoformat()} ({weekday})\n"
-        f"Current local time: {now.strftime('%H:%M')}\n"
+        f"Current local time: {now.strftime('%H:%M')} on {now.date().isoformat()} "
+        f"(context only — not a cutoff)\n"
         f"Active template ({template_type}):\n{template_section}\n\n"
         f"Recent history (last days):\n{history_section}\n\n"
         f"{rules_section}"
