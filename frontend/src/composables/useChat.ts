@@ -31,6 +31,11 @@ export interface ChatMessage {
   explanation: string | null
   ts: number
   appliedResult?: AppliedBlockResult[]
+  // Feature 0083 (issue #219): set only on the two synthetic failure
+  // bubbles below. Sent to the server as `is_error` so the replay guard
+  // can exclude a never-applied failed turn from its evidence — see
+  // RULES.md "Chat replay guard".
+  isError?: boolean
 }
 
 export interface AppliedBlockResult {
@@ -194,9 +199,17 @@ export function useChat() {
         `/api/ai/schedules/${requestDate}/chat/`,
         "POST",
         {
-          messages: messages.value.map(({ role, content }) => ({
+          // Feature 0083: mark assistant turns that carried a non-null
+          // `ask` (`is_ask`) or were a synthetic failure bubble
+          // (`is_error`) — correctness/UX hints for the server's replay
+          // guard, not a security control (see RULES.md and docs/api.md).
+          // Omitted entirely on every other turn so the wire shape stays
+          // unchanged for ordinary user/explanation turns.
+          messages: messages.value.map(({ role, content, ask, isError }) => ({
             role,
             content,
+            ...(role === "assistant" && ask !== null ? { is_ask: true } : {}),
+            ...(role === "assistant" && isError ? { is_error: true } : {}),
           })),
         },
       )) as ChatApiResult
@@ -272,6 +285,7 @@ export function useChat() {
           ask: null,
           explanation: null,
           ts: Date.now(),
+          isError: true,
         },
       ]
       router.reload({ only: ["blocks", "schedule"] })
@@ -298,6 +312,7 @@ export function useChat() {
         ask: null,
         explanation: null,
         ts: Date.now(),
+        isError: true,
       },
     ]
   }

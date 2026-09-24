@@ -78,6 +78,14 @@ def _assistant_turn(text):
     return {"role": "assistant", "content": text}
 
 
+def _ask_turn(text):
+    return {"role": "assistant", "content": text, "is_ask": True}
+
+
+def _error_turn(text):
+    return {"role": "assistant", "content": text, "is_error": True}
+
+
 @pytest.mark.django_db
 class TestChatDurationResize:
     def test_chat_applies_duration_resize_end_to_end(
@@ -389,6 +397,78 @@ class TestValidation:
             assert resp.status_code == 400
         # Counter must still be at zero.
         assert cache.get(f"ai_chat_rl:{user.id}") in (None, 0)
+
+    @pytest.mark.django_db
+    def test_is_ask_must_be_boolean(self, user, auth_client):
+        resp = _post(
+            auth_client,
+            {
+                "messages": [
+                    _user_turn("hi"),
+                    {"role": "assistant", "content": "yes?", "is_ask": "yes"},
+                    _user_turn("ok"),
+                ]
+            },
+        )
+        assert resp.status_code == 400
+        assert resp.json() == {"errors": {"messages": "messages[1].is_ask must be a boolean"}}
+        assert Schedule.objects.filter(user=user, date="2026-04-18").count() == 0
+        assert cache.get(f"ai_chat_rl:{user.id}") in (None, 0)
+
+    @pytest.mark.django_db
+    def test_is_error_must_be_boolean(self, user, auth_client):
+        resp = _post(
+            auth_client,
+            {
+                "messages": [
+                    _user_turn("hi"),
+                    {"role": "assistant", "content": "oops", "is_error": "yes"},
+                    _user_turn("ok"),
+                ]
+            },
+        )
+        assert resp.status_code == 400
+        assert resp.json() == {"errors": {"messages": "messages[1].is_error must be a boolean"}}
+        assert Schedule.objects.filter(user=user, date="2026-04-18").count() == 0
+        assert cache.get(f"ai_chat_rl:{user.id}") in (None, 0)
+
+    @pytest.mark.django_db
+    def test_flags_rejected_on_user_turns(self, auth_client):
+        resp = _post(
+            auth_client,
+            {"messages": [{"role": "user", "content": "hi", "is_ask": True}]},
+        )
+        assert resp.status_code == 400
+        assert resp.json() == {
+            "errors": {"messages": "messages[0].is_ask is only valid on assistant turns"}
+        }
+
+        resp = _post(
+            auth_client,
+            {"messages": [{"role": "user", "content": "hi", "is_error": True}]},
+        )
+        assert resp.status_code == 400
+        assert resp.json() == {
+            "errors": {"messages": "messages[0].is_error is only valid on assistant turns"}
+        }
+
+    @pytest.mark.django_db
+    def test_is_ask_true_accepted(self, today_schedule, auth_client, monkeypatch):
+        _patch_run_chat(
+            monkeypatch,
+            AIChatResult(raw_response_text="{}", parsed_actions=[], explanation="ok", ask=None),
+        )
+        resp = _post(
+            auth_client,
+            {
+                "messages": [
+                    _user_turn("hi"),
+                    {"role": "assistant", "content": "when?", "is_ask": True},
+                    _user_turn("ok"),
+                ]
+            },
+        )
+        assert resp.status_code == 200
 
 
 class TestClarifyingQuestion:
@@ -2310,3 +2390,693 @@ def test_mocked_model_does_not_group_merely_similar_titles(
     similar.refresh_from_db()
     assert target.category == "health"
     assert similar.category == "work"
+
+
+class TestReplayGuard:
+    """Feature 0083 (issue #219): the server-side replay guard on the chat
+    apply path. See ``docs/features/0083_PLAN.md`` §B3/§C."""
+
+    @pytest.mark.django_db
+    def test_issue_219_two_turn_sequence_does_not_replay(
+        self, user, auth_client, today_schedule, monkeypatch
+    ):
+        Rule.objects.create(
+            user=user,
+            text="If a block with the same name already exists, append [N]",
+            priority=10,
+            is_active=True,
+        )
+        _patch_run_chat(
+            monkeypatch,
+            AIChatResult(
+                raw_response_text="{}",
+                parsed_actions=[{"type": "add", "title": "Momentum", "category": "personal"}],
+                explanation="Added Momentum.",
+                ask=None,
+            ),
+        )
+        resp1 = _post(auth_client, {"messages": [_user_turn("add Momentum (Personal)")]})
+        assert resp1.status_code == 200, resp1.content
+        assert resp1.json()["applied"] is True
+        assert TimeBlock.objects.filter(schedule=today_schedule).count() == 1
+
+        _patch_run_chat(
+            monkeypatch,
+            AIChatResult(
+                raw_response_text="{}",
+                parsed_actions=[{"type": "add", "title": "Momentum[2]", "category": "personal"}],
+                explanation="Adding Momentum[2] as a new personal block.",
+                ask=None,
+            ),
+        )
+        resp2 = _post(
+            auth_client,
+            {
+                "messages": [
+                    _user_turn("add Momentum (Personal)"),
+                    _assistant_turn(
+                        "Adding Momentum as a new personal block in the next free slot."
+                    ),
+                    _user_turn("Notes"),
+                ]
+            },
+        )
+        assert resp2.status_code == 200, resp2.content
+        data2 = resp2.json()
+        assert data2["applied"] is False
+        assert data2["partial"] is False
+        assert data2["blocks"] is None
+        assert data2["ask"].startswith("I did not change the schedule:")
+        assert TimeBlock.objects.filter(schedule=today_schedule).count() == 1
+        assert not TimeBlock.objects.filter(schedule=today_schedule, title="Momentum[2]").exists()
+        today_schedule.refresh_from_db()
+        assert today_schedule.status == "active"
+        interactions = list(AIInteraction.objects.filter(schedule=today_schedule).order_by("id"))
+        assert len(interactions) == 2
+        second = interactions[1]
+        assert second.success is True
+        assert second.actions_json == [
+            {"type": "add", "title": "Momentum[2]", "category": "personal"}
+        ]
+        assert second.outcomes_json[0]["reason_code"] == "replay_guard"
+
+    @pytest.mark.django_db
+    def test_bare_name_follow_up_uses_its_own_name(
+        self, user, auth_client, today_schedule, monkeypatch
+    ):
+        _patch_run_chat(
+            monkeypatch,
+            AIChatResult(
+                raw_response_text="{}",
+                parsed_actions=[{"type": "add", "title": "Momentum", "category": "personal"}],
+                explanation="Added Momentum.",
+                ask=None,
+            ),
+        )
+        _post(auth_client, {"messages": [_user_turn("add Momentum (Personal)")]})
+
+        _patch_run_chat(
+            monkeypatch,
+            AIChatResult(
+                raw_response_text="{}",
+                parsed_actions=[{"type": "add", "title": "Notes", "category": "other"}],
+                explanation="Added Notes.",
+                ask=None,
+            ),
+        )
+        resp2 = _post(
+            auth_client,
+            {
+                "messages": [
+                    _user_turn("add Momentum (Personal)"),
+                    _assistant_turn(
+                        "Adding Momentum as a new personal block in the next free slot."
+                    ),
+                    _user_turn("Notes"),
+                ]
+            },
+        )
+        assert resp2.status_code == 200, resp2.content
+        assert resp2.json()["applied"] is True
+        titles = set(
+            TimeBlock.objects.filter(schedule=today_schedule).values_list("title", flat=True)
+        )
+        assert titles == {"Momentum", "Notes"}
+
+    @pytest.mark.django_db
+    def test_guard_aborts_whole_turn(self, user, auth_client, today_schedule, monkeypatch):
+        _patch_run_chat(
+            monkeypatch,
+            AIChatResult(
+                raw_response_text="{}",
+                parsed_actions=[{"type": "add", "title": "Momentum", "category": "personal"}],
+                explanation="Added Momentum.",
+                ask=None,
+            ),
+        )
+        resp1 = _post(auth_client, {"messages": [_user_turn("add Momentum (Personal)")]})
+        momentum_id = resp1.json()["blocks"][0]["id"]
+
+        _patch_run_chat(
+            monkeypatch,
+            AIChatResult(
+                raw_response_text="{}",
+                parsed_actions=[
+                    {"type": "add", "title": "Momentum[2]", "category": "personal"},
+                    {"type": "remove", "task_id": momentum_id},
+                ],
+                explanation="Replaying and removing.",
+                ask=None,
+            ),
+        )
+        resp2 = _post(
+            auth_client,
+            {
+                "messages": [
+                    _user_turn("add Momentum (Personal)"),
+                    _assistant_turn("Added Momentum."),
+                    _user_turn("Notes"),
+                ]
+            },
+        )
+        assert resp2.status_code == 200, resp2.content
+        data2 = resp2.json()
+        assert data2["applied"] is False
+        assert TimeBlock.objects.filter(schedule=today_schedule, id=momentum_id).exists()
+        assert TimeBlock.objects.filter(schedule=today_schedule).count() == 1
+        assert data2["explanation"] == "Nothing was changed."
+        outcomes = data2["outcomes"]
+        assert len(outcomes) == 2
+        assert all(
+            o["status"] == "skipped" and o["reason_code"] == "replay_guard" for o in outcomes
+        )
+        add_outcome, remove_outcome = outcomes
+        assert add_outcome["task_id"] is None
+        assert add_outcome["skipped_fields"] == ["title", "category", "start_time", "end_time"]
+        assert remove_outcome["task_id"] == momentum_id
+        assert remove_outcome["skipped_fields"] == []
+
+    @pytest.mark.django_db
+    def test_explicit_repeat_add_with_rule_suffix_is_allowed(
+        self, auth_client, today_schedule, monkeypatch
+    ):
+        TimeBlock.objects.create(
+            schedule=today_schedule,
+            title="Momentum",
+            start_time="06:00",
+            end_time="06:25",
+            category="personal",
+        )
+        _patch_run_chat(
+            monkeypatch,
+            AIChatResult(
+                raw_response_text="{}",
+                parsed_actions=[{"type": "add", "title": "Momentum[2]", "category": "personal"}],
+                explanation="Added another Momentum.",
+                ask=None,
+            ),
+        )
+        resp = _post(auth_client, {"messages": [_user_turn("add Momentum")]})
+        assert resp.status_code == 200, resp.content
+        assert resp.json()["applied"] is True
+        assert TimeBlock.objects.filter(schedule=today_schedule).count() == 2
+
+    @pytest.mark.django_db
+    def test_multi_block_add_in_one_message_is_allowed(
+        self, auth_client, today_schedule, monkeypatch
+    ):
+        _patch_run_chat(
+            monkeypatch,
+            AIChatResult(
+                raw_response_text="{}",
+                parsed_actions=[
+                    {"type": "add", "title": "Momentum", "category": "personal"},
+                    {"type": "add", "title": "TCO", "category": "work"},
+                    {"type": "add", "title": "GridBot[Note]", "category": "work"},
+                ],
+                explanation="Added three blocks.",
+                ask=None,
+            ),
+        )
+        resp = _post(
+            auth_client,
+            {"messages": [_user_turn("add Momentum, TCO, GridBot[Note]")]},
+        )
+        assert resp.status_code == 200, resp.content
+        assert resp.json()["applied"] is True
+        assert TimeBlock.objects.filter(schedule=today_schedule).count() == 3
+
+    @pytest.mark.django_db
+    def test_pending_ask_answer_skips_guard(self, auth_client, today_schedule, monkeypatch):
+        _patch_run_chat(
+            monkeypatch,
+            AIChatResult(
+                raw_response_text="{}",
+                parsed_actions=[
+                    {
+                        "type": "add",
+                        "title": "Momentum",
+                        "category": "personal",
+                        "start_time": "14:00",
+                        "end_time": "15:00",
+                    }
+                ],
+                explanation="Added Momentum at 14:00.",
+                ask=None,
+            ),
+        )
+        resp = _post(
+            auth_client,
+            {
+                "messages": [
+                    _user_turn("add Momentum 09:00-10:00"),
+                    _ask_turn(
+                        "Momentum does not fit at that time. Please give it a "
+                        "concrete free start and end time."
+                    ),
+                    _user_turn("14:00"),
+                ]
+            },
+        )
+        assert resp.status_code == 200, resp.content
+        assert resp.json()["applied"] is True
+
+    @pytest.mark.django_db
+    def test_no_slot_retry_with_smaller_duration_skips_guard(
+        self, auth_client, today_schedule, monkeypatch
+    ):
+        _patch_run_chat(
+            monkeypatch,
+            AIChatResult(
+                raw_response_text="{}",
+                parsed_actions=[
+                    {
+                        "type": "add",
+                        "title": "Momentum",
+                        "category": "personal",
+                        "duration_minutes": 15,
+                    }
+                ],
+                explanation="Added a shorter Momentum.",
+                ask=None,
+            ),
+        )
+        resp = _post(
+            auth_client,
+            {
+                "messages": [
+                    _user_turn("add Momentum"),
+                    _ask_turn(
+                        "No free slot with the required gaps fits Momentum in your "
+                        "day window. Try a shorter duration or a specific free time."
+                    ),
+                    _user_turn("make it 15 minutes"),
+                ]
+            },
+        )
+        assert resp.status_code == 200, resp.content
+        assert resp.json()["applied"] is True
+
+    @pytest.mark.django_db
+    def test_direction_answer_update_is_not_guarded(
+        self, auth_client, today_schedule, monkeypatch
+    ):
+        target = TimeBlock.objects.create(
+            schedule=today_schedule,
+            title="Focus",
+            start_time="09:00",
+            end_time="10:00",
+            category="work",
+        )
+        TimeBlock.objects.create(
+            schedule=today_schedule,
+            title="Busy",
+            start_time="10:00",
+            end_time="11:00",
+            category="work",
+        )
+        _patch_run_chat(
+            monkeypatch,
+            AIChatResult(
+                "{}",
+                [
+                    {
+                        "type": "update",
+                        "task_id": target.id,
+                        "changes": {"start_time": "10:00", "end_time": "11:00"},
+                        "placement_direction": "later",
+                    }
+                ],
+                "Moved",
+                None,
+            ),
+        )
+        resp = _post(
+            auth_client,
+            {
+                "messages": [
+                    _user_turn("move focus to 10:00"),
+                    _assistant_turn("earlier or later?"),
+                    _user_turn("later"),
+                ]
+            },
+        )
+        assert resp.status_code == 200, resp.content
+        payload = resp.json()
+        suggestion = payload["outcomes"][0]["suggestion"]
+        assert suggestion is not None
+        assert not suggestion.get("direction_required")
+        assert suggestion["start_time"] == "11:00"
+
+    @pytest.mark.django_db
+    def test_rephrased_title_is_allowed(self, auth_client, today_schedule, monkeypatch):
+        _patch_run_chat(
+            monkeypatch,
+            AIChatResult(
+                raw_response_text="{}",
+                parsed_actions=[{"type": "add", "title": "Momentum", "category": "personal"}],
+                explanation="Added Momentum.",
+                ask=None,
+            ),
+        )
+        _post(auth_client, {"messages": [_user_turn("add Momentum")]})
+
+        _patch_run_chat(
+            monkeypatch,
+            AIChatResult(
+                raw_response_text="{}",
+                parsed_actions=[{"type": "add", "title": "Workout", "category": "health"}],
+                explanation="Added Workout.",
+                ask=None,
+            ),
+        )
+        resp = _post(
+            auth_client,
+            {
+                "messages": [
+                    _user_turn("add Momentum"),
+                    _assistant_turn("Added Momentum."),
+                    _user_turn("schedule a workout"),
+                ]
+            },
+        )
+        assert resp.status_code == 200, resp.content
+        assert resp.json()["applied"] is True
+
+    @pytest.mark.django_db
+    def test_translated_title_without_prior_mention_is_allowed(
+        self, auth_client, today_schedule, monkeypatch
+    ):
+        _patch_run_chat(
+            monkeypatch,
+            AIChatResult(
+                raw_response_text="{}",
+                parsed_actions=[{"type": "add", "title": "Lunch", "category": "personal"}],
+                explanation="Added Lunch.",
+                ask=None,
+            ),
+        )
+        resp = _post(auth_client, {"messages": [_user_turn("Обед")]})
+        assert resp.status_code == 200, resp.content
+        assert resp.json()["applied"] is True
+
+    @pytest.mark.django_db
+    def test_retry_after_error_bubble_is_allowed(self, auth_client, today_schedule, monkeypatch):
+        _patch_run_chat(
+            monkeypatch,
+            AIChatResult(
+                raw_response_text="{}",
+                parsed_actions=[{"type": "add", "title": "Momentum", "category": "personal"}],
+                explanation="Added Momentum.",
+                ask=None,
+            ),
+        )
+        resp = _post(
+            auth_client,
+            {
+                "messages": [
+                    _user_turn("add Momentum"),
+                    _error_turn("Please review the updated schedule and try again."),
+                    _user_turn("try again"),
+                ]
+            },
+        )
+        assert resp.status_code == 200, resp.content
+        assert resp.json()["applied"] is True
+
+    @pytest.mark.django_db
+    def test_fresh_turn_after_error_cannot_replay_earlier_add(
+        self, auth_client, today_schedule, monkeypatch
+    ):
+        TimeBlock.objects.create(
+            schedule=today_schedule,
+            title="Momentum",
+            start_time="06:00",
+            end_time="06:25",
+            category="personal",
+        )
+        _patch_run_chat(
+            monkeypatch,
+            AIChatResult(
+                raw_response_text="{}",
+                parsed_actions=[{"type": "add", "title": "Momentum[2]", "category": "personal"}],
+                explanation="Adding Momentum[2].",
+                ask=None,
+            ),
+        )
+        resp = _post(
+            auth_client,
+            {
+                "messages": [
+                    _user_turn("add Momentum (Personal)"),
+                    _assistant_turn("Added Momentum."),
+                    _user_turn("add Gym"),
+                    _error_turn("AI chat failed"),
+                    _user_turn("Notes"),
+                ]
+            },
+        )
+        assert resp.status_code == 200, resp.content
+        assert resp.json()["applied"] is False
+        assert TimeBlock.objects.filter(schedule=today_schedule).count() == 1
+
+    @pytest.mark.django_db
+    def test_chained_failure_retry_is_allowed(self, auth_client, today_schedule, monkeypatch):
+        _patch_run_chat(
+            monkeypatch,
+            AIChatResult(
+                raw_response_text="{}",
+                parsed_actions=[{"type": "add", "title": "Momentum", "category": "personal"}],
+                explanation="Added Momentum.",
+                ask=None,
+            ),
+        )
+        resp = _post(
+            auth_client,
+            {
+                "messages": [
+                    _user_turn("add Momentum"),
+                    _error_turn("AI chat failed"),
+                    _user_turn("try again"),
+                    _error_turn("AI chat failed"),
+                    _user_turn("try again"),
+                ]
+            },
+        )
+        assert resp.status_code == 200, resp.content
+        assert resp.json()["applied"] is True
+
+    @pytest.mark.django_db
+    def test_failure_after_ask_answer_retry_is_allowed(
+        self, auth_client, today_schedule, monkeypatch
+    ):
+        _patch_run_chat(
+            monkeypatch,
+            AIChatResult(
+                raw_response_text="{}",
+                parsed_actions=[{"type": "add", "title": "Momentum", "category": "personal"}],
+                explanation="Added Momentum.",
+                ask=None,
+            ),
+        )
+        resp = _post(
+            auth_client,
+            {
+                "messages": [
+                    _user_turn("add Momentum 09:00-10:00"),
+                    _ask_turn(
+                        "Momentum does not fit at that time. Please give it a "
+                        "concrete free start and end time."
+                    ),
+                    _user_turn("14:00"),
+                    _error_turn("AI chat failed"),
+                    _user_turn("try again"),
+                ]
+            },
+        )
+        assert resp.status_code == 200, resp.content
+        assert resp.json()["applied"] is True
+
+    @pytest.mark.django_db
+    def test_failure_after_ask_answer_cannot_replay_older_add(
+        self, auth_client, today_schedule, monkeypatch
+    ):
+        TimeBlock.objects.create(
+            schedule=today_schedule,
+            title="Momentum",
+            start_time="06:00",
+            end_time="06:25",
+            category="personal",
+        )
+        _patch_run_chat(
+            monkeypatch,
+            AIChatResult(
+                raw_response_text="{}",
+                parsed_actions=[{"type": "add", "title": "Momentum[2]", "category": "personal"}],
+                explanation="Adding Momentum[2].",
+                ask=None,
+            ),
+        )
+        resp = _post(
+            auth_client,
+            {
+                "messages": [
+                    _user_turn("add Momentum"),
+                    _assistant_turn("Added Momentum."),
+                    _user_turn("add Gym 09:00"),
+                    _ask_turn(
+                        "Gym does not fit at that time. Please give it a "
+                        "concrete free start and end time."
+                    ),
+                    _user_turn("14:00"),
+                    _error_turn("AI chat failed"),
+                    _user_turn("Notes"),
+                ]
+            },
+        )
+        assert resp.status_code == 200, resp.content
+        assert resp.json()["applied"] is False
+        assert TimeBlock.objects.filter(schedule=today_schedule).count() == 1
+
+    @pytest.mark.django_db
+    def test_guard_precedes_fingerprint_check(
+        self, auth_client, today_schedule, monkeypatch
+    ):
+        TimeBlock.objects.create(
+            schedule=today_schedule,
+            title="Momentum",
+            start_time="06:00",
+            end_time="06:25",
+            category="personal",
+        )
+
+        async def _run(messages, schedule, blocks, rules, now):
+            await sync_to_async(
+                TimeBlock.objects.create,
+                thread_sensitive=True,
+            )(
+                schedule=schedule,
+                title="Concurrent",
+                start_time="12:00",
+                end_time="12:30",
+                category="work",
+            )
+            return AIChatResult(
+                raw_response_text="{}",
+                parsed_actions=[{"type": "add", "title": "Momentum[2]", "category": "personal"}],
+                explanation="Adding Momentum[2].",
+                ask=None,
+            )
+
+        monkeypatch.setattr("ai.views.run_chat", _run)
+        resp = _post(
+            auth_client,
+            {
+                "messages": [
+                    _user_turn("add Momentum"),
+                    _assistant_turn("Added Momentum."),
+                    _user_turn("Notes"),
+                ]
+            },
+        )
+        assert resp.status_code == 200, resp.content
+        assert resp.json()["outcomes"][0]["reason_code"] == "replay_guard"
+
+    @pytest.mark.django_db
+    def test_pending_ask_without_flag_is_enforced(
+        self, auth_client, today_schedule, monkeypatch
+    ):
+        _patch_run_chat(
+            monkeypatch,
+            AIChatResult(
+                raw_response_text="{}",
+                parsed_actions=[
+                    {
+                        "type": "add",
+                        "title": "Momentum",
+                        "category": "personal",
+                        "start_time": "14:00",
+                        "end_time": "15:00",
+                    }
+                ],
+                explanation="Added Momentum at 14:00.",
+                ask=None,
+            ),
+        )
+        resp = _post(
+            auth_client,
+            {
+                "messages": [
+                    _user_turn("add Momentum 09:00-10:00"),
+                    _assistant_turn(
+                        "Momentum does not fit at that time. Please give it a "
+                        "concrete free start and end time."
+                    ),
+                    _user_turn("14:00"),
+                ]
+            },
+        )
+        assert resp.status_code == 200, resp.content
+        assert resp.json()["applied"] is False
+        assert TimeBlock.objects.filter(schedule=today_schedule).count() == 0
+
+
+class TestImplicitAddAuditUnaffected:
+    """Feature 0083 Addendum D: the implicit-add rewrite lives entirely
+    inside ``ai.service.run_chat`` and only touches the copy of the
+    latest turn sent to the provider. This exercises the REAL
+    ``run_chat`` (only the OpenAI client is faked, at the same seam
+    ``test_ai_service_chat.py`` uses) so the audit row's ``user_command``
+    is pinned against the actual rewrite, not a mocked stand-in."""
+
+    def test_audit_user_command_keeps_original_text(
+        self, auth_client, today_schedule, monkeypatch
+    ):
+        class _FakeMessage:
+            def __init__(self, content):
+                self.content = content
+
+        class _FakeChoice:
+            def __init__(self, content):
+                self.message = _FakeMessage(content)
+
+        class _FakeResponse:
+            def __init__(self, content):
+                self.choices = [_FakeChoice(content)]
+
+        calls = []
+
+        class _FakeCompletions:
+            async def create(self, **kwargs):
+                calls.append(kwargs)
+                payload = json.dumps({"actions": [], "explanation": "Noted.", "ask": None})
+                return _FakeResponse(payload)
+
+        class _FakeChat:
+            completions = _FakeCompletions()
+
+        class _FakeClient:
+            chat = _FakeChat()
+
+        monkeypatch.setattr("ai.service._get_client", lambda: _FakeClient())
+        monkeypatch.setattr("django.conf.settings.LLM_API_KEY", "test-key")
+
+        resp = _post(
+            auth_client,
+            {
+                "messages": [
+                    _user_turn("add Momentum (Personal)"),
+                    _assistant_turn("Added Momentum"),
+                    _user_turn("Notes"),
+                ]
+            },
+        )
+
+        assert resp.status_code == 200, resp.content
+        # The provider received the rewritten, LLM-bound copy.
+        sent_messages = calls[0]["messages"]
+        assert sent_messages[-1] == {"role": "user", "content": "add Notes"}
+        # The audit row keeps the ORIGINAL latest-turn text, never the
+        # rewritten "add Notes" sent to the provider.
+        interaction = AIInteraction.objects.get(schedule=today_schedule)
+        assert interaction.user_command == "Notes"

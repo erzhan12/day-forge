@@ -49,6 +49,7 @@ from django.conf import settings
 from openai import AsyncOpenAI
 from schedules.window import DEFAULT_WINDOW
 
+from ai.implicit_add import apply_implicit_add
 from ai.prompts import (
     build_chat_user_message,
     build_draft_user_message,
@@ -324,6 +325,12 @@ async def run_chat(messages, schedule, blocks, rules, now, categories=None) -> A
     schedule_context = build_chat_user_message(schedule, blocks, now, rules)
     prior_transcript = serialise_prior_turns(messages[:-1])
     latest_user_turn = messages[-1]["content"]
+    # Feature 0083 Addendum D: rewrite the LLM-bound copy only, when the
+    # latest turn carries no explicit instruction. The stored transcript,
+    # the audit ``user_command``, the transcript hash, and the replay
+    # guard all keep using the original ``messages`` (unmutated here) and
+    # therefore the original text — see ``ai/implicit_add.py``.
+    llm_latest_user_turn = apply_implicit_add(latest_user_turn, messages)
 
     chat_messages = [
         {
@@ -342,7 +349,7 @@ async def run_chat(messages, schedule, blocks, rules, now, categories=None) -> A
             "role": "user",
             "content": f"{schedule_context}\n\n{prior_transcript}",
         },
-        {"role": "user", "content": latest_user_turn},
+        {"role": "user", "content": llm_latest_user_turn},
     ]
 
     client = _get_client()

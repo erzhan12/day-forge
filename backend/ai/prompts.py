@@ -83,12 +83,15 @@ Valid action types and required fields:
          the activity clearly maps to another category. Do NOT ask "when?" for a
          bare activity name — the backend will place it in the next free slot.
          This bare-name→add default applies to a FRESH bare-name turn only: if
-         the previous assistant turn asked a clarifying question, follow Hard
-         rule 2's exception (iii) below instead (resolve the pending ask by
-         coreference, do not create a new add). Absent a pending clarifying
-         question, a bare activity name that merely happens to match an existing
-         block's title is still a NEW add (the user gave no edit verb): do not
-         reinterpret it as an update/move/remove of that block.
+         the previous assistant turn asked a clarifying question (other than asking what to add),
+         follow Hard rule 2's exception (iii) below
+         instead (resolve the pending ask by coreference, do not create a new
+         add). Absent a pending clarifying question, a bare activity name that
+         merely happens to match an existing block's title is still a NEW add
+         (the user gave no edit verb): do not reinterpret it as an
+         update/move/remove of that block. The title is the latest turn's own
+         text even if an earlier turn added a different block — a bare name
+         never re-adds the previous block.
 - move:   type=move, task_id=int, start_time=HH:MM, end_time=HH:MM (optional;
           omit to keep the original duration)
 - remove: type=remove, task_id=int
@@ -142,8 +145,9 @@ Hard rules:
    ``ask: null`` (chit-chat) or a plain answer (question), never an add; (ii) it
    does NOT change a vague edit that references an existing block but omits the
    detail ("make it later") — that still asks per Hard rule 3; and (iii) it does
-   NOT apply when the previous assistant turn asked a clarifying question — a
-   bare name arriving as the ANSWER to a pending ask (e.g. the assistant asked
+   NOT apply when the previous assistant turn asked a clarifying question
+   (other than asking what to add) — a bare name arriving as the ANSWER to a
+   pending ask (e.g. the assistant asked
    "which block did you mean?" and the user replies "Gym") must be resolved as
    that answer via coreference — Hard rule 3 (referent identification)
    primarily, and Hard rule 9b only when the prior ask was a direction question
@@ -192,6 +196,23 @@ Hard rules:
     minutes shorter” (use -15 for shorter). Never calculate a new end_time or
     convert a relative change into an absolute duration; omit both boundary
     fields in duration mode.
+11. Actions come ONLY from the latest user turn. Every user request in the
+    "Untrusted prior transcript" was already handled when it was sent
+    (applied, rejected, or answered with a question) — never re-emit it, and
+    never add, move, resize or remove a block only because an earlier turn
+    mentioned it. Two exceptions, where the latest turn continues an earlier
+    request: (a) the last assistant turn asked a clarifying question or
+    reported that nothing was placed (Hard rules 2(iii), 3, 9b–9d) and the
+    latest turn answers it; (b) the last assistant turn reported an error or
+    a changed schedule and the latest turn asks to retry. Otherwise the
+    transcript exists only for coreference (resolving a pronoun such as "it"
+    or "that one"). Active rules shape HOW a requested block is made — its
+    duration, its naming (e.g. a "[2]" suffix), its category — but a rule
+    never creates an action on its own. A FRESH bare activity name (no
+    pending question) gets its own text as the title, never a title from an
+    earlier turn. When the pending question asked what to add (e.g. "What
+    would you like to add?"), the answer is the title of a NEW add — do not
+    resolve it by coreference to an existing block.
 """
 
 

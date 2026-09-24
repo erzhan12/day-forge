@@ -50,6 +50,12 @@ from ai.mutation_planner import (
 from ai.mutation_planner import (
     compute_move_resize_times as _compute_move_resize_times,
 )
+from ai.replay_guard import (
+    GUARD_EXPLANATION,
+    REPLAY_GUARD_REASON_CODE,
+    build_guard_ask,
+    find_replayed_actions,
+)
 from ai.service import (
     AIChatResult,
     AIDraftResult,
@@ -321,6 +327,55 @@ def _build_resolution_ask(
     return (
         f"That time range for {title(skipped[0])} is not valid or available. "
         "Please give a valid time."
+    )
+
+
+async def _replay_guard_response(
+    interaction: AIInteraction | None,
+    parsed_actions: list[dict],
+    offending: tuple[int, ...],
+    *,
+    user_id: int,
+    schedule_id: int,
+) -> JsonResponse:
+    """Build the 200 response for a tripped replay guard (feature 0083).
+
+    All-or-nothing: every parsed action from this turn is skipped, not just
+    the offending ``add``(s) — a sibling move/remove/resize/update in the
+    same model output is just as suspect once the model has proven it
+    misread the latest turn. See ``docs/features/0083_PLAN.md`` §B3.
+    """
+    outcomes = [
+        ActionOutcome(
+            action_index=idx,
+            task_id=action.get("task_id") if action.get("type") != "add" else None,
+            status="skipped",
+            skipped_fields=("title", "category", "start_time", "end_time")
+            if action.get("type") == "add"
+            else (),
+            reason_code=REPLAY_GUARD_REASON_CODE,
+        )
+        for idx, action in enumerate(parsed_actions)
+    ]
+    outcome_payload = [action_outcome_to_dict(o) for o in outcomes]
+    await _mark_success(interaction, outcome_payload)
+    logger.warning(
+        "AI chat replay guard tripped (user=%s, schedule=%s, interaction=%s, actions=%s)",
+        user_id,
+        schedule_id,
+        interaction.id if interaction else None,
+        offending,
+    )
+    first_title = parsed_actions[offending[0]].get("title", "")
+    return JsonResponse(
+        {
+            "blocks": None,
+            "explanation": GUARD_EXPLANATION,
+            "ask": build_guard_ask(first_title),
+            "applied": False,
+            "partial": False,
+            "outcomes": outcome_payload,
+        }
     )
 
 
@@ -984,6 +1039,16 @@ def _validate_chat_messages(messages: object) -> str | None:
         role = msg.get("role")
         if role not in ("user", "assistant"):
             return f"messages[{idx}].role must be 'user' or 'assistant'"
+        # Optional replay-guard wire markers (feature 0083): client-supplied
+        # correctness/UX hints, not a security boundary — see
+        # ``ai.replay_guard`` and RULES.md. Only valid on assistant turns.
+        for flag_name in ("is_ask", "is_error"):
+            if flag_name not in msg:
+                continue
+            if not isinstance(msg[flag_name], bool):
+                return f"messages[{idx}].{flag_name} must be a boolean"
+            if role != "assistant":
+                return f"messages[{idx}].{flag_name} is only valid on assistant turns"
         content = msg.get("content")
         if not isinstance(content, str):
             return f"messages[{idx}].content must be a string"
@@ -1179,6 +1244,22 @@ async def ai_chat(request, date):
                 "partial": False,
                 "outcomes": [],
             }
+        )
+
+    # Replay guard (feature 0083, issue #219): a deterministic backstop for
+    # Hard rule 11 (``prompts.py``) — catches an ``add`` the model replayed
+    # from an earlier, already-handled turn instead of reading the latest
+    # one. Runs BEFORE the apply lock/fingerprint round-trip: a stale
+    # snapshot plus a replayed add should surface the guard's own ask, not
+    # a 409, and the user needs a conversational recovery, not an error.
+    offending = find_replayed_actions(result.parsed_actions, messages)
+    if offending:
+        return await _replay_guard_response(
+            interaction,
+            result.parsed_actions,
+            offending,
+            user_id=user.id,
+            schedule_id=schedule.id,
         )
 
     # Apply path uses the shared select_for_update + per-action dispatcher.

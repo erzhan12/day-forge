@@ -151,16 +151,40 @@ class TestUntrustedTranscript:
 
     def test_latest_user_turn_is_separate_message(self, patch_client, fake_schedule, now):
         completions = patch_client(_ok_response())
+        # Carries an explicit command verb ("cancel") so the Addendum D
+        # implicit-add rewrite (feature 0083) does not touch it — this
+        # test is about message plumbing, not the rewrite.
         messages = [
             {"role": "user", "content": "first"},
             {"role": "assistant", "content": "what?"},
-            {"role": "user", "content": "the latest one"},
+            {"role": "user", "content": "cancel the latest one"},
         ]
         run_chat(messages, fake_schedule, [], [], now)
 
         sent = completions.calls[0]["messages"]
         # Last sent message should be the latest user turn verbatim.
-        assert sent[-1] == {"role": "user", "content": "the latest one"}
+        assert sent[-1] == {"role": "user", "content": "cancel the latest one"}
+
+    def test_turn_flags_never_forwarded_to_provider(self, patch_client, fake_schedule, now):
+        """Feature 0083 wire markers (``is_ask`` / ``is_error``) are a
+        replay-guard hint for the VIEW layer only. ``serialise_prior_turns``
+        reads only ``role``/``content`` — they must never reach the
+        provider, and no assistant-role message may be forwarded either."""
+        completions = patch_client(_ok_response())
+        messages = [
+            {"role": "user", "content": "add Momentum"},
+            {"role": "assistant", "content": "Added Momentum", "is_ask": False},
+            {"role": "user", "content": "add Gym"},
+            {"role": "assistant", "content": "AI chat failed", "is_error": True},
+            {"role": "user", "content": "try again"},
+        ]
+        run_chat(messages, fake_schedule, [], [], now)
+
+        sent_messages = completions.calls[0]["messages"]
+        assert [m["role"] for m in sent_messages if m["role"] == "assistant"] == []
+        for m in sent_messages:
+            assert "is_ask" not in m["content"]
+            assert "is_error" not in m["content"]
 
 
 class TestRulesWiring:
@@ -171,8 +195,10 @@ class TestRulesWiring:
     def test_rule_appears_in_first_user_context_message(self, patch_client, fake_schedule, now):
         completions = patch_client(_ok_response())
         rule = SimpleNamespace(text="10 min gap by default")
+        # Carries an explicit command verb ("cancel") so the Addendum D
+        # implicit-add rewrite (feature 0083) does not touch it.
         run_chat(
-            [{"role": "user", "content": "the latest"}],
+            [{"role": "user", "content": "cancel the latest"}],
             fake_schedule,
             [],
             [rule],
@@ -186,7 +212,7 @@ class TestRulesWiring:
         assert "10 min gap by default" in sent[1]["content"]
         # Latest user turn stays its own separate user-role message and
         # does NOT carry the rules section.
-        assert sent[-1] == {"role": "user", "content": "the latest"}
+        assert sent[-1] == {"role": "user", "content": "cancel the latest"}
         assert "10 min gap by default" not in sent[-1]["content"]
         # Negative pin: the rule text must appear ONLY in the trusted
         # schedule-context message (index 1). The system prompt and any
@@ -658,6 +684,30 @@ class TestBareNounAddBehavior:
         assert result.parsed_actions == [action]
         assert result.ask is None
 
+    def test_bare_name_after_completed_add_round_trips_own_title(
+        self, patch_client, fake_schedule, now
+    ):
+        # Feature 0083 (issue #219): the three-message shape from the bug
+        # report. Stubs the envelope the model is expected to emit under
+        # Hard rule 11 — a FRESH bare name after a completed add still gets
+        # its OWN text as the title, not the earlier turn's title. This is
+        # a service-contract round-trip pin, not a test of the LLM's
+        # classification (untestable offline); the server-side replay
+        # guard (``ai.replay_guard``) is the deterministic backstop.
+        action = {"type": "add", "title": "Notes", "category": "other"}
+        patch_client(_ok_response(actions=[action]))
+        messages = [
+            {"role": "user", "content": "add Momentum (Personal)"},
+            {
+                "role": "assistant",
+                "content": "Adding Momentum as a new personal block in the next free slot.",
+            },
+            {"role": "user", "content": "Notes"},
+        ]
+        result = run_chat(messages, fake_schedule, [], [], now)
+        assert result.parsed_actions == [action]
+        assert result.ask is None
+
 
 class TestChatDurationResize:
     def test_accepts_absolute_duration_resize_action(self, patch_client, fake_schedule, now):
@@ -694,3 +744,41 @@ class TestChatDurationResize:
         )
         with pytest.raises(AIParseError):
             run_chat([{"role": "user", "content": "extend it"}], fake_schedule, [], [], now)
+
+
+class TestImplicitAddRewrite:
+    """Feature 0083 Addendum D: a command-less latest turn is rewritten to
+    an explicit "add ..." before it is sent to the provider — the prior-
+    transcript flatten (built from the ORIGINAL messages) must stay
+    unaffected."""
+
+    def test_bare_title_sent_as_add_to_provider(self, patch_client, fake_schedule, now):
+        completions = patch_client(_ok_response())
+        messages = [
+            {"role": "user", "content": "add Momentum (Personal)"},
+            {"role": "assistant", "content": "Added Momentum"},
+            {"role": "user", "content": "Notes"},
+        ]
+        run_chat(messages, fake_schedule, [], [], now)
+
+        sent = completions.calls[0]["messages"]
+        assert sent[-1] == {"role": "user", "content": "add Notes"}
+        # The flattened prior transcript keeps the ORIGINAL history —
+        # only the latest-turn copy sent to the provider is rewritten.
+        prior_context = sent[1]["content"]
+        assert "add Momentum (Personal)" in prior_context
+        assert "Added Momentum" in prior_context
+        # The latest turn is not folded into the prior flatten, rewritten or not.
+        assert "Notes" not in prior_context
+
+    def test_pending_ask_answer_sent_unchanged(self, patch_client, fake_schedule, now):
+        completions = patch_client(_ok_response())
+        messages = [
+            {"role": "user", "content": "add Gym"},
+            {"role": "assistant", "content": "What time?", "is_ask": True},
+            {"role": "user", "content": "later"},
+        ]
+        run_chat(messages, fake_schedule, [], [], now)
+
+        sent = completions.calls[0]["messages"]
+        assert sent[-1] == {"role": "user", "content": "later"}

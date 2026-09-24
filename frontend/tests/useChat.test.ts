@@ -240,6 +240,87 @@ describe("useChat", () => {
     formatSpy.mockRestore()
   })
 
+  it("sends is_ask on assistant turns that carried an ask", async () => {
+    const chat = useChat()
+    chat.setActiveDate("2026-05-07")
+    requestJsonMock
+      .mockResolvedValueOnce({
+        ok: true,
+        data: { blocks: null, explanation: "I understood", ask: "when?", applied: false },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        data: { blocks: null, explanation: "ok", ask: null, applied: false },
+      })
+
+    await chat.submitTurn("add gym", snapshotBlocks, vi.fn())
+    await chat.submitTurn("18:00", snapshotBlocks, vi.fn())
+
+    const secondBody = requestJsonMock.mock.calls[1][2] as { messages: unknown[] }
+    expect(secondBody.messages).toEqual([
+      { role: "user", content: "add gym" },
+      { role: "assistant", content: "when?", is_ask: true },
+      { role: "user", content: "18:00" },
+    ])
+  })
+
+  it("sends is_error on failure bubbles", async () => {
+    const chat = useChat()
+    chat.setActiveDate("2026-05-07")
+    requestJsonMock
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 409,
+        errors: { detail: "schedule_changed" },
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 502,
+        errors: { detail: "boom" },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        data: { blocks: null, explanation: "ok", ask: null, applied: false },
+      })
+
+    await chat.submitTurn("move gym", snapshotBlocks, vi.fn())
+    await chat.submitTurn("try again", snapshotBlocks, vi.fn())
+    await chat.submitTurn("try again", snapshotBlocks, vi.fn())
+
+    const secondBody = requestJsonMock.mock.calls[1][2] as { messages: unknown[] }
+    expect(secondBody.messages[1]).toEqual({
+      role: "assistant",
+      content: SCHEDULE_CHANGED_RETRY_MESSAGE,
+      is_error: true,
+    })
+    const thirdBody = requestJsonMock.mock.calls[2][2] as { messages: unknown[] }
+    expect(thirdBody.messages[3]).toEqual({
+      role: "assistant",
+      content: "boom",
+      is_error: true,
+    })
+  })
+
+  it("an explanation-only assistant turn carries neither key", async () => {
+    const chat = useChat()
+    chat.setActiveDate("2026-05-07")
+    requestJsonMock
+      .mockResolvedValueOnce({
+        ok: true,
+        data: { blocks: null, explanation: "Added gym", ask: null, applied: true, partial: false },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        data: { blocks: null, explanation: "ok", ask: null, applied: false },
+      })
+
+    await chat.submitTurn("add gym", snapshotBlocks, vi.fn())
+    await chat.submitTurn("thanks", snapshotBlocks, vi.fn())
+
+    const secondBody = requestJsonMock.mock.calls[1][2] as { messages: unknown[] }
+    expect(secondBody.messages[1]).toEqual({ role: "assistant", content: "Added gym" })
+  })
+
   it("clarifying-question turn stores ask in content (not explanation)", async () => {
     const chat = useChat()
     chat.setActiveDate("2026-05-07")

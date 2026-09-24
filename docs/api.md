@@ -282,6 +282,8 @@ Multi-turn natural-language assistant for the command bar (feature 0007). Each r
 
 **Privacy:** the full client-supplied `messages[]` transcript is re-sent to the LLM provider on every turn. Users should clear the thread (or reload the page) before discussing anything sensitive.
 
+A latest turn with no explicit instruction (no command verb, not a question, not a short reply or greeting, not an answer to a pending clarifying ask, not a retry after an error bubble) is interpreted as an add: the server prefixes the copy sent to the LLM with `add ` (or `добавь ` for Cyrillic text) before the call, while the stored transcript and audit log keep the original text (feature 0083 Addendum D — see `backend/ai/implicit_add.py`).
+
 Requires `LLM_API_KEY` to be set. When unset, every call returns `503` so the frontend can show a degraded-mode indicator; manual editing is unaffected.
 
 **Path params**
@@ -295,6 +297,8 @@ Requires `LLM_API_KEY` to be set. When unset, every call returns `503` so the fr
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
 | `messages` | array | yes | Non-empty list of `{role, content}` turns. Roles strictly alternate `user` / `assistant`, starting with `user`. Last turn must be `user`. `1 ≤ len ≤ LLM_CHAT_MAX_TURNS` (default 40). Each `content` is 1–`LLM_MAX_COMMAND_CHARS` (default 500) chars. Sum of all `content` lengths ≤ `LLM_CHAT_MAX_TOTAL_CHARS` (default 4000). |
+| `messages[].is_ask` | boolean | no | **Assistant turns only** (feature 0083). The client marks an assistant turn `is_ask: true` when its `ask` was non-null on the wire — a correctness aid for the replay guard, not a security control. A client that forges this flag only disables the guard for its own turn, no more than it could already do by typing the replayed title directly. Non-boolean, or present on a `user` turn, → `400`. |
+| `messages[].is_error` | boolean | no | **Assistant turns only** (feature 0083). The client marks a synthetic failure bubble (400/409/429/5xx/network — every failure path) `is_error: true` so the replay guard excludes a never-applied failed turn from its evidence and allows a traceable retry. Same non-boolean / assistant-only validation as `is_ask`. |
 
 Malformed `messages` (including non-object JSON roots) return `400` **before** `Schedule.get_or_create` and **before** the rate-limit counter is consumed. Prompt time and untimed-add placement use the user's persisted schedule `time_zone`; legacy `client_tz` fields are ignored.
 
@@ -376,7 +380,7 @@ Each `outcomes[]` entry:
 | `status` | string | `"applied"` (all requested fields landed), `"partial"` (some fields landed, some skipped), or `"skipped"` (nothing landed for this action). |
 | `applied_fields` | array | Field names that persisted (e.g. `title`, `category`, `start_time`, `end_time`). For `remove` actions this is always `[]` — the action's effect is the deletion of the block itself, not a field change. |
 | `skipped_fields` | array | Field names rejected by a policy check. For `remove` actions this is always `[]` (see `applied_fields`). |
-| `reason_code` | string \| null | Why the skip happened (e.g. `out_of_window`, `unresolved_conflict`, `no_slot`). `null` when nothing was skipped. `interval` also covers a computed duration below the 5-minute floor; duration ends beyond the day window are `out_of_window` and are rejected rather than truncated. `no_slot` (feature 0067) means an **untimed** chat `add` found no free forward slot with the required gaps in the day window; `task_id` is `null` and `suggestion`/`attempted_direction`/`conflicting_task_ids` are empty. For a `no_slot` skip, `skipped_fields` lists the fields that would have been written had a slot been found (`["title", "category", "start_time", "end_time"]`). |
+| `reason_code` | string \| null | Why the skip happened (e.g. `out_of_window`, `unresolved_conflict`, `no_slot`, `replay_guard`). `null` when nothing was skipped. `interval` also covers a computed duration below the 5-minute floor; duration ends beyond the day window are `out_of_window` and are rejected rather than truncated. `no_slot` (feature 0067) means an **untimed** chat `add` found no free forward slot with the required gaps in the day window; `task_id` is `null` and `suggestion`/`attempted_direction`/`conflicting_task_ids` are empty. For a `no_slot` skip, `skipped_fields` lists the fields that would have been written had a slot been found (`["title", "category", "start_time", "end_time"]`). `replay_guard` (feature 0083) means the whole turn's actions were skipped because the server-side replay guard flagged an `add` as replayed from an earlier turn — see the replay-guard success variant above. |
 | `conflicting_task_ids` | array | Block ids that the skipped time work collided with. |
 | `attempted_direction` | string \| null | `"earlier"` / `"later"` when a directional free-slot search was attempted and found nothing, else `null`. |
 | `suggestion` | object \| null | `null`, or `{ "start_time", "end_time", "direction" }` (a concrete free slot to offer), or `{ "direction_required": true }` (the model must ask the user which direction to search). |
@@ -401,6 +405,42 @@ skipped time work (`ask` non-null) — the partial-apply case.
 
 No mutations; `Schedule.status` is unchanged. Append the assistant's `explanation`/`ask` to the client transcript and send the user's answer on the next turn.
 
+**Success — replay guard — `200 OK`** (feature 0083, issue #219)
+
+Returned when the server-side replay guard determines that an `add` action
+in the model's output was replayed from an earlier, already-handled turn
+rather than derived from the latest one (e.g. a "same name → add `[N]`" Rule
+firing against a stale title). **All-or-nothing:** every parsed action from
+the turn is skipped, not just the offending add(s).
+
+```json
+{
+  "blocks": null,
+  "explanation": "Nothing was changed.",
+  "ask": "I did not change the schedule: \"Momentum[2]\" is not something you asked for in your last message. What would you like to add?",
+  "applied": false,
+  "partial": false,
+  "outcomes": [
+    {
+      "action_index": 0,
+      "task_id": null,
+      "status": "skipped",
+      "applied_fields": [],
+      "skipped_fields": ["title", "category", "start_time", "end_time"],
+      "reason_code": "replay_guard",
+      "conflicting_task_ids": [],
+      "attempted_direction": null,
+      "suggestion": null
+    }
+  ]
+}
+```
+
+No mutations; `Schedule.status` is unchanged. This ask is server-owned English
+(like every `_build_resolution_ask` string), regardless of the user's
+language. The client should send `is_ask: true` on this assistant turn on
+the next request so a legitimate answer isn't guarded again.
+
 **Success — chit-chat / no-op — `200 OK`**
 
 ```json
@@ -416,16 +456,16 @@ No mutations; `Schedule.status` is unchanged. Append the assistant's `explanatio
 
 Empty `parsed_actions` with `ask: null`. No mutations; status unchanged.
 
-**Envelope uniformity:** `partial` and `outcomes` are **always present on every `200` response** — the apply, clarifying-question, and chit-chat turns alike. On non-apply turns they default to `false` and `[]` respectively, so a client can read them unconditionally without branching on the response variant.
+**Envelope uniformity:** `partial` and `outcomes` are **always present on every `200` response** — the apply, clarifying-question, and chit-chat turns alike. On non-apply turns they default to `false` and `[]` respectively, so a client can read them unconditionally without branching on the response variant. The replay-guard variant above is the one non-apply case where `outcomes` is non-empty — its entries carry `reason_code: "replay_guard"` rather than describing a real per-action policy outcome.
 
 **Errors**
 
 | Status | `errors` key | Meaning |
 |--------|--------------|---------|
-| `400` | `messages` / `date` / `body` | Transcript shape invalid, path date bad, or body not a JSON object. |
+| `400` | `messages` / `date` / `body` | Transcript shape invalid, path date bad, or body not a JSON object. Also covers a non-boolean `messages[].is_ask` / `is_error`, or either flag present on a `user` turn (feature 0083). |
 | `400` | `action_index` + `detail` | An action was **structurally** malformed at apply time (unknown block ID, unparseable/missing required field). Only these abort the whole turn — the entire batch is rolled back. Policy failures (window / grid / interval / overlap) do **not** 400; they skip just that block's time work and are reported via `outcomes` on a `200`. |
 | `403` | `detail` | CSRF token missing/invalid. |
-| `409` | `detail` | `schedule_changed` — the concurrent-edit fingerprint guard (feature 0030); only when `parsed_actions` is non-empty. |
+| `409` | `detail` | `schedule_changed` — the concurrent-edit fingerprint guard (feature 0030); only when `parsed_actions` is non-empty and the replay guard did not trip. |
 | `413` | `body` | Request body exceeds 100 KB. |
 | `429` | `detail` | Per-user chat rate limit (`LLM_CHAT_RATE_LIMIT_PER_HOUR`, default 60/hr) exceeded. Counter is independent from the draft bucket. Validation failures do not consume the budget. |
 | `502` | `detail` | LLM provider returned an error, or response failed JSON / schema validation. |

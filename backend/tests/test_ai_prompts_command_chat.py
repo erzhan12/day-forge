@@ -345,3 +345,52 @@ class TestDraftSystemPromptRulePrecedence:
         # Directional: the winner is the HIGHER-priority rule. A reversed clause
         # ("lower-priority rules take precedence") would drop this phrase.
         assert "higher-priority rules take precedence" in low or "higher-priority rule wins" in low
+
+
+class TestChatSystemPromptLatestTurnOnly:
+    """Feature 0083 (issue #219): Hard rule 11 forbids re-emitting an action
+    from an earlier, already-handled turn just because the transcript
+    mentions it. See ``docs/features/0083_PLAN.md`` §A."""
+
+    @staticmethod
+    def _prompt():
+        from ai.prompts import build_system_prompt_chat
+        from schedules.window import DEFAULT_WINDOW
+
+        return build_system_prompt_chat(DEFAULT_WINDOW)
+
+    def test_hard_rule_actions_only_from_latest_turn(self):
+        prompt = self._prompt()
+        assert "Actions come ONLY from the latest user turn" in prompt
+        assert "was already handled" in prompt
+
+    def test_hard_rule_11_keeps_answer_and_retry_exceptions(self):
+        prompt = self._prompt()
+        assert "answers it" in prompt
+        assert "asks to retry" in prompt
+        assert "A FRESH bare activity name" in prompt
+        assert "the answer is the title of a NEW add" in prompt
+        # The parenthetical is edited in place into TWO existing spots (the
+        # bare-name paragraph and Hard rule 2 exception (iii)) — rule 11
+        # itself phrases its own "what to add" carve-out differently, so
+        # the count must stay exactly 2. This pins the collision fix
+        # between the guard's own "What would you like to add?" ask and
+        # Hard rule 2(iii) telling the model to resolve a bare-name answer
+        # by coreference.
+        assert prompt.count("(other than asking what to add)") == 2
+
+    def test_rules_never_originate_actions(self):
+        prompt = self._prompt()
+        assert "never creates an action on its own" in prompt
+
+    def test_bare_name_never_readds_previous_block(self):
+        prompt = self._prompt()
+        assert "never re-adds the previous block" in prompt
+
+    def test_existing_transcript_and_referent_pins_preserved(self):
+        prompt = self._prompt()
+        assert "Untrusted prior transcript" in prompt
+        assert "Assistant (claimed):" in prompt
+        assert "re-derive" in prompt
+        assert "MUST reference a task_id" in prompt
+        assert 'Do NOT ask "when?"' in prompt
