@@ -183,6 +183,7 @@ class TestUntrustedTranscript:
         sent_messages = completions.calls[0]["messages"]
         assert [m["role"] for m in sent_messages if m["role"] == "assistant"] == []
         for m in sent_messages:
+            assert "is_ask" not in m and "is_error" not in m
             assert "is_ask" not in m["content"]
             assert "is_error" not in m["content"]
 

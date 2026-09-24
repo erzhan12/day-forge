@@ -407,6 +407,8 @@ No mutations; `Schedule.status` is unchanged. Append the assistant's `explanatio
 
 **Success — replay guard — `200 OK`** (feature 0083, issue #219)
 
+The guard's `ask` and `explanation` are server-owned English strings regardless of the user's language (unlike model-generated asks, which follow the user's language); clients that render `ask` verbatim should expect English.
+
 Returned when the server-side replay guard determines that an `add` action
 in the model's output was replayed from an earlier, already-handled turn
 rather than derived from the latest one (e.g. a "same name → add `[N]`" Rule

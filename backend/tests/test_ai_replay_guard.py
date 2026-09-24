@@ -4,7 +4,12 @@ Pure module — stdlib only, no Django, no DB. See
 ``docs/features/0083_PLAN.md`` §B2 for the algorithm this pins.
 """
 
-from ai.replay_guard import GUARD_ASK_PREFIX, REPLAY_GUARD_REASON_CODE, find_replayed_actions
+from ai.replay_guard import (
+    GUARD_ASK_PREFIX,
+    REPLAY_GUARD_REASON_CODE,
+    build_guard_ask,
+    find_replayed_actions,
+)
 
 
 def _u(text, **flags):
@@ -317,3 +322,15 @@ class TestScope:
         messages = [_u("add Momentum"), _a("Added Momentum"), _u("Notes")]
         actions = [_add("Momentum[2]"), _add("Momentum[3]"), _add("Notes")]
         assert find_replayed_actions(actions, messages) == (0, 1)
+
+
+class TestGuardAskCopy:
+    def test_short_title_quoted_verbatim(self):
+        ask = build_guard_ask("Momentum[2]")
+        assert ask.startswith(GUARD_ASK_PREFIX)
+        assert '"Momentum[2]"' in ask
+
+    def test_long_title_truncated_with_ellipsis(self):
+        ask = build_guard_ask("x" * 80)
+        assert '"' + "x" * 60 + '..."' in ask
+        assert "x" * 61 not in ask
