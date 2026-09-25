@@ -49,7 +49,7 @@ from django.conf import settings
 from openai import AsyncOpenAI
 from schedules.window import DEFAULT_WINDOW
 
-from ai.category_resolution import normalize_action_categories
+from ai.category_resolution import UnresolvedCategory, normalize_action_categories
 from ai.implicit_add import apply_implicit_add
 from ai.prompts import (
     _DEFAULT_CATEGORIES,
@@ -124,7 +124,7 @@ class AIChatResult:
     parsed_actions: list[dict]
     explanation: str
     ask: str | None
-    unresolved_categories: tuple = ()
+    unresolved_categories: tuple[UnresolvedCategory, ...] = ()
 
 
 @dataclass
@@ -459,7 +459,13 @@ async def run_chat(messages, schedule, blocks, rules, now, categories=None) -> A
     normalized_actions = normalize_result.actions
 
     per_action_errors = []
-    for idx, action in enumerate(normalized_actions):
+    # ``action[i]`` below is numbered by the MODEL's own index (feature 0084
+    # follow-up, issue #209): ``original_indices`` stays aligned 1:1 with
+    # ``normalized_actions`` even when an earlier category-only update was
+    # dropped, so this message matches ``raw``'s ``actions`` list — the one
+    # the chat failure audit row actually shows — instead of drifting once
+    # a drop has happened.
+    for idx, action in zip(normalize_result.original_indices, normalized_actions, strict=True):
         # Feature 0067: chat allows an untimed add (both times omitted → backend
         # deterministic placement). The draft path uses ``validate_draft_response``
         # with the ``False`` default, so draft adds still require both times.

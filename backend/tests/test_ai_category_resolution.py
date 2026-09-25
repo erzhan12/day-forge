@@ -206,3 +206,29 @@ class TestNormalizePassThroughAndPurity:
         assert original_changes == {"start_time": "14:00", "category": "рабочая"}
         # The returned list is a different object.
         assert result.actions is not actions
+
+
+class TestOriginalIndices:
+    """``original_indices[i]`` names the model's own index for ``actions[i]``
+    (feature 0084 follow-up, issue #209 error_detail numbering fix) — the
+    two tuples stay aligned 1:1, including when an earlier dropped action
+    shrinks both lists together."""
+
+    def test_no_drops_indices_match_position(self):
+        actions = [
+            {"type": "add", "title": "A", "category": "work"},
+            {"type": "move", "task_id": 1, "start_time": "09:00"},
+        ]
+        result = normalize_action_categories(actions, _DEFAULT, "other", known_task_ids={1})
+        assert result.original_indices == (0, 1)
+
+    def test_dropped_action_shifts_later_indices(self):
+        actions = [
+            {"type": "update", "task_id": 5, "changes": {"category": "рабочая"}},
+            {"type": "add", "title": "A", "category": "work"},
+        ]
+        result = normalize_action_categories(actions, _DEFAULT, "other", known_task_ids={5})
+        # action[0] was dropped (category-only, unresolved); the surviving
+        # add is actions[0] but must still be reported as the model's [1].
+        assert len(result.actions) == 1
+        assert result.original_indices == (1,)

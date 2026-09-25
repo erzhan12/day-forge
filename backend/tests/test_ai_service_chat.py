@@ -550,6 +550,28 @@ class TestCategoryResolution:
                 now,
             )
 
+    def test_error_detail_numbers_by_model_index_not_post_normalisation(
+        self, patch_client, fake_schedule, now
+    ):
+        """A category-only update dropped at model index 0 must not shift
+        the ``action[i]`` reported for a later, genuinely invalid action —
+        ``error_detail`` (and this exception's message) is read against the
+        model's OWN ``actions`` list (``raw``), not the post-drop list."""
+        block = _full_block(id=7)
+        dropped_update = {"type": "update", "task_id": 7, "changes": {"category": "рабочая"}}
+        invalid_add = {"type": "add", "category": "work"}  # missing required 'title'
+        patch_client(_ok_response(actions=[dropped_update, invalid_add]))
+        with pytest.raises(AIParseError) as exc_info:
+            run_chat(
+                [{"role": "user", "content": "рабочая, and add a thing"}],
+                fake_schedule,
+                [block],
+                [],
+                now,
+            )
+        assert "action[1]" in str(exc_info.value)
+        assert "action[0]" not in str(exc_info.value)
+
 
 class TestChatUntimedAdd:
     """Feature 0067: ``run_chat`` accepts an untimed add (both times omitted);

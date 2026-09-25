@@ -711,6 +711,105 @@ class TestCategoryAsk:
         assert payload["unresolved_categories"][0]["original_index"] == 0
 
 
+class TestCategoryAskIndexSpacesEndToEnd:
+    """Feature 0084 follow-up (issue #209 index-space fix, review #2): runs
+    the REAL ``ai.service.run_chat`` — only the OpenAI client is faked, at
+    the same seam ``test_ai_service_chat.py`` uses — instead of mocking
+    ``ai.views.run_chat`` with a hand-built ``AIChatResult`` like the rest
+    of ``TestCategoryAsk``. That mocking never exercises the service→view
+    hand-off between the model's own action index (``unresolved_categories``'
+    ``original_index``) and the post-normalisation index (``outcomes``'
+    ``action_index``), so a bug swapping the two spaces would pass anyway."""
+
+    def test_three_actions_mixed_index_spaces(self, auth_client, today_schedule, monkeypatch):
+        block_a = TimeBlock.objects.create(
+            schedule=today_schedule,
+            title="Meeting",
+            start_time="10:00",
+            end_time="11:00",
+            category="personal",
+        )
+        block_b = TimeBlock.objects.create(
+            schedule=today_schedule,
+            title="Focus",
+            start_time="14:00",
+            end_time="15:00",
+            category="work",
+        )
+        # The model's own index space: [0] move A, [1] category-only update
+        # of B (unresolved — dropped), [2] add.
+        model_actions = [
+            {"type": "move", "task_id": block_a.id, "start_time": "12:00"},
+            {"type": "update", "task_id": block_b.id, "changes": {"category": "рабочая"}},
+            {
+                "type": "add",
+                "title": "Gym",
+                "category": "health",
+                "start_time": "18:00",
+                "end_time": "19:00",
+            },
+        ]
+
+        class _FakeMessage:
+            def __init__(self, content):
+                self.content = content
+
+        class _FakeChoice:
+            def __init__(self, content):
+                self.message = _FakeMessage(content)
+
+        class _FakeResponse:
+            def __init__(self, content):
+                self.choices = [_FakeChoice(content)]
+
+        class _FakeCompletions:
+            async def create(self, **kwargs):
+                payload = json.dumps(
+                    {"actions": model_actions, "explanation": "Done.", "ask": None}
+                )
+                return _FakeResponse(payload)
+
+        class _FakeChat:
+            completions = _FakeCompletions()
+
+        class _FakeClient:
+            chat = _FakeChat()
+
+        monkeypatch.setattr("ai.service._get_client", lambda: _FakeClient())
+        monkeypatch.setattr("django.conf.settings.LLM_API_KEY", "test-key")
+
+        resp = _post(
+            auth_client,
+            {"messages": [_user_turn("move meeting to noon, рабочая, and add gym 18:00-19:00")]},
+        )
+
+        assert resp.status_code == 200, resp.content
+        data = resp.json()
+        # Post-normalisation: the dropped update leaves only the move and
+        # the add, at indices [0, 1] — NOT the model's own [0, 2].
+        assert [o["action_index"] for o in data["outcomes"]] == [0, 1]
+        assert data["ask"] is not None
+        assert "Focus" in data["ask"]
+
+        block_a.refresh_from_db()
+        assert block_a.start_time.strftime("%H:%M") == "12:00"
+        assert block_a.end_time.strftime("%H:%M") == "13:00"
+
+        block_b.refresh_from_db()
+        assert block_b.category == "work"  # never quietly recategorised
+
+        assert TimeBlock.objects.filter(schedule=today_schedule, title="Gym").exists()
+
+        interaction = AIInteraction.objects.get(schedule=today_schedule)
+        assert len(interaction.actions_json) == 2
+        payload = json.loads(interaction.ai_response)
+        # Keyed by the MODEL's own index (1), a separate space from
+        # ``outcomes``' post-normalisation ``action_index`` above.
+        assert payload["unresolved_categories"] == [
+            {"original_index": 1, "task_id": block_b.id, "dropped": True}
+        ]
+
+
 class TestApply:
     @pytest.mark.django_db
     def test_apply_actions_creates_blocks(self, user, auth_client, today_schedule, monkeypatch):

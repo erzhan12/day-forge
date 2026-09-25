@@ -89,10 +89,18 @@ class UnresolvedCategory:
 
 @dataclass(frozen=True)
 class NormalizeResult:
-    """Return value of ``normalize_action_categories``."""
+    """Return value of ``normalize_action_categories``.
+
+    ``original_indices[i]`` is the position in the model's OWN ``actions``
+    list that produced ``actions[i]`` — the two lists are aligned 1:1 and
+    both shrink together when a category-only ``update`` is dropped, so a
+    caller building an ``action[i]``-style message from ``actions`` can
+    report the model's own index instead of the post-drop one.
+    """
 
     actions: list[dict]
     unresolved: tuple[UnresolvedCategory, ...]
+    original_indices: tuple[int, ...]
 
 
 def _normalize_add(action: dict, categories, sink_slug: str) -> dict:
@@ -182,6 +190,11 @@ def _normalize_update(
     # it would otherwise be valid AND references a real block — a malformed
     # action or an unknown ``task_id`` must still fail validation (502) as
     # today, never turn into a silent 200 clarifying question.
+    # ``| {value}`` lets the unresolved (still-original-wording) category
+    # pass ``validate_action_shape``'s category check here, so the guard
+    # below only fires — and drops the action — when every OTHER field is
+    # already valid; a genuinely malformed action still fails schema
+    # validation (502) instead of silently becoming a category ask.
     allowed_categories = {slug for slug, _label in categories} | {value}
     guard_errors = validate_action_shape(action, allowed_categories, allow_untimed_add=True)
     if not guard_errors and task_id in known_task_ids:
@@ -213,16 +226,19 @@ def normalize_action_categories(
     carries only the action type, ``task_id``, and the outcome label).
     """
     normalized: list = []
+    original_indices: list[int] = []
     unresolved: list[UnresolvedCategory] = []
 
     for original_index, action in enumerate(actions):
         if not isinstance(action, dict):
             normalized.append(action)
+            original_indices.append(original_index)
             continue
 
         action_type = action.get("type")
         if action_type == "add":
             normalized.append(_normalize_add(action, categories, sink_slug))
+            original_indices.append(original_index)
             continue
 
         if action_type == "update":
@@ -234,9 +250,13 @@ def normalize_action_categories(
                 if record.dropped:
                     continue
             normalized.append(new_action)
+            original_indices.append(original_index)
             continue
 
         # move / remove / resize carry no category — pass through as-is.
         normalized.append(action)
+        original_indices.append(original_index)
 
-    return NormalizeResult(actions=normalized, unresolved=tuple(unresolved))
+    return NormalizeResult(
+        actions=normalized, unresolved=tuple(unresolved), original_indices=tuple(original_indices)
+    )

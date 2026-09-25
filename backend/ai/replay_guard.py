@@ -98,8 +98,8 @@ def truncate_title(title: str, limit: int = _GUARD_TITLE_TRUNCATE) -> str:
     """Truncate a block title for a server-owned ask string.
 
     Public (feature 0084) so callers outside this module — the category ask
-    in ``ai/views.py`` — can share the exact truncation behaviour ``
-    build_guard_ask`` uses, without importing the private
+    in ``ai/views.py`` — can share the exact truncation behaviour
+    ``build_guard_ask`` uses, without importing the private
     ``_GUARD_TITLE_TRUNCATE`` constant. ``limit`` defaults to the guard's own
     60-char cutoff; callers with a different budget may override it.
     """
