@@ -736,6 +736,36 @@ class TestBuildCategoryAsk:
         assert _build_category_ask((self._RECORD,), {7: "Meeting"}, []) is None
 
 
+def _fake_provider(monkeypatch, model_actions):
+    """Fake only the OpenAI client so the REAL ``run_chat`` runs end to end."""
+
+    class _FakeMessage:
+        def __init__(self, content):
+            self.content = content
+
+    class _FakeChoice:
+        def __init__(self, content):
+            self.message = _FakeMessage(content)
+
+    class _FakeResponse:
+        def __init__(self, content):
+            self.choices = [_FakeChoice(content)]
+
+    class _FakeCompletions:
+        async def create(self, **kwargs):
+            payload = json.dumps({"actions": model_actions, "explanation": "Done.", "ask": None})
+            return _FakeResponse(payload)
+
+    class _FakeChat:
+        completions = _FakeCompletions()
+
+    class _FakeClient:
+        chat = _FakeChat()
+
+    monkeypatch.setattr("ai.service._get_client", lambda: _FakeClient())
+    monkeypatch.setattr("django.conf.settings.LLM_API_KEY", "test-key")
+
+
 class TestCategoryAskIndexSpacesEndToEnd:
     """Feature 0084 follow-up (issue #209 index-space fix, review #2): runs
     the REAL ``ai.service.run_chat`` — only the OpenAI client is faked, at
@@ -776,33 +806,7 @@ class TestCategoryAskIndexSpacesEndToEnd:
             },
         ]
 
-        class _FakeMessage:
-            def __init__(self, content):
-                self.content = content
-
-        class _FakeChoice:
-            def __init__(self, content):
-                self.message = _FakeMessage(content)
-
-        class _FakeResponse:
-            def __init__(self, content):
-                self.choices = [_FakeChoice(content)]
-
-        class _FakeCompletions:
-            async def create(self, **kwargs):
-                payload = json.dumps(
-                    {"actions": model_actions, "explanation": "Done.", "ask": None}
-                )
-                return _FakeResponse(payload)
-
-        class _FakeChat:
-            completions = _FakeCompletions()
-
-        class _FakeClient:
-            chat = _FakeChat()
-
-        monkeypatch.setattr("ai.service._get_client", lambda: _FakeClient())
-        monkeypatch.setattr("django.conf.settings.LLM_API_KEY", "test-key")
+        _fake_provider(monkeypatch, model_actions)
 
         resp = _post(
             auth_client,
@@ -834,6 +838,36 @@ class TestCategoryAskIndexSpacesEndToEnd:
         assert payload["unresolved_categories"] == [
             {"original_index": 1, "task_id": block_b.id, "dropped": True}
         ]
+
+    @pytest.mark.django_db
+    def test_single_category_only_update_takes_server_ask_branch(
+        self, auth_client, today_schedule, monkeypatch
+    ):
+        block = TimeBlock.objects.create(
+            schedule=today_schedule,
+            title="Focus",
+            start_time="14:00",
+            end_time="15:00",
+            category="work",
+        )
+        _fake_provider(
+            monkeypatch,
+            [{"type": "update", "task_id": block.id, "changes": {"category": "рабочая"}}],
+        )
+
+        resp = _post(auth_client, {"messages": [_user_turn("focus — рабочая")]})
+
+        assert resp.status_code == 200, resp.content
+        data = resp.json()
+        assert data["applied"] is False
+        assert data["outcomes"] == []
+        assert data["explanation"] == "Nothing was changed."
+        assert "Focus" in data["ask"]
+        block.refresh_from_db()
+        assert block.category == "work"
+        interaction = AIInteraction.objects.get(schedule=today_schedule)
+        assert interaction.success is True
+        assert interaction.actions_json == []
 
 
 class TestApply:

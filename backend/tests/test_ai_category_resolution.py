@@ -169,6 +169,14 @@ class TestNormalizeUpdate:
         assert result.actions == [action]
         assert result.unresolved == ()
 
+    def test_empty_string_category_only_update_dropped_and_recorded(self):
+        action = {"type": "update", "task_id": 5, "changes": {"category": ""}}
+        result = normalize_action_categories([action], _DEFAULT, "other", known_task_ids={5})
+        assert result.actions == []
+        assert result.unresolved == (
+            UnresolvedCategory(original_index=0, task_id=5, value="", dropped=True),
+        )
+
     def test_non_str_category_left_untouched(self):
         action = {"type": "update", "task_id": 5, "changes": {"category": None}}
         result = normalize_action_categories([action], _DEFAULT, "other", known_task_ids={5})

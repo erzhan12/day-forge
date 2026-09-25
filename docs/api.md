@@ -534,7 +534,7 @@ Empty `parsed_actions` with `ask: null`. No mutations; status unchanged.
 | Status | `errors` key | Meaning |
 |--------|--------------|---------|
 | `400` | `messages` / `date` / `body` | Transcript shape invalid, path date bad, or body not a JSON object. Also covers a non-boolean `messages[].is_ask` / `is_error`, or either flag present on a `user` turn (feature 0083). |
-| `400` | `action_index` + `detail` | An action was **structurally** malformed at apply time (unknown block ID, unparseable/missing required field). Only these abort the whole turn — the entire batch is rolled back. Policy failures (window / grid / interval / overlap) do **not** 400; they skip just that block's time work and are reported via `outcomes` on a `200`. |
+| `400` | `action_index` + `detail` | `action_index` indexes the post-normalisation `parsed_actions` (`actions_json`), the same space as `outcomes`. An action was **structurally** malformed at apply time (unknown block ID, unparseable/missing required field). Only these abort the whole turn — the entire batch is rolled back. Policy failures (window / grid / interval / overlap) do **not** 400; they skip just that block's time work and are reported via `outcomes` on a `200`. |
 | `403` | `detail` | CSRF token missing/invalid. |
 | `409` | `detail` | `schedule_changed` — the concurrent-edit fingerprint guard (feature 0030); only when `parsed_actions` is non-empty and the replay guard did not trip. |
 | `413` | `body` | Request body exceeds 100 KB. |
