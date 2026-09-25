@@ -1408,9 +1408,10 @@ async def ai_chat(request, date):
     # Feature 0084 (issue #209): the time-conflict resolution ask wins when
     # both are pending — the user can answer only one question per turn, and
     # a skipped time work item needs a concrete slot before anything else
-    # about that action matters. The category ask covers the mixed-turn case
-    # from the issue's own repro: the time change applies here (``applied:
-    # true``) while a sibling category-only update was dropped.
+    # about that action matters. The category ask covers the issue's own
+    # repro (an update whose unresolved category was stripped while its time
+    # change applies here, ``applied: true``) and a sibling category-only
+    # update that was dropped outright.
     ask = _build_resolution_ask(plan.outcomes, block_titles, create_titles) or _build_category_ask(
         result.unresolved_categories, block_titles, schedule._categories
     )
