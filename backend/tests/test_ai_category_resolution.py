@@ -47,6 +47,13 @@ class TestResolveCategory:
     def test_empty_string_returns_none(self):
         assert resolve_category("", _DEFAULT) is None
 
+    def test_whitespace_only_returns_none(self):
+        assert resolve_category("   ", _DEFAULT) is None
+
+    def test_value_excluded_from_repr(self):
+        record = UnresolvedCategory(original_index=0, task_id=5, value="рабочая", dropped=True)
+        assert "рабочая" not in repr(record)
+
     def test_case_fold_collision_first_catalog_entry_wins(self):
         # SQLite's LOWER folds ASCII only; Python casefold is
         # locale-independent, so two Cyrillic labels differing only in case

@@ -24,7 +24,7 @@ ask).
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from schedules.http import is_plain_int
 
@@ -85,7 +85,9 @@ class UnresolvedCategory:
 
     original_index: int
     task_id: int | None
-    value: str
+    # Excluded from ``repr`` so a stray ``%r`` of a record never logs the
+    # user's own wording (the module never logs it; see the docstring below).
+    value: str = field(repr=False)
     dropped: bool
 
 

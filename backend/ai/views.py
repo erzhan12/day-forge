@@ -23,7 +23,7 @@ from schedules.http import (
     reject_oversized_body,
     times_overlap,
 )
-from schedules.models import Schedule, TimeBlock
+from schedules.models import Category, Schedule, TimeBlock
 from schedules.validators import validate_five_minute_granularity
 from schedules.window import (
     DEFAULT_WINDOW,
@@ -34,6 +34,7 @@ from schedules.window import (
 )
 from templates_mgr.models import Rule, Template
 
+from ai.category_resolution import UnresolvedCategory
 from ai.free_slot import GRID_MINUTES
 from ai.models import AIInteraction
 from ai.mutation_planner import (
@@ -345,7 +346,11 @@ def _build_resolution_ask(
     )
 
 
-def _build_category_ask(unresolved: tuple, block_titles: dict[int, str], categories) -> str | None:
+def _build_category_ask(
+    unresolved: tuple[UnresolvedCategory, ...],
+    block_titles: dict[int, str],
+    categories: list[Category],
+) -> str | None:
     """Server-owned follow-up for an ``update`` dropped for its category
     (feature 0084, issue #209). English-only, like ``_build_resolution_ask``
     and ``build_guard_ask`` — see RULES.md.

@@ -729,6 +729,11 @@ class TestBuildCategoryAsk:
         ask = _build_category_ask((self._RECORD,), {7: "x" * 80}, [Category(label="Work")])
         assert f'"{"x" * 60}..."' in ask
 
+    def test_kept_record_with_missing_block_falls_back_to_that_block(self):
+        record = UnresolvedCategory(original_index=0, task_id=9, value="рабочая", dropped=False)
+        ask = _build_category_ask((record,), {}, [Category(slug="work", label="Work")])
+        assert ask == 'Which category should "that block" use: Work?'
+
     def test_no_unresolved_returns_none(self):
         assert _build_category_ask((), {7: "Meeting"}, [Category(label="Work")]) is None
 

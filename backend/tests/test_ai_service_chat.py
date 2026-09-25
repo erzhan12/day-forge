@@ -501,6 +501,28 @@ class TestCategoryResolution:
         assert result.unresolved_categories[0].task_id == 7
         assert result.unresolved_categories[0].original_index == 0
 
+    def test_label_resolves_against_user_catalog_not_defaults(
+        self, patch_client, fake_schedule, now
+    ):
+        catalog = [
+            SimpleNamespace(slug="job", label="Работа", is_sink=False),
+            SimpleNamespace(slug="other", label="Other", is_sink=True),
+        ]
+        action = {"type": "update", "task_id": 7, "changes": {"category": "работа"}}
+        patch_client(_ok_response(actions=[action]))
+        result = run_chat(
+            [{"role": "user", "content": "работа"}],
+            fake_schedule,
+            [_full_block(id=7)],
+            [],
+            now,
+            categories=catalog,
+        )
+        assert result.parsed_actions == [
+            {"type": "update", "task_id": 7, "changes": {"category": "job"}}
+        ]
+        assert result.unresolved_categories == ()
+
     def test_category_only_unresolved_update_drops_to_empty_actions(
         self, patch_client, fake_schedule, now
     ):
