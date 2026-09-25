@@ -355,3 +355,15 @@ def test_draft_add_schema_unchanged_requires_explicit_times():
     assert "duration_minutes" not in prompt
     assert "auto" not in prompt.lower() and "automatic" not in prompt.lower()
     assert "complet" not in prompt.lower()
+
+
+def test_draft_rule_4_states_emit_the_slug():
+    """Feature 0084, issue #209: draft rule 4 must state the emitted value
+    is the slug, not the label — matching the chat-side wording so the two
+    prompts stay aligned. Must not reintroduce the banned "auto"/"complet"
+    substrings pinned by ``test_draft_add_schema_unchanged_requires_explicit_times``."""
+    prompt = SYSTEM_PROMPT_DRAFT
+    assert "emit the SLUG" in prompt
+    assert "never the label in parentheses" in prompt
+    assert "auto" not in prompt.lower() and "automatic" not in prompt.lower()
+    assert "complet" not in prompt.lower()

@@ -94,12 +94,22 @@ _STOPWORDS = frozenset(
 _GUARD_TITLE_TRUNCATE = 60
 
 
+def truncate_title(title: str, limit: int = _GUARD_TITLE_TRUNCATE) -> str:
+    """Truncate a block title for a server-owned ask string.
+
+    Public (feature 0084) so callers outside this module — the category ask
+    in ``ai/views.py`` — can share the exact truncation behaviour ``
+    build_guard_ask`` uses, without importing the private
+    ``_GUARD_TITLE_TRUNCATE`` constant. ``limit`` defaults to the guard's own
+    60-char cutoff; callers with a different budget may override it.
+    """
+    return title if len(title) <= limit else title[:limit] + "..."
+
+
 def build_guard_ask(title: str) -> str:
     """Server-owned follow-up ask for a tripped guard (English-only, like
     every other ``_build_resolution_ask`` string — see RULES.md)."""
-    truncated = (
-        title if len(title) <= _GUARD_TITLE_TRUNCATE else title[:_GUARD_TITLE_TRUNCATE] + "..."
-    )
+    truncated = truncate_title(title)
     return (
         f'{GUARD_ASK_PREFIX} "{truncated}" is not something you asked for in '
         "your last message. What would you like to add?"

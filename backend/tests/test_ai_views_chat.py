@@ -12,6 +12,7 @@ import json
 from zoneinfo import ZoneInfo
 
 import pytest
+from ai.category_resolution import UnresolvedCategory
 from ai.models import AIInteraction
 from ai.mutation_planner import ActionOutcome
 from ai.service import (
@@ -22,7 +23,7 @@ from ai.service import (
     AITimeoutError,
     AIUnavailableError,
 )
-from ai.views import _build_resolution_ask
+from ai.views import AI_PARSE_ERROR_DETAIL, _build_resolution_ask
 from asgiref.sync import sync_to_async
 from django.contrib.auth.models import User
 from django.core.cache import cache
@@ -498,6 +499,218 @@ class TestClarifyingQuestion:
         assert rows[0].actions_json == []
 
 
+class TestCategoryAsk:
+    """Feature 0084, issue #209: the server-owned category clarifying
+    question, for both the "nothing left to apply" and the applied-plus-ask
+    (partial) shapes. ``run_chat`` is mocked directly here — the
+    normalisation itself is unit-tested in ``test_ai_service_chat.py`` and
+    ``test_ai_category_resolution.py``; these tests pin the VIEW's wiring
+    of ``AIChatResult.unresolved_categories``."""
+
+    @pytest.mark.django_db
+    def test_update_with_time_and_unresolved_category_applies_time_and_asks(
+        self, user, auth_client, today_schedule, monkeypatch
+    ):
+        block = TimeBlock.objects.create(
+            schedule=today_schedule,
+            title="Meeting",
+            start_time="10:00",
+            end_time="11:00",
+            category="personal",
+        )
+        _patch_run_chat(
+            monkeypatch,
+            AIChatResult(
+                raw_response_text="{}",
+                parsed_actions=[
+                    {
+                        "type": "update",
+                        "task_id": block.id,
+                        "changes": {"start_time": "14:00", "end_time": "15:00"},
+                    }
+                ],
+                explanation="Retimed",
+                ask=None,
+                unresolved_categories=(
+                    UnresolvedCategory(
+                        original_index=0, task_id=block.id, value="рабочая", dropped=False
+                    ),
+                ),
+            ),
+        )
+        resp = _post(auth_client, {"messages": [_user_turn("в 14:00 на час, рабочая")]})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["applied"] is True
+        assert data["ask"] is not None
+        assert "Meeting" in data["ask"]
+        for label in ("Work", "Personal", "Health", "Other"):
+            assert label in data["ask"]
+        block.refresh_from_db()
+        assert (block.start_time.strftime("%H:%M"), block.end_time.strftime("%H:%M")) == (
+            "14:00",
+            "15:00",
+        )
+        # Category is unchanged — never quietly recategorised.
+        assert block.category == "personal"
+        # The audit row records the unresolved category (dropped=False, since
+        # the update's other changes still applied).
+        interaction = AIInteraction.objects.get(schedule=today_schedule)
+        payload = json.loads(interaction.ai_response)
+        assert payload["unresolved_categories"] == [
+            {"original_index": 0, "task_id": block.id, "dropped": False}
+        ]
+
+    @pytest.mark.django_db
+    def test_resolution_ask_outranks_category_ask(
+        self, user, auth_client, today_schedule, monkeypatch
+    ):
+        target = TimeBlock.objects.create(
+            schedule=today_schedule,
+            title="Focus",
+            start_time="09:00",
+            end_time="10:00",
+            category="work",
+        )
+        TimeBlock.objects.create(
+            schedule=today_schedule,
+            title="Busy",
+            start_time="10:00",
+            end_time="11:00",
+            category="work",
+        )
+        _patch_run_chat(
+            monkeypatch,
+            AIChatResult(
+                raw_response_text="{}",
+                parsed_actions=[
+                    {
+                        "type": "update",
+                        "task_id": target.id,
+                        "changes": {"start_time": "10:00", "end_time": "11:00"},
+                    }
+                ],
+                explanation="Moved",
+                ask=None,
+                unresolved_categories=(
+                    UnresolvedCategory(
+                        original_index=0, task_id=target.id, value="рабочая", dropped=False
+                    ),
+                ),
+            ),
+        )
+        resp = _post(auth_client, {"messages": [_user_turn("move focus to 10, рабочая")]})
+        assert resp.status_code == 200
+        data = resp.json()
+        # The time-conflict question wins — the user can answer only one.
+        assert data["ask"] == "That time conflicts. Should I look for an earlier or later slot?"
+        assert "category" not in data["ask"].lower()
+
+    @pytest.mark.django_db
+    def test_category_only_unresolved_returns_ask_without_mutating(
+        self, user, auth_client, today_schedule, monkeypatch
+    ):
+        block = TimeBlock.objects.create(
+            schedule=today_schedule,
+            title="Meeting",
+            start_time="10:00",
+            end_time="11:00",
+            category="personal",
+        )
+        _patch_run_chat(
+            monkeypatch,
+            AIChatResult(
+                raw_response_text="{}",
+                parsed_actions=[],
+                explanation="I will change the category.",
+                ask=None,
+                unresolved_categories=(
+                    UnresolvedCategory(
+                        original_index=0, task_id=block.id, value="рабочая", dropped=True
+                    ),
+                ),
+            ),
+        )
+        resp = _post(auth_client, {"messages": [_user_turn("рабочая")]})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["applied"] is False
+        assert data["blocks"] is None
+        assert data["outcomes"] == []
+        assert data["ask"] is not None
+        assert "Meeting" in data["ask"]
+        for label in ("Work", "Personal", "Health", "Other"):
+            assert label in data["ask"]
+        # Server-owned explanation — never the model's (which could claim a
+        # category change that never happened).
+        assert data["explanation"] == "Nothing was changed."
+        block.refresh_from_db()
+        assert block.category == "personal"
+
+        interaction = AIInteraction.objects.get(schedule=today_schedule)
+        assert interaction.success is True
+        assert interaction.actions_json == []
+        payload = json.loads(interaction.ai_response)
+        expected = {"original_index": 0, "task_id": block.id, "dropped": True}
+        assert payload["unresolved_categories"] == [expected]
+        assert list(payload.keys()).index("unresolved_categories") < list(payload.keys()).index(
+            "raw"
+        )
+        # The rejected value itself is never logged outside ``raw``.
+        assert "рабочая" not in json.dumps(payload["unresolved_categories"])
+
+    @pytest.mark.django_db
+    def test_mixed_turn_add_applies_and_category_ask_shown(
+        self, user, auth_client, today_schedule, monkeypatch
+    ):
+        block = TimeBlock.objects.create(
+            schedule=today_schedule,
+            title="Meeting",
+            start_time="10:00",
+            end_time="11:00",
+            category="personal",
+        )
+        add_action = {
+            "type": "add",
+            "title": "Gym",
+            "start_time": "18:00",
+            "end_time": "19:00",
+            "category": "health",
+        }
+        _patch_run_chat(
+            monkeypatch,
+            AIChatResult(
+                raw_response_text="{}",
+                # The category-only update (originally index 0 in the
+                # model's own output) was already dropped by normalisation;
+                # only the add survives, now at normalised index 0.
+                parsed_actions=[add_action],
+                explanation="Added gym.",
+                ask=None,
+                unresolved_categories=(
+                    UnresolvedCategory(
+                        original_index=0, task_id=block.id, value="рабочая", dropped=True
+                    ),
+                ),
+            ),
+        )
+        resp = _post(
+            auth_client, {"messages": [_user_turn("рабочая, and add gym 18:00-19:00")]}
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["applied"] is True
+        assert len(data["outcomes"]) == 1
+        assert data["outcomes"][0]["action_index"] == 0
+        assert data["ask"] is not None
+        assert "Meeting" in data["ask"]
+        assert TimeBlock.objects.filter(schedule=today_schedule, title="Gym").exists()
+
+        interaction = AIInteraction.objects.get(schedule=today_schedule)
+        payload = json.loads(interaction.ai_response)
+        assert payload["unresolved_categories"][0]["original_index"] == 0
+
+
 class TestApply:
     @pytest.mark.django_db
     def test_apply_actions_creates_blocks(self, user, auth_client, today_schedule, monkeypatch):
@@ -673,8 +886,16 @@ class TestAuditEnvelope:
         assert payload["error_class"] == type(exc).__name__
         if isinstance(exc, AIParseError):
             assert payload["raw"] == "not-json"
+            # Feature 0084: the client-facing detail becomes the generic
+            # string; the real validation message survives only in the
+            # audit row's ``error_detail``, placed before ``raw``.
+            assert resp.json()["errors"]["detail"] == AI_PARSE_ERROR_DETAIL
+            assert payload["error_detail"] == "bad json"
+            assert list(payload.keys()).index("error_detail") < list(payload.keys()).index("raw")
         else:
             assert payload["raw"] == str(exc)
+            assert "error_detail" not in payload
+            assert resp.json()["errors"]["detail"] == str(exc)
 
 
 class TestActiveRulesWiring:
@@ -1128,6 +1349,12 @@ class TestSharedApplyCoverage:
         interaction = AIInteraction.objects.get(schedule=today_schedule)
         assert len(interaction.ai_response) == 10_000
         assert '"raw": "AAAA' in interaction.ai_response
+        # Feature 0084: ``error_detail`` is inserted BEFORE ``raw`` so it
+        # survives the front-truncation of a huge model response.
+        assert '"error_detail": "too much"' in interaction.ai_response
+        assert interaction.ai_response.index('"error_detail"') < interaction.ai_response.index(
+            '"raw"'
+        )
 
     def test_duration_preserving_move_past_midnight_returns_clear_error(
         self, auth_client, today_schedule, monkeypatch

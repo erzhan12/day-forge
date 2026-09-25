@@ -262,6 +262,78 @@ def test_capture_refuses_to_follow_symlink(
 
 
 @pytest.mark.django_db
+def test_run_draft_resolves_category_label_to_slug(user, monkeypatch, settings):
+    """Feature 0084, issue #209: a label the model echoes back (rather than
+    the slug) is resolved before schema validation, so the draft no longer
+    raises ``AIParseError``."""
+    settings.LLM_API_KEY = "sk-test"
+    schedule = Schedule.objects.create(user=user, date=datetime.date(2026, 5, 4))
+    template = Template.objects.create(user=user, name="WD", type="weekday", blocks=[])
+
+    fake = _FakeClient(
+        {},
+        json.dumps(
+            {
+                "actions": [
+                    {
+                        "type": "add",
+                        "title": "Doctor",
+                        "start_time": "09:00",
+                        "end_time": "09:30",
+                        "category": "Health",
+                    }
+                ],
+                "explanation": "fresh draft",
+            }
+        ),
+    )
+    monkeypatch.setattr("ai.service._get_client", lambda: fake)
+
+    result = run_draft(schedule, template, [], [], datetime.datetime(2026, 5, 4, 8, 0))
+    assert result.parsed_actions == [
+        {
+            "type": "add",
+            "title": "Doctor",
+            "start_time": "09:00",
+            "end_time": "09:30",
+            "category": "health",
+        }
+    ]
+
+
+@pytest.mark.django_db
+def test_run_draft_unresolved_category_falls_back_to_sink(user, monkeypatch, settings):
+    """An unresolvable word (the model's own invention, or the user's
+    wording via history) defaults to the sink slug instead of failing the
+    whole draft."""
+    settings.LLM_API_KEY = "sk-test"
+    schedule = Schedule.objects.create(user=user, date=datetime.date(2026, 5, 4))
+    template = Template.objects.create(user=user, name="WD", type="weekday", blocks=[])
+
+    fake = _FakeClient(
+        {},
+        json.dumps(
+            {
+                "actions": [
+                    {
+                        "type": "add",
+                        "title": "Мероприятие",
+                        "start_time": "09:00",
+                        "end_time": "09:30",
+                        "category": "рабочая",
+                    }
+                ],
+                "explanation": "fresh draft",
+            }
+        ),
+    )
+    monkeypatch.setattr("ai.service._get_client", lambda: fake)
+
+    result = run_draft(schedule, template, [], [], datetime.datetime(2026, 5, 4, 8, 0))
+    assert result.parsed_actions[0]["category"] == "other"
+
+
+@pytest.mark.django_db
 def test_run_draft_rejects_untimed_add(user, monkeypatch, settings):
     """Feature 0067: draft add still requires both times. An untimed add
     (chat's placement mode) is rejected on the draft path → ``AIParseError``."""

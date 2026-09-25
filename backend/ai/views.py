@@ -55,6 +55,7 @@ from ai.replay_guard import (
     REPLAY_GUARD_REASON_CODE,
     build_guard_ask,
     find_replayed_actions,
+    truncate_title,
 )
 from ai.service import (
     AIChatResult,
@@ -87,6 +88,20 @@ _MAX_AI_RESPONSE_LOG_LEN = 10_000
 _MAX_COMMAND_LOG_LEN = 2_000
 
 _RATE_LIMIT_WINDOW_SECONDS = 3600
+
+# Feature 0084 (issue #209): a generic, user-facing 502 message for every
+# ``AIParseError`` — the real validation string (which can echo raw
+# model-supplied text, e.g. an unresolved category label or an unknown JSON
+# key) goes only to the chat audit row's ``error_detail`` or the draft
+# server log, never to the client. Every other ``AIError`` subclass keeps
+# ``str(e)`` as its user-facing detail, unchanged.
+AI_PARSE_ERROR_DETAIL = "The assistant's reply couldn't be applied. Try rephrasing."
+
+# Cap on the chat audit row's ``error_detail`` (the ``AIParseError`` message,
+# NOT the raw provider response, which already has its own cap above).
+# 2,000 chars bounds a worst-case ~20-action per-action error list
+# (``MAX_ACTIONS_PER_COMMAND``) without materially widening the row.
+_MAX_ERROR_DETAIL_LEN = 2_000
 
 
 async def _load_active_rules(user: User) -> list[Rule]:
@@ -328,6 +343,24 @@ def _build_resolution_ask(
         f"That time range for {title(skipped[0])} is not valid or available. "
         "Please give a valid time."
     )
+
+
+def _build_category_ask(unresolved: tuple, block_titles: dict[int, str], categories) -> str | None:
+    """Server-owned follow-up for an ``update`` dropped for its category
+    (feature 0084, issue #209). English-only, like ``_build_resolution_ask``
+    and ``build_guard_ask`` — see RULES.md.
+
+    Only the FIRST unresolved record is asked about (accepted precedent —
+    same "first of several" choice ``_build_resolution_ask`` makes). The
+    rejected value itself never appears here: the audit row's ``raw``
+    already holds it, and this is a user-facing string.
+    """
+    if not unresolved:
+        return None
+    record = unresolved[0]
+    title = block_titles.get(record.task_id, "that block")
+    labels = ", ".join(category.label for category in categories)
+    return f'Which category should "{truncate_title(title)}" use: {labels}?'
 
 
 async def _replay_guard_response(
@@ -966,7 +999,17 @@ async def ai_generate_draft(request, date):
                 type(e).__name__,
             )
             status = 500
-        return JsonResponse({"errors": {"detail": str(e)}}, status=status)
+        if isinstance(e, AIParseError):
+            # Feature 0084: the client gets the generic detail; the real
+            # validation string (which can echo model-supplied text, e.g. an
+            # unresolved category label) goes to the log at DEBUG only — the
+            # draft audit row above already keeps ``raw`` (unchanged).
+            logger.warning("AI draft parse failure (user=%s, schedule=%s)", user.id, schedule.id)
+            logger.debug("AI draft parse failure detail: %s", e)
+            detail = AI_PARSE_ERROR_DETAIL
+        else:
+            detail = str(e)
+        return JsonResponse({"errors": {"detail": detail}}, status=status)
 
     interaction = await _log_interaction(
         schedule,
@@ -1088,7 +1131,12 @@ def _transcript_sha256(messages: list[dict]) -> str:
 
 
 def _build_chat_audit_response(
-    messages: list[dict], raw_or_str: str, error_class: str | None
+    messages: list[dict],
+    raw_or_str: str,
+    error_class: str | None,
+    *,
+    unresolved_categories: list[dict] | None = None,
+    error_detail: str | None = None,
 ) -> str:
     """Build the JSON-encoded ``ai_response`` payload for a chat audit row.
 
@@ -1096,12 +1144,32 @@ def _build_chat_audit_response(
     for success and the exception class name for failure. Both rows
     carry the transcript hash so a future audit can group rows that
     belong to the same client-supplied transcript.
+
+    ``unresolved_categories`` (feature 0084, issue #209) — a success-row-only
+    list of ``{"original_index", "task_id", "dropped"}`` dicts for any
+    ``update`` action whose category the server couldn't resolve to a slug.
+    Keyed by ``original_index`` — the position in the MODEL's own ``actions``
+    inside ``raw``, a separate index space from ``outcomes``' post-
+    normalisation ``action_index`` (see ``ai/category_resolution.py``). The
+    rejected value itself is never included here: it's the user's own
+    wording, and ``raw`` already holds it.
+
+    ``error_detail`` (feature 0084) — a failure-row-only ``AIParseError``
+    message, present so the real validation detail survives even though the
+    client-facing ``errors.detail`` becomes the generic
+    ``AI_PARSE_ERROR_DETAIL``. Both optional fields are inserted BEFORE
+    ``raw`` so they survive the ``_MAX_AI_RESPONSE_LOG_LEN`` truncation that
+    slices this JSON string from the front on a huge model response.
     """
     payload = {
         "transcript_sha256": _transcript_sha256(messages),
         "turn_count": len(messages),
-        "raw": raw_or_str,
     }
+    if unresolved_categories:
+        payload["unresolved_categories"] = unresolved_categories
+    if error_detail is not None:
+        payload["error_detail"] = error_detail
+    payload["raw"] = raw_or_str
     if error_class is not None:
         payload["error_class"] = error_class
     return json.dumps(payload, ensure_ascii=False)
@@ -1112,7 +1180,13 @@ async def _log_chat_failure(
 ) -> None:
     """Persist the failure-row variant of the chat audit envelope."""
     raw = getattr(exc, "raw_response_text", "") or str(exc)
-    payload = _build_chat_audit_response(messages, raw, error_class=type(exc).__name__)
+    # Feature 0084: only ``AIParseError`` carries a validation-detail message
+    # worth keeping separately — other ``AIError`` subclasses already have
+    # their (non-model-echoing) ``str(exc)`` as ``raw`` above.
+    error_detail = str(exc)[:_MAX_ERROR_DETAIL_LEN] if isinstance(exc, AIParseError) else None
+    payload = _build_chat_audit_response(
+        messages, raw, error_class=type(exc).__name__, error_detail=error_detail
+    )
     await _log_interaction(schedule, last_user_msg, payload, [], kind=AIInteraction.Kind.CHAT)
 
 
@@ -1205,10 +1279,21 @@ async def ai_chat(request, date):
                 type(e).__name__,
             )
             status = 500
-        return JsonResponse({"errors": {"detail": str(e)}}, status=status)
+        # Feature 0084: the client gets a generic detail for a parse
+        # failure — the real validation string (which can echo model-
+        # supplied text) is kept only in the audit row's ``error_detail``
+        # (see ``_log_chat_failure``), never sent to the client.
+        detail = AI_PARSE_ERROR_DETAIL if isinstance(e, AIParseError) else str(e)
+        return JsonResponse({"errors": {"detail": detail}}, status=status)
 
     audit_response = _build_chat_audit_response(
-        messages, result.raw_response_text, error_class=None
+        messages,
+        result.raw_response_text,
+        error_class=None,
+        unresolved_categories=[
+            {"original_index": r.original_index, "task_id": r.task_id, "dropped": r.dropped}
+            for r in result.unresolved_categories
+        ],
     )
     interaction = await _log_interaction(
         schedule,
@@ -1226,6 +1311,30 @@ async def ai_chat(request, date):
                 "blocks": None,
                 "explanation": result.explanation,
                 "ask": result.ask,
+                "applied": False,
+                "partial": False,
+                "outcomes": [],
+            }
+        )
+
+    # Feature 0084 (issue #209): every parsed action was an ``update`` whose
+    # ONLY change was a category the server couldn't resolve to a slug, so
+    # ``normalize_action_categories`` dropped it — ``parsed_actions`` is
+    # empty here but this is NOT chit-chat (unlike the branch below): the
+    # model DID intend a mutation, it just needs the category clarified.
+    # ``explanation`` is server-owned (``GUARD_EXPLANATION``, not the
+    # model's) because the model's explanation could claim a category
+    # change that never happened.
+    if not result.parsed_actions and result.unresolved_categories:
+        await _mark_success(interaction)
+        block_titles = {block.id: block.title for block in current_blocks}
+        return JsonResponse(
+            {
+                "blocks": None,
+                "explanation": GUARD_EXPLANATION,
+                "ask": _build_category_ask(
+                    result.unresolved_categories, block_titles, schedule._categories
+                ),
                 "applied": False,
                 "partial": False,
                 "outcomes": [],
@@ -1296,7 +1405,15 @@ async def ai_chat(request, date):
         for index, action in enumerate(result.parsed_actions)
         if action.get("type") == "add"
     }
-    ask = _build_resolution_ask(plan.outcomes, block_titles, create_titles)
+    # Feature 0084 (issue #209): the time-conflict resolution ask wins when
+    # both are pending — the user can answer only one question per turn, and
+    # a skipped time work item needs a concrete slot before anything else
+    # about that action matters. The category ask covers the mixed-turn case
+    # from the issue's own repro: the time change applies here (``applied:
+    # true``) while a sibling category-only update was dropped.
+    ask = _build_resolution_ask(plan.outcomes, block_titles, create_titles) or _build_category_ask(
+        result.unresolved_categories, block_titles, schedule._categories
+    )
     applied = bool(plan.diff.deletes or plan.diff.updates or plan.diff.creates)
     logger.info(
         "AI chat applied (user=%s, schedule=%s, actions=%s)",

@@ -99,6 +99,21 @@ def now():
     return datetime.datetime(2026, 4, 18, 9, 30)
 
 
+def _full_block(id=7, title="Gym", category="personal"):
+    """A ``TimeBlock``-shaped ``SimpleNamespace`` for ``build_chat_user_message``,
+    which reads every field via ``_runtime_block_to_dict`` — a bare
+    ``SimpleNamespace(id=...)`` isn't enough once a test actually calls
+    ``run_chat`` with a non-empty ``blocks`` list."""
+    return SimpleNamespace(
+        id=id,
+        start_time=datetime.time(7, 0),
+        end_time=datetime.time(8, 0),
+        category=category,
+        is_completed=False,
+        title=title,
+    )
+
+
 def _ok_response(actions=None, explanation="ok", ask=None):
     payload = {
         "actions": actions or [],
@@ -315,8 +330,13 @@ class TestParsing:
         [
             {"explanation": "missing actions", "ask": None},
             {
-                "actions": [{"type": "add", "title": "x"}],
-                "explanation": "missing times",
+                # Feature 0084: a missing ``category`` on an ``add`` is no
+                # longer invalid on its own — ``normalize_action_categories``
+                # defaults it to the sink slug (Hard rule 4's "default to
+                # other if unclear"). Missing ``title`` has no such default,
+                # so this still exercises an invalid untimed add.
+                "actions": [{"type": "add", "category": "work"}],
+                "explanation": "missing title",
                 "ask": None,
             },
             {
@@ -440,6 +460,90 @@ class TestParsing:
         with pytest.raises(AIParseError):
             run_chat(
                 [{"role": "user", "content": "hi"}],
+                fake_schedule,
+                [],
+                [],
+                now,
+            )
+
+
+class TestCategoryResolution:
+    """Feature 0084, issue #209: category labels / the user's own wording
+    are resolved to slugs before per-action shape validation, so a turn
+    like "at 14:00 for an hour, рабочая" no longer raises ``AIParseError``."""
+
+    def test_issue_209_repro_time_and_category_update_no_longer_raises(
+        self, patch_client, fake_schedule, now
+    ):
+        block = _full_block(id=7)
+        action = {
+            "type": "update",
+            "task_id": 7,
+            "changes": {"start_time": "14:00", "end_time": "15:00", "category": "рабочая"},
+        }
+        patch_client(_ok_response(actions=[action]))
+        result = run_chat(
+            [{"role": "user", "content": "в 14:00 на час, рабочая"}],
+            fake_schedule,
+            [block],
+            [],
+            now,
+        )
+        assert result.parsed_actions == [
+            {
+                "type": "update",
+                "task_id": 7,
+                "changes": {"start_time": "14:00", "end_time": "15:00"},
+            }
+        ]
+        assert len(result.unresolved_categories) == 1
+        assert result.unresolved_categories[0].dropped is False
+        assert result.unresolved_categories[0].task_id == 7
+
+    def test_category_only_unresolved_update_drops_to_empty_actions(
+        self, patch_client, fake_schedule, now
+    ):
+        block = _full_block(id=7)
+        action = {"type": "update", "task_id": 7, "changes": {"category": "рабочая"}}
+        patch_client(_ok_response(actions=[action]))
+        result = run_chat(
+            [{"role": "user", "content": "рабочая"}],
+            fake_schedule,
+            [block],
+            [],
+            now,
+        )
+        assert result.parsed_actions == []
+        assert result.ask is None
+        assert len(result.unresolved_categories) == 1
+        assert result.unresolved_categories[0].dropped is True
+        assert result.unresolved_categories[0].task_id == 7
+        assert result.unresolved_categories[0].original_index == 0
+
+    def test_label_resolves_to_slug(self, patch_client, fake_schedule, now):
+        block = _full_block(id=7)
+        action = {"type": "update", "task_id": 7, "changes": {"category": "Work"}}
+        patch_client(_ok_response(actions=[action]))
+        result = run_chat(
+            [{"role": "user", "content": "make it work"}],
+            fake_schedule,
+            [block],
+            [],
+            now,
+        )
+        assert result.parsed_actions == [
+            {"type": "update", "task_id": 7, "changes": {"category": "work"}}
+        ]
+        assert result.unresolved_categories == ()
+
+    def test_category_only_unresolved_unknown_task_id_still_raises_parse(
+        self, patch_client, fake_schedule, now
+    ):
+        action = {"type": "update", "task_id": 999, "changes": {"category": "рабочая"}}
+        patch_client(_ok_response(actions=[action]))
+        with pytest.raises(AIParseError):
+            run_chat(
+                [{"role": "user", "content": "рабочая"}],
                 fake_schedule,
                 [],
                 [],

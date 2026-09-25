@@ -49,8 +49,10 @@ from django.conf import settings
 from openai import AsyncOpenAI
 from schedules.window import DEFAULT_WINDOW
 
+from ai.category_resolution import normalize_action_categories
 from ai.implicit_add import apply_implicit_add
 from ai.prompts import (
+    _DEFAULT_CATEGORIES,
     build_chat_user_message,
     build_draft_user_message,
     build_system_prompt_chat,
@@ -105,13 +107,24 @@ class AIChatResult:
     Carries the provider raw text, parsed actions, an explanation, and an
     optional ``ask`` clarifying-question string. Exactly one of
     ``parsed_actions`` (non-empty) or ``ask`` (non-null) is set, OR both
-    are empty/null for a chit-chat turn.
+    are empty/null for a chit-chat turn — OR, as of feature 0084,
+    ``parsed_actions`` is empty, ``ask`` is null, AND ``unresolved_categories``
+    is non-empty: a server-owned clarifying-question turn (an ``update``
+    whose only change was a category the view couldn't resolve to a slug),
+    not chit-chat. The view (``ai/views.py``) is responsible for telling
+    these two empty-actions/null-ask cases apart.
+
+    ``unresolved_categories`` (feature 0084, issue #209) carries the
+    ``category_resolution.UnresolvedCategory`` records for any ``update``
+    action whose category value could not be resolved to a slug — see
+    ``ai/category_resolution.py``. Empty for every turn with no such action.
     """
 
     raw_response_text: str
     parsed_actions: list[dict]
     explanation: str
     ask: str | None
+    unresolved_categories: tuple = ()
 
 
 @dataclass
@@ -186,6 +199,24 @@ def _get_client() -> AsyncOpenAI:
     return client
 
 
+def _category_context(categories) -> tuple[list[tuple[str, str]], str]:
+    """Return the ``(slug, label)`` pairs and sink slug for one AI call.
+
+    Used for BOTH the system-prompt render and ``normalize_action_categories``
+    (feature 0084) so the two share the exact same empty-catalog fallback —
+    an empty/``None`` ``categories`` renders ``prompts._DEFAULT_CATEGORIES``
+    in the prompt AND resolves labels against that same default set, rather
+    than the two drifting apart. ``ordered_categories`` (``schedules/
+    categories.py``) never actually returns ``[]`` and
+    ``sink_category_uses_other_slug`` (``models.py``) guarantees the sink
+    slug is always ``"other"`` — the ``"other"`` literal below is only a
+    defensive fallback for a caller (e.g. a test) that passes no catalog.
+    """
+    pairs = [(c.slug, c.label) for c in (categories or [])] or _DEFAULT_CATEGORIES
+    sink_slug = next((c.slug for c in (categories or []) if c.is_sink), "other")
+    return pairs, sink_slug
+
+
 async def run_draft(
     schedule, template, history_schedules, rules, now, categories=None
 ) -> AIDraftResult:
@@ -231,6 +262,8 @@ async def run_draft(
                 e,
             )
 
+    category_pairs, sink_slug = _category_context(categories)
+
     client = _get_client()
     try:
         # NOTE: ``LLM_DRAFT_CAPTURE_PROMPT_PATH`` above is intentionally
@@ -245,8 +278,8 @@ async def run_draft(
                     "role": "system",
                     "content": build_system_prompt_draft(
                         getattr(schedule, "_schedule_window", DEFAULT_WINDOW),
-                        [(c.slug, c.label) for c in (categories or [])] or None,
-                        next((c.slug for c in (categories or []) if c.is_sink), "other"),
+                        category_pairs,
+                        sink_slug,
                     ),
                 },
                 {"role": "user", "content": user_message},
@@ -271,6 +304,25 @@ async def run_draft(
         parsed = json.loads(raw)
     except json.JSONDecodeError as e:
         raise AIParseError(f"AI returned invalid JSON: {e}", raw_response_text=raw) from e
+
+    # Feature 0084 (issue #209): resolve category labels / the user's own
+    # wording to slugs BEFORE schema validation, so a model that echoes a
+    # label (or, via history, the user's language) doesn't fail the whole
+    # draft. Guarded so a malformed envelope (``actions`` missing or not a
+    # list) still surfaces as an envelope error from ``validate_draft_response``
+    # below, not an ``AttributeError`` here. ``known_task_ids`` is always
+    # empty — a draft targets an empty schedule, so ``update`` has no real
+    # ``task_id`` to reference; any ``update`` the model still emits keeps
+    # failing ``validate_draft_response``'s add-only rule regardless.
+    if isinstance(parsed, dict) and isinstance(parsed.get("actions"), list):
+        normalize_result = normalize_action_categories(
+            parsed["actions"], category_pairs, sink_slug, known_task_ids=set()
+        )
+        parsed = {**parsed, "actions": normalize_result.actions}
+        # Draft only ever accepts ``add`` actions; a category-only ``update``
+        # would already be rejected by ``validate_draft_response`` regardless
+        # of whether it survived normalisation, so any ``unresolved`` records
+        # here are discarded — there is no draft-side "ask" to carry them to.
 
     allowed_categories = (
         {c.slug for c in categories}
@@ -322,6 +374,8 @@ async def run_chat(messages, schedule, blocks, rules, now, categories=None) -> A
     if not messages or messages[-1].get("role") != "user":
         raise AIInvalidInputError("messages must end with a user turn (view should enforce)")
 
+    category_pairs, sink_slug = _category_context(categories)
+
     schedule_context = build_chat_user_message(schedule, blocks, now, rules)
     prior_transcript = serialise_prior_turns(messages[:-1])
     latest_user_turn = messages[-1]["content"]
@@ -337,8 +391,8 @@ async def run_chat(messages, schedule, blocks, rules, now, categories=None) -> A
             "role": "system",
             "content": build_system_prompt_chat(
                 getattr(schedule, "_schedule_window", DEFAULT_WINDOW),
-                [(c.slug, c.label) for c in (categories or [])] or None,
-                next((c.slug for c in (categories or []) if c.is_sink), "other"),
+                category_pairs,
+                sink_slug,
             ),
         },
         # Schedule context + the flattened prior transcript live in a
@@ -390,8 +444,22 @@ async def run_chat(messages, schedule, blocks, rules, now, categories=None) -> A
         if categories is not None
         else {"work", "personal", "health", "other"}
     )
+
+    # Feature 0084 (issue #209): resolve category labels / the user's own
+    # wording to slugs BEFORE per-action shape validation, so e.g. the
+    # Russian "рабочая" for "work" doesn't fail the whole turn with a 502.
+    # ``known_task_ids`` gates the category-only-update drop (see
+    # ``category_resolution.normalize_action_categories``) to blocks that
+    # actually exist on this schedule; ``raw_response_text`` above still
+    # carries the model's ORIGINAL, unresolved wording for the audit row.
+    known_task_ids = {b.id for b in blocks}
+    normalize_result = normalize_action_categories(
+        parsed["actions"], category_pairs, sink_slug, known_task_ids
+    )
+    normalized_actions = normalize_result.actions
+
     per_action_errors = []
-    for idx, action in enumerate(parsed["actions"]):
+    for idx, action in enumerate(normalized_actions):
         # Feature 0067: chat allows an untimed add (both times omitted → backend
         # deterministic placement). The draft path uses ``validate_draft_response``
         # with the ``False`` default, so draft adds still require both times.
@@ -406,7 +474,8 @@ async def run_chat(messages, schedule, blocks, rules, now, categories=None) -> A
 
     return AIChatResult(
         raw_response_text=raw,
-        parsed_actions=list(parsed["actions"]),
+        parsed_actions=normalized_actions,
         explanation=parsed.get("explanation", ""),
         ask=parsed.get("ask"),
+        unresolved_categories=normalize_result.unresolved,
     )
