@@ -26,6 +26,8 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
+from schedules.http import is_plain_int
+
 from ai.schemas import validate_action_shape
 
 logger = logging.getLogger(__name__)
@@ -133,6 +135,12 @@ def _normalize_add(action: dict, categories, sink_slug: str) -> dict:
     return new_action
 
 
+def _loggable_task_id(task_id):
+    """Log only a plain-int ``task_id``: this runs before schema validation,
+    so any other model-supplied value could carry arbitrary text."""
+    return task_id if is_plain_int(task_id) else "<invalid>"
+
+
 def _normalize_update(
     action: dict,
     categories,
@@ -165,7 +173,7 @@ def _normalize_update(
         new_action["changes"] = new_changes
         logger.debug(
             "AI category resolved (type=update, task_id=%r, outcome=rewritten)",
-            action.get("task_id"),
+            _loggable_task_id(action.get("task_id")),
         )
         return new_action, None
 
@@ -180,7 +188,7 @@ def _normalize_update(
         new_action["changes"] = other_changes
         logger.debug(
             "AI category unresolved (type=update, task_id=%r, outcome=dropped_field)",
-            task_id,
+            _loggable_task_id(task_id),
         )
         return new_action, UnresolvedCategory(
             original_index=original_index, task_id=task_id, value=value, dropped=False
@@ -200,7 +208,7 @@ def _normalize_update(
     if not guard_errors and task_id in known_task_ids:
         logger.debug(
             "AI category unresolved (type=update, task_id=%r, outcome=dropped_action)",
-            task_id,
+            _loggable_task_id(task_id),
         )
         return action, UnresolvedCategory(
             original_index=original_index, task_id=task_id, value=value, dropped=True

@@ -746,6 +746,7 @@ class TestCategoryAskIndexSpacesEndToEnd:
     ``original_index``) and the post-normalisation index (``outcomes``'
     ``action_index``), so a bug swapping the two spaces would pass anyway."""
 
+    @pytest.mark.django_db
     def test_three_actions_mixed_index_spaces(self, auth_client, today_schedule, monkeypatch):
         block_a = TimeBlock.objects.create(
             schedule=today_schedule,

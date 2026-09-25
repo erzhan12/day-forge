@@ -5,8 +5,10 @@ Pure-function tests — no DB, no network. ``resolve_category`` and
 category catalogs, matching the plan's "Tests" section exactly.
 """
 
+import pytest
 from ai.category_resolution import (
     UnresolvedCategory,
+    _loggable_task_id,
     normalize_action_categories,
     resolve_category,
 )
@@ -232,3 +234,14 @@ class TestOriginalIndices:
         # add is actions[0] but must still be reported as the model's [1].
         assert len(result.actions) == 1
         assert result.original_indices == (1,)
+
+
+class TestLoggableTaskId:
+    """Debug logs run before schema validation, so only plain ints are logged."""
+
+    @pytest.mark.parametrize("value", ["drop table", 7.0, True, None, {"x": 1}])
+    def test_non_int_is_redacted(self, value):
+        assert _loggable_task_id(value) == "<invalid>"
+
+    def test_plain_int_passes_through(self):
+        assert _loggable_task_id(7) == 7

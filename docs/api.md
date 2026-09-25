@@ -539,7 +539,7 @@ Empty `parsed_actions` with `ask: null`. No mutations; status unchanged.
 | `409` | `detail` | `schedule_changed` — the concurrent-edit fingerprint guard (feature 0030); only when `parsed_actions` is non-empty and the replay guard did not trip. |
 | `413` | `body` | Request body exceeds 100 KB. |
 | `429` | `detail` | Per-user chat rate limit (`LLM_CHAT_RATE_LIMIT_PER_HOUR`, default 60/hr) exceeded. Counter is independent from the draft bucket. Validation failures do not consume the budget. |
-| `502` | `detail` | LLM provider returned an error, or response failed JSON / schema validation. On a schema-validation failure (`AIParseError`) `detail` is the fixed generic string `AI_PARSE_ERROR_DETAIL` ("The assistant's reply couldn't be applied. Try rephrasing.") — the real validation message (which can echo model-supplied text, e.g. an unresolved category label or an unknown JSON key) is never sent to the client; it survives only in the audit row's `error_detail` (feature 0084) — its `action[i]` refers to the model's own `actions` index in `raw`, the same index space as `unresolved_categories`' `original_index`, not the post-normalisation `actions_json`. |
+| `502` | `detail` | LLM provider returned an error, or response failed JSON / schema validation. On any JSON / envelope / schema-validation failure (`AIParseError`) `detail` is the fixed generic string `AI_PARSE_ERROR_DETAIL` ("The assistant's reply couldn't be applied. Try rephrasing.") — the real validation message (which can echo model-supplied text, e.g. an unresolved category label or an unknown JSON key) is never sent to the client; it survives only in the audit row's `error_detail` (feature 0084) — its `action[i]` refers to the model's own `actions` index in `raw`, the same index space as `unresolved_categories`' `original_index`, not the post-normalisation `actions_json`. |
 | `503` | `detail` | `LLM_API_KEY` is not configured. |
 | `504` | `detail` | LLM provider timed out (>`LLM_REQUEST_TIMEOUT` seconds). |
 
@@ -594,7 +594,7 @@ until the user makes a real edit.
 | `413` | `body` | Request body exceeds 100 KB. |
 | `422` | `detail` | No template configured for this day's slot type. |
 | `429` | `detail` | Draft rate limit (`LLM_DRAFT_RATE_LIMIT_PER_HOUR`, default 10/hr) exceeded. Counter is independent from the chat bucket. |
-| `502` | `detail` | LLM provider returned an error, or response failed JSON / schema validation. On a schema-validation failure (`AIParseError`) `detail` is the fixed generic string `AI_PARSE_ERROR_DETAIL` ("The assistant's reply couldn't be applied. Try rephrasing.") — the real validation message (which can echo model-supplied text) goes only to the server log at `DEBUG` (a `WARNING` line logs that a draft parse failure happened, with no message text), never to the client (feature 0084). |
+| `502` | `detail` | LLM provider returned an error, or response failed JSON / schema validation. On any JSON / envelope / schema-validation failure (`AIParseError`) `detail` is the fixed generic string `AI_PARSE_ERROR_DETAIL` ("The assistant's reply couldn't be applied. Try rephrasing.") — the real validation message (which can echo model-supplied text) goes only to the server log at `DEBUG` (a `WARNING` line logs that a draft parse failure happened, with no message text), never to the client (feature 0084). |
 | `503` | `detail` | `LLM_API_KEY` is not configured. |
 | `504` | `detail` | LLM provider timed out. |
 

@@ -499,6 +499,7 @@ class TestCategoryResolution:
         assert len(result.unresolved_categories) == 1
         assert result.unresolved_categories[0].dropped is False
         assert result.unresolved_categories[0].task_id == 7
+        assert result.unresolved_categories[0].original_index == 0
 
     def test_category_only_unresolved_update_drops_to_empty_actions(
         self, patch_client, fake_schedule, now
