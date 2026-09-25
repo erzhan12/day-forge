@@ -1157,8 +1157,8 @@ def _build_chat_audit_response(
     ``error_detail`` (feature 0084) — a failure-row-only ``AIParseError``
     message, present so the real validation detail survives even though the
     client-facing ``errors.detail`` becomes the generic
-    ``AI_PARSE_ERROR_DETAIL``. Both optional fields are inserted BEFORE
-    ``raw`` so they survive the ``_MAX_AI_RESPONSE_LOG_LEN`` truncation that
+    ``AI_PARSE_ERROR_DETAIL``. Both optional fields, and ``error_class``, are
+    inserted BEFORE ``raw`` so they survive the ``_MAX_AI_RESPONSE_LOG_LEN`` truncation that
     slices this JSON string from the front on a huge model response.
     """
     payload = {
@@ -1169,9 +1169,9 @@ def _build_chat_audit_response(
         payload["unresolved_categories"] = unresolved_categories
     if error_detail is not None:
         payload["error_detail"] = error_detail
-    payload["raw"] = raw_or_str
     if error_class is not None:
         payload["error_class"] = error_class
+    payload["raw"] = raw_or_str
     return json.dumps(payload, ensure_ascii=False)
 
 

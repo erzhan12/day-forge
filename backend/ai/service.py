@@ -327,7 +327,7 @@ async def run_draft(
     allowed_categories = (
         {c.slug for c in categories}
         if categories is not None
-        else {"work", "personal", "health", "other"}
+        else {slug for slug, _label in _DEFAULT_CATEGORIES}
     )
     errors = validate_draft_response(parsed, allowed_categories)
     if errors:
@@ -442,7 +442,7 @@ async def run_chat(messages, schedule, blocks, rules, now, categories=None) -> A
     allowed_categories = (
         {c.slug for c in categories}
         if categories is not None
-        else {"work", "personal", "health", "other"}
+        else {slug for slug, _label in _DEFAULT_CATEGORIES}
     )
 
     # Feature 0084 (issue #209): resolve category labels / the user's own

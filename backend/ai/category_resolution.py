@@ -204,7 +204,7 @@ def _normalize_update(
     # already valid; a genuinely malformed action still fails schema
     # validation (502) instead of silently becoming a category ask.
     allowed_categories = {slug for slug, _label in categories} | {value}
-    guard_errors = validate_action_shape(action, allowed_categories, allow_untimed_add=True)
+    guard_errors = validate_action_shape(action, allowed_categories)
     if not guard_errors and task_id in known_task_ids:
         logger.debug(
             "AI category unresolved (type=update, task_id=%r, outcome=dropped_action)",

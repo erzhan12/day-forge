@@ -44,6 +44,9 @@ class TestResolveCategory:
         assert resolve_category(123, _DEFAULT) is None
         assert resolve_category(None, _DEFAULT) is None
 
+    def test_empty_string_returns_none(self):
+        assert resolve_category("", _DEFAULT) is None
+
     def test_case_fold_collision_first_catalog_entry_wins(self):
         # SQLite's LOWER folds ASCII only; Python casefold is
         # locale-independent, so two Cyrillic labels differing only in case
@@ -83,6 +86,11 @@ class TestNormalizeAdd:
         result = normalize_action_categories([action], _DEFAULT, "other", known_task_ids=set())
         assert result.actions == [{"type": "add", "title": "X", "category": "health"}]
         assert result.unresolved == ()
+
+    def test_empty_catalog_falls_back_to_sink(self):
+        action = {"type": "add", "title": "X", "category": "work"}
+        result = normalize_action_categories([action], [], "other", known_task_ids=set())
+        assert result.actions[0]["category"] == "other"
 
 
 class TestNormalizeUpdate:
