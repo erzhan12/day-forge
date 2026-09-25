@@ -394,3 +394,60 @@ class TestChatSystemPromptLatestTurnOnly:
         assert "re-derive" in prompt
         assert "MUST reference a task_id" in prompt
         assert 'Do NOT ask "when?"' in prompt
+
+
+class TestChatCategorySlugRules:
+    """Feature 0084, issue #209: category values must be emitted as slugs,
+    never labels or the user's own wording, and Hard rule 12 resolves a
+    pending category question by coreference."""
+
+    @staticmethod
+    def _prompt():
+        from ai.prompts import build_system_prompt_chat
+        from schedules.window import DEFAULT_WINDOW
+
+        return build_system_prompt_chat(DEFAULT_WINDOW)
+
+    def test_update_description_states_category_is_a_slug(self):
+        prompt = self._prompt()
+        assert "changes.category MUST be a" in prompt
+        assert "category slug from Hard rule 4" in prompt
+        assert "рабочая" in prompt
+
+    def test_hard_rule_4_states_emit_the_slug(self):
+        prompt = self._prompt()
+        assert "emit the SLUG" in prompt
+        assert "never the label in parentheses" in prompt
+
+    def test_hard_rule_12_appended_after_11_without_renumbering(self):
+        prompt = self._prompt()
+        assert "\n11. Actions come ONLY from the latest user turn" in prompt
+        assert "\n12. When the previous assistant turn asked" in prompt
+        # Rule 12 comes strictly after rule 11 in the rendered text.
+        assert prompt.index("\n11. Actions come ONLY") < prompt.index(
+            "\n12. When the previous assistant turn asked"
+        )
+
+    def test_hard_rule_12_scoped_to_latest_turn_answering_the_question(self):
+        prompt = self._prompt()
+        rule_twelve = prompt.split("\n12. ", 1)[1]
+        assert "the latest user turn answers that question" in rule_twelve
+        assert "do not add a new block" in rule_twelve
+        assert "рабочая" in rule_twelve and "work" in rule_twelve
+        assert "handled normally under Hard rule 11" in rule_twelve
+
+    def test_coreference_parentheticals_mention_rule_12(self):
+        # The prompt is hard-wrapped, so squash whitespace before asserting
+        # on a multi-word phrase — see RULES.md's draft-prompt note.
+        squashed = " ".join(self._prompt().split())
+        assert "Hard rule 12 when the prior ask was a category question" in squashed
+        assert "Hard rules 2(iii), 3, 9b–9d, 12 when the prior ask was a category question" in (
+            squashed
+        )
+
+    def test_other_than_asking_what_to_add_count_stays_two(self):
+        # Pinned alongside the existing count assertion
+        # (TestChatSystemPromptLatestTurnOnly) — the rule 2(iii)/rule 11(a)
+        # edits for feature 0084 must not add or remove an occurrence.
+        prompt = self._prompt()
+        assert prompt.count("(other than asking what to add)") == 2

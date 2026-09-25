@@ -16,6 +16,7 @@ from ai.service import (
     AITimeoutError,
     AIUnavailableError,
 )
+from ai.views import AI_PARSE_ERROR_DETAIL
 from django.contrib.auth.models import User
 from django.core.cache import cache
 from schedules.models import Schedule, TimeBlock, UserScheduleSettings
@@ -379,6 +380,25 @@ class TestProviderErrors:
         log = AIInteraction.objects.get()
         assert log.kind == AIInteraction.Kind.DRAFT
         assert log.success is False
+
+    def test_parse_error_returns_generic_detail(self, auth_client, user, template, monkeypatch):
+        """Feature 0084: the client-facing detail for an ``AIParseError`` is
+        the fixed generic string — the real validation message (which can
+        echo model-supplied text) never reaches the client."""
+        _patch_run(
+            monkeypatch,
+            AIParseError(
+                "AI draft response failed validation: category must be one of [...]",
+                raw_response_text="<raw>",
+            ),
+        )
+        resp = _post(auth_client)
+        assert resp.status_code == 502
+        assert resp.json()["errors"]["detail"] == AI_PARSE_ERROR_DETAIL
+        # The draft audit row is unchanged by feature 0084 — it still logs
+        # ``raw_response_text`` (falling back to ``str(e)`` when absent).
+        log = AIInteraction.objects.get()
+        assert log.ai_response == "<raw>"
 
 
 @pytest.mark.django_db

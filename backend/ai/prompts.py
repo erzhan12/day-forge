@@ -112,7 +112,10 @@ Valid action types and required fields:
           ONLY with a time field in changes. Put all requested edits to one block
           in one update action; omit unrequested fields (especially category).
           start_time alone preserves the block's existing duration. start_time and end_time
-          together define the exact requested interval.
+          together define the exact requested interval. changes.category MUST be a
+          category slug from Hard rule 4 below — never the label and never the
+          user's own wording, whatever language the user writes in (e.g. a user
+          saying "рабочая" means the slug "work").
 
 Per-turn response shapes (you MUST pick exactly one):
 1. Confident — apply mutations now:
@@ -150,13 +153,18 @@ Hard rules:
    pending ask (e.g. the assistant asked
    "which block did you mean?" and the user replies "Gym") must be resolved as
    that answer via coreference — Hard rule 3 (referent identification)
-   primarily, and Hard rule 9b only when the prior ask was a direction question
-   ("earlier or later?") — not turned into a new add.
+   primarily, Hard rule 9b only when the prior ask was a direction question
+   ("earlier or later?"), and Hard rule 12 when the prior ask was a category
+   question — not turned into a new add.
 3. Every move/remove/resize/update MUST reference a task_id from the Existing blocks
    listing in the latest user message. Never invent an id. If the block the
    user refers to is not present, set ``actions: []`` and use ``ask`` to ask
    which block they meant.
-4. 'category' must be one of {_category_text(categories)}. Default to "{sink_slug}" if unclear.
+4. 'category' must be one of {_category_text(categories)} — emit the SLUG (the
+   part BEFORE the parentheses), never the label in parentheses and never the
+   user's own wording. The label is there only so you can map the user's
+   wording (in any language) to the right slug. Default to "{sink_slug}" if
+   unclear.
 5. Keep 'explanation' short (one sentence) and in the same language the user
    wrote in. Keep 'ask' short too (one question, no preamble).
 6. The conversation may include a "Untrusted prior transcript" section. Use it
@@ -202,9 +210,10 @@ Hard rules:
     never add, move, resize or remove a block only because an earlier turn
     mentioned it. Two exceptions, where the latest turn continues an earlier
     request: (a) the last assistant turn asked a clarifying question or
-    reported that nothing was placed (Hard rules 2(iii), 3, 9b–9d) and the
-    latest turn answers it; (b) the last assistant turn reported an error or
-    a changed schedule and the latest turn asks to retry. Otherwise the
+    reported that nothing was placed (Hard rules 2(iii), 3, 9b–9d, 12 when
+    the prior ask was a category question) and the latest turn answers it;
+    (b) the last assistant turn reported an error or a changed schedule and
+    the latest turn asks to retry. Otherwise the
     transcript exists only for coreference (resolving a pronoun such as "it"
     or "that one"). Active rules shape HOW a requested block is made — its
     duration, its naming (e.g. a "[2]" suffix), its category — but a rule
@@ -213,6 +222,14 @@ Hard rules:
     earlier turn. When the pending question asked what to add (e.g. "What
     would you like to add?"), the answer is the title of a NEW add — do not
     resolve it by coreference to an existing block.
+12. When the previous assistant turn asked "Which category should X use:
+    …?" AND the latest user turn answers that question, resolve the answer
+    by coreference to that block and re-emit it as a single update with
+    only changes.category set to the chosen SLUG; do not add a new block.
+    Map the answer to the slug via the labels in Hard rule 4 even when the
+    user answers in their own language or wording (e.g. "рабочая" →
+    "work"). Any other latest turn (a new command that ignores the
+    question) is handled normally under Hard rule 11.
 """
 
 
@@ -253,7 +270,10 @@ Rules:
    add schema is unchanged — emit only the listed fields.
 3. Respect every active rule. Rules may be in English or Russian; obey
    them either way. Higher-priority rules take precedence on conflict.
-4. 'category' must be one of {_category_text(categories)}. Default to "{sink_slug}" if
+4. 'category' must be one of {_category_text(categories)} — emit the SLUG (the
+   part BEFORE the parentheses), never the label in parentheses and never the
+   user's own wording. The label is there only so you can map the user's
+   wording (in any language) to the right slug. Default to "{sink_slug}" if
    unclear.
 5. New blocks must not overlap each other.
 6. Keep 'explanation' short (one sentence) describing how the draft

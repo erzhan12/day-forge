@@ -99,6 +99,21 @@ def now():
     return datetime.datetime(2026, 4, 18, 9, 30)
 
 
+def _full_block(id=7, title="Gym", category="personal"):
+    """A ``TimeBlock``-shaped ``SimpleNamespace`` for ``build_chat_user_message``,
+    which reads every field via ``_runtime_block_to_dict`` — a bare
+    ``SimpleNamespace(id=...)`` isn't enough once a test actually calls
+    ``run_chat`` with a non-empty ``blocks`` list."""
+    return SimpleNamespace(
+        id=id,
+        start_time=datetime.time(7, 0),
+        end_time=datetime.time(8, 0),
+        category=category,
+        is_completed=False,
+        title=title,
+    )
+
+
 def _ok_response(actions=None, explanation="ok", ask=None):
     payload = {
         "actions": actions or [],
@@ -315,8 +330,13 @@ class TestParsing:
         [
             {"explanation": "missing actions", "ask": None},
             {
-                "actions": [{"type": "add", "title": "x"}],
-                "explanation": "missing times",
+                # Feature 0084: a missing ``category`` on an ``add`` is no
+                # longer invalid on its own — ``normalize_action_categories``
+                # defaults it to the sink slug (Hard rule 4's "default to
+                # other if unclear"). Missing ``title`` has no such default,
+                # so this still exercises an invalid untimed add.
+                "actions": [{"type": "add", "category": "work"}],
+                "explanation": "missing title",
                 "ask": None,
             },
             {
@@ -445,6 +465,135 @@ class TestParsing:
                 [],
                 now,
             )
+
+
+class TestCategoryResolution:
+    """Feature 0084, issue #209: category labels / the user's own wording
+    are resolved to slugs before per-action shape validation, so a turn
+    like "at 14:00 for an hour, рабочая" no longer raises ``AIParseError``."""
+
+    def test_issue_209_repro_time_and_category_update_no_longer_raises(
+        self, patch_client, fake_schedule, now
+    ):
+        block = _full_block(id=7)
+        action = {
+            "type": "update",
+            "task_id": 7,
+            "changes": {"start_time": "14:00", "end_time": "15:00", "category": "рабочая"},
+        }
+        patch_client(_ok_response(actions=[action]))
+        result = run_chat(
+            [{"role": "user", "content": "в 14:00 на час, рабочая"}],
+            fake_schedule,
+            [block],
+            [],
+            now,
+        )
+        assert result.parsed_actions == [
+            {
+                "type": "update",
+                "task_id": 7,
+                "changes": {"start_time": "14:00", "end_time": "15:00"},
+            }
+        ]
+        assert len(result.unresolved_categories) == 1
+        assert result.unresolved_categories[0].dropped is False
+        assert result.unresolved_categories[0].task_id == 7
+        assert result.unresolved_categories[0].original_index == 0
+
+    def test_label_resolves_against_user_catalog_not_defaults(
+        self, patch_client, fake_schedule, now
+    ):
+        catalog = [
+            SimpleNamespace(slug="job", label="Работа", is_sink=False),
+            SimpleNamespace(slug="other", label="Other", is_sink=True),
+        ]
+        action = {"type": "update", "task_id": 7, "changes": {"category": "работа"}}
+        patch_client(_ok_response(actions=[action]))
+        result = run_chat(
+            [{"role": "user", "content": "работа"}],
+            fake_schedule,
+            [_full_block(id=7)],
+            [],
+            now,
+            categories=catalog,
+        )
+        assert result.parsed_actions == [
+            {"type": "update", "task_id": 7, "changes": {"category": "job"}}
+        ]
+        assert result.unresolved_categories == ()
+
+    def test_category_only_unresolved_update_drops_to_empty_actions(
+        self, patch_client, fake_schedule, now
+    ):
+        block = _full_block(id=7)
+        action = {"type": "update", "task_id": 7, "changes": {"category": "рабочая"}}
+        patch_client(_ok_response(actions=[action]))
+        result = run_chat(
+            [{"role": "user", "content": "рабочая"}],
+            fake_schedule,
+            [block],
+            [],
+            now,
+        )
+        assert result.parsed_actions == []
+        assert result.ask is None
+        assert len(result.unresolved_categories) == 1
+        assert result.unresolved_categories[0].dropped is True
+        assert result.unresolved_categories[0].task_id == 7
+        assert result.unresolved_categories[0].original_index == 0
+
+    def test_label_resolves_to_slug(self, patch_client, fake_schedule, now):
+        block = _full_block(id=7)
+        action = {"type": "update", "task_id": 7, "changes": {"category": "Work"}}
+        patch_client(_ok_response(actions=[action]))
+        result = run_chat(
+            [{"role": "user", "content": "make it work"}],
+            fake_schedule,
+            [block],
+            [],
+            now,
+        )
+        assert result.parsed_actions == [
+            {"type": "update", "task_id": 7, "changes": {"category": "work"}}
+        ]
+        assert result.unresolved_categories == ()
+
+    def test_category_only_unresolved_unknown_task_id_still_raises_parse(
+        self, patch_client, fake_schedule, now
+    ):
+        action = {"type": "update", "task_id": 999, "changes": {"category": "рабочая"}}
+        patch_client(_ok_response(actions=[action]))
+        with pytest.raises(AIParseError):
+            run_chat(
+                [{"role": "user", "content": "рабочая"}],
+                fake_schedule,
+                [],
+                [],
+                now,
+            )
+
+    def test_error_detail_numbers_by_model_index_not_post_normalisation(
+        self, patch_client, fake_schedule, now
+    ):
+        """A category-only update dropped at model index 0 must not shift
+        the ``action[i]`` reported for a later, genuinely invalid action —
+        ``error_detail`` (and this exception's message) is read against the
+        model's OWN ``actions`` list (``raw``), not the post-drop list."""
+        block = _full_block(id=7)
+        dropped_update = {"type": "update", "task_id": 7, "changes": {"category": "рабочая"}}
+        invalid_add = {"type": "add", "category": "work"}  # missing required 'title'
+        patch_client(_ok_response(actions=[dropped_update, invalid_add]))
+        with pytest.raises(AIParseError) as exc_info:
+            run_chat(
+                [{"role": "user", "content": "рабочая, and add a thing"}],
+                fake_schedule,
+                [block],
+                [],
+                now,
+            )
+        assert "action[1]" in str(exc_info.value)
+        assert "action[0]" not in str(exc_info.value)
 
 
 class TestChatUntimedAdd:

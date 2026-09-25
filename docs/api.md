@@ -375,7 +375,7 @@ Each `outcomes[]` entry:
 
 | Key | Type | Notes |
 |-----|------|-------|
-| `action_index` | int | Zero-based index into the model's `parsed_actions`. |
+| `action_index` | int | Zero-based index into the post-normalisation `parsed_actions` (the list stored in `actions_json`) — see the `unresolved_categories` note below for how a dropped `update` makes this list differ from the model's own `actions`. |
 | `task_id` | int \| null | DB primary key of the affected block, or `null` for a create that never persisted. |
 | `status` | string | `"applied"` (all requested fields landed), `"partial"` (some fields landed, some skipped), or `"skipped"` (nothing landed for this action). |
 | `applied_fields` | array | Field names that persisted (e.g. `title`, `category`, `start_time`, `end_time`). For `remove` actions this is always `[]` — the action's effect is the deletion of the block itself, not a field change. |
@@ -443,6 +443,75 @@ No mutations; `Schedule.status` is unchanged. This ask is server-owned English
 language. The client should send `is_ask: true` on this assistant turn on
 the next request so a legitimate answer isn't guarded again.
 
+**Success — unresolved category — `200 OK`** (feature 0084, issue #209)
+
+A category value the model emitted (a label, or the user's own wording in
+any language, e.g. Russian "рабочая" for "work") could not be resolved to a
+slug — see `ai/category_resolution.py`. On an `add`, an unresolvable value
+silently falls back to the sink category instead (never surfaced here). On
+an `update`, it is dropped instead of quietly recategorising the block, and
+the response always carries a server-owned `ask` naming the block and
+listing the available category labels: `Which category should "<title>"
+use: <Label>, <Label>, …?` — English-only, like every other server-built
+ask.
+
+Two shapes, depending on whether anything ELSE in the turn applied:
+
+*Nothing left to apply* — the only action was an `update` whose sole change
+was the unresolved category. This is the clarifying-question shape:
+`outcomes` is empty (a dropped update has no entry in it) and `explanation`
+is the fixed server string, never the model's (which could claim a category
+change that never happened):
+
+```json
+{
+  "blocks": null,
+  "explanation": "Nothing was changed.",
+  "ask": "Which category should \"Gym\" use: Work, Personal, Health, Other?",
+  "applied": false,
+  "partial": false,
+  "outcomes": []
+}
+```
+
+*Applied plus ask* — a sibling change (or a different action in the same
+turn) applied while the category-only update was dropped. This is
+`docs/api.md`'s standard partial-apply shape (`applied: true` alongside a
+non-null `ask`); the dropped update contributes no `outcomes` entry, only
+the ones for whatever did apply. This is the issue #209 repro exactly: a
+time change applies, and the response carries the category ask:
+
+```json
+{
+  "blocks": [ { "id": 42, "title": "Gym", "start_time": "14:00", "end_time": "15:00", "category": "personal", "is_completed": false, "sort_order": 0 } ],
+  "explanation": "Moved to 14:00.",
+  "ask": "Which category should \"Gym\" use: Work, Personal, Health, Other?",
+  "applied": true,
+  "partial": false,
+  "outcomes": [
+    {
+      "action_index": 0,
+      "task_id": 42,
+      "status": "applied",
+      "applied_fields": ["start_time", "end_time"],
+      "skipped_fields": [],
+      "reason_code": null,
+      "conflicting_task_ids": [],
+      "attempted_direction": null,
+      "suggestion": null
+    }
+  ]
+}
+```
+
+If a skipped-time-work resolution ask (see the apply-turn section above) is
+also pending in the same turn, that ask wins — the user can answer only one
+question per turn.
+
+The audit row carries a parallel `unresolved_categories` array (see the
+Audit row note below) so a dropped update is never silently lost even
+though it has no `outcomes` entry.
+
 **Success — chit-chat / no-op — `200 OK`**
 
 ```json
@@ -465,16 +534,18 @@ Empty `parsed_actions` with `ask: null`. No mutations; status unchanged.
 | Status | `errors` key | Meaning |
 |--------|--------------|---------|
 | `400` | `messages` / `date` / `body` | Transcript shape invalid, path date bad, or body not a JSON object. Also covers a non-boolean `messages[].is_ask` / `is_error`, or either flag present on a `user` turn (feature 0083). |
-| `400` | `action_index` + `detail` | An action was **structurally** malformed at apply time (unknown block ID, unparseable/missing required field). Only these abort the whole turn — the entire batch is rolled back. Policy failures (window / grid / interval / overlap) do **not** 400; they skip just that block's time work and are reported via `outcomes` on a `200`. |
+| `400` | `action_index` + `detail` | `action_index` indexes the post-normalisation `parsed_actions` (`actions_json`), the same space as `outcomes`. An action was **structurally** malformed at apply time (unknown block ID, unparseable/missing required field). Only these abort the whole turn — the entire batch is rolled back. Policy failures (window / grid / interval / overlap) do **not** 400; they skip just that block's time work and are reported via `outcomes` on a `200`. |
 | `403` | `detail` | CSRF token missing/invalid. |
 | `409` | `detail` | `schedule_changed` — the concurrent-edit fingerprint guard (feature 0030); only when `parsed_actions` is non-empty and the replay guard did not trip. |
 | `413` | `body` | Request body exceeds 100 KB. |
 | `429` | `detail` | Per-user chat rate limit (`LLM_CHAT_RATE_LIMIT_PER_HOUR`, default 60/hr) exceeded. Counter is independent from the draft bucket. Validation failures do not consume the budget. |
-| `502` | `detail` | LLM provider returned an error, or response failed JSON / schema validation. |
+| `502` | `detail` | LLM provider returned an error, or response failed JSON / schema validation. On any JSON / envelope / schema-validation failure (`AIParseError`) `detail` is the fixed generic string `AI_PARSE_ERROR_DETAIL` ("The assistant's reply couldn't be applied. Try rephrasing.") — the real validation message (which can echo model-supplied text, e.g. an unresolved category label or an unknown JSON key) is never sent to the client; it survives only in the audit row's `error_detail` (feature 0084) — its `action[i]` refers to the model's own `actions` index in `raw`, the same index space as `unresolved_categories`' `original_index`, not the post-normalisation `actions_json`. |
 | `503` | `detail` | `LLM_API_KEY` is not configured. |
 | `504` | `detail` | LLM provider timed out (>`LLM_REQUEST_TIMEOUT` seconds). |
 
 Atomicity: the accepted subset of a turn is applied within a single transaction, so a partial apply is still atomic — either the whole accepted subset lands or (on a **structural** failure) the entire turn rolls back and returns `400`. Policy failures do not roll back the turn; they drop just the offending time work and are reported via `outcomes`. The `AIInteraction` row is written after a successful LLM call and before apply; a structural apply failure leaves `success=False` with `actions_json` reflecting the model's intent.
+
+`actions_json` is the **post-normalisation** `parsed_actions` list: category labels / the user's own wording are already resolved to slugs, and a category-only `update` dropped for an unresolved category is **omitted** from it entirely (feature 0084). The model's verbatim output — including the unresolved value — stays in the audit row's `raw` field. A success row whose turn had any unresolved category also carries `"unresolved_categories": [{"original_index": int, "task_id": int, "dropped": bool}, …]`, inserted before `raw`; `original_index` is the position in the MODEL's own `actions` (a separate index space from `action_index` in `outcomes`/`actions_json`, since a dropped `update` has no entry there). The rejected value itself is never copied into `unresolved_categories` — only `raw` holds it. A failure row instead carries `error_detail` (the `AIParseError` message, capped at 2,000 chars) in the same before-`raw` position, present only for that error class.
 
 A successful apply flips `Schedule.status` from `draft` to `active` **only when** at least one field was applied (including a partial apply). Clarifying-question, chit-chat, fully-skipped, and empty-action turns leave status untouched.
 
@@ -523,13 +594,13 @@ until the user makes a real edit.
 | `413` | `body` | Request body exceeds 100 KB. |
 | `422` | `detail` | No template configured for this day's slot type. |
 | `429` | `detail` | Draft rate limit (`LLM_DRAFT_RATE_LIMIT_PER_HOUR`, default 10/hr) exceeded. Counter is independent from the chat bucket. |
-| `502` | `detail` | LLM provider returned an error, or response failed JSON / schema validation. |
+| `502` | `detail` | LLM provider returned an error, or response failed JSON / schema validation. On any JSON / envelope / schema-validation failure (`AIParseError`) `detail` is the fixed generic string `AI_PARSE_ERROR_DETAIL` ("The assistant's reply couldn't be applied. Try rephrasing.") — the real validation message (which can echo model-supplied text) goes only to the server log at `DEBUG` (a `WARNING` line logs that a draft parse failure happened, with no message text), never to the client (feature 0084). |
 | `503` | `detail` | `LLM_API_KEY` is not configured. |
 | `504` | `detail` | LLM provider timed out. |
 
 The `409` and `422` checks both run before any LLM call, so neither burns the rate-limit budget. The `409` is re-checked under `select_for_update()` after the LLM call to close the race window with concurrent `create_block` requests.
 
-Audit row: every call (success or failure) writes one `AIInteraction` row with `kind="draft"`, `user_command="[DRAFT]"`, and `actions_json` reflecting the LLM's parsed actions.
+Audit row: every call (success or failure) writes one `AIInteraction` row with `kind="draft"`, `user_command="[DRAFT]"`, and `actions_json` reflecting the LLM's **post-normalisation** parsed actions — category labels / the user's own wording are already resolved to slugs, an unresolvable value falls back to the sink category (feature 0084). The model's verbatim output stays in `ai_response`. Unlike chat, a draft `update` never occurs (drafts only accept `add`), so there is no `unresolved_categories` payload here.
 
 ---
 
