@@ -23,7 +23,7 @@ from ai.service import (
     AITimeoutError,
     AIUnavailableError,
 )
-from ai.views import AI_PARSE_ERROR_DETAIL, _build_resolution_ask
+from ai.views import AI_PARSE_ERROR_DETAIL, _build_category_ask, _build_resolution_ask
 from asgiref.sync import sync_to_async
 from django.contrib.auth.models import User
 from django.core.cache import cache
@@ -709,6 +709,31 @@ class TestCategoryAsk:
         interaction = AIInteraction.objects.get(schedule=today_schedule)
         payload = json.loads(interaction.ai_response)
         assert payload["unresolved_categories"][0]["original_index"] == 0
+
+
+class TestBuildCategoryAsk:
+    """Feature 0084: unit tests for the pure ``_build_category_ask`` helper."""
+
+    _RECORD = UnresolvedCategory(original_index=0, task_id=7, value="рабочая", dropped=True)
+
+    def test_lists_labels_in_catalog_order_and_names_block(self):
+        categories = [Category(slug="work", label="Work"), Category(slug="other", label="Other")]
+        ask = _build_category_ask((self._RECORD,), {7: "Meeting"}, categories)
+        assert ask == 'Which category should "Meeting" use: Work, Other?'
+
+    def test_unknown_task_id_falls_back_to_that_block(self):
+        ask = _build_category_ask((self._RECORD,), {}, [Category(slug="work", label="Work")])
+        assert ask == 'Which category should "that block" use: Work?'
+
+    def test_truncates_long_title(self):
+        ask = _build_category_ask((self._RECORD,), {7: "x" * 80}, [Category(label="Work")])
+        assert f'"{"x" * 60}..."' in ask
+
+    def test_no_unresolved_returns_none(self):
+        assert _build_category_ask((), {7: "Meeting"}, [Category(label="Work")]) is None
+
+    def test_empty_categories_returns_none(self):
+        assert _build_category_ask((self._RECORD,), {7: "Meeting"}, []) is None
 
 
 class TestCategoryAskIndexSpacesEndToEnd:

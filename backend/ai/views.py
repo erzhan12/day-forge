@@ -99,8 +99,8 @@ AI_PARSE_ERROR_DETAIL = "The assistant's reply couldn't be applied. Try rephrasi
 
 # Cap on the chat audit row's ``error_detail`` (the ``AIParseError`` message,
 # NOT the raw provider response, which already has its own cap above).
-# 2,000 chars bounds a worst-case ~20-action per-action error list
-# (``MAX_ACTIONS_PER_COMMAND``) without materially widening the row.
+# A pragmatic size cap, not a bound: a 20-action error list can exceed it,
+# in which case the tail is cut (the full model output is still in ``raw``).
 _MAX_ERROR_DETAIL_LEN = 2_000
 
 
@@ -355,7 +355,7 @@ def _build_category_ask(unresolved: tuple, block_titles: dict[int, str], categor
     rejected value itself never appears here: the audit row's ``raw``
     already holds it, and this is a user-facing string.
     """
-    if not unresolved:
+    if not unresolved or not categories:
         return None
     record = unresolved[0]
     title = block_titles.get(record.task_id, "that block")

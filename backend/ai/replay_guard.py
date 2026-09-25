@@ -94,16 +94,17 @@ _STOPWORDS = frozenset(
 _GUARD_TITLE_TRUNCATE = 60
 
 
-def truncate_title(title: str, limit: int = _GUARD_TITLE_TRUNCATE) -> str:
+def truncate_title(title: str) -> str:
     """Truncate a block title for a server-owned ask string.
 
     Public (feature 0084) so callers outside this module — the category ask
     in ``ai/views.py`` — can share the exact truncation behaviour
     ``build_guard_ask`` uses, without importing the private
-    ``_GUARD_TITLE_TRUNCATE`` constant. ``limit`` defaults to the guard's own
-    60-char cutoff; callers with a different budget may override it.
+    ``_GUARD_TITLE_TRUNCATE`` constant.
     """
-    return title if len(title) <= limit else title[:limit] + "..."
+    if len(title) <= _GUARD_TITLE_TRUNCATE:
+        return title
+    return title[:_GUARD_TITLE_TRUNCATE] + "..."
 
 
 def build_guard_ask(title: str) -> str:
