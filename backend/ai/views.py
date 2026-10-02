@@ -58,6 +58,7 @@ from ai.replay_guard import (
     find_replayed_actions,
     truncate_title,
 )
+from ai.schemas import MAX_ACTIONS_PER_COMMAND
 from ai.service import (
     AIChatResult,
     AIDraftResult,
@@ -1097,6 +1098,16 @@ def _validate_chat_messages(messages: object) -> str | None:
                 return f"messages[{idx}].{flag_name} must be a boolean"
             if role != "assistant":
                 return f"messages[{idx}].{flag_name} is only valid on assistant turns"
+        if "applied_add_block_ids" in msg:
+            ids = msg["applied_add_block_ids"]
+            if role != "assistant":
+                return f"messages[{idx}].applied_add_block_ids is only valid on assistant turns"
+            if (
+                not isinstance(ids, list)
+                or len(ids) > MAX_ACTIONS_PER_COMMAND
+                or any(type(block_id) is not int or block_id <= 0 for block_id in ids)
+            ):
+                return f"messages[{idx}].applied_add_block_ids must be a list of block IDs"
         content = msg.get("content")
         if not isinstance(content, str):
             return f"messages[{idx}].content must be a string"
@@ -1366,7 +1377,11 @@ async def ai_chat(request, date):
     # one. Runs BEFORE the apply lock/fingerprint round-trip: a stale
     # snapshot plus a replayed add should surface the guard's own ask, not
     # a 409, and the user needs a conversational recovery, not an error.
-    offending = find_replayed_actions(result.parsed_actions, messages)
+    offending = find_replayed_actions(
+        result.parsed_actions,
+        messages,
+        existing_blocks={block.id: block.title for block in current_blocks},
+    )
     if offending:
         return await _replay_guard_response(
             interaction,

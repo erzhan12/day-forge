@@ -83,12 +83,100 @@ class TestStepATraceability:
         assert find_replayed_actions([_add("Momentum[2]")], messages) == ()
 
 
-class TestIsAskSkipsGuard:
-    def test_is_ask_true_skips_guard_even_for_textbook_replay(self):
+class TestIsAskChecksOlderTurns:
+    def test_pending_ask_still_flags_add_from_older_completed_turn(self):
         messages = [
             _u("add Momentum (Personal)"),
-            _a("What would you like to add?", is_ask=True),
-            _u("Notes"),
+            _a("Added Momentum"),
+            _u("add Notes"),
+            _a("What time?", is_ask=True),
+            _u("14:00"),
+        ]
+        assert find_replayed_actions([_add("Momentum[2]")], messages) == (0,)
+
+    def test_pending_add_is_allowed_when_no_older_replay_evidence(self):
+        messages = [
+            _u("add Momentum"),
+            _a("What time?", is_ask=True),
+            _u("14:00"),
+        ]
+        assert find_replayed_actions([_add("Momentum")], messages) == ()
+
+    def test_two_clarifications_keep_original_add_pending_and_older_add_guarded(self):
+        messages = [
+            _u("add Vocal"),
+            _a("Added Vocal"),
+            _u("add Stretching after Vocal"),
+            _a("How long?", is_ask=True),
+            _u("25 minutes"),
+            _a("Past or from now?", is_ask=True),
+            _u("past"),
+        ]
+        assert find_replayed_actions([_add("Stretching")], messages) == ()
+        assert find_replayed_actions([_add("Vocal[2]")], messages) == (0,)
+
+    def test_partial_apply_does_not_repeat_existing_sibling_after_ask(self):
+        messages = [
+            _u("add Gym and Vocal"),
+            _a("Added Gym. When should Vocal start?", is_ask=True, applied_add_block_ids=[1]),
+            _u("15 minutes"),
+        ]
+        assert find_replayed_actions(
+            [_add("Gym[2]"), _add("Vocal")], messages, existing_blocks={1: "Gym"}
+        ) == (0,)
+
+    def test_latest_explicit_repeat_still_allows_existing_title_after_ask(self):
+        messages = [
+            _u("add Gym and Vocal"),
+            _a("Added Gym. When should Vocal start?", is_ask=True, applied_add_block_ids=[1]),
+            _u("add Gym again"),
+        ]
+        assert find_replayed_actions([_add("Gym[2]")], messages, existing_blocks={1: "Gym"}) == ()
+
+    def test_prior_single_add_repeat_survives_time_clarification(self):
+        messages = [
+            _u("add Vocal"),
+            _a("Added Vocal"),
+            _u("add Gym after Vocal"),
+            _a("Past or from now forward?", is_ask=True, applied_add_block_ids=[]),
+            _u("past"),
+        ]
+        assert find_replayed_actions(
+            [_add("Gym[2]")], messages, existing_blocks={1: "Gym", 2: "Vocal"}
+        ) == ()
+        assert find_replayed_actions(
+            [_add("Vocal[2]")], messages, existing_blocks={1: "Gym", 2: "Vocal"}
+        ) == (0,)
+
+    def test_multi_add_still_blocks_already_applied_sibling(self):
+        messages = [
+            _u("add Gym plus Vocal"),
+            _a("When should Vocal start?", is_ask=True, applied_add_block_ids=[1]),
+            _u("15 minutes"),
+        ]
+        assert find_replayed_actions([_add("Gym[2]")], messages, existing_blocks={1: "Gym"}) == (
+            0,
+        )
+
+    def test_partial_apply_across_two_asks(self):
+        messages = [
+            _u("add Gym plus Vocal"),
+            _a("When should Vocal start?", is_ask=True, applied_add_block_ids=[1]),
+            _u("after lunch"),
+            _a("Past or from now?", is_ask=True, applied_add_block_ids=[]),
+            _u("past"),
+        ]
+        assert find_replayed_actions(
+            [_add("Gym[2]"), _add("Vocal")], messages, existing_blocks={1: "Gym"}
+        ) == (0,)
+
+    def test_title_explicitly_repeated_in_latest_answer_is_allowed(self):
+        messages = [
+            _u("add Momentum"),
+            _a("Added Momentum"),
+            _u("add Notes"),
+            _a("What time?", is_ask=True),
+            _u("add Momentum again"),
         ]
         assert find_replayed_actions([_add("Momentum[2]")], messages) == ()
 

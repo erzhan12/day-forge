@@ -15,8 +15,9 @@ Algorithm (see ``docs/features/0083_PLAN.md`` §B2 for the full rationale
 and the false-positive/false-negative trade-offs this makes on purpose):
 
 1. If the immediately preceding assistant turn carried ``is_ask: True``, the
-   latest turn is an answer to a pending question — skip the guard entirely
-   for this turn.
+   latest turn may answer a pending question. Exclude the contiguous chain
+   of pending user/ask pairs from prior replay evidence, while still checking
+   older handled turns.
 2. If instead it carried ``is_error: True``, walk back the CONTIGUOUS chain
    of ``(user, is_error assistant)`` pairs. The failed turns (and, if the
    chain began as the answer to a pending ask, that ask turn too) are
@@ -160,7 +161,14 @@ def _letter_tokens(text: str) -> list[str]:
     return [t for t in _tokenize(_normalise(text)) if _has_letter(t)]
 
 
-def _is_replay(title: str, latest_text: str, prior_text: str, ask_text: str | None) -> bool:
+def _is_replay(
+    title: str,
+    latest_text: str,
+    prior_text: str,
+    ask_text: str | None,
+    *,
+    already_present: bool = False,
+) -> bool:
     title_norm = _normalise(title)
     title_letters = [t for t in _tokenize(title_norm) if _has_letter(t)]
     if not title_letters:
@@ -184,6 +192,11 @@ def _is_replay(title: str, latest_text: str, prior_text: str, ask_text: str | No
 
     if traceable_to(latest_text):
         return False
+    if already_present:
+        # An ask can accompany a partially applied turn. A block already in
+        # the current schedule must not be silently added a second time just
+        # because its original request sits inside the pending ask chain.
+        return True
     if ask_text is not None and traceable_to(ask_text):
         return False
 
@@ -237,28 +250,71 @@ def _collect_failure_chain_start(messages: list[dict]) -> tuple[int, str | None]
     return prior_end, ask_text
 
 
-def find_replayed_actions(parsed_actions: list[dict], messages: list[dict]) -> tuple[int, ...]:
+def _collect_ask_chain_start(messages: list[dict]) -> int:
+    """Index of the first user turn in the current pending ask chain."""
+    k = len(messages) - 3
+    while (
+        k >= 2
+        and messages[k - 1].get("role") == "assistant"
+        and messages[k - 1].get("is_ask") is True
+        and messages[k - 2].get("role") == "user"
+    ):
+        k -= 2
+    return max(0, k)
+
+
+def find_replayed_actions(
+    parsed_actions: list[dict], messages: list[dict], existing_blocks: dict[int, str] | None = None
+) -> tuple[int, ...]:
     """Return the indices of ``add`` actions in ``parsed_actions`` that
     replay an earlier, already-handled request rather than the latest user
     turn. An empty tuple means: apply as usual (no violation)."""
     previous_turn = messages[-2] if len(messages) >= 2 else None
     is_previous_assistant = previous_turn is not None and previous_turn.get("role") == "assistant"
-    if is_previous_assistant and previous_turn.get("is_ask") is True:
-        return ()
-
     prior_end = len(messages) - 1
     ask_text: str | None = None
-    if is_previous_assistant and previous_turn.get("is_error") is True:
+    if is_previous_assistant and previous_turn.get("is_ask") is True:
+        # Every user/ask pair in the uninterrupted chain is still pending.
+        # Older turns have been handled and remain replay evidence, even if
+        # the last ask was a mistaken conversational question.
+        prior_end = _collect_ask_chain_start(messages)
+    elif is_previous_assistant and previous_turn.get("is_error") is True:
         prior_end, ask_text = _collect_failure_chain_start(messages)
 
     latest_text = messages[-1]["content"]
     prior_text = "\n".join(m["content"] for m in messages[:prior_end])
+    pending_ask = is_previous_assistant and previous_turn.get("is_ask") is True
+    existing_blocks = existing_blocks or {}
+    already_applied_titles: set[str] = set()
+    if pending_ask:
+        ask_turns = messages[prior_end + 1 : -1 : 2]
+        if all(isinstance(turn.get("applied_add_block_ids"), list) for turn in ask_turns):
+            applied_ids = {
+                block_id
+                for turn in ask_turns
+                for block_id in turn["applied_add_block_ids"]
+            }
+            already_applied_titles = {
+                _normalise(existing_blocks[block_id])
+                for block_id in applied_ids
+                if block_id in existing_blocks
+            }
+        else:
+            # Older clients cannot identify a partial apply. Fail closed
+            # for same-title blocks while a clarification remains pending.
+            already_applied_titles = {_normalise(title) for title in existing_blocks.values()}
 
     offending = []
     for idx, action in enumerate(parsed_actions):
         if action.get("type") != "add":
             continue
         title = action.get("title", "")
-        if _is_replay(title, latest_text, prior_text, ask_text):
+        if _is_replay(
+            title,
+            latest_text,
+            prior_text,
+            ask_text,
+            already_present=pending_ask and _normalise(title) in already_applied_titles,
+        ):
             offending.append(idx)
     return tuple(offending)

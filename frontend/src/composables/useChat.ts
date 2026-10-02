@@ -31,6 +31,9 @@ export interface ChatMessage {
   explanation: string | null
   ts: number
   appliedResult?: AppliedBlockResult[]
+  // IDs added by this assistant turn. Sent back with the transcript so the
+  // server can tell a partial apply from a preexisting same-title block.
+  appliedAddBlockIds?: number[]
   // Feature 0083 (issue #219): set only on the two synthetic failure
   // bubbles below. Sent to the server as `is_error` so the replay guard
   // can exclude a never-applied failed turn from its evidence — see
@@ -102,6 +105,14 @@ function appliedResultFromDiff(snapshot: TimeBlock[], blocks: unknown): AppliedB
     if (!afterById.has(block.id)) result.push({ title: block.title, start_time: block.start_time, end_time: block.end_time, category: block.category, change: "removed" })
   }
   return result
+}
+
+function addedBlockIdsFromDiff(snapshot: TimeBlock[], blocks: unknown): number[] | undefined {
+  if (!Array.isArray(blocks)) return undefined
+  const beforeIds = new Set(snapshot.map((block) => block.id))
+  return (blocks as TimeBlock[])
+    .filter((block) => !beforeIds.has(block.id))
+    .map((block) => block.id)
 }
 
 /**
@@ -205,11 +216,14 @@ export function useChat() {
           // guard, not a security control (see RULES.md and docs/api.md).
           // Omitted entirely on every other turn so the wire shape stays
           // unchanged for ordinary user/explanation turns.
-          messages: messages.value.map(({ role, content, ask, isError }) => ({
+          messages: messages.value.map(({ role, content, ask, isError, appliedAddBlockIds }) => ({
             role,
             content,
             ...(role === "assistant" && ask !== null ? { is_ask: true } : {}),
             ...(role === "assistant" && isError ? { is_error: true } : {}),
+            ...(role === "assistant" && appliedAddBlockIds !== undefined
+              ? { applied_add_block_ids: appliedAddBlockIds }
+              : {}),
           })),
         },
       )) as ChatApiResult
@@ -238,6 +252,11 @@ export function useChat() {
       const appliedResult = applied && !partial
         ? appliedResultFromDiff(snapshot, data.blocks)
         : undefined
+      const appliedAddBlockIds = ask === null
+        ? undefined
+        : applied
+          ? addedBlockIdsFromDiff(snapshot, data.blocks)
+          : []
 
       // Prefer ask over explanation in the assistant message's `content`
       // so the next turn's transcript carries the actual question the
@@ -252,6 +271,7 @@ export function useChat() {
           explanation,
           ts: Date.now(),
           appliedResult,
+          appliedAddBlockIds,
         },
       ]
       pendingAsk.value = ask
