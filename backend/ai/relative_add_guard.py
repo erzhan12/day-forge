@@ -12,8 +12,13 @@ _ADD_COMMAND_RE = re.compile(
 )
 _RELATION_RE = re.compile(r"\b(after|before|после|до)\b", re.IGNORECASE | re.UNICODE)
 _GAP_RE = re.compile(
-    r"\b(?:(\d+)\s*[- ]?\s*(?:min|minutes?)\s+gap|gap\s+(?:of\s+)?(\d+)\s*(?:min|minutes?))\b",
-    re.IGNORECASE,
+    r"\b(?:"
+    r"(\d+)\s*[- ]?\s*(?:min(?:ute)?s?|мин(?:ут\w*)?)\s+"
+    r"(?:gap|отступ\w*|промежут\w*|интервал\w*)"
+    r"|(?:gap|отступ\w*|промежут\w*|интервал\w*|через)\s+"
+    r"(?:of\s+)?(\d+)\s*(?:min(?:ute)?s?|мин(?:ут\w*)?)"
+    r")\b",
+    re.IGNORECASE | re.UNICODE,
 )
 _CLOCK_REF_RE = re.compile(
     r"^\s*(?:at\s+)?(?:\d{1,2}(?::\d{2})?\s*(?:am|pm)?|noon|midnight)\b",

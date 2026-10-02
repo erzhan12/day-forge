@@ -59,6 +59,22 @@ def test_explicit_add_must_keep_requested_gap():
     ) == "What start time should the new block have after Gym?"
 
 
+def test_explicit_add_must_keep_russian_requested_gap():
+    assert relative_add_guard_ask(
+        [_user("добавь Вокал после Зала с отступом 10 минут")],
+        [_add(start_time="09:35", end_time="10:00")],
+        [_block(title="Зал")],
+    ) == "What start time should the new block have after Зал?"
+
+
+def test_explicit_add_must_keep_gap_in_mins_form():
+    assert relative_add_guard_ask(
+        [_user("add Vocal after Gym with a 10 mins gap")],
+        [_add(start_time="09:35", end_time="10:00")],
+        [_block()],
+    ) == "What start time should the new block have after Gym?"
+
+
 def test_before_relation_checks_end_time():
     assert relative_add_guard_ask(
         [_user("add Vocal before Gym")],
