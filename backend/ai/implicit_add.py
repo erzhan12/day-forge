@@ -246,6 +246,12 @@ _EN_FORMS = sorted(
 )
 _EN_VERB_RE = re.compile(r"\b(?:" + "|".join(_EN_FORMS) + r")\b", re.IGNORECASE)
 _RU_STEM_RE = re.compile(r"\b(?:" + "|".join(_RU_STEMS) + r")", re.UNICODE | re.IGNORECASE)
+_ADD_COMMAND_RE = re.compile(r"(?:add\b|добав\w*)", re.UNICODE | re.IGNORECASE)
+_COMMAND_PREAMBLE_RE = re.compile(
+    r"^(?:(?:please|can you|could you|would you|i want to|i need to|"
+    r"i'd like to|пожалуйста|можешь|можете|хочу)\s+)+",
+    re.IGNORECASE,
+)
 _CYRILLIC_RE = re.compile(r"[Ѐ-ӿ]")
 _EDGE_PUNCT_RE = re.compile(r"^[^\w]+|[^\w]+$", re.UNICODE)
 # Leading run of letters only, so "What's next" -> "what", "How's" -> "how".
@@ -258,6 +264,16 @@ def _has_cyrillic(text: str) -> bool:
 
 def _has_command_verb(text: str) -> bool:
     return bool(_EN_VERB_RE.search(text)) or bool(_RU_STEM_RE.search(text))
+
+
+def has_explicit_add_command(text: str) -> bool:
+    """Recognize an add request, including the implicit-add rewrite.
+
+    Edit and cancellation commands are excluded: misclassifying their
+    completion replies as pending asks would disable the replay guard.
+    """
+    command = _COMMAND_PREAMBLE_RE.sub("", text.strip())
+    return bool(_ADD_COMMAND_RE.match(command))
 
 
 def _is_question(text: str) -> bool:

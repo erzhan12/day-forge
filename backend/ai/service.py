@@ -50,7 +50,7 @@ from openai import AsyncOpenAI
 from schedules.window import DEFAULT_WINDOW
 
 from ai.category_resolution import UnresolvedCategory, normalize_action_categories
-from ai.implicit_add import apply_implicit_add
+from ai.implicit_add import apply_implicit_add, has_explicit_add_command
 from ai.prompts import (
     _DEFAULT_CATEGORIES,
     build_chat_user_message,
@@ -66,6 +66,30 @@ from ai.schemas import (
 )
 
 logger = logging.getLogger(__name__)
+
+_CONVERSATIONAL_CLOSERS = (
+    "anything else",
+    "something else",
+    "another task",
+    "more help",
+    "что-нибудь ещё",
+    "что-нибудь еще",
+    "что-то ещё",
+    "что-то еще",
+    "ещё что-нибудь",
+    "еще что-нибудь",
+)
+
+
+def _is_recoverable_chat_question(explanation: str) -> bool:
+    """Only recover a standalone question, never a status plus polite closer."""
+    question = explanation.strip()
+    if not question.endswith(("?", "？")):
+        return False
+    body = question[:-1].casefold().strip()
+    if any(mark in body for mark in (".", "!", "?", "？", "\n")):
+        return False
+    return not body.endswith(_CONVERSATIONAL_CLOSERS)
 
 
 class AIError(Exception):
@@ -431,6 +455,22 @@ async def run_chat(messages, schedule, blocks, rules, now, categories=None) -> A
         parsed = json.loads(raw)
     except json.JSONDecodeError as e:
         raise AIParseError(f"AI returned invalid JSON: {e}", raw_response_text=raw) from e
+
+    # A model can ask a question in explanation while leaving ask=null.
+    # Recover it only for add requests. The LLM-bound copy includes the
+    # implicit add for bare activity names; the original user text stays
+    # untouched for audit and replay checks. Completion and cancellation
+    # replies with a polite question must not disable the replay guard.
+    if (
+        has_explicit_add_command(llm_latest_user_turn)
+        and isinstance(parsed, dict)
+        and parsed.get("actions") == []
+        and "ask" in parsed
+        and parsed["ask"] is None
+        and isinstance(parsed.get("explanation"), str)
+        and _is_recoverable_chat_question(parsed["explanation"])
+    ):
+        parsed["ask"] = parsed["explanation"].strip()
 
     envelope_errors = validate_chat_response_envelope(parsed)
     if envelope_errors:

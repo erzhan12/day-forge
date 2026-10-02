@@ -259,7 +259,7 @@ describe("useChat", () => {
     const secondBody = requestJsonMock.mock.calls[1][2] as { messages: unknown[] }
     expect(secondBody.messages).toEqual([
       { role: "user", content: "add gym" },
-      { role: "assistant", content: "when?", is_ask: true },
+      { role: "assistant", content: "when?", is_ask: true, applied_add_block_ids: [] },
       { role: "user", content: "18:00" },
     ])
   })
@@ -371,6 +371,38 @@ describe("useChat", () => {
       ask: "Should I look for an earlier or later slot?",
     })
     expect(chat.messages.value.at(-1)?.appliedResult).toBeUndefined()
+  })
+
+  it("sends IDs added before a partial apply ask on the next turn", async () => {
+    const chat = useChat()
+    chat.setActiveDate("2026-05-07")
+    requestJsonMock
+      .mockResolvedValueOnce({
+        ok: true,
+        data: {
+          blocks: [{ ...BLOCK }, { ...BLOCK, id: 2, title: "Gym" }],
+          explanation: "Added Gym",
+          ask: "When should Vocal start?",
+          applied: true,
+          partial: true,
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        data: { blocks: null, explanation: "ok", ask: null, applied: false },
+      })
+
+    await chat.submitTurn("add Gym plus Vocal", snapshotBlocks, vi.fn())
+    await chat.submitTurn("15 minutes", snapshotBlocks, vi.fn())
+
+    const secondBody = requestJsonMock.mock.calls[1][2] as { messages: unknown[] }
+    expect(secondBody.messages[1]).toEqual({
+      role: "assistant",
+      content: "When should Vocal start?",
+      is_ask: true,
+      applied_add_block_ids: [2],
+    })
+    expect(chat.messages.value[1].appliedResult).toBeUndefined()
   })
 
   it("409 schedule_changed shows retry message, reloads, no undo, apiHealthy true", async () => {

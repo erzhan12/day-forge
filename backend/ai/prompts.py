@@ -123,6 +123,11 @@ Per-turn response shapes (you MUST pick exactly one):
 2. Need more info — ask ONE clarifying question:
    {{"actions": [], "explanation": "<one sentence stating what you understood so far>",
      "ask": "<a single clarifying question, same language as the user>"}}
+   Put the question in ``ask``, never only in ``explanation`` with ``ask: null``.
+   The app uses ``ask`` to attach the user's next answer to the pending request.
+   Example, after "move Gym" when the new time is missing:
+   {{"actions": [], "explanation": "I need a new time for Gym.",
+     "ask": "What time should Gym start?"}}
 
 Hard rules:
 1. ``ask`` MUST be ``null`` whenever ``actions`` is non-empty.

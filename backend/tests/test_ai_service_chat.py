@@ -377,6 +377,150 @@ class TestParsing:
         assert result.ask == "when?"
         assert result.parsed_actions == []
 
+    @pytest.mark.parametrize(
+        "question",
+        [
+            "Place Stretching after Vocal (past) or from now forward?",
+            "Поставить растяжку после вокала или начиная с текущего времени?  ",
+            "Which time？",
+        ],
+    )
+    def test_no_action_question_in_explanation_becomes_ask(
+        self, patch_client, fake_schedule, now, question
+    ):
+        raw = _ok_response(explanation=question)
+        patch_client(raw)
+        result = run_chat(
+            [{"role": "user", "content": "add Stretching after the Vocal"}],
+            fake_schedule,
+            [],
+            [],
+            now,
+        )
+        assert result.ask == question.strip()
+        assert result.parsed_actions == []
+        assert result.raw_response_text == raw
+
+    @pytest.mark.parametrize(
+        "latest_turn",
+        [
+            "thanks",
+            "show my plan",
+            "what is next?",
+            "привет",
+        ],
+    )
+    def test_conversational_question_does_not_become_pending_ask(
+        self, patch_client, fake_schedule, now, latest_turn
+    ):
+        patch_client(_ok_response(explanation="You're welcome. Need anything else?"))
+        result = run_chat(
+            [{"role": "user", "content": latest_turn}], fake_schedule, [], [], now
+        )
+        assert result.ask is None
+        assert result.explanation == "You're welcome. Need anything else?"
+
+    @pytest.mark.parametrize(
+        "explanation",
+        [
+            "Okay, canceled. Anything else?",
+            "Anything else?",
+            "Ready for another task?",
+            "Отменено. Что-нибудь ещё?",
+            "Which block should I cancel?",
+            "Canceled, what would you like to do next?",
+        ],
+    )
+    def test_cancellation_closer_does_not_become_pending_ask(
+        self, patch_client, fake_schedule, now, explanation
+    ):
+        patch_client(_ok_response(explanation=explanation))
+        result = run_chat(
+            [{"role": "user", "content": "cancel that"}], fake_schedule, [], [], now
+        )
+        assert result.ask is None
+        assert result.explanation == explanation
+
+    @pytest.mark.parametrize(
+        "latest_turn",
+        ["please add Stretching", "can you add Stretching", "добавь растяжку"],
+    )
+    def test_polite_and_russian_adds_recover_questions(
+        self, patch_client, fake_schedule, now, latest_turn
+    ):
+        patch_client(_ok_response(explanation="What time?"))
+        result = run_chat(
+            [{"role": "user", "content": latest_turn}], fake_schedule, [], [], now
+        )
+        assert result.ask == "What time?"
+
+    @pytest.mark.parametrize("latest_turn", ["Stretching", "Review PR"])
+    def test_bare_activity_rewrite_can_recover_question(
+        self, patch_client, fake_schedule, now, latest_turn
+    ):
+        completions = patch_client(_ok_response(explanation="Past or from now forward?"))
+        result = run_chat(
+            [{"role": "user", "content": latest_turn}], fake_schedule, [], [], now
+        )
+        assert completions.calls[0]["messages"][-1]["content"] == f"add {latest_turn}"
+        assert result.ask == "Past or from now forward?"
+
+    def test_closing_pending_ask_does_not_recover_polite_question(
+        self, patch_client, fake_schedule, now
+    ):
+        patch_client(_ok_response(explanation="Okay, need anything else?"))
+        result = run_chat(
+            [
+                {"role": "user", "content": "add Stretching after Vocal"},
+                {"role": "assistant", "content": "When?", "is_ask": True},
+                {"role": "user", "content": "never mind"},
+            ],
+            fake_schedule,
+            [],
+            [],
+            now,
+        )
+        assert result.ask is None
+
+    @pytest.mark.parametrize(
+        ("actions", "explanation", "ask"),
+        [
+            ([], "You have three blocks left.", None),
+            ([], "Thanks!", None),
+            ([], "After Vocal?", "Which time should Stretching start?"),
+            ([{"type": "add", "title": "Gym", "category": "personal"}], "Anything else?", None),
+        ],
+    )
+    def test_question_recovery_preserves_other_response_types(
+        self, patch_client, fake_schedule, now, actions, explanation, ask
+    ):
+        patch_client(_ok_response(actions=actions, explanation=explanation, ask=ask))
+        result = run_chat(
+            [{"role": "user", "content": "add Gym"}], fake_schedule, [], [], now
+        )
+        assert result.ask == ask
+        assert result.explanation == explanation
+        assert result.parsed_actions == actions
+
+    def test_recovered_question_still_obeys_ask_length_limit(
+        self, patch_client, fake_schedule, now, monkeypatch
+    ):
+        monkeypatch.setattr("django.conf.settings.LLM_CHAT_MAX_ASK_CHARS", 10)
+        raw = _ok_response(explanation="Which time should Stretching start?")
+        patch_client(raw)
+        with pytest.raises(AIParseError) as exc:
+            run_chat(
+                [{"role": "user", "content": "add Stretching"}], fake_schedule, [], [], now
+            )
+        assert exc.value.raw_response_text == raw
+
+    def test_question_recovery_does_not_accept_missing_ask(
+        self, patch_client, fake_schedule, now
+    ):
+        patch_client(json.dumps({"actions": [], "explanation": "Which time?"}))
+        with pytest.raises(AIParseError):
+            run_chat([{"role": "user", "content": "add Gym"}], fake_schedule, [], [], now)
+
     def test_returns_chat_result_with_actions(self, patch_client, fake_schedule, now):
         action = {
             "type": "add",

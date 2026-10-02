@@ -9,6 +9,7 @@ handling are all exercised against real DB.
 import datetime
 import hashlib
 import json
+from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -470,6 +471,20 @@ class TestValidation:
             },
         )
         assert resp.status_code == 200
+
+    @pytest.mark.django_db
+    def test_applied_add_ids_rejected_on_user_or_with_invalid_values(self, auth_client):
+        bad_messages = [
+            [{**_user_turn("hi"), "applied_add_block_ids": [1]}],
+            [
+                _user_turn("hi"),
+                {**_ask_turn("when?"), "applied_add_block_ids": [True]},
+                _user_turn("now"),
+            ],
+        ]
+        for messages in bad_messages:
+            resp = _post(auth_client, {"messages": messages})
+            assert resp.status_code == 400
 
 
 class TestClarifyingQuestion:
@@ -3033,6 +3048,86 @@ class TestReplayGuard:
         assert resp.json()["applied"] is True
 
     @pytest.mark.django_db
+    def test_pending_ask_does_not_repeat_partially_applied_sibling(
+        self, auth_client, today_schedule, monkeypatch
+    ):
+        gym = TimeBlock.objects.create(
+            schedule=today_schedule,
+            title="Gym",
+            start_time="09:00",
+            end_time="09:25",
+            category="personal",
+        )
+        _patch_run_chat(
+            monkeypatch,
+            AIChatResult(
+                raw_response_text="{}",
+                parsed_actions=[{"type": "add", "title": "Gym[2]", "category": "personal"}],
+                explanation="Added another Gym.",
+                ask=None,
+            ),
+        )
+        response = _post(
+            auth_client,
+            {
+                "messages": [
+                    _user_turn("add Gym and Vocal"),
+                    {
+                        **_ask_turn("Added Gym. When should Vocal start?"),
+                        "applied_add_block_ids": [gym.id],
+                    },
+                    _user_turn("15 minutes"),
+                ]
+            },
+        )
+        assert response.status_code == 200, response.content
+        assert response.json()["applied"] is False
+        assert response.json()["outcomes"][0]["reason_code"] == "replay_guard"
+        assert TimeBlock.objects.filter(schedule=today_schedule).count() == 1
+
+    @pytest.mark.django_db
+    def test_pending_ask_can_repeat_preexisting_title_when_nothing_was_added(
+        self, auth_client, today_schedule, monkeypatch
+    ):
+        TimeBlock.objects.create(
+            schedule=today_schedule,
+            title="Gym",
+            start_time="09:00",
+            end_time="09:25",
+            category="personal",
+        )
+        _patch_run_chat(
+            monkeypatch,
+            AIChatResult(
+                raw_response_text="{}",
+                parsed_actions=[
+                    {
+                        "type": "add",
+                        "title": "Gym[2]",
+                        "category": "personal",
+                        "start_time": "10:00",
+                        "end_time": "10:25",
+                    }
+                ],
+                explanation="Added another Gym.",
+                ask=None,
+            ),
+        )
+        response = _post(
+            auth_client,
+            {
+                "messages": [
+                    _user_turn("add Gym after Vocal"),
+                    {**_ask_turn("Past or from now?"), "applied_add_block_ids": []},
+                    _user_turn("past"),
+                ]
+            },
+        )
+        assert response.status_code == 200, response.content
+        assert response.json()["applied"] is True
+        assert TimeBlock.objects.filter(schedule=today_schedule).count() == 2
+
+    @pytest.mark.django_db
     def test_no_slot_retry_with_smaller_duration_skips_guard(
         self, auth_client, today_schedule, monkeypatch
     ):
@@ -3410,6 +3505,170 @@ class TestReplayGuard:
         assert resp.status_code == 200, resp.content
         assert resp.json()["applied"] is False
         assert TimeBlock.objects.filter(schedule=today_schedule).count() == 0
+
+
+@pytest.mark.django_db
+def test_misplaced_clarification_keeps_past_reply_attached_to_pending_add(
+    auth_client, today_schedule, monkeypatch
+):
+    """Use the real service, replay guard and apply path across three turns."""
+    for title, start, end in [("Gym", "09:00", "09:30"), ("Vocal", "09:40", "10:05")]:
+        TimeBlock.objects.create(
+            schedule=today_schedule,
+            title=title,
+            start_time=start,
+            end_time=end,
+            category="personal",
+        )
+    question = "Place Stretching after Vocal (past) or from now forward?"
+    add_stretching = {
+        "type": "add",
+        "title": "Stretching",
+        "category": "personal",
+        "start_time": "10:15",
+        "end_time": "10:40",
+    }
+    raw_question = json.dumps({"actions": [], "explanation": question, "ask": None})
+    responses = iter(
+        [
+            raw_question,
+            json.dumps(
+                {"actions": [add_stretching], "explanation": "Added Stretching.", "ask": None}
+            ),
+            json.dumps(
+                {
+                    "actions": [{**add_stretching, "title": "Stretching[2]"}],
+                    "explanation": "Added Stretching[2].",
+                    "ask": None,
+                }
+            ),
+        ]
+    )
+    calls = []
+
+    async def complete(**kwargs):
+        calls.append(kwargs)
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content=next(responses)))]
+        )
+
+    monkeypatch.setattr(
+        "ai.service._get_client",
+        lambda: SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=complete))),
+    )
+    monkeypatch.setattr("django.conf.settings.LLM_API_KEY", "test-key")
+    messages = [
+        _user_turn("add Vocal after the Gym"),
+        _assistant_turn("Adding Vocal for 25 min after Gym with 10-min gap."),
+        _user_turn("add Stretching after the Vocal"),
+    ]
+    response = _post(auth_client, {"messages": messages})
+    assert response.status_code == 200, response.content
+    first = response.json()
+    assert first["ask"] == question
+    assert first["applied"] is False
+    blocks = TimeBlock.objects.filter(schedule=today_schedule)
+    assert blocks.count() == 2
+    interaction = AIInteraction.objects.get(schedule=today_schedule)
+    assert json.loads(interaction.ai_response)["raw"] == raw_question
+
+    # Mirror useChat's actual wire marker, derived from the API's ask field.
+    messages.extend(
+        [
+            {
+                "role": "assistant",
+                "content": first["ask"] or first["explanation"],
+                **({"is_ask": True} if first["ask"] is not None else {}),
+            },
+            _user_turn("past"),
+        ]
+    )
+    response = _post(auth_client, {"messages": messages})
+    assert response.status_code == 200, response.content
+    second = response.json()
+    assert second["applied"] is True
+    assert second["ask"] is None
+    assert calls[1]["messages"][-1] == {"role": "user", "content": "past"}
+    stretching = blocks.get(title="Stretching")
+    assert (stretching.start_time, stretching.end_time) == (
+        datetime.time(10, 15),
+        datetime.time(10, 40),
+    )
+    assert blocks.count() == 3
+    assert AIInteraction.objects.filter(schedule=today_schedule).latest("id").user_command == "past"
+
+    # Once the pending request is complete, an unrelated add must still
+    # reject a model replay of that request.
+    messages.extend([_assistant_turn(second["explanation"]), _user_turn("Notes")])
+    response = _post(auth_client, {"messages": messages})
+    assert response.status_code == 200, response.content
+    third = response.json()
+    assert third["applied"] is False
+    assert third["outcomes"][0]["reason_code"] == "replay_guard"
+    assert blocks.count() == 3
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("user_turn", "explanation", "expect_ask", "reply"),
+    [
+        ("thanks", "You're welcome. Need anything else?", False, "Notes"),
+        ("cancel that", "Okay, canceled. Anything else?", False, "Notes"),
+        ("add Notes", "What next?", True, "okay"),
+    ],
+)
+def test_conversational_question_does_not_disable_replay_guard(
+    auth_client, today_schedule, monkeypatch, user_turn, explanation, expect_ask, reply
+):
+    TimeBlock.objects.create(
+        schedule=today_schedule,
+        title="Stretching",
+        start_time="10:15",
+        end_time="10:40",
+        category="personal",
+    )
+    responses = iter(
+        [
+            json.dumps(
+                {"actions": [], "explanation": explanation, "ask": None}
+            ),
+            json.dumps(
+                {
+                    "actions": [{"type": "add", "title": "Stretching[2]", "category": "personal"}],
+                    "explanation": "Added Stretching[2].",
+                    "ask": None,
+                }
+            ),
+        ]
+    )
+
+    async def complete(**kwargs):
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content=next(responses)))]
+        )
+
+    monkeypatch.setattr(
+        "ai.service._get_client",
+        lambda: SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=complete))),
+    )
+    monkeypatch.setattr("django.conf.settings.LLM_API_KEY", "test-key")
+    messages = [
+        _user_turn("add Stretching"),
+        _assistant_turn("Added Stretching."),
+        _user_turn(user_turn),
+    ]
+    first = _post(auth_client, {"messages": messages})
+    assert first.status_code == 200, first.content
+    first_data = first.json()
+    assert (first_data["ask"] is not None) is expect_ask
+    assistant = _assistant_turn(first_data["ask"] or first_data["explanation"])
+    if expect_ask:
+        assistant["is_ask"] = True
+    messages.extend([assistant, _user_turn(reply)])
+    second = _post(auth_client, {"messages": messages})
+    assert second.status_code == 200, second.content
+    assert second.json()["outcomes"][0]["reason_code"] == "replay_guard"
+    assert TimeBlock.objects.filter(schedule=today_schedule).count() == 1
 
 
 class TestImplicitAddAuditUnaffected:
