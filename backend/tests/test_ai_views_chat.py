@@ -2336,6 +2336,47 @@ class TestAutoPlacementIntegration:
         assert TimeBlock.objects.filter(schedule=today_schedule).count() == 1
 
     @pytest.mark.django_db
+    def test_relative_add_does_not_block_independent_untimed_sibling(
+        self, auth_client, today_schedule, monkeypatch
+    ):
+        TimeBlock.objects.create(
+            schedule=today_schedule,
+            title="Gym",
+            start_time="09:00",
+            end_time="09:30",
+            category="personal",
+        )
+        _patch_run_chat(
+            monkeypatch,
+            AIChatResult(
+                raw_response_text="{}",
+                parsed_actions=[
+                    {
+                        "type": "add",
+                        "title": "Vocal",
+                        "category": "personal",
+                        "start_time": "09:40",
+                        "end_time": "10:05",
+                    },
+                    {"type": "add", "title": "Notes", "category": "personal"},
+                ],
+                explanation="Added Vocal and Notes.",
+                ask=None,
+            ),
+        )
+
+        response = _post(
+            auth_client,
+            {"messages": [_user_turn("add Vocal after Gym and also add Notes")]},
+        )
+
+        assert response.status_code == 200, response.content
+        assert response.json()["applied"] is True
+        blocks = {block.title: block for block in TimeBlock.objects.filter(schedule=today_schedule)}
+        assert set(blocks) == {"Gym", "Vocal", "Notes"}
+        assert blocks["Vocal"].start_time.strftime("%H:%M") == "09:40"
+
+    @pytest.mark.django_db
     def test_untimed_add_uses_fresh_apply_time_local_now(
         self, user, auth_client, today_schedule, monkeypatch
     ):

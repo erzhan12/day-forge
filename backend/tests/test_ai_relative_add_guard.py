@@ -51,6 +51,25 @@ def test_explicit_add_after_anchor_is_allowed():
     )
 
 
+def test_multi_add_checks_relative_target_without_blocking_untimed_sibling():
+    assert relative_add_guard_ask(
+        [_user("add Vocal after Gym and also add Notes")],
+        [
+            _add(start_time="09:40", end_time="10:05"),
+            {"type": "add", "title": "Notes", "category": "other"},
+        ],
+        [_block()],
+    ) is None
+
+
+def test_seconds_in_explicit_time_do_not_crash_guard():
+    assert relative_add_guard_ask(
+        [_user("add Vocal after Gym")],
+        [_add(start_time="09:40:00", end_time="10:05:00")],
+        [_block()],
+    ) is None
+
+
 def test_explicit_add_must_keep_requested_gap():
     assert relative_add_guard_ask(
         [_user("add Vocal after Gym with a 10-minute gap")],

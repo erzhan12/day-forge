@@ -68,8 +68,7 @@ def _active_request_index(messages: list[dict]) -> int | None:
 
 def _minutes(value: datetime.time | str) -> int:
     if isinstance(value, str):
-        hour, minute = map(int, value.split(":", 1))
-        return hour * 60 + minute
+        value = datetime.time.fromisoformat(value)
     return value.hour * 60 + value.minute
 
 
@@ -130,9 +129,16 @@ def relative_add_guard_ask(
         return f"Which existing block should the new block be placed {direction}?"
 
     anchor = anchors[0]
-    for action in actions:
-        if action.get("type") != "add":
-            continue
+    add_actions = [action for action in actions if action.get("type") == "add"]
+    named_before_relation = [
+        action
+        for action in add_actions
+        if _title_in_tail(action.get("title", ""), request[: relation.start()])
+    ]
+    # A single named add owns the relative phrase; sibling adds may use
+    # ordinary auto-placement. Ambiguous wording stays conservative.
+    checked_actions = named_before_relation if len(named_before_relation) == 1 else add_actions
+    for action in checked_actions:
         if "start_time" not in action or "end_time" not in action:
             return f"What start time should the new block have {direction} {anchor.title}?"
         if direction == "after" and (
