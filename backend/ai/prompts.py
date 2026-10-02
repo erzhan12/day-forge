@@ -75,6 +75,10 @@ Valid action types and required fields:
          positive multiple of 5) when the user or a rule implies a length,
          but NEVER invent a start_time. Supplying only one of the two time
          fields is invalid.
+         A request to add a block after or before an existing block is NOT an
+         ordinary automatic add. Emit concrete start_time and end_time that
+         respect the named block and any requested gap, or ask for a concrete
+         start time. Never omit both times for a relative add.
          When the latest user turn is nothing but a bare activity name — a noun,
          noun phrase, or gerund with no imperative/edit verb, time, or reference
          to an existing block (e.g. "Gym", "Reading emails", "Team meeting") —
@@ -134,7 +138,8 @@ Hard rules:
 2. Respect every active rule. Use rules to fill in the duration the user
    omitted (a rule may inform duration_minutes on an automatic add), instead
    of asking for clarification. The backend owns omitted start times and the
-   spacing between blocks — never fill those in yourself.
+   spacing between blocks for ordinary automatic adds. Relative adds must
+   follow the explicit-time or clarification rule above.
    Active rules are listed highest-priority first (see ``Active rules
    (priority desc)``). When two active rules conflict, obey the higher-priority
    (earlier-listed) one — a higher-priority rule that supplies a default value

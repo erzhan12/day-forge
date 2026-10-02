@@ -2272,6 +2272,70 @@ class TestAutoPlacementIntegration:
         )
 
     @pytest.mark.django_db
+    def test_relative_untimed_add_asks_instead_of_placing_before_anchor(
+        self, auth_client, today_schedule, monkeypatch
+    ):
+        TimeBlock.objects.create(
+            schedule=today_schedule,
+            title="Gym",
+            start_time="09:00",
+            end_time="09:30",
+            category="personal",
+        )
+        _patch_run_chat(
+            monkeypatch, self._auto_add_result("Vocal", duration_minutes=25)
+        )
+
+        response = _post(
+            auth_client,
+            {"messages": [_user_turn("add Vocal for 25 minutes after Gym with a 10-minute gap")]},
+        )
+
+        assert response.status_code == 200, response.content
+        assert response.json()["applied"] is False
+        assert response.json()["ask"] == "What start time should the new block have after Gym?"
+        titles = list(
+            TimeBlock.objects.filter(schedule=today_schedule).values_list("title", flat=True)
+        )
+        assert titles == ["Gym"]
+
+    @pytest.mark.django_db
+    def test_relative_explicit_add_before_anchor_asks_without_mutating(
+        self, auth_client, today_schedule, monkeypatch
+    ):
+        TimeBlock.objects.create(
+            schedule=today_schedule,
+            title="Gym",
+            start_time="09:00",
+            end_time="09:30",
+            category="personal",
+        )
+        _patch_run_chat(
+            monkeypatch,
+            AIChatResult(
+                raw_response_text="{}",
+                parsed_actions=[
+                    {
+                        "type": "add",
+                        "title": "Vocal",
+                        "category": "personal",
+                        "start_time": "08:00",
+                        "end_time": "08:25",
+                    }
+                ],
+                explanation="Added Vocal after Gym.",
+                ask=None,
+            ),
+        )
+
+        response = _post(auth_client, {"messages": [_user_turn("add Vocal after Gym")]})
+
+        assert response.status_code == 200, response.content
+        assert response.json()["applied"] is False
+        assert response.json()["ask"] == "What start time should the new block have after Gym?"
+        assert TimeBlock.objects.filter(schedule=today_schedule).count() == 1
+
+    @pytest.mark.django_db
     def test_untimed_add_uses_fresh_apply_time_local_now(
         self, user, auth_client, today_schedule, monkeypatch
     ):
@@ -3096,6 +3160,13 @@ class TestReplayGuard:
             end_time="09:25",
             category="personal",
         )
+        TimeBlock.objects.create(
+            schedule=today_schedule,
+            title="Vocal",
+            start_time="09:30",
+            end_time="09:45",
+            category="personal",
+        )
         _patch_run_chat(
             monkeypatch,
             AIChatResult(
@@ -3125,7 +3196,7 @@ class TestReplayGuard:
         )
         assert response.status_code == 200, response.content
         assert response.json()["applied"] is True
-        assert TimeBlock.objects.filter(schedule=today_schedule).count() == 2
+        assert TimeBlock.objects.filter(schedule=today_schedule).count() == 3
 
     @pytest.mark.django_db
     def test_no_slot_retry_with_smaller_duration_skips_guard(

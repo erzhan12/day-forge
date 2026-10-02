@@ -51,6 +51,7 @@ from ai.mutation_planner import (
 from ai.mutation_planner import (
     compute_move_resize_times as _compute_move_resize_times,
 )
+from ai.relative_add_guard import relative_add_guard_ask
 from ai.replay_guard import (
     GUARD_EXPLANATION,
     REPLAY_GUARD_REASON_CODE,
@@ -1389,6 +1390,23 @@ async def ai_chat(request, date):
             offending,
             user_id=user.id,
             schedule_id=schedule.id,
+        )
+
+    # A relative add must not fall through to ordinary automatic placement.
+    # The provider can omit times from "add Vocal after Gym", which would
+    # otherwise put Vocal in the first free slot, possibly before Gym.
+    relative_ask = relative_add_guard_ask(messages, result.parsed_actions, current_blocks)
+    if relative_ask is not None:
+        await _mark_success(interaction)
+        return JsonResponse(
+            {
+                "blocks": None,
+                "explanation": GUARD_EXPLANATION,
+                "ask": relative_ask,
+                "applied": False,
+                "partial": False,
+                "outcomes": [],
+            }
         )
 
     # Apply path uses the shared select_for_update + per-action dispatcher.
