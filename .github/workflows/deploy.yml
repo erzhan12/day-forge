@@ -279,9 +279,15 @@ jobs:
           cd "$DEPLOY_PATH"
           echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
           export DOCKER_IMAGE="$IMAGE_REF"
+          echo "Disk and inode usage before cleanup:"
+          df -h /var
+          df -i /var
+          docker system df
           # Free images unused by any container before pulling. On this shared
           # droplet, a full disk otherwise prevents extraction of the new image.
           docker image prune -af
+          echo "Disk usage after cleanup:"
+          df -h /var
           docker compose pull
           docker compose up -d --remove-orphans
           docker image prune -f
