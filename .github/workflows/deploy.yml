@@ -279,6 +279,9 @@ jobs:
           cd "$DEPLOY_PATH"
           echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
           export DOCKER_IMAGE="$IMAGE_REF"
+          # Free images unused by any container before pulling. On this shared
+          # droplet, a full disk otherwise prevents extraction of the new image.
+          docker image prune -af
           docker compose pull
           docker compose up -d --remove-orphans
           docker image prune -f
