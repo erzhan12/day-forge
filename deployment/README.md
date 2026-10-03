@@ -188,6 +188,13 @@ Push to `main` (or run the **Deploy** workflow manually). CI tests → builds �
 pushes to GHCR → SSHes in → writes `.env` → `docker compose pull && up -d` →
 health-checks `https://dayforge.habitreward.org/accounts/login/`.
 
+After the container starts, the deploy removes old local Day Forge images. It
+keeps the running SHA-tagged image and the two newest SHA-tagged images for
+rollback. The `latest` tag, manually named tags, and images from other apps are
+left alone. Cleanup errors are logged without failing the deploy; the next
+deploy retries. GHCR tags are unaffected. Check host usage with `df -h /` and
+`docker system df` after deployment.
+
 ## Rollback
 
 On the droplet, pin the previous image tag in `.env` (`DOCKER_IMAGE=...`) and run

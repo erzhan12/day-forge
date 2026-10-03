@@ -65,6 +65,9 @@ jobs:
         # LLM_API_KEY unset so ai.E001 does not require Redis in CI.
         run: uv run pytest backend/tests/ -q
 
+      - name: Test deployment image retention
+        run: bash deployment/tests/test_image_retention.sh
+
       - name: Set up Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
         with:
@@ -161,8 +164,10 @@ jobs:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
           # One-time host prep (deploy owns DEPLOY_PATH; data/staticfiles uid 1000) — deployment/README.md §3b.
-          ssh -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$HOME/.ssh/known_hosts" "$SSH_TARGET" "mkdir -p \"$DEPLOY_PATH/data\" \"$DEPLOY_PATH/staticfiles\""
+          ssh -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$HOME/.ssh/known_hosts" "$SSH_TARGET" "mkdir -p \"$DEPLOY_PATH/data\" \"$DEPLOY_PATH/staticfiles\" \"$DEPLOY_PATH/lib\""
           scp -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$HOME/.ssh/known_hosts" deployment/docker/docker-compose.yml "$SSH_TARGET:$DEPLOY_PATH/docker-compose.yml"
+          scp -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$HOME/.ssh/known_hosts" deployment/scripts/prune_deployment_images.sh "$SSH_TARGET:$DEPLOY_PATH/prune_deployment_images.sh"
+          scp -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$HOME/.ssh/known_hosts" deployment/scripts/lib/select_images_to_delete.sh "$SSH_TARGET:$DEPLOY_PATH/lib/select_images_to_delete.sh"
 
       - name: Write .env, pull image, restart stack
         env:
@@ -281,7 +286,8 @@ jobs:
           export DOCKER_IMAGE="$IMAGE_REF"
           docker compose pull
           docker compose up -d --remove-orphans
-          docker image prune -f
+          bash ./prune_deployment_images.sh "\$DOCKER_IMAGE" || echo "image retention cleanup failed (non-fatal)"
+          docker image prune -f || echo "dangling image prune failed (non-fatal)"
           EOF
 
   health-check:
