@@ -84,6 +84,15 @@ jobs:
 
             Use the repository's CLAUDE.md for guidance on style and conventions. Be constructive and helpful in your feedback.
 
+            ## Execution Requirements
+
+            Complete the review in this session. Do not launch Task/subagent work or
+            background jobs; a previous run ended after launching reviewers without
+            collecting their results. Inspect the PR diff directly, finish assessing
+            the findings, and only then post the required top-level comment. Do not
+            report success or stop after starting review work. If posting the comment
+            fails, state the concrete failure so the workflow log exposes it.
+
             ## Output Instructions
 
             1. Review all changed files in the PR thoroughly.
