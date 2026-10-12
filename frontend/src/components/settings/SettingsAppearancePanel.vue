@@ -1,3 +1,7 @@
+<script setup lang="ts">
+import DesignSelector from "../DesignSelector.vue"
+</script>
+
 <template>
   <section class="settings-panel">
     <h2 id="settings-topic-appearance" class="settings-topic-heading" tabindex="-1">Appearance</h2>

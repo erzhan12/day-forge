@@ -1,44 +1,22 @@
-"""Fernet symmetric encryption for stored CalDAV passwords.
+"""Encryption of stored passwords with the calendar_sync key."""
 
-Keyed by ``settings.CALDAV_ENCRYPTION_KEY`` (Fernet URL-safe base64, 32
-bytes). The system check ``calendar_sync.E001`` blocks ``DEBUG=False``
-startup when the env var is unset — see ``checks.py``.
-"""
+from common.integration_crypto import decrypt_secret, encrypt_secret, fernet_for_setting
+from cryptography.fernet import Fernet
 
-from cryptography.fernet import Fernet, InvalidToken
-from django.conf import settings
-from django.core.exceptions import ImproperlyConfigured
+_SETTING = "CALDAV_ENCRYPTION_KEY"
+_SAFE_ERROR = (
+    "Stored CalDAV password could not be decrypted with the current CALDAV_ENCRYPTION_KEY."
+    " The key may have rotated."
+)
 
 
 def _fernet() -> Fernet:
-    key = getattr(settings, "CALDAV_ENCRYPTION_KEY", "") or ""
-    if not key:
-        raise ImproperlyConfigured(
-            "CALDAV_ENCRYPTION_KEY is not set. Generate one with "
-            '`python -c "from cryptography.fernet import Fernet; '
-            'print(Fernet.generate_key().decode())"` and add it to .env.'
-        )
-    try:
-        return Fernet(key.encode() if isinstance(key, str) else key)
-    except (ValueError, TypeError) as e:
-        raise ImproperlyConfigured("CALDAV_ENCRYPTION_KEY is not a valid Fernet key.") from e
+    return fernet_for_setting(_SETTING)
 
 
 def encrypt_password(plaintext: str) -> bytes:
-    if not isinstance(plaintext, str):
-        raise TypeError("plaintext password must be str")
-    return _fernet().encrypt(plaintext.encode("utf-8"))
+    return encrypt_secret(plaintext, setting_name=_SETTING, secret_name="password")
 
 
 def decrypt_password(ciphertext: bytes | memoryview) -> str:
-    if isinstance(ciphertext, memoryview):
-        ciphertext = bytes(ciphertext)
-    try:
-        return _fernet().decrypt(ciphertext).decode("utf-8")
-    except InvalidToken as e:
-        # Translate to ImproperlyConfigured so a key-rotation bug surfaces
-        # as a config problem rather than a generic crypto error in views.
-        raise ImproperlyConfigured(
-            "Stored CalDAV password could not be decrypted with the "
-            "current CALDAV_ENCRYPTION_KEY. The key may have rotated."
-        ) from e
+    return decrypt_secret(ciphertext, setting_name=_SETTING, safe_error=_SAFE_ERROR)

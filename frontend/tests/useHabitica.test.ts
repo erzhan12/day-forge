@@ -1,21 +1,5 @@
-// useHabitica — connected-state elevation and optimistic-complete rollback.
-//
-// Two things here are load-bearing and were previously untested:
-//
-// 1. The `connected` elevation guard. `fetchTasks` deliberately diverges from
-//    useCalendar: a non-503 error elevates `connected` so the error surfaces
-//    past the `!connected` panel gate. The precondition is "a definitive HTTP
-//    status proves the account row exists" — so the branches where that
-//    precondition is FALSE (no status at all, or a 400 returned before the
-//    account check) must NOT elevate. This is the exact feature-0020
-//    regression recorded in tasks/lessons.md: the original coded it as a bare
-//    `else`, which swallowed the no-status case and showed the panel to a
-//    disconnected user after a mere network blip.
-//
-// 2. `completeTask`'s surgical rollback. On failure it re-inserts the single
-//    removed task at its original index rather than restoring a whole-list
-//    snapshot, which would resurrect stale rows and drop tasks a concurrent
-//    refresh added.
+// Habitica account verdicts come from explicit response metadata. Completion
+// rolls back one row without replacing a concurrent refresh's full list.
 
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
@@ -45,7 +29,7 @@ beforeEach(() => {
 
 describe("useHabitica connected-state elevation", () => {
   it("resolves disconnected on 503 without elevating connected", async () => {
-    requestJson.mockResolvedValue({ ok: false, status: 503, errors: {} })
+    requestJson.mockResolvedValue({ ok: false, status: 503, data: { meta: { account_state: "disconnected", resource_state: "unavailable" } }, errors: {} })
     const { state, fetchTasks } = useHabitica()
     await fetchTasks(TODAY)
 
@@ -54,9 +38,9 @@ describe("useHabitica connected-state elevation", () => {
   })
 
   it.each([401, 500, 502, 504])(
-    "elevates connected on %i (a real status proves the row exists)",
+    "uses explicit connected metadata on %i",
     async (status) => {
-      requestJson.mockResolvedValue({ ok: false, status, errors: {} })
+      requestJson.mockResolvedValue({ ok: false, status, data: { meta: { account_state: "connected", resource_state: status === 401 ? "credentials_error" : "provider_error" } }, errors: {} })
       const { state, fetchTasks } = useHabitica()
       await fetchTasks(TODAY)
 
@@ -67,9 +51,7 @@ describe("useHabitica connected-state elevation", () => {
   )
 
   it("does NOT elevate connected when the failure carries no status", async () => {
-    // useHttp returns {ok:false, errors} with NO status on a network/parse
-    // failure. Elevating here would show the panel to a user who may not be
-    // connected at all — the feature-0020 regression (tasks/lessons.md).
+    // A network failure has no account verdict.
     requestJson.mockResolvedValue({
       ok: false,
       errors: { detail: "Network error" },
@@ -78,7 +60,7 @@ describe("useHabitica connected-state elevation", () => {
     await fetchTasks(TODAY)
 
     expect(state.connected).toBe(false)
-    expect(state.statusKnown).toBe(true)
+    expect(state.statusKnown).toBe(false)
     expect(state.error).toBeTruthy()
   })
 
@@ -90,7 +72,7 @@ describe("useHabitica connected-state elevation", () => {
     await fetchTasks(TODAY)
 
     expect(state.connected).toBe(false)
-    expect(state.statusKnown).toBe(true)
+    expect(state.statusKnown).toBe(false)
   })
 
   it("sets connected and commits tasks on success", async () => {

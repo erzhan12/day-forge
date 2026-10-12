@@ -1,25 +1,57 @@
-import { ref } from "vue"
-import { router } from "@inertiajs/vue3"
+import { ref, type Ref } from "vue"
 import { type ApiResult, requestJson } from "./useHttp"
 import { extractErrorMessage } from "../utils/errorMessage"
+import { useScheduleRevision, runScheduleMutation, isScheduleRevisionConflict, SCHEDULE_CHANGED_MESSAGE, type ScheduleRevisionState } from "./useScheduleRevision"
+import { registerMutationUndo } from "./useMutationUndo"
+import type { UndoAction } from "../types"
 
 interface DraftSubmitResult extends ApiResult {
   explanation?: string | null
 }
 
-// Module-level state — Schedule.vue is the sole consumer (single
-// instance per page). If a second consumer ever
-// appears, move state back into useDraft() to avoid cross-instance
-// leakage.
-const isGeneratingDraft = ref(false)
-const lastDraftError = ref<string | null>(null)
+interface DraftState {
+  isGeneratingDraft: Ref<boolean>
+  lastDraftError: Ref<string | null>
+  latestRequestId: number
+  unsubscribe?: () => void
+}
 
-// Module-level counter — mirrors useChat's latestRequestId. Each
-// generateDraft bumps it; only the resolver whose myId still matches may
-// clear the spinner or call router.reload. Prevents overlapping auto-drafts
-// (date navigation during a slow LLM call) from unlocking edits mid-flight
-// and then stomping them when an earlier draft resolves.
-let latestRequestId = 0
+function createDraftState(): DraftState {
+  return { isGeneratingDraft: ref(false), lastDraftError: ref<string | null>(null), latestRequestId: 0 }
+}
+
+let ownerStates = new WeakMap<ScheduleRevisionState, DraftState>()
+let standaloneState = createDraftState()
+let lastAccessedState = standaloneState
+
+function stateFor(owner?: ScheduleRevisionState): DraftState {
+  if (!owner) return standaloneState
+  let state = ownerStates.get(owner)
+  if (!state) {
+    state = createDraftState()
+    ownerStates.set(owner, state)
+    state.unsubscribe = owner.subscribeScopeReset((reason) => {
+      clearDraftState(state!)
+      if (reason === "dispose") {
+        state!.unsubscribe?.()
+        state!.unsubscribe = undefined
+        ownerStates.delete(owner)
+        if (lastAccessedState === state) lastAccessedState = standaloneState
+      }
+    })
+  }
+  return state
+}
+
+function clearDraftState(state: DraftState): void {
+  state.latestRequestId += 1
+  state.isGeneratingDraft.value = false
+  state.lastDraftError.value = null
+}
+
+export function clearDraftSession(owner?: ScheduleRevisionState): void {
+  clearDraftState(stateFor(owner))
+}
 
 function statusToMessage(status: number | undefined): string | null {
   switch (status) {
@@ -36,32 +68,40 @@ function statusToMessage(status: number | undefined): string | null {
   }
 }
 
-export function useDraft() {
-  /** Cancel an in-flight draft after date navigation (mirrors useChat.clearThread). */
+export function useDraft(explicitRevision?: ScheduleRevisionState) {
+  const revision = useScheduleRevision(explicitRevision)
+  const state = stateFor(revision)
+  lastAccessedState = state
+  const { isGeneratingDraft, lastDraftError } = state
+  /** Drop the current draft UI response without assuming its write was cancelled. */
   function abandonInFlight(): void {
-    latestRequestId += 1
+    state.latestRequestId += 1
     isGeneratingDraft.value = false
   }
 
-  async function generateDraft(date: string): Promise<DraftSubmitResult> {
-    const myId = ++latestRequestId
+  async function generateDraft(date: string, pushUndo?: (action: UndoAction) => void): Promise<DraftSubmitResult> {
+    if (!revision || revision.busy.value) {
+      return { ok: false, code: "schedule_synchronizing", errors: { detail: "Schedule is updating. Wait for it to finish, then try again." } }
+    }
+    const myId = ++state.latestRequestId
     isGeneratingDraft.value = true
     lastDraftError.value = null
 
     let result: DraftSubmitResult
     try {
-      result = await requestJson(
+      result = await runScheduleMutation(revision, date, (capture) => requestJson(
         `/api/ai/schedules/${date}/generate-draft/`,
         "POST",
-        undefined,
-      )
+        { expected_revision: capture.revision },
+        { expectedUserId: capture.userId },
+      ))
     } finally {
-      if (myId === latestRequestId) {
+      if (myId === state.latestRequestId) {
         isGeneratingDraft.value = false
       }
     }
 
-    if (myId !== latestRequestId) {
+    if (myId !== state.latestRequestId) {
       return { ok: false, errors: { detail: "stale" } }
     }
 
@@ -70,14 +110,17 @@ export function useDraft() {
         typeof result.data?.explanation === "string"
           ? result.data.explanation
           : null
-      // Reload includes ``schedule`` so a future flip on first edit
-      // re-renders the badge correctly. ``auto_draft_pending`` is its
-      // own Inertia prop, not part of ``schedule``, so this partial
-      // reload doesn't refresh it — that's intentional. The
-      // per-instance ``attemptedAutoDraftDates`` set in Schedule.vue
-      // prevents refire on the same date.
-      router.reload({ only: ["blocks", "schedule"] })
-      return { ok: true, data: result.data, explanation }
+      registerMutationUndo(result, pushUndo, {
+        description: explanation || "Generated draft",
+        type: "draft",
+      })
+      if (result.code === "schedule_sync_failed") lastDraftError.value = "Changes were saved, but the display could not refresh. Reload the page."
+      return { ...result, explanation }
+    }
+
+    if (isScheduleRevisionConflict(result)) {
+      lastDraftError.value = SCHEDULE_CHANGED_MESSAGE
+      return result
     }
 
     if (result.status === 409) {
@@ -107,12 +150,14 @@ export function useDraft() {
 
 /** Test-only reset — mirrors useChat._resetChatStateForTests. */
 export function _resetDraftStateForTests(): void {
-  latestRequestId = 0
-  isGeneratingDraft.value = false
-  lastDraftError.value = null
+  clearDraftState(lastAccessedState)
+  lastAccessedState.unsubscribe?.()
+  ownerStates = new WeakMap()
+  standaloneState = createDraftState()
+  lastAccessedState = standaloneState
 }
 
 /** Test-only peek at the request counter. */
 export function _peekLatestRequestId(): number {
-  return latestRequestId
+  return lastAccessedState.latestRequestId
 }

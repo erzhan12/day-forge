@@ -306,6 +306,60 @@ class TestProviderErrors:
 
 
 class TestParsing:
+    def test_invalid_action_types_raise_parse_with_original_indices(
+        self, patch_client, fake_schedule, now
+    ):
+        actions = [
+            {"type": "update", "task_id": 7, "changes": {"category": "unknown-category"}},
+            {"type": "remove", "task_id": 8},
+            {"type": []},
+            {"type": "add", "title": "Notes", "category": "work"},
+            {"type": {}},
+            {"type": "unknown"},
+        ]
+        raw = _ok_response(actions=actions)
+        patch_client(raw)
+
+        with pytest.raises(AIParseError) as exc:
+            run_chat(
+                [{"role": "user", "content": "change the schedule"}],
+                fake_schedule,
+                [_full_block()],
+                [],
+                now,
+            )
+
+        assert exc.value.raw_response_text == raw
+        detail = str(exc.value)
+        assert "failed action validation" in detail
+        for index in (2, 4, 5):
+            assert f"action[{index}]: type must be one of" in detail
+        for index in (0, 1, 3):
+            assert f"action[{index}]:" not in detail
+
+    def test_valid_multiple_actions_preserve_order(self, patch_client, fake_schedule, now):
+        actions = [
+            {"type": "add", "title": "Notes", "category": "work"},
+            {"type": "update", "task_id": 7, "changes": {"title": "Training"}},
+            {"type": "remove", "task_id": 8},
+        ]
+        raw = _ok_response(actions=actions, explanation="Changes ready")
+        patch_client(raw)
+
+        result = run_chat(
+            [{"role": "user", "content": "change the schedule"}],
+            fake_schedule,
+            [_full_block()],
+            [],
+            now,
+        )
+
+        assert result.parsed_actions == actions
+        assert result.raw_response_text == raw
+        assert result.explanation == "Changes ready"
+        assert result.ask is None
+        assert result.unresolved_categories == ()
+
     def test_invalid_json_raises_parse(self, patch_client, fake_schedule, now):
         patch_client("not-json")
         with pytest.raises(AIParseError) as exc:
@@ -585,6 +639,45 @@ class TestParsing:
                 [],
                 now,
             )
+
+    @pytest.mark.parametrize("explanation", ["", " \t\n"])
+    @pytest.mark.parametrize(
+        "actions", [[], [{"type": "add", "title": "Gym", "category": "personal"}]]
+    )
+    def test_rejects_blank_explanation_without_ask(
+        self, patch_client, fake_schedule, now, explanation, actions
+    ):
+        raw = _ok_response(actions=actions, explanation=explanation)
+        patch_client(raw)
+        with pytest.raises(AIParseError, match="explanation.*non-blank") as exc:
+            run_chat([{"role": "user", "content": "add Gym"}], fake_schedule, [], [], now)
+        assert exc.value.raw_response_text == raw
+
+    @pytest.mark.parametrize("ask", [" ", "\t\n"])
+    def test_rejects_whitespace_ask(self, patch_client, fake_schedule, now, ask):
+        raw = _ok_response(explanation="", ask=ask)
+        patch_client(raw)
+        with pytest.raises(AIParseError, match="ask.*non-blank") as exc:
+            run_chat([{"role": "user", "content": "hi"}], fake_schedule, [], [], now)
+        assert exc.value.raw_response_text == raw
+
+    def test_accepts_ask_with_blank_explanation(self, patch_client, fake_schedule, now):
+        patch_client(_ok_response(explanation=" \t", ask="Which time?"))
+        result = run_chat([{"role": "user", "content": "add Gym"}], fake_schedule, [], [], now)
+        assert result.ask == "Which time?"
+        assert result.explanation == " \t"
+        assert result.parsed_actions == []
+
+    @pytest.mark.parametrize("field", ["ask", "explanation"])
+    def test_rejects_reply_longer_than_next_turn_content_limit(
+        self, patch_client, fake_schedule, now, monkeypatch, field
+    ):
+        monkeypatch.setattr("django.conf.settings.LLM_MAX_COMMAND_CHARS", 10)
+        payload = {"ask": None, "explanation": "Short."}
+        payload[field] = "x" * 11
+        patch_client(_ok_response(**payload))
+        with pytest.raises(AIParseError, match="assistant content.*10 chars"):
+            run_chat([{"role": "user", "content": "hi"}], fake_schedule, [], [], now)
 
     def test_rejects_overlong_ask(self, patch_client, fake_schedule, now, monkeypatch):
         monkeypatch.setattr("django.conf.settings.LLM_CHAT_MAX_ASK_CHARS", 10)

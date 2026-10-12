@@ -1,6 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from "vitest"
-import { flushPromises, mount } from "@vue/test-utils"
+import { ScheduleUndoKey, ScheduleDragKey, ScheduleContainerKey, ScheduleDisabledKey } from "../src/composables/scheduleContext"
+import { describe, it, expect, vi, beforeEach, beforeAll, afterAll, afterEach } from "vitest"
+import { flushPromises, mount, enableAutoUnmount } from "@vue/test-utils"
 import { ref } from "vue"
+import { acceptedMutation } from "./helpers/mutation"
 
 // Mock useSchedule
 const mockUpdateBlock = vi.fn()
@@ -19,8 +21,22 @@ vi.mock("@inertiajs/vue3", () => ({
   usePage: () => ({ props: { ui_preferences: { theme: "classic" } } }),
 }))
 
+import DeleteBlockDialog from "../src/components/DeleteBlockDialog.vue"
 import TimeBlock from "../src/components/TimeBlock.vue"
 import type { TimeBlock as TimeBlockType } from "../src/types"
+
+enableAutoUnmount(afterEach)
+
+// jsdom does not implement native dialog methods or browser focus behavior.
+// Focus containment, Escape, and focus restoration are checked in the browser.
+beforeAll(() => {
+  HTMLDialogElement.prototype.showModal = function () { this.open = true }
+  HTMLDialogElement.prototype.close = function () { this.open = false }
+})
+afterAll(() => {
+  Reflect.deleteProperty(HTMLDialogElement.prototype, "showModal")
+  Reflect.deleteProperty(HTMLDialogElement.prototype, "close")
+})
 
 function makeBlock(overrides: Partial<TimeBlockType> = {}): TimeBlockType {
   return {
@@ -47,15 +63,16 @@ function mountWithProvide(props: {
   return mount(TimeBlock, {
     props,
     global: {
+      stubs: { teleport: true },
       provide: {
-        undo: { pushUndo: mockPushUndo, snapshotBlocks: mockSnapshotBlocks },
-        drag: {
+        [ScheduleUndoKey]: { pushUndo: mockPushUndo, snapshotBlocks: mockSnapshotBlocks },
+        [ScheduleDragKey]: {
           startDrag: vi.fn(),
           isDragging: ref(false),
           dragBlockId: ref(null),
           shiftedBlockIds: ref(new Set()),
         },
-        scheduleContainer: ref(null),
+        [ScheduleContainerKey]: ref(null),
       },
     },
   })
@@ -138,13 +155,13 @@ describe("TimeBlock", () => {
   })
 
   it("toggles completion on checkbox change", async () => {
-    mockUpdateBlock.mockResolvedValue({ ok: true })
+    mockUpdateBlock.mockResolvedValue(acceptedMutation([makeBlock()]))
     const wrapper = mountWithProvide({ block: makeBlock(), date: "2026-04-10" })
     await wrapper.find(".checkbox").trigger("change")
     expect(mockUpdateBlock).toHaveBeenCalledWith(
       1,
       { is_completed: true },
-      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      { scheduleDate: "2026-04-10" },
     )
   })
 
@@ -162,7 +179,7 @@ describe("TimeBlock", () => {
     expect((wrapper.find(".checkbox").element as HTMLInputElement).checked).toBe(true)
     expect(wrapper.find(".time-block").classes()).toContain("completed")
     expect(wrapper.find(".checkbox").classes()).toContain("saving")
-    resolveUpdate({ ok: true })
+    resolveUpdate(acceptedMutation([makeBlock()]))
     await flushPromises()
     expect(mockPushUndo).toHaveBeenCalledTimes(1)
     expect(mockPushUndo).toHaveBeenCalledWith(
@@ -171,278 +188,87 @@ describe("TimeBlock", () => {
     expect(wrapper.text()).not.toContain("Failed to update")
   })
 
-  it("retries on failure and succeeds on a later attempt", async () => {
-    vi.useFakeTimers()
-    try {
-      mockUpdateBlock
-        .mockResolvedValueOnce({ ok: false })
-        .mockResolvedValueOnce({ ok: false })
-        .mockResolvedValueOnce({ ok: true })
-      const wrapper = mountWithProvide({ block: makeBlock(), date: "2026-04-10" })
-      await wrapper.find(".checkbox").trigger("change")
-      await flushPromises()
-      // After attempt 1 fails, checkbox stays flipped and saving class is present.
-      expect((wrapper.find(".checkbox").element as HTMLInputElement).checked).toBe(true)
-      expect(wrapper.find(".checkbox").classes()).toContain("saving")
-      expect(wrapper.text()).not.toContain("Failed to update")
-
-      await vi.advanceTimersByTimeAsync(300)
-      await flushPromises()
-      await vi.advanceTimersByTimeAsync(1000)
-      await flushPromises()
-
-      expect(mockUpdateBlock).toHaveBeenCalledTimes(3)
-      expect((wrapper.find(".checkbox").element as HTMLInputElement).checked).toBe(true)
-      expect(wrapper.find(".checkbox").classes()).not.toContain("saving")
-      expect(wrapper.text()).not.toContain("Failed to update")
-      expect(mockPushUndo).toHaveBeenCalledTimes(1)
-    } finally {
-      vi.useRealTimers()
-    }
-  })
-
-  it("shows error when toggle fails", async () => {
-    vi.useFakeTimers()
-    try {
-      mockUpdateBlock.mockResolvedValue({ ok: false })
-      const wrapper = mountWithProvide({ block: makeBlock(), date: "2026-04-10" })
-      await wrapper.find(".checkbox").trigger("change")
-      await flushPromises()
-      // Mid-chain: stay flipped, no error yet.
-      expect((wrapper.find(".checkbox").element as HTMLInputElement).checked).toBe(true)
-      expect(wrapper.text()).not.toContain("Failed to update")
-
-      // Full backoff: 300 + 1000 + 3000 = 4300 ms across 4 attempts.
-      await vi.advanceTimersByTimeAsync(4300)
-      await flushPromises()
-
-      expect(mockUpdateBlock).toHaveBeenCalledTimes(4)
-      expect((wrapper.find(".checkbox").element as HTMLInputElement).checked).toBe(false)
-      expect(wrapper.text()).toContain("Failed to update")
-      expect(wrapper.find(".checkbox").classes()).not.toContain("saving")
-      expect(mockPushUndo).not.toHaveBeenCalled()
-    } finally {
-      vi.useRealTimers()
-    }
-  })
-
-  it("clears the 'Failed to update' copy after a failure followed by a successful retry", async () => {
-    // Guards the TimeBlock-local errorMessage STRING, which the controller's
-    // errorState boolean test cannot catch (0049 plan § Slice 2 refactor).
-    vi.useFakeTimers()
-    try {
-      mockUpdateBlock.mockResolvedValue({ ok: false })
-      const wrapper = mountWithProvide({ block: makeBlock(), date: "2026-04-10" })
-      await wrapper.find(".checkbox").trigger("change")
-      await flushPromises()
-      await vi.advanceTimersByTimeAsync(4300)
-      await flushPromises()
-      expect(wrapper.text()).toContain("Failed to update")
-
-      // A new toggle that succeeds must clear the stale copy.
-      vi.useRealTimers()
-      mockUpdateBlock.mockResolvedValue({ ok: true })
-      await wrapper.find(".checkbox").trigger("change")
-      await flushPromises()
-      expect(wrapper.text()).not.toContain("Failed to update")
-      expect(wrapper.find(".checkbox").classes()).not.toContain("saving")
-    } finally {
-      vi.useRealTimers()
-    }
-  })
-
-  it("a second click aborts the in-flight chain and targets the newest value", async () => {
-    vi.useFakeTimers()
-    try {
-      // Chain 1 attempt 1 fails → parks in sleep(300). Chain 2 succeeds on attempt 1.
-      mockUpdateBlock
-        .mockResolvedValueOnce({ ok: false })
-        .mockResolvedValueOnce({ ok: true })
-      const wrapper = mountWithProvide({ block: makeBlock(), date: "2026-04-10" })
-
-      // 1. Chain 1: optimistic → true
-      await wrapper.find(".checkbox").trigger("change")
-      // 2. Let attempt-1 resolve {ok:false} and park in sleep(300)
-      await flushPromises()
-      expect((wrapper.find(".checkbox").element as HTMLInputElement).checked).toBe(true)
-
-      // 3. Mid-sleep: second click starts chain 2 (optimistic → false), supersedes chain 1
-      await wrapper.find(".checkbox").trigger("change")
-      expect((wrapper.find(".checkbox").element as HTMLInputElement).checked).toBe(false)
-
-      // 4. Chain 2's attempt-1 resolves {ok:true}
-      await flushPromises()
-      expect(mockPushUndo).toHaveBeenCalledTimes(1)
-      expect(wrapper.find(".checkbox").classes()).not.toContain("saving")
-      expect(wrapper.text()).not.toContain("Failed to update")
-
-      // 5. Chain 1's sleep(300) resolves; post-sleep guard must bail silently
-      await vi.advanceTimersByTimeAsync(300)
-      await flushPromises()
-      expect((wrapper.find(".checkbox").element as HTMLInputElement).checked).toBe(false)
-      expect(mockPushUndo).toHaveBeenCalledTimes(1)
-      expect(wrapper.text()).not.toContain("Failed to update")
-    } finally {
-      vi.useRealTimers()
-    }
-  })
-
-  it("aborts an in-flight PATCH on re-toggle so a late success cannot pushUndo", async () => {
-    // Signal-aware mock: pending promise rejects AbortError when signal aborts.
-    // A local counter (not the mock's live call array) decides first-vs-later.
-    let callCount = 0
-    mockUpdateBlock.mockImplementation(
-      (
-        _id: number,
-        _data: Record<string, unknown>,
-        options?: { signal?: AbortSignal },
-      ) =>
-        new Promise<{ ok: boolean }>((resolve, reject) => {
-          callCount++
-          const signal = options?.signal
-          if (signal?.aborted) {
-            reject(new DOMException("Aborted", "AbortError"))
-            return
-          }
-          const onAbort = () => reject(new DOMException("Aborted", "AbortError"))
-          signal?.addEventListener("abort", onAbort, { once: true })
-          // First call stays pending until aborted; second resolves ok.
-          if (callCount === 1) {
-            // leave pending — aborted by second click
-            return
-          }
-          signal?.removeEventListener("abort", onAbort)
-          resolve({ ok: true })
-        }),
-    )
+  it.each([400, 403, 404, 409, 500, undefined])("reverts on status %s after one attempt", async (status) => {
+    mockUpdateBlock.mockResolvedValue({ ok: false, status })
     const wrapper = mountWithProvide({ block: makeBlock(), date: "2026-04-10" })
     await wrapper.find(".checkbox").trigger("change")
-    expect((wrapper.find(".checkbox").element as HTMLInputElement).checked).toBe(true)
-
-    await wrapper.find(".checkbox").trigger("change")
-    expect((wrapper.find(".checkbox").element as HTMLInputElement).checked).toBe(false)
     await flushPromises()
-
-    expect(mockPushUndo).toHaveBeenCalledTimes(1)
-    expect(mockPushUndo).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "toggle", silent: true }),
-    )
-    expect(wrapper.text()).not.toContain("Failed to update")
+    expect(mockUpdateBlock).toHaveBeenCalledOnce()
     expect((wrapper.find(".checkbox").element as HTMLInputElement).checked).toBe(false)
-  })
-
-  it("reverts to completed when uncheck exhausts all retries", async () => {
-    vi.useFakeTimers()
-    try {
-      mockUpdateBlock.mockResolvedValue({ ok: false })
-      const wrapper = mountWithProvide({
-        block: makeBlock({ is_completed: true }),
-        date: "2026-04-10",
-      })
-      await wrapper.find(".checkbox").trigger("change")
-      await flushPromises()
-      expect((wrapper.find(".checkbox").element as HTMLInputElement).checked).toBe(false)
-
-      await vi.advanceTimersByTimeAsync(4300)
-      await flushPromises()
-
-      expect(mockUpdateBlock).toHaveBeenCalledTimes(4)
-      expect((wrapper.find(".checkbox").element as HTMLInputElement).checked).toBe(true)
-      expect(wrapper.find(".title-completed").exists()).toBe(true)
-      expect(wrapper.text()).toContain("Failed to update")
-      expect(mockPushUndo).not.toHaveBeenCalled()
-    } finally {
-      vi.useRealTimers()
-    }
-  })
-
-  it("skips undo when unmounted mid-flight", async () => {
-    // The onUnmounted hook aborts the in-flight PATCH and
-    // bumps generation so a late resolve cannot pushUndo/revert/error
-    // into a destroyed component. A pending PATCH that resolves ok after
-    // unmount must hit the post-resolve generation guard and bail.
-    let resolveUpdate: (v: { ok: boolean }) => void = () => {}
-    mockUpdateBlock.mockReturnValueOnce(
-      new Promise<{ ok: boolean }>((res) => {
-        resolveUpdate = res
-      }),
-    )
-    const wrapper = mountWithProvide({ block: makeBlock(), date: "2026-04-10" })
-    await wrapper.find(".checkbox").trigger("change")
-    // Unmount while the PATCH is still pending.
-    wrapper.unmount()
-    // Late success must not pushUndo (generation bumped on unmount).
-    resolveUpdate({ ok: true })
-    await flushPromises()
+    expect(wrapper.text()).toContain("Failed to update")
     expect(mockPushUndo).not.toHaveBeenCalled()
   })
 
-  it("reverts to the live reloaded prop, not the pre-toggle value, after exhausting retries", async () => {
-    // A mid-chain router.reload can change props.block.is_completed
-    // before the failure revert fires. The revert reads the live prop,
-    // not a serverValue captured when the toggle started — a regression
-    // to the captured value would clobber a server-applied change here.
-    vi.useFakeTimers()
-    try {
-      mockUpdateBlock.mockResolvedValue({ ok: false })
-      const wrapper = mountWithProvide({
-        block: makeBlock({ is_completed: false }),
-        date: "2026-04-10",
-      })
-      // Toggle check → optimistic true; every attempt fails.
-      await wrapper.find(".checkbox").trigger("change")
-      await flushPromises()
-      // Server actually applied the change; a reload lands mid-retry.
-      await wrapper.setProps({ block: makeBlock({ is_completed: true }) })
-
-      await vi.advanceTimersByTimeAsync(4300)
-      await flushPromises()
-
-      expect(mockUpdateBlock).toHaveBeenCalledTimes(4)
-      // Revert reads the live prop (true), not captured serverValue (false).
-      expect((wrapper.find(".checkbox").element as HTMLInputElement).checked).toBe(true)
-      expect(wrapper.text()).toContain("Failed to update")
-      expect(mockPushUndo).not.toHaveBeenCalled()
-    } finally {
-      vi.useRealTimers()
-    }
+  it("serializes rapid checkbox clicks and retains the latest optimistic value", async () => {
+    let resolveFirst!: (value: ReturnType<typeof acceptedMutation>) => void
+    mockUpdateBlock.mockReturnValueOnce(new Promise((resolve) => { resolveFirst = resolve }))
+      .mockResolvedValueOnce(acceptedMutation([makeBlock({ is_completed: true })], "2026-04-10", 4))
+    const wrapper = mountWithProvide({ block: makeBlock(), date: "2026-04-10" })
+    await wrapper.find(".checkbox").trigger("change")
+    await wrapper.find(".checkbox").trigger("change")
+    expect(mockUpdateBlock).toHaveBeenCalledOnce()
+    expect((wrapper.find(".checkbox").element as HTMLInputElement).checked).toBe(false)
+    resolveFirst(acceptedMutation([makeBlock()]))
+    await flushPromises()
+    expect(mockUpdateBlock).toHaveBeenCalledTimes(2)
+    expect(mockPushUndo).toHaveBeenCalledTimes(2)
+    expect(mockPushUndo.mock.calls[1][0]).toMatchObject({ description: 'Unchecked "Test Block"', expected_revision: 5 })
+    expect((wrapper.find(".checkbox").element as HTMLInputElement).checked).toBe(false)
+    expect(wrapper.find(".checkbox").classes()).not.toContain("saving")
   })
 
-  it("aborts and re-aligns to the new block when the row is reused for a different block", async () => {
-    // Schedule.vue keys rows by index, so this instance can be reassigned to
-    // a different block mid-retry. On id change the chain aborts (never PATCHes
-    // the swapped-in id) and all local UI state re-aligns to the new block — no
-    // stuck optimistic checked / saving spinner on the wrong row.
-    vi.useFakeTimers()
-    try {
-      mockUpdateBlock.mockResolvedValue({ ok: false })
-      const wrapper = mountWithProvide({
-        block: makeBlock({ id: 1, is_completed: false }),
-        date: "2026-04-10",
-      })
-      await wrapper.find(".checkbox").trigger("change") // optimistic check on block 1
-      await flushPromises()
-      expect((wrapper.find(".checkbox").element as HTMLInputElement).checked).toBe(true)
-      expect(wrapper.find(".checkbox").classes()).toContain("saving")
+  it("cancels a queued toggle after conflict and shows the reconciled block", async () => {
+    let resolveFirst!: (value: { ok: boolean; status: number }) => void
+    mockUpdateBlock.mockReturnValueOnce(new Promise((resolve) => { resolveFirst = resolve }))
+    const wrapper = mountWithProvide({ block: makeBlock(), date: "2026-04-10" })
+    await wrapper.find(".checkbox").trigger("change")
+    await wrapper.find(".checkbox").trigger("change")
+    // Reconciliation reports the completion changed by another writer.
+    await wrapper.setProps({ block: makeBlock({ is_completed: true }) })
+    resolveFirst({ ok: false, status: 409 })
+    await flushPromises()
+    expect(mockUpdateBlock).toHaveBeenCalledOnce()
+    expect((wrapper.find(".checkbox").element as HTMLInputElement).checked).toBe(true)
+    expect(wrapper.text()).toContain("Failed to update")
+    expect(wrapper.find(".checkbox").classes()).not.toContain("saving")
+  })
 
-      // Instance reused for a different, not-completed block.
-      await wrapper.setProps({ block: makeBlock({ id: 99, is_completed: false }) })
+  it("retains confirmed mutation history when a row unmounts during its request", async () => {
+    let resolveWrite!: (value: ReturnType<typeof acceptedMutation>) => void
+    mockUpdateBlock.mockReturnValueOnce(new Promise((resolve) => { resolveWrite = resolve }))
+    const wrapper = mountWithProvide({ block: makeBlock(), date: "2026-04-10" })
+    await wrapper.find(".checkbox").trigger("change")
+    wrapper.unmount()
+    resolveWrite(acceptedMutation([makeBlock()]))
+    await flushPromises()
+    expect(mockPushUndo).toHaveBeenCalledOnce()
+  })
 
-      await vi.advanceTimersByTimeAsync(4300)
-      await flushPromises()
+  it("resets reused row UI without aborting an accepted write", async () => {
+    let resolveWrite!: (value: ReturnType<typeof acceptedMutation>) => void
+    mockUpdateBlock.mockReturnValueOnce(new Promise((resolve) => { resolveWrite = resolve }))
+    const wrapper = mountWithProvide({ block: makeBlock(), date: "2026-04-10" })
+    await wrapper.find(".checkbox").trigger("change")
+    await wrapper.setProps({ block: makeBlock({ id: 99 }) })
+    expect((wrapper.find(".checkbox").element as HTMLInputElement).checked).toBe(false)
+    expect(wrapper.find(".checkbox").classes()).not.toContain("saving")
+    resolveWrite(acceptedMutation([makeBlock()]))
+    await flushPromises()
+    expect(mockUpdateBlock).toHaveBeenCalledOnce()
+    expect(mockUpdateBlock.mock.calls[0][2]).not.toHaveProperty("signal")
+    expect(mockPushUndo).toHaveBeenCalledOnce()
+    expect(wrapper.text()).not.toContain("Failed to update")
+  })
 
-      // Never PATCHed the swapped-in block; UI re-aligned to the new block;
-      // no error or undo leaked onto the wrong row.
-      for (const call of mockUpdateBlock.mock.calls) {
-        expect(call[0]).toBe(1)
-      }
-      expect((wrapper.find(".checkbox").element as HTMLInputElement).checked).toBe(false)
-      expect(wrapper.find(".checkbox").classes()).not.toContain("saving")
-      expect(wrapper.text()).not.toContain("Failed to update")
-      expect(mockPushUndo).not.toHaveBeenCalled()
-    } finally {
-      vi.useRealTimers()
-    }
+  it("clears an earlier error when a later explicit toggle succeeds", async () => {
+    mockUpdateBlock.mockResolvedValueOnce({ ok: false }).mockResolvedValueOnce(acceptedMutation([makeBlock()]))
+    const wrapper = mountWithProvide({ block: makeBlock(), date: "2026-04-10" })
+    await wrapper.find(".checkbox").trigger("change")
+    await flushPromises()
+    expect(wrapper.text()).toContain("Failed to update")
+    await wrapper.find(".checkbox").trigger("change")
+    await flushPromises()
+    expect(wrapper.text()).not.toContain("Failed to update")
   })
 
   it("does not clobber a newer optimistic value when an older reload lands mid-flight", async () => {
@@ -471,15 +297,15 @@ describe("TimeBlock", () => {
       props: { block: makeBlock(), date: "2026-04-10" },
       global: {
         provide: {
-          undo: { pushUndo: mockPushUndo, snapshotBlocks: mockSnapshotBlocks },
-          drag: {
+          [ScheduleUndoKey]: { pushUndo: mockPushUndo, snapshotBlocks: mockSnapshotBlocks },
+          [ScheduleDragKey]: {
             startDrag: vi.fn(),
             isDragging: ref(false),
             dragBlockId: ref(null),
             shiftedBlockIds: ref(new Set()),
           },
-          scheduleContainer: ref(null),
-          scheduleDisabled: ref(true),
+          [ScheduleContainerKey]: ref(null),
+          [ScheduleDisabledKey]: ref(true),
         },
       },
     })
@@ -498,15 +324,15 @@ describe("TimeBlock", () => {
       },
       global: {
         provide: {
-          undo: { pushUndo: mockPushUndo, snapshotBlocks: mockSnapshotBlocks },
-          drag: {
+          [ScheduleUndoKey]: { pushUndo: mockPushUndo, snapshotBlocks: mockSnapshotBlocks },
+          [ScheduleDragKey]: {
             startDrag: vi.fn(),
             isDragging: ref(false),
             dragBlockId: ref(null),
             shiftedBlockIds: ref(new Set()),
           },
-          scheduleContainer: ref(null),
-          scheduleDisabled: ref(true),
+          [ScheduleContainerKey]: ref(null),
+          [ScheduleDisabledKey]: ref(true),
         },
       },
     })
@@ -516,63 +342,20 @@ describe("TimeBlock", () => {
     expect(mockUpdateBlock).not.toHaveBeenCalled()
   })
 
-  it("labels a rapid re-toggle by the written value, not a stale prop", async () => {
-    // unchecked → check (in-flight) → uncheck before any reload. The second
-    // chain writes is_completed:false, so the undo label must be "Unchecked"
-    // even though props.block.is_completed still reads false.
-    let resolveFirst: (v: { ok: boolean }) => void = () => {}
-    mockUpdateBlock
-      .mockReturnValueOnce(
-        new Promise<{ ok: boolean }>((res) => {
-          resolveFirst = res
-        }),
-      )
-      .mockResolvedValueOnce({ ok: true })
-    const wrapper = mountWithProvide({
-      block: makeBlock({ is_completed: false }),
-      date: "2026-04-10",
-    })
-    await wrapper.find(".checkbox").trigger("change") // toggle 1: optimistic check
-    await wrapper.find(".checkbox").trigger("change") // toggle 2: optimistic uncheck, supersedes
-    await flushPromises() // chain 2 resolves ok → pushUndo "Unchecked"
-    resolveFirst({ ok: true }) // chain 1's late success must bail (superseded)
+  it("settles a rejected response without retrying or leaving the spinner", async () => {
+    mockUpdateBlock.mockRejectedValue(new TypeError("network died mid-body"))
+    const wrapper = mountWithProvide({ block: makeBlock(), date: "2026-04-10" })
+    await wrapper.find(".checkbox").trigger("change")
     await flushPromises()
-    expect(mockPushUndo).toHaveBeenCalledTimes(1)
-    expect(mockPushUndo).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "toggle", description: 'Unchecked "Test Block"' }),
-    )
-  })
-
-  it("reverts and clears saving when a non-abort error rejects the PATCH", async () => {
-    // useHttp reads the response body outside its try/catch, so a disrupted
-    // read rejects with a non-AbortError. That must be treated as a failed
-    // attempt — retried, then reverted — never a stuck spinner / desync.
-    vi.useFakeTimers()
-    try {
-      mockUpdateBlock.mockRejectedValue(new TypeError("network died mid-body"))
-      const wrapper = mountWithProvide({
-        block: makeBlock({ is_completed: false }),
-        date: "2026-04-10",
-      })
-      await wrapper.find(".checkbox").trigger("change")
-      await flushPromises()
-      await vi.advanceTimersByTimeAsync(4300)
-      await flushPromises()
-
-      expect(mockUpdateBlock).toHaveBeenCalledTimes(4)
-      expect((wrapper.find(".checkbox").element as HTMLInputElement).checked).toBe(false)
-      expect(wrapper.find(".checkbox").classes()).not.toContain("saving")
-      expect(wrapper.text()).toContain("Failed to update")
-      expect(mockPushUndo).not.toHaveBeenCalled()
-    } finally {
-      vi.useRealTimers()
-    }
+    expect(mockUpdateBlock).toHaveBeenCalledOnce()
+    expect(wrapper.find(".checkbox").classes()).not.toContain("saving")
+    expect(wrapper.text()).toContain("Failed to update")
   })
 
   it("toggles completion on the compact-layout checkbox", async () => {
     // The compact (<=30m) and expanded branches render separate <input>s;
     // exercise the compact one so a regression in either branch is caught.
-    mockUpdateBlock.mockResolvedValue({ ok: true })
+    mockUpdateBlock.mockResolvedValue(acceptedMutation([makeBlock()]))
     const wrapper = mountWithProvide({
       block: makeBlock({ start_time: "09:00", end_time: "09:30" }),
       date: "2026-04-10",
@@ -582,7 +365,7 @@ describe("TimeBlock", () => {
     expect(mockUpdateBlock).toHaveBeenCalledWith(
       1,
       { is_completed: true },
-      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      { scheduleDate: "2026-04-10" },
     )
     await flushPromises()
     expect((wrapper.find(".checkbox").element as HTMLInputElement).checked).toBe(true)
@@ -597,7 +380,7 @@ describe("TimeBlock", () => {
   })
 
   it("saves title on enter and exits edit mode", async () => {
-    mockUpdateBlock.mockResolvedValue({ ok: true })
+    mockUpdateBlock.mockResolvedValue(acceptedMutation([makeBlock()]))
     const wrapper = mountWithProvide({ block: makeBlock(), date: "2026-04-10" })
     await wrapper.find(".title").trigger("click")
     const input = wrapper.find(".title-input")
@@ -635,7 +418,7 @@ describe("TimeBlock", () => {
     await input.setValue("New Title")
     await input.trigger("keydown.enter")
     await input.trigger("blur")
-    resolveFirst({ ok: true })
+    resolveFirst(acceptedMutation([makeBlock()]))
     await flushPromises()
     expect(mockUpdateBlock).toHaveBeenCalledTimes(1)
     expect(mockPushUndo).toHaveBeenCalledTimes(1)
@@ -657,18 +440,91 @@ describe("TimeBlock", () => {
   })
 
   it("calls delete after confirm", async () => {
-    mockDeleteBlock.mockResolvedValue({ ok: true })
-    vi.spyOn(window, "confirm").mockReturnValue(true)
+    mockDeleteBlock.mockResolvedValue(acceptedMutation([makeBlock()]))
     const wrapper = mountWithProvide({ block: makeBlock(), date: "2026-04-10" })
     await wrapper.find(".delete-btn").trigger("click")
+    expect(mockDeleteBlock).not.toHaveBeenCalled()
+    expect(wrapper.find("dialog").text()).toContain("Test Block")
+    await wrapper.find(".confirm-delete").trigger("click")
+    expect(wrapper.find("dialog").exists()).toBe(false)
     expect(mockDeleteBlock).toHaveBeenCalledWith(1)
   })
 
   it("does not delete if confirm cancelled", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(false)
     const wrapper = mountWithProvide({ block: makeBlock(), date: "2026-04-10" })
     await wrapper.find(".delete-btn").trigger("click")
+    await wrapper.find(".cancel-delete").trigger("click")
+    expect(wrapper.find("dialog").exists()).toBe(false)
     expect(mockDeleteBlock).not.toHaveBeenCalled()
+  })
+
+  it("cancels deletion on the dialog cancel event (Escape)", async () => {
+    const wrapper = mountWithProvide({ block: makeBlock(), date: "2026-04-10" })
+    await wrapper.find(".delete-btn").trigger("click")
+    await wrapper.find("dialog").trigger("cancel")
+    expect(wrapper.find("dialog").exists()).toBe(false)
+    expect(mockDeleteBlock).not.toHaveBeenCalled()
+  })
+
+  it("keeps dialog keyboard input out of the page shortcut handler", async () => {
+    const wrapper = mount(DeleteBlockDialog, { props: { title: "Test Block" } })
+    const pageShortcut = vi.fn()
+    document.addEventListener("keydown", pageShortcut)
+    try {
+      const button = document.querySelector<HTMLButtonElement>("dialog .cancel-delete")!
+      button.dispatchEvent(new KeyboardEvent("keydown", { key: "z", metaKey: true, bubbles: true }))
+      expect(pageShortcut).not.toHaveBeenCalled()
+    } finally {
+      document.removeEventListener("keydown", pageShortcut)
+      wrapper.unmount()
+    }
+  })
+
+  it.each([
+    { date: "2026-04-11" },
+    { block: makeBlock({ id: 2 }) },
+    { block: makeBlock({ title: "Changed elsewhere" }) },
+  ])("dismisses confirmation when its context changes: %j", async (change) => {
+    const wrapper = mountWithProvide({ block: makeBlock(), date: "2026-04-10" })
+    await wrapper.find(".delete-btn").trigger("click")
+    await wrapper.setProps(change)
+    expect(wrapper.find("dialog").exists()).toBe(false)
+    expect(mockDeleteBlock).not.toHaveBeenCalled()
+  })
+
+  it("dismisses confirmation and disables deletion while another write is busy", async () => {
+    const busy = ref(false)
+    const wrapper = mount(TimeBlock, {
+      props: { block: makeBlock(), date: "2026-04-10" },
+      global: { stubs: { teleport: true }, provide: { [ScheduleDisabledKey]: busy } },
+    })
+    await wrapper.find(".delete-btn").trigger("click")
+    busy.value = true
+    await flushPromises()
+    expect(wrapper.find("dialog").exists()).toBe(false)
+    expect(wrapper.find(".delete-btn").attributes("disabled")).toBeDefined()
+    expect(mockDeleteBlock).not.toHaveBeenCalled()
+  })
+
+  it("submits only once if confirmation is repeated before the next render", async () => {
+    mockDeleteBlock.mockResolvedValue(acceptedMutation([makeBlock()]))
+    const wrapper = mountWithProvide({ block: makeBlock(), date: "2026-04-10" })
+    await wrapper.find(".delete-btn").trigger("click")
+    const dialog = wrapper.findComponent(DeleteBlockDialog)
+    dialog.vm.$emit("confirm")
+    dialog.vm.$emit("confirm")
+    await flushPromises()
+    expect(mockDeleteBlock).toHaveBeenCalledTimes(1)
+  })
+
+  it("shows deletion failure without recording Undo", async () => {
+    mockDeleteBlock.mockResolvedValue({ ok: false })
+    const wrapper = mountWithProvide({ block: makeBlock(), date: "2026-04-10" })
+    await wrapper.find(".delete-btn").trigger("click")
+    await wrapper.find(".confirm-delete").trigger("click")
+    await flushPromises()
+    expect(wrapper.text()).toContain("Failed to delete")
+    expect(mockPushUndo).not.toHaveBeenCalled()
   })
 
   it("shows completed styling", () => {
@@ -697,7 +553,7 @@ describe("TimeBlock", () => {
   })
 
   it("pushUndo called on successful title save", async () => {
-    mockUpdateBlock.mockResolvedValue({ ok: true })
+    mockUpdateBlock.mockResolvedValue(acceptedMutation([makeBlock()]))
     const wrapper = mountWithProvide({ block: makeBlock(), date: "2026-04-10" })
     await wrapper.find(".title").trigger("click")
     await wrapper.find(".title-input").setValue("New Title")
@@ -708,7 +564,7 @@ describe("TimeBlock", () => {
   })
 
   it("pushUndo called on successful toggle", async () => {
-    mockUpdateBlock.mockResolvedValue({ ok: true })
+    mockUpdateBlock.mockResolvedValue(acceptedMutation([makeBlock()]))
     const wrapper = mountWithProvide({ block: makeBlock(), date: "2026-04-10" })
     await wrapper.find(".checkbox").trigger("change")
     expect(mockPushUndo).toHaveBeenCalledWith(
@@ -717,10 +573,10 @@ describe("TimeBlock", () => {
   })
 
   it("pushUndo called on successful delete", async () => {
-    mockDeleteBlock.mockResolvedValue({ ok: true })
-    vi.spyOn(window, "confirm").mockReturnValue(true)
+    mockDeleteBlock.mockResolvedValue(acceptedMutation([makeBlock()]))
     const wrapper = mountWithProvide({ block: makeBlock(), date: "2026-04-10" })
     await wrapper.find(".delete-btn").trigger("click")
+    await wrapper.find(".confirm-delete").trigger("click")
     expect(mockPushUndo).toHaveBeenCalledWith(
       expect.objectContaining({ type: "delete", silent: true }),
     )
@@ -741,7 +597,7 @@ describe("TimeBlock", () => {
   // date the mutation started on, not whatever ``props.date`` happens
   // to read at pushUndo time.
 
-  it("toggle binds scheduleDate to the date active when the request started (issue #21)", async () => {
+  it("ignores stale toggle history after date navigation", async () => {
     let resolveUpdate: (v: { ok: boolean }) => void = () => {}
     mockUpdateBlock.mockReturnValueOnce(
       new Promise<{ ok: boolean }>((res) => {
@@ -753,12 +609,10 @@ describe("TimeBlock", () => {
     await wrapper.setProps({ date: "2026-04-11" })
     resolveUpdate({ ok: true })
     await flushPromises()
-    expect(mockPushUndo).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "toggle", scheduleDate: "2026-04-10" }),
-    )
+    expect(mockPushUndo).not.toHaveBeenCalled()
   })
 
-  it("edit binds scheduleDate to the date active when the request started (issue #21)", async () => {
+  it("ignores stale edit history after date navigation", async () => {
     let resolveUpdate: (v: { ok: boolean }) => void = () => {}
     mockUpdateBlock.mockReturnValueOnce(
       new Promise<{ ok: boolean }>((res) => {
@@ -772,26 +626,22 @@ describe("TimeBlock", () => {
     await wrapper.setProps({ date: "2026-04-11" })
     resolveUpdate({ ok: true })
     await flushPromises()
-    expect(mockPushUndo).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "edit", scheduleDate: "2026-04-10" }),
-    )
+    expect(mockPushUndo).not.toHaveBeenCalled()
   })
 
-  it("delete binds scheduleDate to the date active when the request started (issue #21)", async () => {
+  it("ignores stale delete history after date navigation", async () => {
     let resolveDelete: (v: { ok: boolean }) => void = () => {}
     mockDeleteBlock.mockReturnValueOnce(
       new Promise<{ ok: boolean }>((res) => {
         resolveDelete = res
       }),
     )
-    vi.spyOn(window, "confirm").mockReturnValue(true)
     const wrapper = mountWithProvide({ block: makeBlock(), date: "2026-04-10" })
     await wrapper.find(".delete-btn").trigger("click")
+    await wrapper.find(".confirm-delete").trigger("click")
     await wrapper.setProps({ date: "2026-04-11" })
     resolveDelete({ ok: true })
     await flushPromises()
-    expect(mockPushUndo).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "delete", scheduleDate: "2026-04-10" }),
-    )
+    expect(mockPushUndo).not.toHaveBeenCalled()
   })
 })

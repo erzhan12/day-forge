@@ -3,6 +3,8 @@
 Target: `dayforge.habitreward.org` on the shared habitreward DigitalOcean droplet,
 behind the central Caddy that already lives in the **habit_reward** repo's compose.
 
+The production image starts `day_forge.asgi:application` with uvicorn. The Deploy workflow calls `.github/workflows/ci.yml` before image build and push. That reusable workflow runs backend lint and tests, frontend type checking and tests, a production build, a production dependency audit, and the SSH host-key pinning check. The Docker entrypoint applies existing migrations and collects static files on each start; it does not create migrations. Run `make makemigrations` during development when models change and include the resulting migration files in the image.
+
 ## First deploy order (blocking)
 
 Complete **before** expecting a green CI health-check:
@@ -184,9 +186,8 @@ docker exec habit_reward_caddy caddy reload --config /etc/caddy/Caddyfile
 ```
 
 ## Deploying
-Push to `main` (or run the **Deploy** workflow manually). CI tests → builds →
-pushes to GHCR → SSHes in → writes `.env` → `docker compose pull && up -d` →
-health-checks `https://dayforge.habitreward.org/accounts/login/`.
+
+Push to `main` or run the **Deploy** workflow manually. Shared CI validation must pass before the workflow builds and pushes the image to GHCR. The deploy job connects over pinned SSH, writes `.env`, then runs `docker compose pull` and `docker compose up -d`. The final job checks `https://dayforge.habitreward.org/accounts/login/`.
 
 After the container starts, the deploy removes old local Day Forge images. It
 keeps the running SHA-tagged image and the two newest SHA-tagged images for

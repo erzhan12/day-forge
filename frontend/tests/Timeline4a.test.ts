@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { mount, VueWrapper } from "@vue/test-utils"
+import { makeCategories, makeScheduleProvides } from "./helpers/schedule"
 
 import Timeline4a from "../src/components/Timeline4a.vue"
+import { createTimelinePresentation } from "../src/composables/useTimelinePresentation"
 import type { TimeBlock } from "../src/types"
 import {
   DEFAULT_SCHEDULE_WINDOW,
@@ -37,8 +39,10 @@ function mountTimeline(overrides: Record<string, unknown> = {}) {
       nowDate: "2026-08-22",
       pxPerMinute: 2,
       disabled: false,
+      categories: makeCategories(),
       ...overrides,
     },
+    global: { provide: makeScheduleProvides() },
   })
   return wrapper
 }
@@ -56,6 +60,26 @@ describe("Timeline4a now-line", () => {
 })
 
 describe("Timeline4a absolute axis", () => {
+  it("renders an injected frozen model when live clock and scale props change", async () => {
+    const model = createTimelinePresentation({
+      blocks: [BLOCK], date: "2026-08-22", window: DEFAULT_SCHEDULE_WINDOW,
+      nowMinutes: 630, nowDate: "2026-08-22", pxPerMinute: 1.6,
+      drag: {
+        isDragging: true, previewBlocks: [], dragBlockId: 1,
+        frozenRenderBounds: computeRenderBounds([BLOCK], 630, DEFAULT_SCHEDULE_WINDOW),
+        frozenNowMinutes: 630, frozenPxPerMinute: 1.6,
+        frozenTimelineOriginMinutes: null, frozenWindow: DEFAULT_SCHEDULE_WINDOW,
+      },
+    })
+    mountTimeline({ presentation: model, pxPerMinute: 1.6, nowMinutes: 630 })
+    const initialHeight = wrapper!.get('[data-testid="timeline-4a"]').element.style.height
+    const initialBlockTop = (wrapper!.get(".time-block-4a").element.parentElement as HTMLElement).style.top
+    await wrapper!.setProps({ pxPerMinute: 2, nowMinutes: 690 })
+    expect(wrapper!.get('[data-testid="timeline-4a"]').element.style.height).toBe(initialHeight)
+    expect((wrapper!.get(".time-block-4a").element.parentElement as HTMLElement).style.top).toBe(initialBlockTop)
+    expect(wrapper!.get('[data-testid="timeline-4a"]').element.style.height).toBe(`${model.canvasHeightPx}px`)
+  })
+
   it("positions a block from the axis origin at 2 px/min, not flow layout", () => {
     mountTimeline({
       timelineOriginMinutes: 6 * 60,

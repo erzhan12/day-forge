@@ -2,13 +2,21 @@
 
 Patterns and corrections discovered during development. Review at session start.
 
-## `structuredClone` on Vue reactive / Inertia props throws `DataCloneError`
+## Preserving data in a controller also requires preserving it in the panel
 
-Inertia page props (and Vue `defineProps` results) are wrapped in a readonly reactive proxy. `structuredClone` can't clone these — it fails with `DataCloneError: [object Array] could not be cloned`.
+R08 kept the last successful Todoist/Habitica rows during a failed background refresh, but the panel's `v-if="error"` / `v-else` hid the list. Render the error banner independently of retained rows. Empty failures still show only the error. Test this at both controller and component boundaries.
 
-When cloning for a snapshot (e.g. undo stack), unwrap the proxy first. For flat objects, `arr.map(x => ({ ...x }))` is the simplest. For nested data, `JSON.parse(JSON.stringify(x))` or `toRaw()` + manual walk.
+## Disconnect must invalidate optimistic mutations, not only resource reads
 
-Seen at `frontend/src/composables/useUndo.ts:65` — AddBlockForm submit crashed the native event handler because `snapshotBlocks()` cloned `props.blocks` directly.
+Clearing tasks after a disconnected resource response does not stop a pending completion POST from restoring its removed row on failure. Advance the shared resource epoch and abort mutations when accepting disconnect. A late account read, GET or rollback must not re-establish the previous source.
+
+## Keep destructive-action confirmations inside the page
+
+The in-app browser stalled on `window.confirm` during the R04 block deletion test and required a manual click. Use a DOM dialog for block deletion so browser automation can confirm or cancel it. Preserve keyboard access, focus restoration, and Undo. Stop dialog key events from reaching page shortcuts, and dismiss pending confirmation if its block, date, or mutation state changes.
+
+## Copy reactive snapshots into plain values
+
+Inertia and Vue props can be reactive proxies. `structuredClone` on those proxies throws `DataCloneError`. `useUndo.snapshotBlocks()` copies flat block rows with `map(block => ({ ...block }))`; `useScheduleRevision` owns the canonical snapshot. For nested data, unwrap or copy the relevant values explicitly. Copying a snapshot does not make its revision current.
 
 ## Concurrent mutations during drag-and-drop require snapshot validation
 
@@ -16,12 +24,14 @@ When a drag holds state across async boundaries (pointer down → pointer up), c
 
 Detect this before applying updates: compare live blocks to the drag-start snapshot (excluding the dragged block). Check ID-set equality first (catches additions/deletions), then verify each neighbour's `start_time`, `end_time`, and `sort_order`. If diverged, abort the operation without posting.
 
-Seen at `frontend/src/composables/useDrag.ts` — `blocksExternallyMutated` guards `endDrag`. Defense in depth: `scheduleDisabled` also prevents new drags from starting while `isChatProcessing` is true.
+`useDrag.blocksExternallyMutated` guards `endDrag`. The page controller's mutation phase also blocks new drags during AI or reconciliation. Keep both checks when moving ownership between composables.
 
 ## A "plan-mandated divergence" still needs its boundary conditions checked
 
-When code intentionally diverges from a precedent (documented + plan-blessed), adversarial reviewers tend to wave it through as "matches the plan" and never drill into its edge cases. That is a blind spot.
+The old Todoist loader treated every non-503 result as proof of a connected account, including a network failure with no HTTP status. That promoted a disconnected source after a failed request. R08 replaces that inference with explicit `meta.account_state` and `meta.resource_state` in `useDatedResource`; a bare status still cannot establish account existence.
 
-Feature 0020 (`useTodoist.ts`): the plan said "on any non-503 error (401/500/502/504) set `connected = true`" because a real HTTP status proves the account row exists. The impl coded this as an `else` branch — which also swallows the `result.status === undefined` case (`useHttp.requestJson` returns `{ok:false, errors}` with **no status** on network/parse failure, `useHttp.ts:67-70`). So a pure network failure for a *disconnected* user elevated `connected` and showed the panel. Two adversarial review passes missed it; an external review caught it.
+When reviewing a plan-approved exception, test its missing precondition as well as its successful path. Include network/parse failures and unrelated authentication failures when mapping a provider result to account state.
 
-Rule: when reviewing an intentional divergence, enumerate its stated precondition (here: "a definitive HTTP status exists") and test the path where that precondition is **false**. Fix: gate the elevation on `result.status !== undefined`, and always add a test for the no-status / network-failure branch whenever a composable maps HTTP status to UI state.
+## Update fixtures when removing a compatibility default
+
+R12 removed invented frontend category rows after confirming that authenticated page loaders bootstrap a live catalog. Leaf and PiP fixtures that omitted categories then exercised the new error path instead of their intended behavior. Pass a complete realistic catalog with one sink and one new-block default; keep separate malformed-catalog tests. Do not weaken an unrelated UI assertion to accommodate an incomplete fixture.

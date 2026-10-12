@@ -3,22 +3,24 @@ import { computed, toRef } from "vue"
 import type { TimeBlock, UserCategory } from "../types"
 import { getCategoryColor } from "../utils/categoryColors"
 import { useActiveTheme } from "../composables/useActiveTheme"
-import { todayString } from "../utils/date"
 import { useNowMinutes } from "../composables/useNowMinutes"
 
 const props = defineProps<{
   blocks: TimeBlock[]
   date: string
   categories?: UserCategory[]
+  timeZone?: string
 }>()
 
 const activeTheme = useActiveTheme()
 // Shared 60s tick so today's blocks roll into Skipped as their window closes
 // (extracted from the previously duplicated Schedule.vue interval).
-const { currentHHMM } = useNowMinutes(toRef(props, "date"))
+const { currentHHMM, todayDate } = useNowMinutes(
+  toRef(props, "date"), computed(() => props.timeZone ?? "UTC"),
+)
 
-const isPastDay = computed(() => props.date < todayString())
-const isToday = computed(() => props.date === todayString())
+const isPastDay = computed(() => props.date < todayDate.value)
+const isToday = computed(() => props.date === todayDate.value)
 
 const skipped = computed<TimeBlock[]>(() => {
   if (!isPastDay.value && !isToday.value) return []

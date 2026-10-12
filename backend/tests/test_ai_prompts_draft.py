@@ -19,6 +19,8 @@ from ai.prompts import (
     build_system_prompt_draft,
 )
 from analytics.models import DailyReview
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from schedules.models import Schedule, TimeBlock
 from schedules.window import DEFAULT_WINDOW, ScheduleWindow
 from templates_mgr.models import Rule, Template
@@ -249,64 +251,111 @@ def test_draft_prompt_scopes_past_rule_and_forbids_moving_past_blocks():
 
 
 @pytest.mark.django_db
-def test_build_draft_user_message_includes_completion_suffix(user):
-    """A history schedule with a ``DailyReview`` whose ``planned_count >
-    0`` gets a ``(completed: X/Y)`` suffix on its date header line; a
-    schedule without a review (or with ``planned_count == 0``) is silent.
-    Pins the analytics-as-context contract for the AI draft prompt.
-    """
+def test_build_draft_user_message_uses_only_current_review_snapshots(user):
     schedule = Schedule.objects.create(
         user=user, date=datetime.date(2026, 5, 4)  # Monday
     )
 
-    # History day 1 — has a review with planned_count > 0 → suffix.
-    has_review = Schedule.objects.create(
+    frozen = Schedule.objects.create(
         user=user,
         date=datetime.date(2026, 5, 3),
-        status=Schedule.Status.ACTIVE,
+        status=Schedule.Status.REVIEWED,
+        revision=3,
     )
     TimeBlock.objects.create(
-        schedule=has_review,
+        schedule=frozen,
         title="Reviewed gym",
         start_time=datetime.time(10, 0),
         end_time=datetime.time(11, 0),
         category="health",
     )
     DailyReview.objects.create(
-        schedule=has_review, planned_count=7, completed_count=5
+        schedule=frozen, planned_count=7, completed_count=5, reviewed_revision=3
     )
 
-    # History day 2 — no review → no suffix.
-    no_review = Schedule.objects.create(
+    stale = Schedule.objects.create(
+        user=user, date=datetime.date(2026, 5, 2),
+        status=Schedule.Status.REVIEWED, revision=4,
+    )
+    for completed, hour in [(True, 9), (False, 10)]:
+        TimeBlock.objects.create(
+            schedule=stale, title=f"Stale {hour}",
+            start_time=datetime.time(hour, 0), end_time=datetime.time(hour + 1, 0),
+            is_completed=completed,
+        )
+    DailyReview.objects.create(
+        schedule=stale, planned_count=8, completed_count=8, reviewed_revision=3
+    )
+
+    active = Schedule.objects.create(
         user=user,
-        date=datetime.date(2026, 5, 2),
+        date=datetime.date(2026, 5, 1),
         status=Schedule.Status.ACTIVE,
+        revision=3,
     )
     TimeBlock.objects.create(
-        schedule=no_review,
-        title="No review block",
+        schedule=active,
+        title="Current block",
         start_time=datetime.time(9, 0),
         end_time=datetime.time(10, 0),
         category="other",
+        is_completed=True,
+    )
+    DailyReview.objects.create(
+        schedule=active, planned_count=9, completed_count=0, reviewed_revision=3,
+    )
+
+    no_review = Schedule.objects.create(
+        user=user, date=datetime.date(2026, 4, 30), status=Schedule.Status.ACTIVE,
+    )
+    TimeBlock.objects.create(
+        schedule=no_review, title="No review block",
+        start_time=datetime.time(9, 0), end_time=datetime.time(10, 0),
+        is_completed=True,
+    )
+    missing_snapshot = Schedule.objects.create(
+        user=user, date=datetime.date(2026, 4, 28), status=Schedule.Status.REVIEWED,
+    )
+    TimeBlock.objects.create(
+        schedule=missing_snapshot, title="Missing snapshot block",
+        start_time=datetime.time(9, 0), end_time=datetime.time(10, 0),
+        is_completed=True,
+    )
+    Schedule.objects.create(
+        user=user, date=datetime.date(2026, 4, 27), status=Schedule.Status.ACTIVE,
+    )
+    draft = Schedule.objects.create(
+        user=user, date=datetime.date(2026, 4, 29), status=Schedule.Status.DRAFT,
+    )
+    TimeBlock.objects.create(
+        schedule=draft, title="Draft block",
+        start_time=datetime.time(9, 0), end_time=datetime.time(10, 0),
     )
 
     history = list(
         Schedule.objects.filter(user=user)
         .exclude(pk=schedule.pk)
         .order_by("date")
+        .select_related("daily_review")
         .prefetch_related("time_blocks")
     )
 
-    msg = build_draft_user_message(
-        schedule, None, history, [], datetime.datetime(2026, 5, 4, 7, 30)
-    )
-    # Suffix appears exactly once — for has_review only.
+    with CaptureQueriesContext(connection) as queries:
+        msg = build_draft_user_message(
+            schedule, None, history, [], datetime.datetime(2026, 5, 4, 7, 30)
+        )
+    assert len(queries) == 0
     assert "(completed: 5/7)" in msg
-    assert msg.count("(completed:") == 1
-    # Both history dates are still present.
     assert "2026-05-03 (Sunday) (completed: 5/7)" in msg
-    assert "2026-05-02 (Saturday)" in msg
-    assert "2026-05-02 (Saturday) (completed:" not in msg
+    assert "2026-05-02 (Saturday) (completed: 1/2)" in msg
+    assert "2026-05-01 (Friday) (completed: 1/1)" in msg
+    assert "2026-04-30 (Thursday) (completed: 1/1)" in msg
+    assert "2026-04-28 (Tuesday) (completed: 1/1)" in msg
+    assert "2026-04-27 (Monday)\n(no blocks)" in msg
+    assert "(completed: 8/8)" not in msg
+    assert "(completed: 0/9)" not in msg
+    assert "Draft block" not in msg
+    assert "2026-04-29" not in msg
 
 
 @pytest.mark.django_db

@@ -3,24 +3,32 @@
 import datetime
 import json
 
-from analytics.services import recompute_review_from_schedule
+from analytics.services import freeze_review_snapshot
 from schedules.models import Schedule
+from schedules.mutations import execute_schedule_maintenance, run_user_maintenance
 
 from scripts import _required, _user
-from scripts.seed_schedule import _replace_blocks
+from scripts.seed_schedule import _replace_blocks_locked
 
 
 def main() -> None:
     user = _user()
-    schedule, _ = Schedule.objects.update_or_create(
-        user=user,
-        date=datetime.date.fromisoformat(_required("SEED_DATE")),
-        defaults={"status": Schedule.Status.ACTIVE},
-    )
-    _replace_blocks(schedule, json.loads(_required("SEED_BLOCKS_JSON")))
-    recompute_review_from_schedule(schedule)
-    schedule.status = Schedule.Status.REVIEWED
-    schedule.save(update_fields=["status"])
+
+    def seed(_user):
+        schedule, _ = Schedule.objects.get_or_create(
+            user=user, date=datetime.date.fromisoformat(_required("SEED_DATE"))
+        )
+
+        def replace(context):
+            _replace_blocks_locked(context.schedule, json.loads(_required("SEED_BLOCKS_JSON")))
+            context.schedule.status = Schedule.Status.REVIEWED
+            context.schedule.save(update_fields=["status"])
+
+        result = execute_schedule_maintenance(user.pk, schedule.pk, replace)
+        freeze_review_snapshot(result.schedule, revision=result.schedule.revision)
+        return result.schedule
+
+    schedule = run_user_maintenance(user.pk, seed)
     print("seeded schedule", schedule.id, "blocks", schedule.time_blocks.count())
 
 

@@ -13,9 +13,10 @@ to match ``frontend/src/composables/useHttp.ts:77``.
 """
 
 import datetime
-import json
 import logging
 
+from common.http import parse_json_object
+from common.integration_response import resource_error, resource_meta
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ImproperlyConfigured
@@ -23,12 +24,12 @@ from django.db import transaction
 from django.http import HttpRequest, JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
-from schedules.http import reject_oversized_body
 from schedules.ratelimit import (
     connect_rate_limit_key,
     consume_rate_limit,
     rate_limited_response,
 )
+from schedules.window import get_schedule_settings, resolve_time_zone
 
 from todoist_sync import cache as todoist_cache
 from todoist_sync import service
@@ -62,22 +63,40 @@ def _account_status_payload(account: TodoistAccount | None) -> dict:
     return {
         "connected": True,
         "last_verified_at": (
-            account.last_verified_at.isoformat()
-            if account.last_verified_at
-            else None
+            account.last_verified_at.isoformat() if account.last_verified_at else None
         ),
     }
 
 
-def _service_error_response(exc: Exception) -> JsonResponse:
+def _service_error_response(
+    exc: Exception, *, resource: bool = False, account_state: str = "connected"
+) -> JsonResponse:
     """Map ``TodoistError`` subclasses to the standard envelope + status."""
     for cls, (status, detail) in _SERVICE_ERROR_STATUS.items():
         if isinstance(exc, cls):
+            if resource:
+                state = (
+                    "credentials_error"
+                    if status == 401
+                    else "unavailable"
+                    if status == 504
+                    else "provider_error"
+                )
+                return resource_error(
+                    detail, status, account_state=account_state, resource_state=state
+                )
             return _envelope(detail, status)
     # Unknown error class — log and return 500. Never let the raw error
     # bubble to the client; provider stacktraces can include the token in
     # some code paths.
     logger.exception("Unexpected Todoist service error")
+    if resource:
+        return resource_error(
+            "Todoist error",
+            500,
+            account_state=account_state,
+            resource_state="unavailable",
+        )
     return _envelope("Todoist error", 500)
 
 
@@ -104,13 +123,9 @@ def account(request: HttpRequest) -> JsonResponse:
         return JsonResponse(_account_status_payload(None))
 
     # POST — verify-then-upsert.
-    oversized = reject_oversized_body(request)
-    if oversized is not None:
-        return oversized
-    try:
-        data = json.loads(request.body or b"{}")
-    except json.JSONDecodeError:
-        return _envelope("Invalid JSON.", 400)
+    data, err = parse_json_object(request, allow_empty=True, error_field="detail")
+    if err is not None:
+        return err
 
     cleaned, errors = validate_account_payload(data)
     if errors:
@@ -123,21 +138,34 @@ def account(request: HttpRequest) -> JsonResponse:
     try:
         service.verify_credentials(cleaned["token"])
     except service.TodoistError as e:
-        return _service_error_response(e)
-
-    with transaction.atomic():
-        acc, _ = TodoistAccount.objects.select_for_update().get_or_create(
-            user=request.user,
+        return _service_error_response(
+            e,
+            resource=True,
+            account_state=(
+                "connected"
+                if TodoistAccount.objects.filter(user=request.user).exists()
+                else "disconnected"
+            ),
         )
-        # ``token_encrypted`` is a ``BinaryField`` and cannot be passed
-        # inline / via ``defaults`` — set it on the instance after the row
-        # exists.
-        acc.set_token(cleaned["token"])
-        acc.last_verified_at = timezone.now()
-        # Plain save — no ``update_fields`` — so ``auto_now=True`` fires
-        # on ``updated_at`` and the cache-key version advances. See the
-        # auto_now footgun note in todoist_sync/cache.py.
-        acc.save()
+
+    try:
+        with transaction.atomic():
+            acc, _ = TodoistAccount.objects.select_for_update().get_or_create(
+                user=request.user,
+            )
+            # BinaryField cannot be passed inline through get_or_create.
+            acc.set_token(cleaned["token"])
+            acc.last_verified_at = timezone.now()
+            # Plain save bumps the cache-key version via auto_now.
+            acc.save()
+    except ImproperlyConfigured:
+        logger.exception("Todoist encryption misconfigured for user %s", request.user.id)
+        return resource_error(
+            "Todoist service is misconfigured. Contact the administrator.",
+            500,
+            account_state="configuration_error",
+            resource_state="unavailable",
+        )
 
     return JsonResponse(_account_status_payload(acc))
 
@@ -156,30 +184,33 @@ def tasks(request: HttpRequest, date: str) -> JsonResponse:
     try:
         account_row = request.user.todoist_account
     except TodoistAccount.DoesNotExist:
-        return _envelope("No Todoist account configured", 503)
+        return resource_error(
+            "No Todoist account configured",
+            503,
+            account_state="disconnected",
+            resource_state="unavailable",
+        )
 
-    include_overdue_carryover = request.GET.get("carry_overdue") == "1"
-    # ``?refresh=1`` forces a cache-bypass live re-fetch (manual Refresh /
-    # future polling). Additive: a non-forced read still hits the cache,
-    # and the forced read re-warms it below, so the read-only flow is
-    # unchanged. Independent of ``carry_overdue`` — both are query flags.
+    # One saved-zone and clock snapshot controls both the provider query and
+    # cache identity, even if settings change while the provider is in flight.
+    time_zone = get_schedule_settings(request.user).time_zone
+    local_today = timezone.localtime(timezone.now(), resolve_time_zone(time_zone)).date()
+    # ``?refresh=1`` bypasses the cache and re-warms the current scope.
     force_refresh = request.GET.get("refresh") == "1"
-    filter_scope = todoist_cache.tasks_filter_scope(
-        parsed_date, include_overdue_carryover=include_overdue_carryover
-    )
+    filter_scope = todoist_cache.tasks_filter_scope(parsed_date, local_today=local_today)
 
     if not force_refresh:
         cached = todoist_cache.get_cached_tasks(
-            account_row, parsed_date, filter_scope=filter_scope
+            account_row, parsed_date, time_zone=time_zone, filter_scope=filter_scope
         )
         if cached is not None:
-            return JsonResponse({"tasks": cached})
+            return JsonResponse({"tasks": cached, "meta": resource_meta("connected", "ready")})
 
     try:
         tasks_list = service.fetch_tasks_for_date(
             account_row,
             parsed_date,
-            include_overdue_carryover=include_overdue_carryover,
+            local_today=local_today,
         )
     except ImproperlyConfigured:
         # Server-side encryption-key issue (e.g. TODOIST_ENCRYPTION_KEY
@@ -188,18 +219,20 @@ def tasks(request: HttpRequest, date: str) -> JsonResponse:
         # 502 "Todoist provider failure" — ops can act on the real cause
         # faster.
         logger.exception("Todoist decryption misconfigured for user %s", request.user.id)
-        return _envelope(
+        return resource_error(
             "Todoist service is misconfigured. Contact the administrator.",
             500,
+            account_state="configuration_error",
+            resource_state="unavailable",
         )
     except service.TodoistError as e:
-        return _service_error_response(e)
+        return _service_error_response(e, resource=True)
 
     payload = [normalized_task_to_dict(t) for t in tasks_list]
     todoist_cache.set_cached_tasks(
-        account_row, parsed_date, payload, filter_scope=filter_scope
+        account_row, parsed_date, payload, time_zone=time_zone, filter_scope=filter_scope
     )
-    return JsonResponse({"tasks": payload})
+    return JsonResponse({"tasks": payload, "meta": resource_meta("connected", "ready")})
 
 
 # ----- /api/todoist/tasks/<task_id>/complete/ ----------------------------
@@ -219,7 +252,12 @@ def complete(request: HttpRequest, task_id: str) -> JsonResponse:
     try:
         account_row = request.user.todoist_account
     except TodoistAccount.DoesNotExist:
-        return _envelope("No Todoist account configured", 503)
+        return resource_error(
+            "No Todoist account configured",
+            503,
+            account_state="disconnected",
+            resource_state="unavailable",
+        )
 
     try:
         service.complete_task(account_row, task_id)
@@ -227,15 +265,15 @@ def complete(request: HttpRequest, task_id: str) -> JsonResponse:
         # Server-side encryption-key issue (e.g. TODOIST_ENCRYPTION_KEY
         # rotated while old rows persist) — config-shaped 500, not a 502
         # that would wrongly point ops at Todoist. Mirrors the ``tasks`` view.
-        logger.exception(
-            "Todoist decryption misconfigured for user %s", request.user.id
-        )
-        return _envelope(
+        logger.exception("Todoist decryption misconfigured for user %s", request.user.id)
+        return resource_error(
             "Todoist service is misconfigured. Contact the administrator.",
             500,
+            account_state="configuration_error",
+            resource_state="unavailable",
         )
     except service.TodoistError as e:
-        return _service_error_response(e)
+        return _service_error_response(e, resource=True)
 
     # Invalidate every cached list for this user (versioned-key bump) so the
     # just-closed task is not served from a stale cache for up to the TTL.

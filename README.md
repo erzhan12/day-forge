@@ -1,41 +1,40 @@
 # Day Forge
 
-AI-powered daily schedule assistant. Plan your day with templates, refine it with an AI command bar and chat, then review what you actually got done.
+Day Forge is a daily schedule assistant with templates, manual editing, AI chat and drafts, external calendar and task integrations, and daily reviews.
 
 - **Backend:** Django 5.x, Python 3.14, SQLite, managed with [`uv`](https://github.com/astral-sh/uv)
 - **Frontend:** Vue 3 + TypeScript + Inertia.js, served via Vite
 - **AI:** OpenAI-compatible chat-completions (configurable model/base URL)
 
-> ⚠️ **Production scale blocker:** the AI endpoints are `async def`, but the deployment is still WSGI/sync gunicorn — every async view runs through asgiref's thread-pool executor, so each in-flight LLM call still occupies one worker thread. Do not front this branch with concurrent production AI load until Phase 7 (ASGI runner + middleware audit) ships. See [CLAUDE.md](CLAUDE.md) § Production Deployment.
+The production image starts `day_forge.asgi:application` with uvicorn. The WSGI/sync gunicorn warning in older feature plans applies to other runners, not the deployment in `deployment/`.
 
 ## Prerequisites
 
 - Python 3.14 (pinned in `.python-version`)
 - [`uv`](https://docs.astral.sh/uv/) for Python dependency management
-- Node.js 20+ and npm for the frontend
+- Node.js 22 and npm for the frontend (the CI version)
 - (Optional) Docker + Docker Compose
 
 ## Quick Start (Local)
 
-Day Forge needs **two terminals** in development — Django serves the API on `:8006`, Vite serves the frontend with HMR on `:5173` and proxies API calls to Django.
+Day Forge needs two terminals in development. Django serves the API on port 8006; Vite serves the frontend on port 5173 and proxies API calls to Django.
 
 ```bash
 # One-time setup
-uv sync
-uv run python backend/manage.py migrate
-uv run python backend/manage.py createsuperuser
-uv run python backend/manage.py seed_templates
-cd frontend && npm install && cd ..
+make install
+make migrate
+make superuser
+make seed SEED_USER=your_username
 ```
 
 ```bash
-# Terminal 1 — Django backend
-uv run python backend/manage.py runserver 8006
+# Terminal 1: Django backend
+make run
 ```
 
 ```bash
-# Terminal 2 — Vite dev server
-cd frontend && npm run dev
+# Terminal 2: Vite dev server
+make frontend-dev
 ```
 
 Then visit **http://localhost:5173/** and log in.
@@ -49,22 +48,15 @@ Then visit **http://localhost:5173/** and log in.
 docker compose build
 docker compose run web uv run python manage.py migrate
 docker compose run web uv run python manage.py createsuperuser
-docker compose run web uv run python manage.py seed_templates
+docker compose run web uv run python manage.py seed_templates --user your_username
 docker compose up
 ```
 
-> This root Docker stack is **dev-only** (`runserver`, `DEBUG=1`). The
-> production stack (uvicorn ASGI, multi-stage image, Redis) lives in
-> `deployment/` — see **Deploy** below.
+The root Docker stack runs the development server with `DEBUG=1`. The production stack is in `deployment/`.
 
 ## Deploy
 
-Production target: `dayforge.habitreward.org` on the shared habitreward
-droplet, behind the central Caddy, via a gated GitHub Actions pipeline
-(test → build → push GHCR → SSH deploy → health-check). One-time manual
-setup (DNS, GitHub secrets, droplet firewall, Caddy block) and the full
-runbook live in [`deployment/README.md`](deployment/README.md). Design
-rationale: [`docs/features/0016_deploy_PLAN.md`](docs/features/0016_deploy_PLAN.md).
+The deployment configuration targets `dayforge.habitreward.org` on the shared habitreward droplet behind Caddy. The Deploy workflow calls the same validation workflow used by pull requests, then builds and pushes a container image, deploys it over pinned SSH, and probes the HTTPS login page. The [deployment runbook](deployment/README.md) covers host setup, secrets, rollback, and backups. [Feature 0016](docs/features/0016_deploy_PLAN.md) records the original deployment design.
 
 ## Configuration
 
@@ -96,9 +88,9 @@ The full list (history days, chat caps, schema caps, capture-prompt path, etc.) 
 # Backend
 uv run python backend/manage.py runserver 8006              # Dev server
 uv run python backend/manage.py runserver 8006 --noreload   # No autoreload (debuggers, manual smoke)
-uv run python backend/manage.py makemigrations
-uv run python backend/manage.py migrate
-uv run python backend/manage.py seed_templates
+make makemigrations               # Only when models change
+make migrate                      # Apply existing migrations
+make seed SEED_USER=your_username
 
 # Frontend
 cd frontend && npm run dev          # Vite dev server (HMR)
@@ -107,61 +99,71 @@ cd frontend && npm run build        # Production build
 # Lint / type-check
 uv run ruff check backend/
 uv run ruff check backend/ --fix
-cd frontend && npx vue-tsc --noEmit
+cd frontend && npm run type-check
 ```
 
 ## Testing
 
 ```bash
 # Backend (pytest)
-uv run pytest backend/tests/ -v
+uv run pytest backend/tests/ -q
 uv run pytest backend/tests/test_file.py -v
 
 # Frontend (vitest)
 cd frontend && npm test
 ```
 
-End-to-end Playwright scripts live in [frontend/scripts/playwright/](frontend/scripts/playwright/):
+Backend fixtures use a fast password hasher configured only in `backend/tests/conftest.py`. API tests use `force_login`; login and password-seeding tests request `production_password_hashers` to exercise real password verification. A separate test loads production settings in a fresh Python process to check that the fast hasher cannot leak into the application configuration.
 
-- `ai-chat-*.mjs` — multi-turn chat flows
-- `ai-draft-*.mjs` — draft endpoint
+Pull requests run `.github/workflows/ci.yml`. Deployment calls the same workflow before building or publishing an image. It checks backend lint and tests, frontend types and tests, the production build, production dependency vulnerabilities, and deployment SSH host-key pinning. PR checks have read-only repository access and do not require deployment secrets. Configure required checks in GitHub separately after the workflow has run.
 
-These hit the real LLM provider, require `LLM_API_KEY`, and **must be run serially** — they share rate-limit counters and concurrent runs will race them. The exception is `ai-draft-409-on-non-empty.mjs`, which short-circuits server-side and makes no LLM call.
+To run the application checks locally from the repository root:
+
+```bash
+make check
+make frontend-build
+npm --prefix frontend audit --omit=dev --audit-level=high
+```
+
+`make check` runs backend lint and tests plus frontend type checking and tests. The separate build and audit commands above cover the remaining application checks from CI. The workflow also checks SSH host-key pinning in `.github/workflows/deploy.yml`.
+
+End-to-end Playwright scripts are documented in [frontend/scripts/playwright/README.md](frontend/scripts/playwright/README.md). Some scripts call the real LLM or external providers and create data. Read the script guide before running `make e2e`.
 
 ## Architecture
 
 ```
 backend/
   day_forge/          Django project (settings, URLs, ASGI/WSGI)
-  schedules/          Schedule + TimeBlock models (core app)
-  templates_mgr/      Templates, Rules, UserPreferences, seed command
-  ai/                 AIInteraction model + service layer (command, draft, chat)
-  analytics/          DailyReview model + streak/completion stats
+  schedules/          Schedule and block APIs, mutation planning and persistence
+  templates_mgr/      Templates, rules, preferences, seed command
+  ai/                 Chat and draft services, AIInteraction audit records
+  analytics/          Current statistics and reviewed snapshots
+  common/             Shared integration and HTTP infrastructure
+  *_sync/             Calendar and task integrations
   tests/              pytest test suite
 frontend/
   src/pages/          Inertia page components (Login, Schedule, Settings, Analytics)
   src/components/     Reusable Vue components
-  src/composables/    Vue composables (useSchedule, useChat, useThemeFromProps)
+  src/composables/    Schedule page owner, revision state, integrations, AI
   src/utils/          theme.ts, themes.ts, etc.
 db/                   SQLite database (gitignored)
 docs/
   api.md              JSON API reference
-  features/           Feature planning documents
+  features/           Feature plans and reviews; see features/README.md
 ```
 
 ## Key Documents
 
-- [CLAUDE.md](CLAUDE.md) — Repo-level guidance for Claude Code (includes production-deployment caveats)
-- [RULES.md](RULES.md) — Living knowledge base of patterns, pitfalls, conventions
-- [PHASES.md](PHASES.md) — 7-phase implementation roadmap
-- [day_forge_prd.md](day_forge_prd.md) — Product requirements
-- [docs/api.md](docs/api.md) — JSON API reference
-- [docs/features/](docs/features/) — Per-feature plans (created by the planner agent)
-- [tasks/todo.md](tasks/todo.md) — Current work items
-- [tasks/lessons.md](tasks/lessons.md) — Corrections and patterns learned
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): current code map and data flow.
+- [RULES.md](RULES.md): current invariants and conventions.
+- [docs/api.md](docs/api.md): JSON API reference.
+- [tasks/todo.md](tasks/todo.md) and [docs/REFACTORING_PLAN.md](docs/REFACTORING_PLAN.md): tracked work and refactor status.
+- [tasks/lessons.md](tasks/lessons.md): bugs and corrections to review before coding.
+- [docs/features/README.md](docs/features/README.md): how to read historical feature plans and reviews.
+- [PHASES.md](PHASES.md) and [day_forge_prd.md](day_forge_prd.md): original roadmap and product requirements.
 
 ## Privacy Notes
 
 - User commands and chat turns are logged to `AIInteraction` for audit (PRD §6.5). Avoid entering passwords or API keys in prompts.
-- The **chat endpoint re-sends the full prior client-supplied transcript to the LLM provider on every turn** — the egress surface grows each turn. Use the Clear-thread button (or reload the page) before discussing anything sensitive. Thread state is in-memory per tab; there is no server-side persistence.
-- Prior client turns are flattened into a single user-role message under an "Untrusted prior transcript" header — never forwarded as privileged `assistant` messages — so a tampered client cannot inject assistant pre-commitments. Regression-tested in `backend/tests/test_ai_service_chat.py`.
+- The chat endpoint sends the prior client-supplied transcript to the LLM provider on each turn, so each new turn can send more text. Clear the thread before discussing anything sensitive. The UI keeps thread state in memory per tab; `AIInteraction` stores audit records on the server.
+- Prior client turns are flattened into a single user-role message under an "Untrusted prior transcript" header. They are not forwarded as privileged `assistant` messages. `backend/tests/test_ai_service_chat.py` covers this boundary.

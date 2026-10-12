@@ -10,8 +10,8 @@
 //     is open. Larger textarea (min 6 rows, max 20) and unbounded
 //     thread history.
 //
-// State lives in `useChat` (module-level singleton), so the two
-// variants share one thread — switching viewports preserves chat.
+// Both variants use the schedule owner's chat state, so switching
+// viewports preserves the thread.
 //
 // Keyboard (both variants):
 //   * Enter sends the turn
@@ -19,8 +19,8 @@
 //   * Escape clears the input
 //   * `/` (when focus is outside form fields) moves focus into the textarea
 
-import type { Ref } from "vue"
 import { computed, inject, onMounted, onUnmounted, ref, watch } from "vue"
+import { ScheduleDisabledKey } from "../composables/scheduleContext"
 import type { TimeBlock, UndoAction } from "../types"
 import { useChat } from "../composables/useChat"
 import { useActiveTheme } from "../composables/useActiveTheme"
@@ -36,6 +36,14 @@ const props = defineProps<{
   pushUndo: (action: UndoAction) => void
   variant: Variant
 }>()
+
+const emit = defineEmits<{ "height-change": [height: number] }>()
+const barEl = ref<HTMLElement | null>(null)
+let sizeObserver: ResizeObserver | null = null
+
+function reportHeight(): void {
+  if (barEl.value) emit("height-change", barEl.value.getBoundingClientRect().height)
+}
 
 const {
   messages,
@@ -55,7 +63,7 @@ watch(
   (d) => setActiveDate(d),
 )
 
-const scheduleDisabled = inject<Ref<boolean> | null>("scheduleDisabled", null)
+const scheduleDisabled = inject(ScheduleDisabledKey, null)
 const inputDisabled = computed(
   () => isProcessing.value || Boolean(scheduleDisabled?.value),
 )
@@ -206,9 +214,17 @@ onMounted(() => {
   window.addEventListener("blur", syncPlaceholderRotation)
   syncPlaceholderRotation()
   autosize()
+  if (props.variant === "dock" && barEl.value) {
+    reportHeight()
+    if (typeof ResizeObserver !== "undefined") {
+      sizeObserver = new ResizeObserver(reportHeight)
+      sizeObserver.observe(barEl.value)
+    }
+  }
 })
 
 onUnmounted(() => {
+  sizeObserver?.disconnect()
   document.removeEventListener("keydown", handleGlobalKeydown)
   document.removeEventListener("visibilitychange", syncPlaceholderRotation)
   window.removeEventListener("focus", syncPlaceholderRotation)
@@ -219,6 +235,7 @@ onUnmounted(() => {
 
 <template>
   <div
+    ref="barEl"
     class="command-bar"
     :class="`variant-${variant}`"
     data-testid="command-bar"

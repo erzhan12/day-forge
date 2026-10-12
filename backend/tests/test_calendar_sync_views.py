@@ -52,7 +52,7 @@ def user(db):
 @pytest.fixture
 def auth_client(user):
     client = Client()
-    client.login(username="cal-user", password="testpass123")
+    client.force_login(user)
     return client
 
 
@@ -324,6 +324,24 @@ class TestEventsEndpoint:
             assert cls.call_count == first_calls
             assert r1.json() == r2.json()
 
+    def test_timezone_change_misses_old_cache(self, auth_client, account):
+        from schedules.models import UserScheduleSettings
+
+        row, _ = UserScheduleSettings.objects.get_or_create(user=account.user)
+        seen = []
+
+        def fetch(_account, _date, time_zone):
+            seen.append(time_zone)
+            return []
+
+        with patch("calendar_sync.service.fetch_events_for_date", side_effect=fetch):
+            auth_client.get("/api/calendar/events/2026-05-07/")
+            row.time_zone = "Asia/Qatar"
+            row.save()
+            auth_client.get("/api/calendar/events/2026-05-07/")
+
+        assert seen == ["UTC", "Asia/Qatar"]
+
     def test_refresh_bypasses_cache_and_rewarms(self, auth_client, account):
         """``?refresh=1`` must bypass a pre-seeded cache entry, hit the
         provider, and re-warm via ``set_cached_events``."""
@@ -544,9 +562,9 @@ class TestCsrfGuard:
 
     def test_post_without_csrf_token_returns_403(self, db):
         from django.test import Client
-        User.objects.create_user(username="csrf-cal", password="x")
+        user = User.objects.create_user(username="csrf-cal", password="x")
         client = Client(enforce_csrf_checks=True)
-        client.login(username="csrf-cal", password="x")
+        client.force_login(user)
         resp = client.post(
             "/api/calendar/account/",
             data='{"apple_id": "a@b.com", "password": "x"}',
@@ -556,9 +574,9 @@ class TestCsrfGuard:
 
     def test_delete_without_csrf_token_returns_403(self, db):
         from django.test import Client
-        User.objects.create_user(username="csrf-cal2", password="x")
+        user = User.objects.create_user(username="csrf-cal2", password="x")
         client = Client(enforce_csrf_checks=True)
-        client.login(username="csrf-cal2", password="x")
+        client.force_login(user)
         resp = client.delete("/api/calendar/account/")
         assert resp.status_code == 403
 

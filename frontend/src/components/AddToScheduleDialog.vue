@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import type { Ref } from "vue"
 import { computed, inject, ref } from "vue"
-import type { TimeBlock, TravelRule, UndoAction, UserCategory } from "../types"
+import type { TimeBlock, TravelRule, UserCategory } from "../types"
+import { ScheduleDisabledKey, ScheduleUndoKey } from "../composables/scheduleContext"
 import { sinkCategory, orderedCategories } from "../utils/categories"
 import type { NormalizedEvent } from "../types/calendar"
 import { useSchedule } from "../composables/useSchedule"
+import { registerMutationUndo } from "../composables/useMutationUndo"
 import { computeEventBlockTimes } from "../utils/travelRules"
 import {
   DEFAULT_SCHEDULE_WINDOW,
@@ -18,6 +19,7 @@ const props = defineProps<{
   event: NormalizedEvent
   matchedRule: TravelRule | null
   date: string
+  timeZone?: string
   // The travel-rule fetch failed, so `matchedRule` is null because the rules
   // are UNKNOWN, not because none matched. Those two states produce identical
   // 0/0/"other" prefills, so the distinction has to be shown or the user
@@ -38,12 +40,9 @@ const win = computed(() => props.window ?? DEFAULT_SCHEDULE_WINDOW)
 // setup-time date if the user navigates dates while the dialog is open.
 const { createBlockFromEvent } = useSchedule(() => props.date)
 
-const undo = inject<{
-  pushUndo: (action: UndoAction) => void
-  snapshotBlocks: () => TimeBlock[]
-} | null>("undo", null)
+const undo = inject(ScheduleUndoKey, null)
 
-const scheduleDisabled = inject<Ref<boolean> | null>("scheduleDisabled", null)
+const scheduleDisabled = inject(ScheduleDisabledKey, null)
 const isDisabled = computed(() => Boolean(scheduleDisabled?.value))
 
 // Prefill EVERY field from the matched rule (locked requirement); the bare
@@ -59,7 +58,7 @@ const ruleCategory = props.matchedRule?.category
 const category = ref<TimeBlock["category"]>(
   ruleCategory && knownSlugs.has(ruleCategory)
     ? ruleCategory
-    : sinkCategory(props.categories ?? [])?.slug || "other",
+    : sinkCategory(props.categories ?? [])?.slug ?? "",
 )
 
 const submitting = ref(false)
@@ -78,6 +77,7 @@ const computedTimes = computed(() =>
     props.date,
     clampMinutes(travelThere.value),
     clampMinutes(travelBack.value),
+    props.timeZone ?? "UTC",
   ),
 )
 
@@ -107,6 +107,7 @@ const confirmDisabled = computed(
   () =>
     submitting.value ||
     isDisabled.value ||
+    !knownSlugs.has(category.value) ||
     outsideViewedDay.value ||
     zeroLength.value,
 )
@@ -116,10 +117,6 @@ async function handleConfirm() {
   if (confirmDisabled.value || times === null) return
   submitting.value = true
   errorMessage.value = ""
-  // Undo parity with AddBlockForm.handleSubmit: snapshot + date captured
-  // BEFORE the request (issue #21 date-navigation guard).
-  const snapshot = undo?.snapshotBlocks()
-  const scheduleDate = props.date
   const blockTitle = props.event.title
   const result = await createBlockFromEvent({
     title: blockTitle,
@@ -129,15 +126,11 @@ async function handleConfirm() {
   })
   submitting.value = false
   if (result.ok) {
-    if (undo && snapshot) {
-      undo.pushUndo({
-        description: `Added "${blockTitle}"`,
-        type: "add",
-        previousBlocks: snapshot,
-        scheduleDate,
-        silent: true,
-      })
-    }
+    registerMutationUndo(result, undo?.pushUndo, {
+      description: `Added "${blockTitle}"`,
+      type: "add",
+      silent: true,
+    })
     emit("close")
   } else if (result.code === "outside_window") {
     // Deliberate skip (feature 0053): event fell fully outside the day window.

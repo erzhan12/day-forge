@@ -17,9 +17,7 @@ function makeRule(overrides: Partial<TravelRule> & { id: number }): TravelRule {
   }
 }
 
-// Build an ISO8601 (UTC) string for a LOCAL wall-clock time so the tests
-// are independent of the TZ the runner executes in — the util reads the
-// event back via getHours()/getMinutes() in the same local TZ.
+// Build an explicit UTC fixture, independent of the test runner timezone.
 function isoLocal(
   y: number,
   m: number,
@@ -27,7 +25,7 @@ function isoLocal(
   h: number,
   min: number,
 ): string {
-  return new Date(y, m - 1, d, h, min).toISOString()
+  return new Date(Date.UTC(y, m - 1, d, h, min)).toISOString()
 }
 
 const VIEWED = "2026-04-07"

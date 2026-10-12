@@ -144,16 +144,9 @@ try {
       ).test(histSection),
     },
     {
-      name: `${HIST_NO_REVIEW} (${nWeekday}) has NO suffix`,
+      name: `${HIST_NO_REVIEW} (${nWeekday}) uses live ratio (completed: 1/2)`,
       pass: new RegExp(
-        `^# ${HIST_NO_REVIEW} \\(${nWeekday}\\)$`,
-        "m",
-      ).test(histSection),
-    },
-    {
-      name: `${HIST_NO_REVIEW} line does NOT contain '(completed:'`,
-      pass: !new RegExp(
-        `^# ${HIST_NO_REVIEW} \\(${nWeekday}\\) \\(completed:`,
+        `^# ${HIST_NO_REVIEW} \\(${nWeekday}\\) \\(completed: 1/2\\)$`,
         "m",
       ).test(histSection),
     },

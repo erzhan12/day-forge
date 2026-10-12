@@ -19,12 +19,12 @@ and the false-positive/false-negative trade-offs this makes on purpose):
    of pending user/ask pairs from prior replay evidence, while still checking
    older handled turns.
 2. If instead it carried ``is_error: True``, walk back the CONTIGUOUS chain
-   of ``(user, is_error assistant)`` pairs. The failed turns (and, if the
-   chain began as the answer to a pending ask, that ask turn too) are
-   excluded from the "prior text" used as replay evidence in step 4, and a
-   title traceable to that ask's own text is allowed through — this lets a
-   "try again" retry an add that never actually applied (a 400 aborts the
-   whole batch; a 409 ``schedule_changed`` writes nothing).
+   of ``(user, is_error assistant)`` pairs. The failed turns and any
+   contiguous still-pending ask chain before them are excluded from the
+   "prior text" used as replay evidence in step 4. A title traceable to
+   the immediately preceding ask may pass; block IDs reported as applied in the
+   ask chain remain replay evidence. This lets "try again" retry an add
+   that never applied without repeating a partially applied sibling.
 3. For each ``add`` action, normalise the title (strip a trailing ``[N]``
    duplicate-counter suffix, casefold, collapse whitespace) and check it is
    traceable to the latest user turn (Step A) — ANY significant token
@@ -211,18 +211,18 @@ def _is_replay(
     return False
 
 
-def _collect_failure_chain_start(messages: list[dict]) -> tuple[int, str | None]:
-    """Return ``(prior_end, ask_text)`` for the ``is_error`` widening path.
+def _collect_failure_chain_start(messages: list[dict]) -> tuple[int, str | None, int | None]:
+    """Return ``(prior_end, ask_text, ask_chain_end)`` after an error.
 
     ``messages[-2]`` is assumed to already be an ``is_error`` assistant
     turn. Walks back over the CONTIGUOUS ``(user, is_error assistant)``
-    chain; ``prior_end`` is the index such that ``messages[:prior_end]`` is
-    the prior text used as replay evidence (the failed turns — and, if the
-    chain began as the answer to a pending ask, that ask turn too — are
-    excluded). ``ask_text`` is the content of that pending-ask turn when
-    present and not itself a guard ask (a guard ask quotes the REJECTED
-    title, so treating it as evidence would whitelist the exact replay this
-    guard blocks) — else ``None``.
+    chain. ``prior_end`` is the first user turn in any still-pending ask
+    chain before those failures, or the first failed user turn otherwise.
+    ``ask_text`` comes from the immediately preceding ask, unless any ask
+    in the pending chain is the guard's own (which quotes a rejected title).
+    ``ask_chain_end``
+    bounds the asks whose already-applied block IDs still count as replay
+    evidence even though their pending user turns are excluded from text.
     """
     n = len(messages)
     k = n - 3  # earliest failed user turn found so far
@@ -236,6 +236,7 @@ def _collect_failure_chain_start(messages: list[dict]) -> tuple[int, str | None]
 
     prior_end = k
     ask_text = None
+    ask_chain_end = None
     ask_turn = messages[k - 1] if k >= 1 else None
     is_assistant_ask_turn = (
         ask_turn is not None
@@ -243,11 +244,16 @@ def _collect_failure_chain_start(messages: list[dict]) -> tuple[int, str | None]
         and ask_turn.get("is_ask") is True
     )
     if is_assistant_ask_turn:
+        prior_end = _collect_ask_chain_start(messages[: k + 1])
+        ask_chain_end = k
         ask_content = ask_turn["content"]
-        if not ask_content.startswith(GUARD_ASK_PREFIX):
+        has_guard_ask = any(
+            turn["content"].startswith(GUARD_ASK_PREFIX)
+            for turn in messages[prior_end + 1 : ask_chain_end : 2]
+        )
+        if not has_guard_ask:
             ask_text = ask_content
-        prior_end = k - 1
-    return prior_end, ask_text
+    return prior_end, ask_text, ask_chain_end
 
 
 def _collect_ask_chain_start(messages: list[dict]) -> int:
@@ -273,21 +279,22 @@ def find_replayed_actions(
     is_previous_assistant = previous_turn is not None and previous_turn.get("role") == "assistant"
     prior_end = len(messages) - 1
     ask_text: str | None = None
+    ask_chain_end: int | None = None
     if is_previous_assistant and previous_turn.get("is_ask") is True:
         # Every user/ask pair in the uninterrupted chain is still pending.
         # Older turns have been handled and remain replay evidence, even if
         # the last ask was a mistaken conversational question.
         prior_end = _collect_ask_chain_start(messages)
+        ask_chain_end = len(messages) - 1
     elif is_previous_assistant and previous_turn.get("is_error") is True:
-        prior_end, ask_text = _collect_failure_chain_start(messages)
+        prior_end, ask_text, ask_chain_end = _collect_failure_chain_start(messages)
 
     latest_text = messages[-1]["content"]
     prior_text = "\n".join(m["content"] for m in messages[:prior_end])
-    pending_ask = is_previous_assistant and previous_turn.get("is_ask") is True
     existing_blocks = existing_blocks or {}
     already_applied_titles: set[str] = set()
-    if pending_ask:
-        ask_turns = messages[prior_end + 1 : -1 : 2]
+    if ask_chain_end is not None:
+        ask_turns = messages[prior_end + 1 : ask_chain_end : 2]
         if all(isinstance(turn.get("applied_add_block_ids"), list) for turn in ask_turns):
             applied_ids = {
                 block_id
@@ -314,7 +321,7 @@ def find_replayed_actions(
             latest_text,
             prior_text,
             ask_text,
-            already_present=pending_ask and _normalise(title) in already_applied_titles,
+            already_present=_normalise(title) in already_applied_titles,
         ):
             offending.append(idx)
     return tuple(offending)

@@ -30,6 +30,11 @@ import google.oauth2.id_token
 import httpx
 from asgiref.sync import sync_to_async
 from calendar_sync.schemas import NormalizedEvent
+from calendar_sync.time import (
+    floating_datetime_to_utc,
+    local_date_to_utc,
+    local_day_bounds_utc,
+)
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.db import transaction
@@ -421,23 +426,14 @@ async def _ensure_access_token(account) -> str:
 
 # ----- REST fetch (async; httpx.AsyncClient) -----------------------------
 
-def _day_window(target_date: date) -> tuple[dt, dt]:
-    """``[start, end)`` for the date in ``settings.TIME_ZONE``, in UTC.
-
-    Google wants RFC3339 strings; ``.isoformat()`` on these aware-UTC
-    datetimes yields the ``+00:00`` form Google accepts.
-    """
-    tz = django_tz.get_current_timezone()
-    start = dt.combine(target_date, datetime.time.min, tzinfo=tz)
-    end = start + datetime.timedelta(days=1)
-    return start.astimezone(datetime.UTC), end.astimezone(datetime.UTC)
+def _day_window(target_date: date, time_zone: str = "UTC") -> tuple[dt, dt]:
+    """UTC instants bounding the user's local date, including DST days."""
+    return local_day_bounds_utc(target_date, time_zone)
 
 
-def _date_to_utc(value: date) -> dt:
-    """All-day date → UTC midnight in ``settings.TIME_ZONE`` (CalDAV parity)."""
-    naive = dt.combine(value, datetime.time.min)
-    aware = django_tz.make_aware(naive, django_tz.get_current_timezone())
-    return aware.astimezone(datetime.UTC)
+def _date_to_utc(value: date, time_zone: str = "UTC") -> dt:
+    """All-day date → midnight in the saved user zone, then UTC."""
+    return local_date_to_utc(value, time_zone)
 
 
 async def _fetch_selected_calendars(client, access_token: str) -> list[dict]:
@@ -500,7 +496,7 @@ async def _fetch_events_for_calendar(
 
 
 def _normalize_gcal_event(
-    raw: dict, calendar_name: str, account_email: str
+    raw: dict, calendar_name: str, account_email: str, time_zone: str = "UTC"
 ) -> NormalizedEvent | None:
     """Build a NormalizedEvent from one raw Google event; return ``None`` on
     a cancelled or malformed event rather than crashing the whole fetch."""
@@ -513,15 +509,26 @@ def _normalize_gcal_event(
         start = raw["start"]
         end = raw["end"]
         if "dateTime" in start:
-            # Timed: Google returns offset-aware RFC3339 → parse → UTC.
-            start_utc = dt.fromisoformat(start["dateTime"]).astimezone(datetime.UTC)
-            end_utc = dt.fromisoformat(end["dateTime"]).astimezone(datetime.UTC)
+            # RFC3339 offsets take precedence. If an offset is absent, Google
+            # may supply a separate event timezone; otherwise use the saved
+            # viewer timezone instead of the server machine's timezone.
+            start_utc = floating_datetime_to_utc(
+                dt.fromisoformat(start["dateTime"]),
+                start.get("timeZone") or time_zone,
+            )
+            end_utc = floating_datetime_to_utc(
+                dt.fromisoformat(end["dateTime"]),
+                end.get("timeZone") or time_zone,
+            )
             all_day = False
+            start_date = end_date = None
         else:
             # All-day: date-only, exclusive ``end.date`` (kept as-is, matching
             # CalDAV's +1-day all-day convention).
-            start_utc = _date_to_utc(date.fromisoformat(start["date"]))
-            end_utc = _date_to_utc(date.fromisoformat(end["date"]))
+            start_date = date.fromisoformat(start["date"])
+            end_date = date.fromisoformat(end["date"])
+            start_utc = _date_to_utc(start_date, time_zone)
+            end_utc = _date_to_utc(end_date, time_zone)
             all_day = True
         title = raw.get("summary") or "(no title)"
         # Namespaced so a Google id can't collide with a CalDAV UID in the
@@ -535,6 +542,8 @@ def _normalize_gcal_event(
             all_day=all_day,
             external_uid=external_uid,
             account_label=account_email,
+            start_date=start_date,
+            end_date=end_date,
         )
     except (KeyError, ValueError, TypeError) as e:
         # Narrow catch — bug-class errors (NameError, ImportError) propagate
@@ -548,7 +557,7 @@ def _normalize_gcal_event(
 
 
 async def fetch_events_for_account(
-    account, target_date: date
+    account, target_date: date, time_zone: str = "UTC"
 ) -> list[NormalizedEvent]:
     """Fetch + normalise Google events for one account on one date.
 
@@ -558,7 +567,7 @@ async def fetch_events_for_account(
     server-wide config-500.
     """
     access_token = await _ensure_access_token(account)
-    time_min_dt, time_max_dt = _day_window(target_date)
+    time_min_dt, time_max_dt = _day_window(target_date, time_zone)
     time_min, time_max = time_min_dt.isoformat(), time_max_dt.isoformat()
     try:
         async with httpx.AsyncClient(
@@ -585,7 +594,9 @@ async def fetch_events_for_account(
         normalized: list[NormalizedEvent] = []
         for cal, raw_list in zip(selected, results):
             for raw in raw_list:
-                ev = _normalize_gcal_event(raw, cal["summary"], account.email)
+                ev = _normalize_gcal_event(
+                    raw, cal["summary"], account.email, time_zone
+                )
                 if ev is None:
                     continue
                 # Defensive window guard — drop anything outside [start, end).

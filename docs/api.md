@@ -1,284 +1,104 @@
 # Day Forge API
 
-JSON endpoints for managing schedules and time blocks. Page routes (`/`, `/schedule/<date>/`, `/accounts/login/`) render Inertia pages and are not covered here.
+Current wire contracts after R00–R12. Architecture and implementation owners: [ARCHITECTURE.md](ARCHITECTURE.md). Feature plans describe historical implementations; they do not override this reference or contract tests.
 
 ## Conventions
 
-- **Base URL:** same host as Django (`http://localhost:8006` in dev; Vite dev server proxies `/api/*` to it).
-- **Content type:** `application/json` for all request bodies.
-- **Authentication:** session cookie. All endpoints require `@login_required`; unauthenticated requests receive `302` → `/accounts/login/`.
-- **CSRF:** Django's CSRF middleware is active. Clients must:
-  1. Obtain the `XSRF-TOKEN` cookie by hitting any `@ensure_csrf_cookie` view (e.g. `GET /accounts/login/` or `GET /schedule/<date>/`).
-  2. Send the token back in the `X-XSRF-TOKEN` header on every unsafe request. Missing or mismatched token → `403`.
-- **Time format:** `HH:MM`, 24-hour, 5-minute granularity (validated at the model layer). **Exception (feature 0026):** blocks created via `POST /api/schedules/{date}/blocks/from-event/` may carry arbitrary minutes (external calendar events don't snap). Such off-grid blocks are first-class afterwards: non-time `PATCH`es tolerate them, `restore` re-accepts them, and `reorder` skips the granularity check on *unchanged* times. Manually *changing* a time on any endpoint still enforces the 5-minute grid.
-- **Date format:** `YYYY-MM-DD`.
-- **Errors:** non-`2xx` responses return `{"errors": {<field>: <message>}}`. Field is either a request field name or a logical key (`time`, `body`, `detail`).
+- Base URL: Django (`http://localhost:8006` in development). Vite serves assets and proxies application routes on `:5173`.
+- Authentication: Django session cookie. Unauthenticated protected views redirect to `/accounts/login/`. Unsafe `/api/` requests carrying a mismatched `X-Schedule-User` account ID return `401` with `code: session_invalid` before the view. This header supplements session authentication.
+- CSRF: obtain `XSRF-TOKEN` from the login or schedule GET; send `X-XSRF-TOKEN` on unsafe requests. Missing or invalid CSRF returns 403.
+- JSON request bodies must be objects. Shared parsing rejects malformed roots with 400 and bodies over 100 KB with 413 where that parser applies. Error envelopes use `errors`, optionally a stable `code` and metadata. Middleware errors may use Django's HTML response.
+- Dates use `YYYY-MM-DD`, block times use `HH:MM`, intervals are `[start, end)`. The saved user IANA `time_zone` defines civil time, viewed-day scope, AI placement and integration queries. Browser and project default zones do not override it.
+- Manual changed times require five-minute increments. Imported events permit arbitrary minutes; unchanged imported times can survive metadata edits and reorder. Restore accepts those previously valid intervals. Supported writes use domain validation rather than per-row `full_clean()`.
 
-## Endpoints
+## Schedule mutation contract
 
-### Category catalog
+Block create, from-event create, PATCH, DELETE, reorder, restore, AI chat and draft require JSON `expected_revision`, a plain integer from 0 through `2**63 - 1`. Use the revision of the canonical schedule currently shown. An absent day starts at revision 0. The active mark-reviewed path has the same requirement; its reviewed retry exception is documented under Analytics. Category, rule, template, preference and settings mutations have their own contracts, not this field.
 
-`GET /api/user/categories/` lazily returns the authenticated user's ordered catalog. A first read seeds Work (`work`, blue, default), Personal (`personal`, violet), Health (`health`, emerald), and Other (`other`, gray sink).
+Missing, invalid or obsolete revision returns 409 with `code: schedule_changed`. Temporary exhausted SQLite write contention can return the same conflict. These failures do not apply a partial write. The client reconciles the canonical schedule before another mutation; it does not blindly replay the request.
 
-`POST /api/user/categories/` accepts `{ "label", "color_id" }`; labels are trimmed and case-insensitively unique, with immutable ASCII slugs generated from them. The shared palette IDs are `blue`, `violet`, `emerald`, `gray`, `amber`, `rose`, `cyan`, and `indigo`; up to eight categories are allowed.
+Successful mutation responses include a canonical snapshot captured inside the transaction:
 
-`PATCH /api/user/categories/{id}/` changes `label`, `color_id`, or promotes the row by posting `{ "is_new_block_default": true }`. `slug` and `is_sink` are immutable. `POST /api/user/categories/swap/` accepts `{ "a": id, "b": id }`. `DELETE /api/user/categories/{id}/` refuses the sink and atomically remaps the deleted slug to the sink across blocks, templates, travel overrides, and review maps.
+```json
+{
+  "schedule": {"id": 12, "date": "2026-10-11", "status": "active", "revision": 8},
+  "blocks": [{"id": 42, "title": "Standup", "start_time": "09:00", "end_time": "09:15", "category": "work", "is_completed": false, "sort_order": 0}],
+  "revision": 8
+}
+```
 
-All four **write** operations (POST create, PATCH, DELETE, POST swap) share one per-user fixed-window budget (`CATEGORY_MUTATION_RATE_LIMIT_PER_HOUR`, default 60/hr; feature 0064); exceeding it returns `429 Too Many Requests` with `{"errors": {"detail": "Rate limit exceeded. Try again later."}}` and a `Retry-After: 3600` header. `GET /api/user/categories/` reads are never counted.
+Create/PATCH retain the changed block fields at the top level; DELETE retains `ok: true`. Reorder/restore return the snapshot directly. AI replies add their documented action/ask/outcome fields. Do not replace state from an obsolete response or from another account/date. A successful no-op retains revision; accepted block or status changes advance it once. Forward edits promote draft/reviewed to active. Restore preserves status, and draft generation stays draft.
+
+Each serialized block also carries an opaque signed `restore_proof`. Keep it with the block snapshot for Undo; do not construct or modify it. The server owns stored origin, which is not a writable API field. Calendar-import and legacy/unverified block titles are masked in AI schedule context and draft history; scheduling times, category and completion remain available. Matching protected titles are masked in the provider-bound chat transcript. User-written rules, templates and copied text remain separate AI inputs; see `/privacy/`.
+
+All supported day writes lock User → Schedule → TimeBlock and validate the complete candidate state. On SQLite the executor reserves the writer before reading and retries the whole transaction on bounded busy errors. On PostgreSQL the same ordering uses row locks. SQLite still serializes writes across users and can return contention conflicts. This contract protects supported application writers; direct ORM edits bypass it. See [R04](REFACTORING_R04.md), [R05](REFACTORING_R05.md), and [R07](REFACTORING_R07.md).
+
+### Schedule page reads
+
+GET `/schedule/{date}/` captures an existing fully bootstrapped day, ordered blocks and page policies in one read transaction without reserving the SQLite writer. An absent day or missing first-use rows use the shared User writer lock; the creation flag and response snapshot are captured before commit. `auto_draft_pending` can be true only for the request that created Schedule, with a matching template and configured AI key. Restoring missing policies for an existing day does not emit that signal.
+
+Exhausted first-use contention or SQLite locked/busy errors inside this view return 503 with `Retry-After: 1` and a plain-text retry message. They do not return the mutation `409 schedule_changed` envelope. This response contract does not cover authentication middleware failures before the view.
+
+The frontend app-root coordinator retains pending writes and confirmed revision floors across page remounts. A returning account/date waits for settlement and accepts a sufficiently current snapshot or performs a scoped GET reload. Failed or older reconciliation keeps writes blocked. Navigation does not replay POST, and a departed day's settlement does not reload another day. See [A02/A03](AUDIT_FIXES_A02_A03.md).
+
+## Category catalog
+
+`GET /api/user/categories/` returns `{"categories": [...]}` in catalog order and bootstraps Work (`work`, default), Personal (`personal`), Health (`health`) and Other (`other`, sink) on first access. Slugs are immutable and user scoped. Labels are trimmed and case-insensitively unique. Palette IDs: `blue`, `violet`, `emerald`, `gray`, `amber`, `rose`, `cyan`, `indigo`. At most eight categories.
+
+| Method and path | Request | Result |
+|---|---|---|
+| POST `/api/user/categories/` | `label`, `color_id` | Create category, 201 |
+| PATCH `/api/user/categories/{id}/` | `label`, `color_id`, or `is_new_block_default: true` | Update mutable fields or promote default, 200 |
+| POST `/api/user/categories/swap/` | Distinct plain-integer `a`, `b` | Swap order, 200 |
+| DELETE `/api/user/categories/{id}/` | No mutation revision required | Refuse sink deletion; remap deleted slug to sink in blocks, templates, travel rules and review maps, 200 |
+
+Malformed fields return 400; unknown/foreign IDs return 404. Four write operations share `CATEGORY_MUTATION_RATE_LIMIT_PER_HOUR` (default 60). Exceeded budget returns 429, `Retry-After: 3600`, `errors.detail: Rate limit exceeded. Try again later.` GET is uncounted. Category maintenance locks the user and advances affected day revisions when block state changes.
+
+Category deletion advances each affected schedule revision once. If a reviewed snapshot was current before the remap, its tag advances to that revision in the same transaction; frozen counts, notes and timestamps stay unchanged. Category-minute maps move to the sink. Previously stale snapshots remain stale. A repeated delete returns 404 without another revision change.
+
+## Block endpoints
 
 ### `POST /api/schedules/{date}/blocks/`
 
-Create a time block on the schedule for the given date, owned by the authenticated user. If the user has no schedule for that date, one is created.
+Create a user-owned block, creating the day only on an accepted write. Body: `expected_revision`, nonempty trimmed `title` (1–255 characters), `start_time`, `end_time`, optional category slug. An omitted category uses the catalog's new-block default. Manual times require the five-minute grid and start < end. A partially outside interval is clamped to the day window; a wholly outside interval returns 422 with `skipped: true`, `code: outside_window` and `window`. Overlap returns 400 with `errors.time`.
 
-**Path params**
+Success: 201, changed block fields plus the canonical mutation snapshot. Invalid body/date/fields/category/interval returns 400; oversized body returns 413; revision/contention returns 409.
 
-| Name | Type | Notes |
-|------|------|-------|
-| `date` | string | `YYYY-MM-DD`. Invalid format → `400`. |
+### `POST /api/schedules/{date}/blocks/from-event/`
 
-**Request body**
+Same revision, title, interval, ownership and response contract as manual create, with arbitrary minute boundaries and the sink as omitted category. The frontend converts the event to the saved user timezone and applies travel overrides before submitting the local interval. The backend validates the resulting interval and clamps it to the saved day window. Free-slot re-adds are permitted; this endpoint has no event deduplication key.
 
-| Field | Type | Required | Notes |
-|-------|------|----------|-------|
-| `title` | string | yes | 1–255 chars after `strip()`. |
-| `start_time` | string | yes | `HH:MM`, 5-minute increments, `< end_time`. |
-| `end_time` | string | yes | `HH:MM`, 5-minute increments, `> start_time`. |
-| `category` | string | no | A slug from the authenticated user's category catalog. Omitted manual creates use that catalog's new-block default. |
+### `PATCH /api/blocks/{id}/`
 
-**Success — `201 Created`**
+Body: `expected_revision` plus any of `title`, `start_time`, `end_time`, `category`, `is_completed`, `sort_order`. Completion is a boolean; sort order is a plain integer 0–10000. Only changed time boundaries enforce the grid and window. Metadata-only edits tolerate unchanged imported times and blocks outside a subsequently narrowed window. Candidate overlap or invalid interval returns 400. Unknown or foreign ID returns 404.
 
-```json
-{
-  "id": 42,
-  "title": "Deep work",
-  "start_time": "09:00",
-  "end_time": "10:30",
-  "category": "work",
-  "is_completed": false,
-  "sort_order": 0
-}
-```
+Success: 200, changed block fields and mutation snapshot. Identical values do not advance revision or change draft/reviewed status.
 
-**Errors — `400`**
+### `DELETE /api/blocks/{id}/`
 
-| `errors` key | Meaning |
-|--------------|---------|
-| `body` | Request body is not valid JSON. |
-| `date` | Path date is not `YYYY-MM-DD`. |
-| `title` | Missing, empty after strip, or > 255 chars. |
-| `start_time` / `end_time` | Missing or not in `HH:MM` format. |
-| `category` | Not a string, or not one of the allowed choices. |
-| `time` | `start_time >= end_time`, or block overlaps an existing block on the same schedule. |
-
-The overlap check runs inside `transaction.atomic()` but is **not** race-safe against concurrent requests on SQLite (no row locks available). Any production deployment that serves real concurrent users should move to PostgreSQL (where `select_for_update` actually takes row locks) and add a DB-level exclusion constraint on `(schedule, [start_time, end_time))` as defence-in-depth. The same caveat applies to `PATCH /api/blocks/{pk}/`, `POST /api/blocks/reorder/`, and `POST /api/schedules/{date}/blocks/restore/`.
-
----
-
-### `POST /api/schedules/{date}/blocks/from-event/` — feature 0026
-
-Create a time block from an external calendar event ("Add to schedule" in the External Calendars panel). Identical to `POST /api/schedules/{date}/blocks/` **except** the 5-minute granularity check is skipped — external events carry arbitrary minutes (e.g. `14:07`) and the clamp-to-day decision produces `23:59`. This is the single sanctioned off-grid create path; ordinary clients should keep using the plain create endpoint.
-
-The frontend computes the final local `HH:MM` pair (event local time ± travel-time rule minutes, clamped to `00:00`/`23:59`); this endpoint is TZ-agnostic and only parses, range-checks, and overlap-checks.
-
-**Request body**
-
-| Field | Type | Required | Notes |
-|-------|------|----------|-------|
-| `title` | string | yes | 1–255 chars after `strip()`. Non-string → `400`. |
-| `start_time` | string | yes | `HH:MM`, any minute value, `< end_time`. |
-| `end_time` | string | yes | `HH:MM`, any minute value, `> start_time`. |
-| `category` | string | no | A slug from the authenticated user's category catalog. From-event creates with no override use the sink. |
-
-The raw request body is capped at **100 KB** (`413` before JSON parsing). Non-object JSON roots and non-string field values return structured `400`s.
-
-**Success — `201 Created`** — same shape as the plain create response.
-
-**Errors — `400`** — same keys as the plain create endpoint, including the identical overlap message `{"errors": {"time": "This block overlaps with an existing block."}}`. Re-adding the same event is always allowed (no dedupe) as long as the slot is free.
-
----
-
-### `PATCH /api/blocks/{pk}/`
-
-Partially update a time block. Only fields present in the request body are modified. The block must be owned (via `schedule.user`) by the authenticated user.
-
-**Path params**
-
-| Name | Type | Notes |
-|------|------|-------|
-| `pk` | integer | TimeBlock primary key. |
-
-**Request body** (all optional, but at least one field should be present)
-
-| Field | Type | Notes |
-|-------|------|-------|
-| `title` | string | 1–255 chars after `strip()`. |
-| `start_time` | string | `HH:MM`. 5-minute increments are required only when the value **differs** from the stored one — re-submitting a block's existing off-grid time is accepted. If set, resulting `start < end` must still hold and no other block on the same schedule may overlap. |
-| `end_time` | string | Same rules as `start_time`. |
-| `category` | string | One of `work`, `personal`, `health`, `other`. |
-| `is_completed` | boolean | — |
-| `sort_order` | integer | `0 ≤ n ≤ 10000`. Booleans rejected. |
-
-Non-time PATCHes (title, category, `is_completed`, `sort_order`) tolerate stored off-grid times (from-event blocks, feature 0026) — the field-level 5-minute validators are excluded from the final `full_clean` because time changes are validated explicitly beforehand. Granularity is enforced only on times that actually **changed**, matching `blocks/reorder/`, so a client echoing a block's stored off-grid times back while editing its title is accepted. Supplying a *new* off-grid `start_time`/`end_time` still `400`s.
-
-**Success — `200 OK`** — same shape as the `POST` response.
-
-**Errors**
-
-| Status | `errors` key | Meaning |
-|--------|--------------|---------|
-| `400` | `body` | Request body is not valid JSON or is not a JSON object. |
-| `400` | `title` | Not a string, empty after strip, or > 255 chars. |
-| `400` | `start_time` / `end_time` | Not in `HH:MM` format. |
-| `400` | `category` | Not a string, or not one of the allowed choices. |
-| `400` | `sort_order` | Not an integer, or out of bounds. |
-| `400` | `time` | Resulting `start >= end`, or overlaps another block. |
-| `403` | `detail` | CSRF token missing/invalid. |
-| `404` | `detail` | No block with that `pk`, **or** the block belongs to another user. Cross-user access deliberately returns 404 rather than 403 to avoid leaking the existence of block IDs outside the caller's own schedule. |
-| `413` | `body` | Request body exceeds 100 KB (checked before JSON parsing). |
-
----
-
-### `DELETE /api/blocks/{pk}/`
-
-Delete a time block owned by the authenticated user.
-
-**Success — `200 OK`**
-
-```json
-{"ok": true}
-```
-
-**Errors**
-
-| Status | `errors` key | Meaning |
-|--------|--------------|---------|
-| `403` | `detail` | CSRF token missing/invalid. |
-| `404` | `detail` | No block with that `pk`, **or** the block belongs to another user (see the PATCH section above for the rationale). |
-
----
+Send JSON `{"expected_revision": 8}` with CSRF. The block must belong to the authenticated user; unknown/foreign ID returns 404. Success: 200, `ok: true` plus mutation snapshot. An empty body has no valid revision and returns 409.
 
 ### `POST /api/blocks/reorder/`
 
-Batch-update the times and sort order of multiple blocks after a drag-and-drop operation. All blocks must belong to the same schedule owned by the authenticated user. The final schedule state (updated + unchanged blocks) is validated for overlaps.
+Body: `expected_revision` and a nonempty `updates` list, at most 100 items. Each item has distinct plain-integer `id`, `start_time`, `end_time`, and `sort_order` (0–10000). All IDs must belong to one owned schedule. Changed boundaries enforce the grid and day window; unchanged imported boundaries remain valid.
 
-**Limits**
-
-- `updates` array is capped at **100 entries**. Larger payloads are rejected with `400 {"errors": {"updates": "Cannot update more than 100 blocks at once."}}`.
-- The raw request body is capped at **100 KB**. Larger bodies are rejected with `413 {"errors": {"body": "Request body too large."}}` *before* JSON parsing, so malicious clients cannot force expensive parsing.
-
-**Request body**
-
-```json
-{
-  "updates": [
-    {
-      "id": 42,
-      "start_time": "10:00",
-      "end_time": "11:00",
-      "sort_order": 0
-    }
-  ]
-}
-```
-
-| Field | Type | Required | Notes |
-|-------|------|----------|-------|
-| `updates` | array | yes | Non-empty list of block updates. |
-| `updates[].id` | integer | yes | TimeBlock primary key. No duplicates. |
-| `updates[].start_time` | string | yes | `HH:MM`. 5-minute increments enforced only when the value **differs** from the stored one — unchanged off-grid times (from-event blocks, feature 0026) pass through, since a drag payload re-submits every block's unchanged times alongside new `sort_order`s. |
-| `updates[].end_time` | string | yes | Same rule as `start_time`; `> start_time` always enforced. |
-| `updates[].sort_order` | integer | yes | `0 ≤ n ≤ 10000`. |
-
-**Success — `200 OK`**
-
-```json
-{
-  "blocks": [
-    { "id": 42, "title": "...", "start_time": "10:00", "end_time": "11:00", "category": "work", "is_completed": false, "sort_order": 0 }
-  ]
-}
-```
-
-Returns the full block list for the schedule, ordered by `start_time`, `sort_order`.
-
-**Errors**
-
-| Status | `errors` key | Meaning |
-|--------|--------------|---------|
-| `400` | `updates` | Not a list, empty, duplicate IDs, cross-schedule blocks, or more than 100 entries. |
-| `400` | `start_time` / `end_time` | Invalid format, `start >= end`, or a **changed** time off the 5-minute grid (unchanged off-grid times are accepted — see the field table). |
-| `400` | `sort_order` | Not an integer or out of bounds. |
-| `400` | `time` | Reorder would cause overlapping blocks (checked against full schedule). |
-| `403` | `detail` | CSRF token missing/invalid. |
-| `404` | `detail` | One or more block IDs not found, **or** they belong to another user. Cross-user access deliberately returns 404 rather than 403 to avoid leaking block-ID existence. |
-| `413` | `body` | Request body exceeds 100 KB (checked before JSON parsing). |
-
-All-or-nothing: if any update is invalid, no blocks are changed.
-
----
+The planner validates the entire final schedule, so an atomic swap can succeed although an intermediate sequential update would overlap. Success: 200 mutation snapshot. Bad shape, duplicate IDs, mixed days, invalid interval/order or final overlap returns 400; missing/foreign IDs return 404. Failure changes no rows.
 
 ### `POST /api/schedules/{date}/blocks/restore/`
 
-Atomically replace all blocks on a schedule with a provided snapshot. Used by the undo system to restore previous state. Incoming `id` fields are ignored — new rows are created with fresh IDs.
+Body: `expected_revision`, `blocks` array (may be empty). Every block supplies `title`, `start_time`, `end_time`; optional `category`, `is_completed` (default false), `sort_order` (default 0). Send the original `id` and `restore_proof` from the accepted snapshot to preserve server-owned origin. Proofs are bound to schedule, original block ID, title and origin; IDs must be positive, plain integers and distinct when proofs are supplied. Invalid proofs return 400 without writes. Missing proofs are accepted conservatively with `unknown` origin; client-supplied origin flags cannot override it. IDs without proofs do not restore identity.
 
-**Limits**
+A changed restore replaces rows with fresh IDs and proofs; an authenticated identical restore retains current IDs and revision. Provenance is part of snapshot equality, so a restore without proof can change origin even when visible fields match. Unknown or deleted category slugs map to the current sink.
 
-- The raw request body is capped at **100 KB**. Larger bodies are rejected with `413 {"errors": {"body": "Request body too large."}}` *before* JSON parsing.
+Restore validates the complete replacement for shape, intervals and overlap. It accepts arbitrary minutes and preserved intervals outside the current day window. It preserves current schedule status, ignores historical status/revision supplied by the client, and advances revision once if the persisted block state changes. Success: 200 mutation snapshot. Invalid shape/interval/overlap returns 400; oversized body returns 413; stale/missing revision returns 409. Rejection leaves current data unchanged.
 
-**Path params**
-
-| Name | Type | Notes |
-|------|------|-------|
-| `date` | string | `YYYY-MM-DD`. If no schedule exists for this date, one is created. |
-
-**Request body**
-
-```json
-{
-  "blocks": [
-    {
-      "title": "Standup",
-      "start_time": "09:00",
-      "end_time": "09:15",
-      "category": "work",
-      "is_completed": false,
-      "sort_order": 0
-    }
-  ]
-}
-```
-
-| Field | Type | Required | Notes |
-|-------|------|----------|-------|
-| `blocks` | array | yes | May be empty (deletes all blocks). |
-| `blocks[].title` | string | yes | 1–255 chars. |
-| `blocks[].start_time` | string | yes | `HH:MM`. **No 5-minute granularity check** — restore re-persists previously-valid states, which may include off-grid from-event blocks (feature 0026). |
-| `blocks[].end_time` | string | yes | `HH:MM`, `> start_time`. Same granularity note as `start_time`. |
-| `blocks[].category` | string | no | Default `other`. |
-| `blocks[].is_completed` | boolean | no | Default `false`. |
-| `blocks[].sort_order` | integer | no | Default `0`, `0 ≤ n ≤ 10000`. |
-
-**Success — `200 OK`** — same shape as the reorder response (`{"blocks": [...]}`). Block IDs are new.
-
-**Errors**
-
-| Status | `errors` key | Meaning |
-|--------|--------------|---------|
-| `400` | `date` | Invalid date format. |
-| `400` | `blocks` | Not a list. |
-| `400` | `title` | Missing, empty, or > 255 chars. |
-| `400` | `start_time` / `end_time` | Invalid format or `start >= end` (off-grid minutes are accepted — see the field table). |
-| `400` | `category` | Not a string, or not one of the allowed choices. |
-| `400` | `time` | Restored blocks would overlap. |
-| `413` | `body` | Request body exceeds 100 KB (checked before JSON parsing). |
-
-All-or-nothing: if any block is invalid, no changes are applied.
+Undo is a local snapshot stack bound to date, account and revision. It is not a durable server journal and cannot replace changes accepted since its snapshot. See [R05](REFACTORING_R05.md).
 
 ---
 
 ### `POST /api/ai/schedules/{date}/chat/`
 
-Multi-turn natural-language assistant for the command bar (feature 0007). Each request carries the full client-side transcript; the server validates it, calls the LLM once for the latest user turn, and either applies schedule mutations, asks a clarifying question, or returns chit-chat with no mutations. Active server-side Rules are injected into the trusted schedule-context message via the shared `ai.views._load_active_rules` helper (same as draft). Every call is logged to `AIInteraction`.
+Multi-turn natural-language assistant for the command bar (feature 0007). Each request carries the full client-side transcript; the server validates it, calls the LLM for the latest user turn, and either applies schedule mutations, asks a clarifying question, or returns chit-chat with no mutations. Active server-side Rules are injected into the trusted schedule-context message in the User-locked `ai.views._load_ai_context_sync` capture (same as draft). Provider attempts are logged to `AIInteraction` on a best-effort basis; rejected preconditions need not create a row, and audit success is not a commit receipt.
 
 **Privacy:** the full client-supplied `messages[]` transcript is re-sent to the LLM provider on every turn. Users should clear the thread (or reload the page) before discussing anything sensitive.
 
@@ -296,9 +116,12 @@ Requires `LLM_API_KEY` to be set. When unset, every call returns `503` so the fr
 
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
-| `messages` | array | yes | Non-empty list of `{role, content}` turns. Roles strictly alternate `user` / `assistant`, starting with `user`. Last turn must be `user`. `1 ≤ len ≤ LLM_CHAT_MAX_TURNS` (default 40). Each `content` is 1–`LLM_MAX_COMMAND_CHARS` (default 500) chars. Sum of all `content` lengths ≤ `LLM_CHAT_MAX_TOTAL_CHARS` (default 4000). |
+| `expected_revision` | integer | yes | Revision from the canonical day snapshot; missing/invalid/stale returns 409 before the provider call. |
+| `messages` | array | yes | Non-empty list of `{role, content}` turns. Roles strictly alternate `user` / `assistant`, starting with `user`. Last turn must be `user`. `1 ≤ len ≤ LLM_CHAT_MAX_TURNS` (default 40). Each `content` contains non-whitespace text and is 1–`LLM_MAX_COMMAND_CHARS` (default 500) chars. Sum of all `content` lengths ≤ `LLM_CHAT_MAX_TOTAL_CHARS` (default 4000). |
 | `messages[].is_ask` | boolean | no | **Assistant turns only** (feature 0083). The client marks an assistant turn `is_ask: true` when its `ask` was non-null on the wire — a correctness aid for the replay guard, not a security control. A client that forges this flag only disables the guard for its own turn, no more than it could already do by typing the replayed title directly. Non-boolean, or present on a `user` turn, → `400`. |
-| `messages[].is_error` | boolean | no | **Assistant turns only** (feature 0083). The client marks a synthetic failure bubble (400/409/429/5xx/network — every failure path) `is_error: true` so the replay guard excludes a never-applied failed turn from its evidence and allows a traceable retry. Same non-boolean / assistant-only validation as `is_ask`. |
+| `messages[].is_error` | boolean | no | **Assistant turns only** (feature 0083). The client marks every synthetic failure bubble (400/409/429/5xx/network) `is_error: true`. The replay guard excludes the contiguous failed turns and any preceding pending ask chain from text evidence, while preserving already-applied siblings through their reported IDs and current blocks. A network failure does not prove that the prior request never applied: retry after a lost response can duplicate a committed add. No durable request idempotency is implemented. Same non-boolean / assistant-only validation as `is_ask`. |
+
+Assistant asks may also include `applied_add_block_ids`, a list of positive plain-integer block IDs (maximum 100). It identifies adds accepted in that partial turn for replay handling; it is not a server-owned authorization claim.
 
 Malformed `messages` (including non-object JSON roots) return `400` **before** `Schedule.get_or_create` and **before** the rate-limit counter is consumed. Prompt time and untimed-add placement use the user's persisted schedule `time_zone`; legacy `client_tz` fields are ignored.
 
@@ -527,6 +350,8 @@ though it has no `outcomes` entry.
 
 Empty `parsed_actions` with `ask: null`. No mutations; status unchanged.
 
+Provider chat replies with null ask require a nonblank explanation, including no-op and action replies. A supplied ask must contain non-whitespace text; its explanation may be blank because the client uses ask as assistant content. The selected `ask ?? explanation` must also fit `LLM_MAX_COMMAND_CHARS`, independently of the output field caps. Invalid replies return the fixed parse-error 502 before action processing. Incoming blank or whitespace-only transcript content returns 400 before the provider call. These chat-history rules do not change draft validation.
+
 **Envelope uniformity:** `partial` and `outcomes` are **always present on every `200` response** — the apply, clarifying-question, and chit-chat turns alike. On non-apply turns they default to `false` and `[]` respectively, so a client can read them unconditionally without branching on the response variant. The replay-guard variant above is the one non-apply case where `outcomes` is non-empty — its entries carry `reason_code: "replay_guard"` rather than describing a real per-action policy outcome.
 
 **Errors**
@@ -571,7 +396,7 @@ until the user makes a real edit.
 |------|------|-------|
 | `date` | string | `YYYY-MM-DD`. Invalid format → `400`. |
 
-**Request body** — optional. Draft prompt time uses the user's persisted schedule `time_zone`; any legacy `client_tz` field is ignored.
+**Request body**: JSON object with required `expected_revision`. Draft prompt time uses the user's persisted schedule `time_zone`; any legacy `client_tz` field is ignored.
 
 **Success — `200 OK`**
 
@@ -598,9 +423,9 @@ until the user makes a real edit.
 | `503` | `detail` | `LLM_API_KEY` is not configured. |
 | `504` | `detail` | LLM provider timed out. |
 
-The `409` and `422` checks both run before any LLM call, so neither burns the rate-limit budget. The `409` is re-checked under `select_for_update()` after the LLM call to close the race window with concurrent `create_block` requests.
+The `409` and `422` checks both run before any LLM call, so neither burns the rate-limit budget. Revision, empty-day status and the prompt-context fingerprint are checked again under the shared mutation executor after the provider call. A conflict rejects the returned plan without applying it.
 
-Audit row: every call (success or failure) writes one `AIInteraction` row with `kind="draft"`, `user_command="[DRAFT]"`, and `actions_json` reflecting the LLM's **post-normalisation** parsed actions — category labels / the user's own wording are already resolved to slugs, an unresolvable value falls back to the sink category (feature 0084). The model's verbatim output stays in `ai_response`. Unlike chat, a draft `update` never occurs (drafts only accept `add`), so there is no `unresolved_categories` payload here.
+Draft provider attempts are logged on a best-effort basis with `kind="draft"`, `user_command="[DRAFT]"`, and `actions_json` reflecting post-normalisation parsed actions. Category labels are resolved to slugs; an unresolved add category falls back to the sink. The model's raw output stays in `ai_response`. Preconditions such as invalid revision, no template or rate limit can reject a request without an audit row. An audit write can fail independently of mutation commit. Draft accepts only add, so it has no chat-style `unresolved_categories` payload.
 
 ---
 
@@ -771,45 +596,32 @@ Partial update over the coupled window and independent timezone. `day_start` and
 
 Unauthenticated requests return a `302` redirect (per the conventions header), not a JSON `401`.
 
-**Note — window enforcement on block placement.** The saved window also constrains the schedule-mutation endpoints (manual create/PATCH, drag/reorder, AI, template, CalDAV/Google from-event). A new block/event **fully outside** the window is not created; those endpoints return `422` with a top-level skip envelope: `{"skipped": true, "code": "outside_window", "window": {"start": "HH:MM", "end": "HH:MM"}, "errors": {...}}` (`code`/`window` are top-level siblings, not nested under `errors`). A partially-outside interval is clamped to the boundary instead. Narrowing the window never mutates existing blocks.
+**Note — window enforcement on block placement.** The saved window also constrains the schedule-mutation endpoints (manual create/PATCH, drag/reorder, AI, template, CalDAV/Google from-event). For manual/import writes, a new block/event **fully outside** the window is not created; these endpoints return `422` with a top-level skip envelope: `{"skipped": true, "code": "outside_window", "window": {"start": "HH:MM", "end": "HH:MM"}, "errors": {...}}` (`code`/`window` are top-level siblings, not nested under `errors`). Manual/import partially-outside intervals are clamped to the boundary. AI chat reports skipped actions through outcomes; draft/template validation rejects invalid intervals. Metadata-only edits preserve unchanged boundaries outside a narrowed window. Narrowing the window never mutates existing blocks.
 
 ---
 
 ## Analytics
 
-Per-day review panel + Mark-reviewed flow. The Inertia page route
-(`GET /analytics/<date>/`) is documented for completeness even though
-it renders HTML, not JSON.
-
 ### `GET /analytics/{date}/`
 
-Inertia render of the per-day analytics panel. Recomputes the
-`DailyReview` snapshot on every visit while the schedule is `active`;
-serves the persisted (frozen) snapshot once `Schedule.status` is
-`reviewed`. A `reviewed` schedule that predates Phase 6 (no
-`DailyReview` row yet) is recomputed-and-persisted once for back-compat.
+Render the Inertia analytics page for today or a past date. Compute current statistics in memory. Use a stored frozen snapshot only when status is `reviewed` and `reviewed_revision` equals the schedule revision. GET does not create or update `DailyReview`, including when a reviewed day has no valid snapshot.
 
-**Errors**
+The `review` prop retains counts, category minutes, completion rate and notes. `id`, `created_at` and `updated_at` are null before the first notes save or review. `snapshot_kind` is `current` or `frozen`; `reviewed_revision` is the stored snapshot tag or null. A stale tag can be returned with `snapshot_kind: current`; only the kind establishes the authority of the displayed aggregates.
 
-| Status | Meaning |
-|--------|---------|
-| `400` | Invalid date format, **or** the date is in the future. Analytics is past-/today-only. |
-| `404` | No `Schedule` row exists for the user on this date. Analytics is read-only — it never auto-creates. |
+Invalid or future dates return 400. A missing schedule returns 404; analytics never creates a schedule.
 
 ### `POST /api/analytics/schedules/{date}/mark-reviewed/`
 
-Freeze the analytics snapshot for the given date by flipping
-`Schedule.status` from `active` to `reviewed`. Idempotent.
+Freeze an active day's statistics and change its status to reviewed in the shared User → Schedule → TimeBlock transaction. The schedule revision advances once, and `reviewed_revision` records that resulting revision.
 
-**Path params** — `date` (`YYYY-MM-DD`).
+| Field | Type | Requirement |
+|-------|------|-------------|
+| `expected_revision` | integer | Required on the active path. Missing, invalid or obsolete values return 409. |
+| `notes` | string | Optional, at most 2000 characters. Omission preserves notes; an empty string clears them. |
 
-**Request body** (optional)
+Send `X-Schedule-User` with the captured account ID. Account mismatch returns 401 with `code: session_invalid`.
 
-| Field | Type | Notes |
-|-------|------|-------|
-| `notes` | string | Optional. ≤ 2000 chars. Persisted on the active→reviewed flip; ignored on a retry against an already-reviewed schedule (use `PATCH /api/analytics/reviews/{pk}/notes/` to edit notes after review). Empty body is accepted as a no-op equivalent to `{}`. Unknown fields are silently ignored. |
-
-**Success — `200 OK`** — returns the persisted `DailyReview` row:
+Success (200) returns review fields and the canonical `schedule`, `blocks` and `revision` mutation snapshot. For example:
 
 ```json
 {
@@ -825,97 +637,53 @@ Freeze the analytics snapshot for the given date by flipping
   "completed_minutes_by_category": {"work": 240, "personal": 0, "health": 60, "other": 0},
   "notes": "Felt focused.",
   "created_at": "...",
-  "updated_at": "..."
+  "updated_at": "...",
+  "snapshot_kind": "frozen",
+  "reviewed_revision": 12,
+  "schedule": {"id": 42, "date": "2026-04-01", "status": "reviewed", "revision": 12},
+  "blocks": [],
+  "revision": 12
 }
 ```
 
-**Idempotency rules**
+`blocks` contains the day's canonical blocks; the empty array above abbreviates that part of the response.
 
-- A retry against an already-reviewed schedule returns the existing
-  snapshot **without** parsing the body, **without** acquiring the
-  lock, and **without** recomputing. `updated_at` is identical between
-  two calls. A retry with a malformed body (e.g. corrupted by network)
-  to a reviewed schedule still returns `200`, not `400`.
-- A retry with a different `notes` value against a reviewed schedule
-  returns the original snapshot — the second `notes` value is
-  discarded. Use the PATCH endpoint to overwrite notes after review.
+A reviewed retry runs under the same lock before body parsing or revision validation. A valid snapshot is returned unchanged, including timestamps and revision. Retry notes are ignored. If the reviewed snapshot is missing or its tag is stale, this explicit POST rebuilds it at the existing revision and preserves notes. This is the recovery path for legacy or invalidated reviewed snapshots; GET serves current statistics until repair.
 
-**Errors**
+Analytics exposes this recovery as `Update reviewed summary` for a reviewed day without a current frozen snapshot. An up-to-date frozen review hides that button; category maintenance does not perform the explicit repair on the user's behalf.
 
-| Status | `errors` key | Meaning |
-|--------|--------------|---------|
-| `400` | `detail` | Schedule status is `draft` (cannot review a never-edited day). |
-| `400` | `body` | Invalid JSON on the active path (parser is reached only when status==`active` under the lock). |
-| `400` | `notes` | Notes too long (> 2000 chars). |
-| `403` | `detail` | CSRF token missing/invalid. |
-| `404` | `detail` | No schedule for this user on this date. |
-| `413` | `body` | Request body exceeds 100 KB. Rejected before any status check. |
+| Status | Meaning |
+|--------|---------|
+| 400 | Draft schedule, invalid active-path JSON, or invalid notes. |
+| 401 | Captured account does not match the current session. |
+| 403 | CSRF validation failed. |
+| 404 | No schedule belonging to this user. |
+| 409 | Missing, invalid or obsolete active-path revision. |
+| 413 | Body exceeds 100 KB, including reviewed retries. |
 
-**Concurrency**: the active→reviewed path opens a `transaction.atomic()`,
-takes `select_for_update()` on the parent `Schedule` row (an empty
-`TimeBlock` queryset would lock zero rows under PostgreSQL — RULES.md
-"Locking an empty child queryset locks nothing"), re-checks `status`
-under the lock to close the mark_reviewed-vs-mark_reviewed TOCTOU
-race, then recomputes + persists + flips status atomically.
+### `PATCH /api/analytics/schedules/{date}/notes/`
+
+Save `{ "notes": "..." }` by date, with the captured `X-Schedule-User` account ID. Notes must be a string of at most 2000 characters; an empty string clears them. The first save lazily creates `DailyReview` for an existing schedule. The operation locks User then Schedule, preserves aggregates and `reviewed_revision`, and does not advance the schedule revision.
+
+Success (200) returns the review shape described above, using current in-memory aggregates when no valid frozen snapshot exists. Notes storage can therefore exist with `snapshot_kind: current` and `reviewed_revision: null`.
+
+Invalid date/body/notes return 400; account mismatch returns 401; failed CSRF returns 403; a missing or foreign schedule returns 404; an oversized body returns 413. Temporary SQLite contention can return 409; the client does not automatically replay writes.
 
 ### `PATCH /api/analytics/reviews/{pk}/notes/`
 
-Edit `notes` on an existing review row. Notes are the only field
-editable post-review; everything else is frozen.
-
-**Path params** — `pk` (DailyReview primary key).
-
-**Request body**
-
-| Field | Type | Required | Notes |
-|-------|------|----------|-------|
-| `notes` | string | yes | ≤ 2000 chars. |
-
-**Success — `200 OK`** — returns the updated `DailyReview` row (same
-shape as `mark-reviewed`).
-
-**Errors**
-
-| Status | `errors` key | Meaning |
-|--------|--------------|---------|
-| `400` | `body` | Invalid JSON, or empty body (PATCH without a field is degenerate). |
-| `400` | `notes` | Missing, not a string, or > 2000 chars. |
-| `403` | `detail` | CSRF token missing/invalid. |
-| `404` | `detail` | No review with that PK, **or** the review's schedule belongs to another user. Cross-user 404 (not 403) matches the project-wide convention. |
-| `413` | `body` | Request body exceeds 100 KB. |
+Compatibility route for an existing review ID. It uses the same validation and locked notes writer as the date route. A missing or foreign review returns 404. New frontend code uses the date route so autosave works before a review row exists.
 
 ---
 
-## Example: create → update → delete (dev)
+## Example: revision-aware editing
 
-```bash
-# 1. Log in (sets sessionid + XSRF-TOKEN cookies)
-curl -c cookies.txt -b cookies.txt \
-  -H "Content-Type: application/json" \
-  -d '{"username":"me","password":"pw"}' \
-  http://localhost:8006/accounts/login/
+Read the authenticated Inertia schedule props, including `auth_user_id` and the canonical schedule revision. Send `X-Schedule-User`, CSRF and JSON `expected_revision` with create/PATCH/DELETE. After each success use the returned revision and block ID for the next request. A 409 requires refreshing the day before deciding whether to submit a new edit. Reusing an old example's fixed ID or revision is unsafe.
 
-CSRF=$(grep XSRF-TOKEN cookies.txt | awk '{print $NF}')
+## Integration resource state
 
-# 2. Create a block
-curl -c cookies.txt -b cookies.txt \
-  -H "Content-Type: application/json" \
-  -H "X-XSRF-TOKEN: $CSRF" \
-  -d '{"title":"Standup","start_time":"09:00","end_time":"09:15","category":"work"}' \
-  http://localhost:8006/api/schedules/2026-04-09/blocks/
+Calendar event and external task list responses add `meta: {account_state, resource_state}` alongside `events` or `tasks`. Connected success uses `connected`/`ready`. Missing accounts use `disconnected`/`unavailable`; configuration errors identify the account/configuration problem. Resource failures include `errors.detail`, stable `code` and metadata. A stored-provider credential error uses `code: integration_credentials_error`; an unrelated 401 is a session failure. HTTP status alone does not establish account existence.
 
-# 3. Mark it complete
-curl -c cookies.txt -b cookies.txt -X PATCH \
-  -H "Content-Type: application/json" \
-  -H "X-XSRF-TOKEN: $CSRF" \
-  -d '{"is_completed": true}' \
-  http://localhost:8006/api/blocks/1/
-
-# 4. Delete it
-curl -c cookies.txt -b cookies.txt -X DELETE \
-  -H "X-XSRF-TOKEN: $CSRF" \
-  http://localhost:8006/api/blocks/1/
-```
+Google can return partial success with per-account errors while preserving events from successful accounts. Frontend same-date refresh errors retain prior rows and display the error. Disconnect, date, account or saved-zone changes invalidate old reads and pending optimistic task mutations. Wire helpers live in `backend/common/integration_response.py`.
 
 ## Calendar (CalDAV) — feature 0011
 
@@ -1036,8 +804,7 @@ account_version)` cache (TTL = `CALDAV_CACHE_TTL_SECONDS`, default
 }
 ```
 
-All-day events have `all_day: true` and a `[date 00:00 UTC, next-day
-00:00 UTC)` range. Recurring events return one entry per occurrence
+All-day events have `all_day: true`, original inclusive `start_date` and exclusive `end_date`. Their `start`/`end` instants represent local midnights in the saved user timezone converted to UTC; the range need not be 24 hours across DST. The provider query spans the same local-day UTC bounds. Recurring events return one entry per occurrence
 inside the window; `external_uid` includes the `RECURRENCE-ID` so
 each occurrence is unique. `account_label` (feature 0022) is the
 connecting-account label, shared wire-compatibly with the Google path;
@@ -1111,23 +878,23 @@ Idempotent disconnect. Returns the disconnected status shape.
 ### `GET /api/habitica/tasks/{date}/`
 
 Returns outstanding Habitica tasks for the selected schedule date. Results are
-cached per `(user, account_version, date, scope)` with
+cached per `(user, account_version, time_zone, date, scope)` with
 `HABITICA_CACHE_TTL_SECONDS`.
 
 Filter rules:
 
 - Dated todos match `date`; completed todos are excluded.
-- On client today (`carry_overdue=1`) or project today, overdue unfinished todos
+- On today in the saved user timezone, overdue unfinished todos
   (`due_date < date`) and undated todos are also included.
 - On past/future dates, only todos due exactly on that date are included.
-- Dailies are fetched only for client today/project today, using Habitica's
+- Dailies are fetched only for today in the saved user timezone, using Habitica's
   `type=dailys` query value, and only returned when `isDue` is true.
 
 Query params:
 
 | Name | Notes |
 |------|-------|
-| `carry_overdue=1` | Browser-local today bridge; includes overdue/undated todos and today's due dailies. |
+| `carry_overdue` | Legacy parameter is ignored; only the saved-zone local day establishes today. |
 | `refresh=1` | Bypasses the read cache and re-warms it. Used by the sidebar refresh and `EXTERNAL_TASKS_POLL_INTERVAL_SECONDS`. |
 
 Success:
@@ -1299,7 +1066,7 @@ Returns the refreshed list in the same shape as `GET /accounts/`.
 
 `async` multi-account fetch (the deploy is ASGI/uvicorn). Fetches across every
 connected account × selected calendar concurrently. Server-side per-`(user,
-account, date, account_version)` cache (TTL = `GOOGLE_CACHE_TTL_SECONDS`).
+account, date, account_version, time_zone)` cache (TTL = `GOOGLE_CACHE_TTL_SECONDS`).
 
 **Path params**
 
@@ -1341,6 +1108,10 @@ still load — a single bad account never blanks the panel. Transient
 provider/timeout failures use `error: "unavailable"`. `external_uid` is
 namespaced (`<id>@google`) so it can't collide with a CalDAV UID; cancelled
 recurring instances are dropped.
+
+The response also carries `meta.account_state: connected`. Its `resource_state` is `ready` if at least one account succeeded, including a successful empty account. If all accounts failed it is `provider_error` when any account is unavailable, otherwise `credentials_error`. All-failed retains HTTP 200, empty `events` and the current per-account errors.
+
+The Google frontend adapter preserves last-good events for the active date/context on that all-failed response and shows a provider banner plus account errors. A successful empty `ready` response clears old events, even when another account failed; partial ready results replace them. Date, account/session context, saved-zone changes and disconnect clear retained rows. A first failure shows the error without events or a successful-empty-day message.
 
 **Error responses** (whole-request, not per-account):
 
@@ -1425,7 +1196,7 @@ Idempotent delete. Versioned cache keys make stale entries unreachable.
 ### `GET /api/todoist/tasks/{date}/`
 
 Fetch normalised active (non-completed) tasks for one day. Server-side
-per-`(user, date, account_version)` cache (TTL = `TODOIST_CACHE_TTL_SECONDS`,
+per-`(user, date, account_version, time_zone)` cache (TTL = `TODOIST_CACHE_TTL_SECONDS`,
 default `300`).
 
 **Path params**
@@ -1434,26 +1205,14 @@ default `300`).
 |------|------|-------|
 | `date` | string | `YYYY-MM-DD`. Invalid → `400`. |
 
-**Date → filter behavior**: when `date` is **today** (project `TIME_ZONE`
-via `timezone.localdate()`) **or** the client passes `?carry_overdue=1`
-(browser-local today can differ from `TIME_ZONE` when it is UTC), the
-service queries Todoist with `"<YYYY-MM-DD> | overdue"` — tasks due on
-that schedule date plus all overdue carryover. For any other date it
-shows tasks due **on that exact date** only (`"<YYYY-MM-DD>"`). Tasks
-with no due date never appear (the view is date-scoped). Completed tasks are never returned.
+**Date → filter behavior:** today is computed in the saved user timezone. Today uses Todoist's date filter plus overdue carryover; other dates use the exact date filter. Tasks without a due date and completed tasks do not appear. The frontend does not supply a browser-time bridge.
 
-**Query params**
+| Query parameter | Effect |
+|---|---|
+| `carry_overdue` | Legacy parameter is ignored. |
+| `refresh=1` | Bypass read cache and re-warm it after a successful provider fetch. |
 
-| Name | Type | Notes |
-|------|------|-------|
-| `carry_overdue` | string | Optional. Pass `1` to include overdue carryover when `date` is browser-local today but not project-local today. The Schedule page sets this automatically for today. |
-| `refresh` | string | Optional (feature 0021). Pass `1` to **bypass** the read cache and force a live provider re-fetch; the result still re-warms the cache, so a subsequent non-forced read is served from cache. Independent of `carry_overdue` (both can apply). Used by the sidebar Refresh button and background polling (`EXTERNAL_TASKS_POLL_INTERVAL_SECONDS` > 0). |
-
-The server caches the two filter modes **separately** (`exact` vs.
-`with_overdue`) under distinct keys, so toggling `carry_overdue` on the
-same date fetches fresh data rather than serving the stale non-overdue
-list — the overdue query returns a strict superset, so the two must not
-share a cache entry.
+The cache separates `exact` and `with_overdue` scope and includes the saved timezone, so midnight or timezone changes cannot reuse the wrong result.
 
 **Success — `200 OK`**
 

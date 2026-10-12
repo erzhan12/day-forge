@@ -2,6 +2,7 @@
 // the bottom-dock chat surface backed by `useChat`; the previous
 // the single-shot command consumer has been retired.
 
+import { ScheduleDisabledKey } from "../src/composables/scheduleContext"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { mount, VueWrapper } from "@vue/test-utils"
 import { nextTick, reactive, ref } from "vue"
@@ -118,6 +119,31 @@ describe("CommandBar (chat dock)", () => {
     expect(setActiveDate).toHaveBeenCalledWith("2026-04-18")
   })
 
+  it("reports dock resizing and disconnects its observer on unmount", () => {
+    let resized = () => {}
+    const observe = vi.fn()
+    const disconnect = vi.fn()
+    vi.stubGlobal("ResizeObserver", class {
+      constructor(callback: () => void) { resized = callback }
+      observe = observe
+      disconnect = disconnect
+    })
+    const bar = mountBar()
+    expect(observe).toHaveBeenCalledWith(bar.element)
+    expect(bar.emitted("height-change")).toEqual([[0]])
+
+    const bounds = vi.spyOn(bar.element, "getBoundingClientRect")
+    bounds.mockReturnValue({ height: 240 } as DOMRect)
+    resized()
+    bounds.mockReturnValue({ height: 360 } as DOMRect)
+    resized()
+    expect(bar.emitted("height-change")).toEqual([[0], [240], [360]])
+
+    bar.unmount()
+    wrapper = null
+    expect(disconnect).toHaveBeenCalledOnce()
+  })
+
   describe.each(["dock", "sidebar"] as const)(
     "configurable suggestions (%s)",
     (variant) => {
@@ -223,7 +249,7 @@ describe("CommandBar (chat dock)", () => {
             pushUndo: vi.fn(),
             variant,
           },
-          global: { provide: { scheduleDisabled: ref(true) } },
+          global: { provide: { [ScheduleDisabledKey]: ref(true) } },
           attachTo: document.body,
         })
         wrapper = w
@@ -248,7 +274,7 @@ describe("CommandBar (chat dock)", () => {
             pushUndo: vi.fn(),
             variant,
           },
-          global: { provide: { scheduleDisabled: ref(true) } },
+          global: { provide: { [ScheduleDisabledKey]: ref(true) } },
           attachTo: document.body,
         })
         wrapper = w
@@ -596,7 +622,7 @@ describe("CommandBar (chat dock)", () => {
       },
       global: {
         provide: {
-          scheduleDisabled: ref(true),
+          [ScheduleDisabledKey]: ref(true),
         },
       },
       attachTo: document.body,
@@ -717,7 +743,7 @@ describe("CommandBar (chat dock)", () => {
         pushUndo: vi.fn(),
         variant: "dock" as const,
       },
-      global: { provide: { scheduleDisabled: ref(false) } },
+      global: { provide: { [ScheduleDisabledKey]: ref(false) } },
       attachTo: document.body,
     })
     wrapper = w
@@ -743,7 +769,7 @@ describe("CommandBar (chat dock)", () => {
         pushUndo: vi.fn(),
         variant: "dock" as const,
       },
-      global: { provide: { scheduleDisabled: ref(true) } },
+      global: { provide: { [ScheduleDisabledKey]: ref(true) } },
       attachTo: document.body,
     })
     wrapper = w

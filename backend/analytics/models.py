@@ -15,11 +15,8 @@ class DailyReview(models.Model):
     planned_minutes_by_category = models.JSONField(default=dict)
     completed_minutes_by_category = models.JSONField(default=dict)
     notes = models.TextField(blank=True, default="")
+    reviewed_revision = models.PositiveBigIntegerField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
-    # Distinguishes "fresh recompute" rows (advances on every analytics_view
-    # visit while the schedule is ``active``) from frozen review snapshots
-    # (stable after Mark reviewed). Tested via ``test_analytics_views``
-    # idempotency cases.
     updated_at = models.DateTimeField(auto_now=True)
 
     @property

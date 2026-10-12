@@ -507,20 +507,41 @@ class TestNormalisationEdgeCases:
         assert ev.start == datetime.datetime(2026, 5, 7, 0, 0, tzinfo=datetime.UTC)
         assert ev.end == datetime.datetime(2026, 5, 8, 0, 0, tzinfo=datetime.UTC)
 
-    def test_all_day_event_non_utc_timezone(self, account, settings):
-        # All-day window must synthesize midnight in settings.TIME_ZONE, then
-        # convert to UTC — proves _date_to_utc's TZ math (not a no-op under UTC).
-        settings.TIME_ZONE = "America/New_York"  # EDT = UTC-4 in May
+    def test_all_day_event_non_utc_timezone(self, account):
+        # The explicit user timezone, not Django's active timezone, determines
+        # the compatibility UTC instants. Date-only fields retain the dates.
         cals = [{"id": "primary", "summary": "Primary", "selected": True}]
         factory = _make_async_client(
             cals, {"primary": [_allday("e2", "Conf", "2026-05-07", "2026-05-08")]}
         )
         with patch.object(service.httpx, "AsyncClient", factory):
-            events = asyncio.run(service.fetch_events_for_account(account, self._DATE))
+            events = asyncio.run(
+                service.fetch_events_for_account(account, self._DATE, "America/New_York")
+            )
         ev = events[0]
         # Midnight EDT 2026-05-07 == 04:00 UTC.
         assert ev.start == datetime.datetime(2026, 5, 7, 4, 0, tzinfo=datetime.UTC)
         assert ev.end == datetime.datetime(2026, 5, 8, 4, 0, tzinfo=datetime.UTC)
+        assert ev.start_date == datetime.date(2026, 5, 7)
+        assert ev.end_date == datetime.date(2026, 5, 8)
+
+    def test_cross_utc_midnight_event_is_in_qatar_local_day(self, account):
+        cals = [{"id": "primary", "summary": "Primary", "selected": True}]
+        factory = _make_async_client(
+            cals,
+            {"primary": [
+                _timed(
+                    "late", "Late event", "2026-05-06T22:30:00+00:00",
+                    "2026-05-07T00:30:00+00:00",
+                )
+            ]},
+        )
+        with patch.object(service.httpx, "AsyncClient", factory):
+            events = asyncio.run(
+                service.fetch_events_for_account(account, self._DATE, "Asia/Qatar")
+            )
+        assert [event.title for event in events] == ["Late event"]
+        assert events[0].start_date is None
 
     def test_out_of_window_event_dropped(self, account):
         # The defensive window guard drops an event the (fake) provider

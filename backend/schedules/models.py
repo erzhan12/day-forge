@@ -22,6 +22,7 @@ class Schedule(models.Model):
     )
     date = models.DateField()
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.DRAFT)
+    revision = models.PositiveBigIntegerField(default=0, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -209,8 +210,14 @@ class Category(models.Model):
 
 
 class TimeBlock(models.Model):
+    class Origin(models.TextChoices):
+        MANUAL = "manual", "Manual"
+        CALENDAR = "calendar", "Calendar import"
+        UNKNOWN = "unknown", "Legacy or unverified"
+
     schedule = models.ForeignKey(Schedule, related_name="time_blocks", on_delete=models.CASCADE)
     title = models.CharField(max_length=255)
+    origin = models.CharField(max_length=8, choices=Origin.choices, default=Origin.MANUAL)
     start_time = models.TimeField(validators=[validate_five_minute_granularity])
     end_time = models.TimeField(validators=[validate_five_minute_granularity])
     category = models.CharField(max_length=32, default="other")
@@ -220,6 +227,12 @@ class TimeBlock(models.Model):
 
     class Meta:
         ordering = ["start_time", "sort_order"]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(start_time__lt=F("end_time")),
+                name="timeblock_start_lt_end",
+            ),
+        ]
         indexes = [
             models.Index(fields=["schedule", "start_time", "end_time", "sort_order"]),
         ]

@@ -2,14 +2,11 @@
 import { computed } from "vue"
 import type { TimeBlock, ScheduleWindow, UserCategory } from "../types"
 import {
-  buildBaseDisplayItems,
-  computeRenderBounds,
   minutesToTime,
-  nowOffsetPercent,
   timeToMinutes,
-  type ScheduleDisplayItem,
   type ScheduleWindowBounds,
 } from "../utils/scheduleTime"
+import { createTimelinePresentation, type TimelinePresentation } from "../composables/useTimelinePresentation"
 import TimeBlock4a from "./TimeBlock4a.vue"
 import GapSlot4a from "./GapSlot4a.vue"
 import NowLine4a from "./NowLine4a.vue"
@@ -20,11 +17,13 @@ const props = defineProps<{
   scheduleWindow: ScheduleWindow
   nowMinutes: number | null
   nowDate: string | null
+  currentHHMM?: string
   pxPerMinute: number
   timelineOriginMinutes?: number
   timelineEndMinutes?: number
   currentBlockId?: number | null
   currentBlockRemaining?: number | null
+  presentation?: TimelinePresentation
   disabled: boolean
   categories: UserCategory[]
 }>()
@@ -35,88 +34,31 @@ const windowBounds = computed((): ScheduleWindowBounds => ({
   startMinutes: timeToMinutes(props.scheduleWindow.start),
   endMinutes: timeToMinutes(props.scheduleWindow.end),
 }))
-// Same contract as classic: nowMinutes is non-null only on the viewed today.
-const todayNowMinutes = computed(() =>
-  props.nowDate !== null && props.nowDate === props.date ? props.nowMinutes : null,
+const nowLabel = computed(() =>
+  props.currentHHMM ?? (props.nowMinutes === null ? "" : minutesToTime(props.nowMinutes)),
 )
-const compactBounds = computed(() =>
-  computeRenderBounds(props.blocks, todayNowMinutes.value, windowBounds.value),
+// Standalone callers use the same model builder as Schedule.vue.
+const model = computed(() => props.presentation ?? createTimelinePresentation({
+  blocks: props.blocks,
+  date: props.date,
+  window: windowBounds.value,
+  nowMinutes: props.nowMinutes,
+  nowDate: props.nowDate,
+  pxPerMinute: props.pxPerMinute,
+  axisOriginMinutes: props.timelineOriginMinutes,
+  axisEndMinutes: props.timelineEndMinutes,
+}))
+const axisOriginMinutes = computed(() => model.value.axisOriginMinutes)
+const axisEndMinutes = computed(() => model.value.axisEndMinutes)
+const canvasHeight = computed(() => model.value.canvasHeightPx)
+const currentBlockId = computed(() =>
+  props.currentBlockId === undefined ? model.value.currentBlock?.id ?? null : props.currentBlockId,
 )
-// Origin defaults to 0017 renderStart so omitted props still compress edges.
-const axisOriginMinutes = computed(() => props.timelineOriginMinutes ?? compactBounds.value.renderStart)
-const axisEndMinutes = computed(() => props.timelineEndMinutes ?? compactBounds.value.renderEnd)
-const canvasHeight = computed(() => (axisEndMinutes.value - axisOriginMinutes.value) * props.pxPerMinute)
-
-const items = computed(() => buildBaseDisplayItems(
-  props.blocks,
-  axisOriginMinutes.value,
-  axisEndMinutes.value,
-  todayNowMinutes.value,
-  windowBounds.value,
-).filter((item) => item.type !== "spacer"))
-
-const hourTicks = computed(() => {
-  const first = Math.ceil(axisOriginMinutes.value / 60) * 60
-  const ticks: number[] = []
-  for (let minute = first; minute < axisEndMinutes.value; minute += 60) ticks.push(minute)
-  return ticks
-})
-
-function visualStartMinutes(item: ScheduleDisplayItem): number {
-  const start = timeToMinutes(item.start_time)
-  // Pin compact leading stub to origin so top stays non-negative.
-  if (item.compact && start < axisOriginMinutes.value) return axisOriginMinutes.value
-  return start
-}
-function visualMinutes(item: ScheduleDisplayItem): number {
-  return item.render_minutes ?? item.duration_minutes
-}
-function topFor(time: string | number): string {
-  const minutes = typeof time === "string" ? timeToMinutes(time) : time
-  return `${(minutes - axisOriginMinutes.value) * props.pxPerMinute}px`
-}
-function itemTop(item: ScheduleDisplayItem): string {
-  return topFor(visualStartMinutes(item))
-}
-function itemHeight(item: ScheduleDisplayItem): string {
-  return `${visualMinutes(item) * props.pxPerMinute}px`
-}
-
-const leadingCompactGap = computed(() =>
-  items.value.find(
-    (item) =>
-      item.compact === true &&
-      item.type === "gap" &&
-      item.start_time === props.scheduleWindow.start,
-  ),
+const currentBlockRemaining = computed(() =>
+  props.currentBlockRemaining === undefined
+    ? model.value.currentBlockRemaining
+    : props.currentBlockRemaining,
 )
-function nowInLeadingStub(now: number): boolean {
-  const stub = leadingCompactGap.value
-  if (!stub) return false
-  return now >= timeToMinutes(stub.start_time) && now < timeToMinutes(stub.end_time)
-}
-const nowVisible = computed(() => {
-  if (props.nowDate === null || props.nowMinutes === null || props.nowDate !== props.date) {
-    return false
-  }
-  const now = props.nowMinutes
-  if (now >= axisOriginMinutes.value && now < axisEndMinutes.value) return true
-  return nowInLeadingStub(now)
-})
-const nowLineTop = computed(() => {
-  const now = props.nowMinutes
-  if (now === null) return "0px"
-  if (now >= axisOriginMinutes.value && now < axisEndMinutes.value) return topFor(now)
-  const stub = leadingCompactGap.value
-  if (stub && nowInLeadingStub(now)) {
-    const pct = Number.parseFloat(nowOffsetPercent(stub.start_time, stub.end_time, now)) / 100
-    const top =
-      (visualStartMinutes(stub) - axisOriginMinutes.value) * props.pxPerMinute +
-      pct * visualMinutes(stub) * props.pxPerMinute
-    return `${top}px`
-  }
-  return topFor(now)
-})
 const emit = defineEmits<{ "add-here": [payload: { start_time: string; end_time: string }] }>()
 
 defineExpose({ timelineOriginMinutes: axisOriginMinutes, timelineEndMinutes: axisEndMinutes, canvasHeight })
@@ -124,14 +66,14 @@ defineExpose({ timelineOriginMinutes: axisOriginMinutes, timelineEndMinutes: axi
 
 <template>
   <section class="timeline-4a" :style="{ height: canvasHeight + 'px' }" data-testid="timeline-4a">
-    <div v-for="tick in hourTicks" :key="tick" class="hour-tick" :style="{ top: topFor(tick) }">
-      <span>{{ minutesToTime(tick) }}</span><i />
+    <div v-for="tick in model.hourTicks" :key="tick.minute" class="hour-tick" :style="{ top: tick.topPx + 'px' }">
+      <span>{{ minutesToTime(tick.minute) }}</span><i />
     </div>
-    <div v-for="(item, index) in items" :key="`${item.type}:${item.start_time}:${index}`" class="timeline-item" :style="{ top: itemTop(item), height: itemHeight(item) }">
-      <TimeBlock4a v-if="item.type === 'block' && item.block" :block="item.block" :date="date" :categories="categories" :is-current="item.block.id === currentBlockId" :remaining-minutes="item.block.id === currentBlockId ? currentBlockRemaining : null" />
-      <GapSlot4a v-else-if="item.type === 'gap'" :start-time="item.start_time" :end-time="item.end_time" :duration-minutes="item.duration_minutes" :compact="item.compact" :window-start="scheduleWindow.start" :disabled="disabled" @add-here="emit('add-here', $event)" />
+    <div v-for="(positioned, index) in model.positionedItems" :key="`${positioned.item.type}:${positioned.item.start_time}:${index}`" class="timeline-item" :style="{ top: positioned.topPx + 'px', height: positioned.heightPx + 'px' }">
+      <TimeBlock4a v-if="positioned.item.type === 'block' && positioned.item.block" :block="positioned.item.block" :date="date" :categories="categories" :is-current="positioned.item.block.id === currentBlockId" :remaining-minutes="positioned.item.block.id === currentBlockId ? currentBlockRemaining : null" />
+      <GapSlot4a v-else-if="positioned.item.type === 'gap'" :start-time="positioned.item.start_time" :end-time="positioned.item.end_time" :duration-minutes="positioned.item.duration_minutes" :compact="positioned.item.compact" :window-start="model.window.start" :disabled="disabled" @add-here="emit('add-here', $event)" />
     </div>
-    <NowLine4a v-if="nowVisible" class="timeline-now" :style="{ top: nowLineTop }" />
+    <NowLine4a v-if="model.nowVisible" class="timeline-now" :label="nowLabel" :style="{ top: model.nowLineTopPx + 'px' }" />
   </section>
 </template>
 

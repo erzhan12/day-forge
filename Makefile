@@ -28,23 +28,24 @@ run-manual: ## Start Django dev server on :8006 without auto-reload
 shell: ## Open Django shell
 	uv run python backend/manage.py shell
 
-migrate: ## Create and apply migrations
-	uv run python backend/manage.py makemigrations
+migrate: ## Apply existing migrations
 	uv run python backend/manage.py migrate
 
 makemigrations: ## Create migrations only (no apply)
 	uv run python backend/manage.py makemigrations
 
-seed: ## Seed default templates
-	uv run python backend/manage.py seed_templates
+seed: export SEED_USER := $(SEED_USER)
+seed: ## Seed templates for a user: make seed SEED_USER=username
+	@test -n "$$SEED_USER" || { echo "Usage: make seed SEED_USER=username" >&2; exit 2; }
+	uv run python backend/manage.py seed_templates --user "$$SEED_USER"
 
 superuser: ## Create a Django superuser
 	uv run python backend/manage.py createsuperuser
 
 # ─── Frontend ─────────────────────────────────────────────────────────────
 
-frontend-install: ## Install npm dependencies
-	cd frontend && npm install
+frontend-install: ## Install npm dependencies from the lockfile
+	cd frontend && npm ci --no-audit --no-fund
 
 frontend-dev: ## Start Vite dev server on :5173
 	cd frontend && npm run dev
@@ -63,18 +64,18 @@ lint-fix: ## Run ruff with --fix on backend
 format: ## Format backend code with ruff
 	uv run ruff format backend/
 
-typecheck: ## Run vue-tsc on frontend
-	cd frontend && npx vue-tsc --noEmit
+typecheck: ## Run the frontend type-check script
+	cd frontend && npm run type-check
 
 test: test-backend test-frontend ## Run backend and frontend tests
 
 test-backend: ## Run pytest
-	uv run pytest backend/tests/ -v
+	uv run pytest backend/tests/ -q
 
 test-frontend: ## Run frontend tests
 	cd frontend && npm test
 
-check: lint typecheck test ## Lint + typecheck + test (run before pushing)
+check: lint test-backend typecheck test-frontend ## Backend lint/tests and frontend type-check/tests
 
 # These smoke scripts run serially because they share the playwright user's
 # AI rate-limit counters. Some make real provider calls and consume tokens.

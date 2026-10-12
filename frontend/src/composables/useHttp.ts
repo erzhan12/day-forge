@@ -14,6 +14,8 @@
 // the options object — `requestJson(url, "GET", { signal })` would serialise
 // the options as the JSON body.
 
+import type { TimeBlock } from "../types"
+
 export function getCsrfToken(): string {
   const match = document.cookie.match(/XSRF-TOKEN=([^;]+)/)
   return match ? decodeURIComponent(match[1]) : ""
@@ -27,6 +29,15 @@ export interface ApiResult {
   skipped?: boolean
   code?: string
   window?: { start: string; end: string }
+  synchronizationError?: string
+  mutation?: {
+    previousBlocks: TimeBlock[]
+    previousRevision: number
+    expectedRevision: number
+    changed: boolean
+    date: string
+    generation: number
+  }
 }
 
 /**
@@ -41,6 +52,7 @@ export interface ApiResult {
  */
 export interface RequestOptions {
   signal?: AbortSignal
+  expectedUserId?: number
 }
 
 export async function requestJson(
@@ -56,6 +68,7 @@ export async function requestJson(
       headers: {
         "Content-Type": "application/json",
         "X-XSRF-TOKEN": getCsrfToken(),
+        ...(options?.expectedUserId !== undefined ? { "X-Schedule-User": String(options.expectedUserId) } : {}),
       },
       body: body ? JSON.stringify(body) : undefined,
       signal: options?.signal,
@@ -73,15 +86,46 @@ export async function requestJson(
     }
   }
 
-  const text = await resp.text()
+  // fetch follows Django's login redirect. Its final HTML 200 is an expired
+  // session, never an accepted schedule write or a malformed JSON success.
+  if (resp.redirected && new URL(resp.url).pathname === "/accounts/login/") {
+    return { ok: false, status: 401, code: "session_invalid", errors: { detail: "Session expired. Sign in again." } }
+  }
+
+  let text: string
+  try {
+    text = await resp.text()
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") throw err
+    if (resp.status === 401) {
+      return { ok: false, status: 401, code: "session_invalid", errors: { detail: "Session expired. Sign in again." } }
+    }
+    // Headers may arrive after commit while the response body is lost. The
+    // mutation owner reconciles this uncertain result without repeating it.
+    return { ok: false, status: resp.status, errors: { detail: "Server response was interrupted. Refresh to check whether the change was saved." } }
+  }
   let data: Record<string, unknown> | undefined
   let parseFailed = false
   if (text) {
     try {
-      data = JSON.parse(text)
+      const parsed: unknown = JSON.parse(text)
+      if (parsed === null || Array.isArray(parsed) || typeof parsed !== "object") {
+        parseFailed = true
+      } else {
+        data = parsed as Record<string, unknown>
+      }
     } catch {
       parseFailed = true
     }
+  }
+
+  // A provider credential failure belongs to the integration, not the
+  // Django session. Only the explicit server contract makes that distinction.
+  const integrationCredentialsError = data?.code === "integration_credentials_error"
+    && typeof data.meta === "object" && data.meta !== null
+    && (data.meta as Record<string, unknown>).resource_state === "credentials_error"
+  if (resp.status === 401 && !integrationCredentialsError) {
+    return { ok: false, status: 401, code: "session_invalid", errors: { detail: "Session expired. Sign in again." } }
   }
 
   if (resp.ok) {
@@ -103,6 +147,7 @@ export async function requestJson(
   return {
     ok: false,
     status: resp.status,
+    data,
     errors,
     skipped: data?.skipped === true,
     code: typeof data?.code === "string" ? data.code : undefined,

@@ -9,6 +9,9 @@ export interface NormalizedEvent {
   end: string
   calendar_name: string
   all_day: boolean
+  // Civil dates for all-day events; end_date is exclusive.
+  start_date?: string | null
+  end_date?: string | null
   external_uid: string
   account_label: string
 }
@@ -48,8 +51,8 @@ export interface GoogleEventsResponse {
 }
 
 // One whole-request provider failure banner rendered by ExternalEventsPanel.
-// Distinct from per-account `GoogleAccountError`s — these come from an HTTP
-// error on the provider's events call, not a 200 + account_errors entry.
+// Distinct from per-account `GoogleAccountError`s. A whole-request HTTP error
+// or Google's 200 all-account failure can produce this banner.
 export interface ProviderErrorBanner {
   provider: "apple" | "google"
   message: string

@@ -1,8 +1,11 @@
-"""Unit tests for the synchronous shared connect rate limiter."""
+"""Regression tests for the shared fixed-window rate limiter."""
 
 import json
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier, Lock, local
+from types import SimpleNamespace
 
 from django.core.cache import cache
 from schedules.ratelimit import (
@@ -69,6 +72,28 @@ def test_consume_rate_limit_preserves_window_ttl():
     assert RATE_LIMIT_WINDOW_SECONDS == 3600
 
 
+def test_consume_rate_limit_recovers_from_expiry_between_add_and_incr(monkeypatch):
+    key = "connect_rl:test:expired"
+    cache_key = cache.make_key(key)
+    assert consume_rate_limit(key, limit=2)
+    real_add = cache.add
+    expired = False
+
+    def expire_after_failed_add(*args, **kwargs):
+        nonlocal expired
+        result = real_add(*args, **kwargs)
+        if not result and not expired:
+            expired = True
+            cache._expire_info[cache_key] = time.time() - 1
+        return result
+
+    monkeypatch.setattr("schedules.ratelimit.cache.add", expire_after_failed_add)
+
+    assert consume_rate_limit(key, limit=2)
+    assert cache.get(key) == 1
+    assert cache._expire_info[cache_key] - time.time() > RATE_LIMIT_WINDOW_SECONDS / 2
+
+
 def test_consume_rate_limit_race_recovery_callers_share_one_window(monkeypatch):
     key = "connect_rl:test:4"
     limit = 3
@@ -120,38 +145,47 @@ def test_consume_rate_limit_contention_single_add_winner_others_increment(
     monkeypatch,
 ):
     key = "connect_rl:test:6"
-    assert consume_rate_limit(key, limit=5) is True
+    callers = 8
+    limit = 3
+    assert consume_rate_limit(key, limit=limit)
     real_add = cache.add
     real_incr = cache.incr
-    add_results = []
-    caller = 0
-    pending_raise = False
+    real_delete = cache.delete
+    thread_state = local()
+    record_lock = Lock()
+    expired_barrier = Barrier(callers, action=lambda: real_delete(key), timeout=5)
+    reseed_results = []
 
-    def record_add(*args, **kwargs):
+    def race_add(*args, **kwargs):
+        if not getattr(thread_state, "started", False):
+            thread_state.started = True
+            # Every caller observes the old window before it expires.
+            result = real_add(*args, **kwargs)
+            assert result is False
+            expired_barrier.wait()
+            return result
         result = real_add(*args, **kwargs)
-        add_results.append(result)
+        with record_lock:
+            reseed_results.append(result)
         return result
 
     def race_incr(incr_key):
-        nonlocal pending_raise
-        if pending_raise:
-            pending_raise = False
-            if caller == 1:
-                cache.delete(incr_key)
-            raise ValueError("simulated eviction race")
+        if not getattr(thread_state, "recovering", False):
+            thread_state.recovering = True
+            # Each caller's first increment encounters the expired window.
+            raise ValueError("key expired")
         return real_incr(incr_key)
 
-    monkeypatch.setattr("schedules.ratelimit.cache.add", record_add)
-    monkeypatch.setattr("schedules.ratelimit.cache.incr", race_incr)
+    monkeypatch.setattr(
+        "schedules.ratelimit.cache", SimpleNamespace(add=race_add, incr=race_incr)
+    )
 
-    results = []
-    for caller in range(1, 5):
-        pending_raise = True
-        results.append(consume_rate_limit(key, limit=5))
+    with ThreadPoolExecutor(max_workers=callers) as pool:
+        results = list(pool.map(lambda _: consume_rate_limit(key, limit=limit), range(callers)))
 
-    assert sum(add_results) == 1
-    assert results == [True, True, True, True]
-    assert cache.get(key) == 4
+    assert sum(reseed_results) == 1
+    assert sum(results) == limit
+    assert cache.get(key) == callers
 
 
 def test_consume_rate_limit_repeated_eviction_fails_closed(monkeypatch, caplog):

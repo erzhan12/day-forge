@@ -23,6 +23,7 @@ class DailyReviewAdmin(admin.ModelAdmin):
         "skipped_count",
         "planned_minutes_by_category",
         "completed_minutes_by_category",
+        "reviewed_revision",
         "created_at",
         "updated_at",
     )

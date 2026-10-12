@@ -2,19 +2,28 @@
 
 import re
 import unicodedata
+from functools import wraps
 
 from analytics.models import DailyReview
 from calendar_sync.models import TravelRule
-from django.contrib.auth.models import User
-from django.db import IntegrityError, OperationalError, transaction
+from django.db import IntegrityError, OperationalError
 from django.db.models import Q
 from templates_mgr.models import Template
 
 from schedules.category_palette import PALETTE, SEED_CATEGORIES
-from schedules.models import Category, TimeBlock
+from schedules.models import Category, Schedule, TimeBlock
+from schedules.mutations import execute_schedule_maintenance, run_user_maintenance, user_write_lock
 
 MAX_CATEGORIES = 8
-_SLUG_RE = re.compile(r"^[a-z0-9-]+$")
+
+
+def _category_write(operation):
+    """Retry a complete catalog transaction after SQLite writer contention."""
+    @wraps(operation)
+    def wrapped(user, *args, **kwargs):
+        return run_user_maintenance(user.pk, lambda _user: operation(user, *args, **kwargs))
+
+    return wrapped
 
 
 def ordered_categories(user):
@@ -25,8 +34,7 @@ def ordered_categories(user):
     # upgrade race on the first concurrent seed.
     for attempt in range(3):
         try:
-            with transaction.atomic():
-                User.objects.select_for_update().get(pk=user.pk)
+            with user_write_lock(user.pk):
                 rows = list(Category.objects.filter(user=user).order_by("sort_order", "id"))
                 if rows:
                     return rows
@@ -101,6 +109,7 @@ def _slugify(label, existing):
     return slug
 
 
+@_category_write
 def create_category(user, label, color_id):
     label = label.strip() if isinstance(label, str) else ""
     if not label or len(label) > 64:
@@ -114,8 +123,7 @@ def create_category(user, label, color_id):
     # duplicate-label check) rather than surfacing a 500.
     for attempt in range(3):
         try:
-            with transaction.atomic():
-                User.objects.select_for_update().get(pk=user.pk)
+            with user_write_lock(user.pk):
                 rows = ordered_categories(user)
                 if len(rows) >= MAX_CATEGORIES:
                     raise ValueError(
@@ -137,9 +145,9 @@ def create_category(user, label, color_id):
     raise ValueError("A category with that label already exists.")
 
 
+@_category_write
 def update_category(user, category, data):
-    with transaction.atomic():
-        User.objects.select_for_update().get(pk=user.pk)
+    with user_write_lock(user.pk):
         category = Category.objects.select_for_update().get(pk=category.pk, user=user)
         if "slug" in data or "is_sink" in data:
             raise ValueError("Slug and sink status are immutable.")
@@ -169,17 +177,35 @@ def update_category(user, category, data):
         return category
 
 
+@_category_write
 def delete_category(user, category):
-    with transaction.atomic():
-        User.objects.select_for_update().get(pk=user.pk)
+    with user_write_lock(user.pk):
         target = Category.objects.select_for_update().get(pk=category.pk, user=user)
         if target.is_sink:
             raise ValueError("The sink category cannot be deleted.")
         rows = ordered_categories(user)
         sink = sink_category(rows)
-        TimeBlock.objects.filter(schedule__user=user, category=target.slug).update(
-            category=sink.slug
+        # Stable day ordering under the shared User lock also serializes this
+        # catalog operation against manual edits and AI policy validation.
+        schedule_ids = list(
+            Schedule.objects.filter(user=user, time_blocks__category=target.slug)
+            .order_by("pk").values_list("pk", flat=True).distinct()
         )
+        for schedule_id in schedule_ids:
+            def remap(context):
+                TimeBlock.objects.filter(
+                    schedule=context.schedule, category=target.slug
+                ).update(category=sink.slug)
+                return context.schedule.revision
+
+            result = execute_schedule_maintenance(user.pk, schedule_id, remap)
+            # A category-only block change preserves the frozen counts. Keep
+            # that snapshot current only if it matched before this revision
+            # bump; a previously stale review must stay stale.
+            if result.changed and result.schedule.status == Schedule.Status.REVIEWED:
+                DailyReview.objects.filter(
+                    schedule_id=schedule_id, reviewed_revision=result.value
+                ).update(reviewed_revision=result.schedule.revision)
         templates = list(Template.objects.select_for_update().filter(user=user))
         changed = []
         for template in templates:
@@ -233,9 +259,9 @@ def delete_category(user, category):
         target.delete()
 
 
+@_category_write
 def swap_categories(user, first_id, second_id):
-    with transaction.atomic():
-        User.objects.select_for_update().get(pk=user.pk)
+    with user_write_lock(user.pk):
         rows = list(
             Category.objects.select_for_update()
             .filter(user=user, pk__in=[first_id, second_id])

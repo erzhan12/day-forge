@@ -18,6 +18,7 @@ import requests
 from cryptography.fernet import Fernet
 from django.contrib.auth.models import User
 from django.core.exceptions import ImproperlyConfigured
+from schedules.window import get_schedule_settings
 from todoist_sync import service
 from todoist_sync.models import TodoistAccount
 
@@ -132,7 +133,9 @@ class TestFilterQuerySelection:
         patched_get.return_value = _fake_response(
             json_payload=_fake_page([], next_cursor=None)
         )
-        service.fetch_tasks_for_date(_make_account_stub(), target_date)
+        service.fetch_tasks_for_date(
+            _make_account_stub(), target_date, local_today=datetime.date(2026, 6, 17),
+        )
         # The first positional/keyword call carries the query param.
         _, kwargs = patched_get.call_args
         return kwargs["params"]["query"]
@@ -140,24 +143,18 @@ class TestFilterQuerySelection:
     def test_today_uses_date_overdue(self, patched_get):
         today = datetime.date(2026, 6, 17)
         with patch(
-            "todoist_sync.service.django_tz.localdate", return_value=today
+            "todoist_sync.service.user_local_date", return_value=today
         ):
             assert self._query_for(patched_get, today) == "2026-06-17 | overdue"
 
-    def test_carry_overdue_flag_when_not_project_today(self, patched_get):
-        today = datetime.date(2026, 6, 17)
-        browser_today = datetime.date(2026, 6, 18)
-        with patch(
-            "todoist_sync.service.django_tz.localdate", return_value=today
-        ):
-            patched_get.return_value = _fake_response(
-                json_payload=_fake_page([], next_cursor=None)
-            )
-            service.fetch_tasks_for_date(
-                _make_account_stub(),
-                browser_today,
-                include_overdue_carryover=True,
-            )
+    def test_explicit_user_today_overrides_project_today(self, patched_get):
+        user_today = datetime.date(2026, 6, 18)
+        patched_get.return_value = _fake_response(
+            json_payload=_fake_page([], next_cursor=None)
+        )
+        service.fetch_tasks_for_date(
+            _make_account_stub(), user_today, local_today=user_today
+        )
         _, kwargs = patched_get.call_args
         assert kwargs["params"]["query"] == "2026-06-18 | overdue"
 
@@ -165,7 +162,7 @@ class TestFilterQuerySelection:
         today = datetime.date(2026, 6, 17)
         past = datetime.date(2025, 2, 12)
         with patch(
-            "todoist_sync.service.django_tz.localdate", return_value=today
+            "todoist_sync.service.user_local_date", return_value=today
         ):
             assert self._query_for(patched_get, past) == "2025-02-12"
 
@@ -173,21 +170,37 @@ class TestFilterQuerySelection:
         today = datetime.date(2026, 6, 17)
         future = datetime.date(2027, 12, 31)
         with patch(
-            "todoist_sync.service.django_tz.localdate", return_value=today
+            "todoist_sync.service.user_local_date", return_value=today
         ):
             assert self._query_for(patched_get, future) == "2027-12-31"
 
     def test_filter_uses_max_page_limit(self, patched_get):
         today = datetime.date(2026, 6, 17)
         with patch(
-            "todoist_sync.service.django_tz.localdate", return_value=today
+            "todoist_sync.service.user_local_date", return_value=today
         ):
             patched_get.return_value = _fake_response(
                 json_payload=_fake_page([], next_cursor=None)
             )
-            service.fetch_tasks_for_date(_make_account_stub(), today)
+            service.fetch_tasks_for_date(
+                _make_account_stub(), today, local_today=datetime.date(2026, 6, 17),
+            )
         _, kwargs = patched_get.call_args
         assert kwargs["params"]["limit"] == 200
+
+    def test_direct_account_fetch_uses_saved_timezone(self, account, patched_get):
+        get_schedule_settings(account.user)
+        account.user.schedule_settings.time_zone = "Asia/Qatar"
+        account.user.schedule_settings.save()
+        patched_get.return_value = _fake_response(json_payload=_fake_page([]))
+        with patch(
+            "schedules.window.timezone.now",
+            return_value=datetime.datetime(2026, 5, 7, 22, tzinfo=datetime.UTC),
+        ):
+            service.fetch_tasks_for_date(account, datetime.date(2026, 5, 8))
+        assert patched_get.call_args.kwargs["params"]["query"] == (
+            "2026-05-08 | overdue"
+        )
 
 
 def _make_account_stub(token=TOKEN_PLAIN):
@@ -215,7 +228,7 @@ class TestPriorityMapping:
         )
         tasks = service.fetch_tasks_for_date(
             _make_account_stub(), datetime.date(2025, 2, 12)
-        )
+        , local_today=datetime.date(2026, 6, 17))
         assert len(tasks) == 1
         assert tasks[0].priority == priority
         assert tasks[0].ui_priority == expected_ui
@@ -230,7 +243,7 @@ class TestDueNormalisation:
         )
         tasks = service.fetch_tasks_for_date(
             _make_account_stub(), datetime.date(2025, 2, 12)
-        )
+        , local_today=datetime.date(2026, 6, 17))
         assert tasks[0].due_date == "2025-02-12"
 
     def test_timed_due_drops_time_no_raise(self, patched_get):
@@ -242,7 +255,7 @@ class TestDueNormalisation:
         )
         tasks = service.fetch_tasks_for_date(
             _make_account_stub(), datetime.date(2018, 11, 15)
-        )
+        , local_today=datetime.date(2026, 6, 17))
         assert tasks[0].due_date == "2018-11-15"
 
     @pytest.mark.parametrize(
@@ -266,7 +279,7 @@ class TestDueNormalisation:
         )
         tasks = service.fetch_tasks_for_date(
             _make_account_stub(), datetime.date(2018, 11, 15)
-        )
+        , local_today=datetime.date(2026, 6, 17))
         assert tasks[0].due_date == "2018-11-15"
 
     def test_null_due_maps_to_none(self, patched_get):
@@ -275,7 +288,7 @@ class TestDueNormalisation:
         )
         tasks = service.fetch_tasks_for_date(
             _make_account_stub(), datetime.date(2025, 2, 12)
-        )
+        , local_today=datetime.date(2026, 6, 17))
         assert tasks[0].due_date is None
 
 
@@ -288,7 +301,7 @@ class TestTitleMapping:
         )
         tasks = service.fetch_tasks_for_date(
             _make_account_stub(), datetime.date(2025, 2, 12)
-        )
+        , local_today=datetime.date(2026, 6, 17))
         assert tasks[0].title == "Buy milk"
 
 
@@ -316,7 +329,7 @@ class TestPagination:
 
         tasks = service.fetch_tasks_for_date(
             _make_account_stub(), datetime.date(2025, 2, 12)
-        )
+        , local_today=datetime.date(2026, 6, 17))
 
         assert {t.id for t in tasks} == {"a", "b", "c"}
         assert patched_get.call_count == 2
@@ -339,7 +352,7 @@ class TestPagination:
 
         tasks = service.fetch_tasks_for_date(
             _make_account_stub(), datetime.date(2025, 2, 12)
-        )
+        , local_today=datetime.date(2026, 6, 17))
 
         assert len(tasks) == 200
         assert patched_get.call_count == 1
@@ -359,7 +372,7 @@ class TestPagination:
         with pytest.raises(service.TodoistProviderError):
             service.fetch_tasks_for_date(
                 _make_account_stub(), datetime.date(2025, 2, 12)
-            )
+            , local_today=datetime.date(2026, 6, 17))
         assert patched_get.call_count == service._MAX_FILTER_PAGES
 
 
@@ -382,7 +395,7 @@ class TestDeterministicSort:
         )
         tasks = service.fetch_tasks_for_date(
             _make_account_stub(), datetime.date(2025, 2, 12)
-        )
+        , local_today=datetime.date(2026, 6, 17))
         # priority 4 (P1, highest) sorts before priority 1 (P4).
         assert [t.id for t in tasks] == ["high", "low"]
 
@@ -405,7 +418,7 @@ class TestDeterministicSort:
         # Must not raise TypeError comparing None against a str date.
         tasks = service.fetch_tasks_for_date(
             _make_account_stub(), datetime.date(2025, 2, 12)
-        )
+        , local_today=datetime.date(2026, 6, 17))
         assert len(tasks) == 2
         # None due sorts as "" (before the dated task) at equal priority.
         assert [t.id for t in tasks] == ["nodue", "dated"]
@@ -424,7 +437,7 @@ class TestMalformedTaskSkipped:
         with caplog.at_level(logging.WARNING):
             tasks = service.fetch_tasks_for_date(
                 _make_account_stub(), datetime.date(2025, 2, 12)
-            )
+            , local_today=datetime.date(2026, 6, 17))
 
         assert [t.id for t in tasks] == ["ok"]
         assert any(
@@ -439,21 +452,21 @@ class TestProviderErrorMapping:
         with pytest.raises(service.TodoistAuthError):
             service.fetch_tasks_for_date(
                 _make_account_stub(), datetime.date(2025, 2, 12)
-            )
+            , local_today=datetime.date(2026, 6, 17))
 
     def test_fetch_timeout_raises_timeout(self, patched_get):
         patched_get.side_effect = requests.Timeout("timed out")
         with pytest.raises(service.TodoistTimeoutError):
             service.fetch_tasks_for_date(
                 _make_account_stub(), datetime.date(2025, 2, 12)
-            )
+            , local_today=datetime.date(2026, 6, 17))
 
     def test_fetch_500_raises_provider(self, patched_get):
         patched_get.return_value = _fake_response(status_code=502)
         with pytest.raises(service.TodoistProviderError):
             service.fetch_tasks_for_date(
                 _make_account_stub(), datetime.date(2025, 2, 12)
-            )
+            , local_today=datetime.date(2026, 6, 17))
 
 
 class TestCompleteTask:
@@ -532,7 +545,9 @@ class TestDecryptionPropagation:
         acc = _make_account_stub()
         acc.get_token.side_effect = ImproperlyConfigured("undecryptable token")
         with pytest.raises(ImproperlyConfigured):
-            service.fetch_tasks_for_date(acc, datetime.date(2025, 2, 12))
+            service.fetch_tasks_for_date(
+                acc, datetime.date(2025, 2, 12), local_today=datetime.date(2026, 6, 17),
+            )
         # Decryption fails first, so the provider is never hit and the token
         # is never sent over the wire.
         patched_get.assert_not_called()

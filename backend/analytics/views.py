@@ -1,39 +1,34 @@
-"""Analytics endpoints: per-day review panel + Mark-reviewed + notes.
+"""Per-day analytics, frozen review snapshots, and editable review notes.
 
-Three views:
-
-* ``analytics_view`` — Inertia-rendered ``GET /analytics/<date>/``.
-  Recomputes-on-visit while the schedule is ``active``; serves the
-  frozen snapshot for ``reviewed``.
-* ``mark_reviewed`` — ``POST /api/analytics/schedules/<date>/mark-reviewed/``.
-  Hard-idempotent on ``REVIEWED`` (a retry returns the persisted
-  snapshot regardless of payload). The two load-bearing ordering rules:
-    1. Body is NOT parsed until after the under-lock status re-check.
-       A retry with a malformed payload to a reviewed schedule still
-       gets the snapshot, not a 400.
-    2. ``select_for_update`` on the parent ``Schedule`` row + a
-       double-checked status under the lock. Closes both the
-       PATCH-vs-mark_reviewed race and the mark_reviewed-vs-mark_reviewed
-       race. Pattern mirrors ``ai_generate_draft`` — see RULES.md
-       "Locking an empty child queryset locks nothing".
-* ``update_review_notes`` — ``PATCH /api/analytics/reviews/<pk>/notes/``.
-  Notes are the only field editable post-review.
+Review writes use the shared User → Schedule → TimeBlock lock order. An
+already-reviewed day returns its persisted review before parsing the request
+or checking its revision, so retries remain stable even with malformed bodies.
 """
 
 import datetime
-import json
 import logging
 
+from common.http import parse_json_object, reject_oversized_body
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
+from django.db.models import Prefetch
 from django.http import Http404, HttpResponseBadRequest, JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 from inertia import render as inertia_render
 from schedules.categories import ordered_categories, serialize_category, sink_category
-from schedules.http import reject_oversized_body
 from schedules.models import Schedule, TimeBlock
+from schedules.mutations import (
+    MutationRejected,
+    ScheduleChanged,
+    execute_schedule_mutation,
+    parse_expected_revision,
+    run_user_maintenance,
+    schedule_changed_response,
+)
+from schedules.serialization import serialize_block
 from schedules.window import get_schedule_settings, resolve_time_zone, user_local_now
 from templates_mgr.preferences import (
     get_user_preferences,
@@ -41,45 +36,44 @@ from templates_mgr.preferences import (
 )
 
 from analytics.models import DailyReview
-from analytics.services import compute_streak, recompute_review_from_schedule
+from analytics.services import (
+    compute_review_stats,
+    compute_streak,
+    freeze_review_snapshot,
+    is_review_snapshot_current,
+)
 
 logger = logging.getLogger(__name__)
 
 NOTES_MAX_CHARS = 2000
 
 
-def _block_to_dict(block: TimeBlock) -> dict:
-    """Match ``schedules.http.block_to_dict``. Duplicated locally rather
-    than imported because the analytics view forwards blocks through
-    Inertia and shouldn't depend on the schedules HTTP shim's churn."""
-    return {
-        "id": block.id,
-        "title": block.title,
-        "start_time": block.start_time.strftime("%H:%M"),
-        "end_time": block.end_time.strftime("%H:%M"),
-        "category": block.category,
-        "is_completed": block.is_completed,
-        "sort_order": block.sort_order,
-    }
-
-
-def _review_to_dict(review: DailyReview) -> dict:
+def _review_to_dict(
+    schedule: Schedule, review: DailyReview | None, *, stats: dict | None = None
+) -> dict:
     """Serialise a ``DailyReview`` to the shape consumed by
     ``frontend/src/types/index.ts:DailyReview``."""
-    return {
-        "id": review.id,
-        "schedule_id": review.schedule_id,
-        "date": review.schedule.date.isoformat(),
-        "status": review.schedule.status,
+    frozen = stats is None and is_review_snapshot_current(schedule, review)
+    aggregates = stats if stats is not None else {
         "planned_count": review.planned_count,
         "completed_count": review.completed_count,
         "skipped_count": review.skipped_count,
-        "completion_rate": review.completion_rate,
         "planned_minutes_by_category": review.planned_minutes_by_category,
         "completed_minutes_by_category": review.completed_minutes_by_category,
-        "notes": review.notes,
-        "created_at": review.created_at.isoformat(),
-        "updated_at": review.updated_at.isoformat(),
+    }
+    planned = aggregates["planned_count"]
+    return {
+        "id": review.id if review else None,
+        "schedule_id": schedule.id,
+        "date": schedule.date.isoformat(),
+        "status": schedule.status,
+        **aggregates,
+        "completion_rate": aggregates["completed_count"] / planned if planned else None,
+        "notes": review.notes if review else "",
+        "created_at": review.created_at.isoformat() if review else None,
+        "updated_at": review.updated_at.isoformat() if review else None,
+        "snapshot_kind": "frozen" if frozen else "current",
+        "reviewed_revision": review.reviewed_revision if review else None,
     }
 
 
@@ -122,14 +116,8 @@ def analytics_view(request, date):
     Schedule row exists — analytics is read-only on past data and
     shouldn't auto-create.
 
-    Recompute strategy:
-      - ``status == reviewed`` → serve the persisted snapshot frozen.
-        Back-compat: a ``reviewed`` schedule predating Phase 6 may have
-        no row; recompute once and persist in that case so the user
-        still sees something.
-      - otherwise → recompute on every visit. ``updated_at`` advances
-        each time, which is how the test suite pins "freshness while
-        active vs. frozen after review".
+    Current statistics are computed in memory. A reviewed snapshot is used
+    only when its recorded revision matches the schedule's revision.
     """
     try:
         parsed_date = datetime.date.fromisoformat(date)
@@ -144,68 +132,80 @@ def analytics_view(request, date):
     # Inlined (not schedules.window.user_local_now) on purpose: the helper
     # would issue its own get_schedule_settings, and we already need the
     # settings object for schedule_window — do NOT "simplify" to the helper.
-    # NOTE: resolved before the future-date gate, so a 400 on a future date
-    # still issues the get_or_create write inside get_schedule_settings
-    # (idempotent settings-row ensure; negligible, same as schedule_view).
-    schedule_settings = get_schedule_settings(request.user)
-    now_local = timezone.localtime(
-        timezone.now(), resolve_time_zone(schedule_settings.time_zone)
-    )
-    today = now_local.date()
-    if parsed_date > today:
-        return HttpResponseBadRequest("Analytics is past-only.")
+    def load_analytics():
+        schedule_settings = get_schedule_settings(request.user)
+        now_local = timezone.localtime(
+            timezone.now(), resolve_time_zone(schedule_settings.time_zone)
+        )
+        today = now_local.date()
+        if parsed_date > today:
+            return HttpResponseBadRequest("Analytics is past-only.")
 
-    schedule = (
-        Schedule.objects.filter(user=request.user, date=parsed_date)
-        .prefetch_related("time_blocks")
-        .first()
-    )
-    if schedule is None:
-        raise Http404("No schedule for this date.")
-
-    categories = ordered_categories(request.user)
-    if schedule.status == Schedule.Status.REVIEWED:
-        review = DailyReview.objects.filter(schedule=schedule).first()
-        if review is None:
-            # Back-compat one-shot recompute for pre-Phase-6 reviewed rows.
-            review = recompute_review_from_schedule(
-                schedule, now=now_local, categories=categories
+        schedule = (
+            Schedule.objects.filter(user=request.user, date=parsed_date)
+            .prefetch_related(
+                Prefetch(
+                    "time_blocks",
+                    queryset=TimeBlock.objects.order_by("start_time", "sort_order", "id"),
+                )
             )
-    else:
-        review = recompute_review_from_schedule(
-            schedule, now=now_local, categories=categories
+            .first()
+        )
+        if schedule is None:
+            raise Http404("No schedule for this date.")
+
+        categories = ordered_categories(request.user)
+        review = DailyReview.objects.filter(schedule=schedule).first()
+        stats = None
+        if not is_review_snapshot_current(schedule, review):
+            stats = compute_review_stats(schedule, now=now_local, categories=categories)
+        review_data = _review_to_dict(schedule, review, stats=stats)
+        # Category deletion can leave historical keys. Fold them for display.
+        review_data["planned_minutes_by_category"] = _normalized_category_minutes(
+            review_data["planned_minutes_by_category"], categories
+        )
+        review_data["completed_minutes_by_category"] = _normalized_category_minutes(
+            review_data["completed_minutes_by_category"], categories
         )
 
-    # Cache the in-scope ``schedule`` on the review instance so
-    # ``_review_to_dict`` doesn't issue an extra SELECT for the parent
-    # row when it reads ``review.schedule.date`` / ``.status``. Both
-    # the back-compat lookup and the recompute path return a review
-    # whose ``schedule`` FK is not pre-fetched.
-    review.schedule = schedule
-    # Reviewed snapshots are immutable, but category deletion may make keys
-    # stale. Fold for presentation so their minutes remain visible as sink.
-    review.planned_minutes_by_category = _normalized_category_minutes(
-        review.planned_minutes_by_category, categories
-    )
-    review.completed_minutes_by_category = _normalized_category_minutes(
-        review.completed_minutes_by_category, categories
-    )
+        blocks = list(schedule.time_blocks.all())
+        return (
+            schedule,
+            review_data,
+            now_local,
+            categories,
+            schedule_settings,
+            [serialize_block(block) for block in blocks],
+        )
 
-    blocks = list(schedule.time_blocks.all().order_by("start_time", "sort_order"))
-    prefs = get_user_preferences(request.user)
+    # First-use helpers may create default rows. Resolve them before the read
+    # transaction, then capture the day and streak under the same User lock
+    # taken by schedule writers. The lock is a SELECT; GET does not update User.
+    get_schedule_settings(request.user)
+    ordered_categories(request.user)
+    get_user_preferences(request.user)
+    with transaction.atomic():
+        get_user_model().objects.select_for_update().get(pk=request.user.pk)
+        captured = load_analytics()
+        if isinstance(captured, HttpResponseBadRequest):
+            return captured
+        schedule, review_data, now_local, categories, schedule_settings, blocks_data = captured
+        streak_data = _streak_payload(request.user, today=now_local.date())
+        prefs = get_user_preferences(request.user)
     # schedule_settings already resolved above; reused here for schedule_window prop.
     return inertia_render(
         request,
         "Analytics",
         {
-            "review": _review_to_dict(review),
-            "streak": _streak_payload(request.user, today=today),
+            "review": review_data,
+            "streak": streak_data,
             "schedule": {
                 "id": schedule.id,
                 "date": schedule.date.isoformat(),
                 "status": schedule.status,
+                "revision": schedule.revision,
             },
-            "blocks": [_block_to_dict(b) for b in blocks],
+            "blocks": blocks_data,
             "categories": [serialize_category(category) for category in categories],
             "date": parsed_date.isoformat(),
             "ui_preferences": ui_preferences_payload(prefs),
@@ -257,112 +257,75 @@ def mark_reviewed(request, date):
     if schedule is None:
         return JsonResponse({"errors": {"detail": "Not found."}}, status=404)
 
-    # Pre-lock fast paths. Cheap early-out, NOT load-bearing for
-    # correctness — the under-lock recheck below is what closes the race.
-    if schedule.status == Schedule.Status.DRAFT:
-        return JsonResponse(
-            {
-                "errors": {
-                    "detail": ("Cannot review a draft schedule — make at least one edit first.")
-                }
-            },
-            status=400,
-        )
-
-    # Same user-local instant ``analytics_view`` computes (0077 wiring). The
-    # snapshot this view freezes is permanent, so a server/UTC ``now`` would
-    # bake in a skipped-count that disagrees with the panel the user just saw
-    # whenever their zone is on the other side of a day boundary.
-    #
-    # Unlike ``analytics_view`` this uses the ``user_local_now`` helper rather
-    # than inlining it: that view inlines because it needs the settings object
-    # anyway for ``schedule_window``, and nothing here does.
-    #
-    # Resolved once here so all three recompute call sites below share one
-    # instant, and after the DRAFT early-out so that 400 does not pay the
-    # settings get_or_create — no call site below it is reachable on that path.
-    now_local = user_local_now(request.user)
-
-    if schedule.status == Schedule.Status.REVIEWED:
-        # Hard idempotency: do NOT parse the body, do NOT acquire the
-        # lock, do NOT recompute. A retry with a stale or corrupted
-        # payload still returns the persisted snapshot.
-        review = DailyReview.objects.filter(schedule=schedule).first()
-        if review is None:
-            # Back-compat one-shot recompute for pre-Phase-6 reviewed
-            # rows that have no DailyReview yet.
-            review = recompute_review_from_schedule(schedule, now=now_local)
-        review.schedule = schedule  # avoid an extra SELECT in serialiser
-        return JsonResponse(_review_to_dict(review))
-
-    with transaction.atomic():
-        # Lock the parent ``Schedule`` row. Locking the (potentially
-        # empty) child TimeBlock queryset would acquire zero locks under
-        # PostgreSQL — see RULES.md "Locking an empty child queryset
-        # locks nothing". This serialises every potential writer for
-        # this schedule (block_detail, mark_reviewed, AI chat, etc.)
-        # behind one queue.
-        locked = (
-            Schedule.objects.select_for_update().prefetch_related("time_blocks").get(pk=schedule.pk)
-        )
-
-        # Re-check status under the lock. Closes the
-        # mark_reviewed-vs-mark_reviewed TOCTOU race: two concurrent
-        # callers can both observe ACTIVE in the pre-lock check, both
-        # enter the atomic block, both queue on the row lock; the second
-        # would otherwise overwrite the first's freshly-frozen snapshot.
-        if locked.status == Schedule.Status.REVIEWED:
-            review = DailyReview.objects.filter(schedule=locked).first()
-            if review is None:
-                review = recompute_review_from_schedule(locked, now=now_local)
-            review.schedule = locked  # avoid extra SELECT in serialiser
-            return JsonResponse(_review_to_dict(review))
-        if locked.status == Schedule.Status.DRAFT:
+    def precondition(ctx):
+        # Stable retries are resolved under the same lock before body parsing
+        # or revision validation, including malformed or obsolete payloads.
+        if ctx.schedule.status == Schedule.Status.REVIEWED:
+            review = DailyReview.objects.filter(schedule=ctx.schedule).first()
+            if not is_review_snapshot_current(ctx.schedule, review):
+                # Explicit retry repairs a missing or stale snapshot under the
+                # User and Schedule lock. It preserves notes and does not edit
+                # the schedule, so its revision remains unchanged.
+                review = freeze_review_snapshot(
+                    ctx.schedule,
+                    revision=ctx.schedule.revision,
+                    now=user_local_now(request.user),
+                )
+            return _review_to_dict(ctx.schedule, review)
+        if ctx.schedule.status == Schedule.Status.DRAFT:
             return JsonResponse(
                 {
                     "errors": {
-                        "detail": ("Cannot review a draft schedule — make at least one edit first.")
+                        "detail": "Cannot review a draft schedule — make at least one edit first."
                     }
                 },
                 status=400,
             )
+        return None
 
-        # Only reachable when status == ACTIVE under the lock. Body
-        # parsing is intentionally deferred to here so the REVIEWED
-        # idempotent paths above never see a 400 from a malformed payload.
-        if request.body == b"":
-            data: dict = {}
-        else:
-            try:
-                data = json.loads(request.body)
-            except json.JSONDecodeError:
-                return JsonResponse({"errors": {"body": "Invalid JSON."}}, status=400)
-            if not isinstance(data, dict):
-                return JsonResponse(
-                    {"errors": {"body": "Request body must be a JSON object."}},
-                    status=400,
-                )
+    body = {}
 
-        notes_value, notes_err = _validate_notes(data.get("notes"), required=False)
+    def expected_revision(ctx):
+        data, error = parse_json_object(request, allow_empty=True, max_bytes=None)
+        if error is not None:
+            raise MutationRejected(error)
+        body.clear()
+        body.update(data)
+        return parse_expected_revision(data)
+
+    def mutate(ctx):
+        notes_value, notes_err = _validate_notes(body.get("notes"), required=False)
         if notes_err is not None:
             return notes_err
-
-        review = recompute_review_from_schedule(locked, now=now_local)
+        review = freeze_review_snapshot(
+            ctx.schedule,
+            revision=ctx.schedule.revision + 1,
+            now=user_local_now(request.user),
+        )
         if notes_value is not None:
             review.notes = notes_value
             review.save(update_fields=["notes"])
-        locked.mark_reviewed_if_active()
-        # Refresh the in-memory ``review.schedule`` so the serialised
-        # status reflects the just-flipped value.
-        review.schedule = locked
+        ctx.schedule.mark_reviewed_if_active()
+        # The executor advances the persisted revision after this callback.
+        # Set the in-memory value for the immediate review payload.
+        ctx.schedule.revision = review.reviewed_revision
+        return _review_to_dict(ctx.schedule, review)
 
+    try:
+        result = execute_schedule_mutation(
+            request.user.pk, schedule.pk, expected_revision, mutate, precondition=precondition
+        )
+    except ScheduleChanged as exc:
+        return schedule_changed_response(exc)
+    except MutationRejected as exc:
+        return exc.response
     logger.info(
-        "mark_reviewed: user=%s schedule=%s notes=%s",
+        "mark_reviewed: user=%s schedule=%s changed=%s",
         request.user.id,
-        locked.id,
-        "yes" if notes_value else "no",
+        schedule.id,
+        result.changed,
     )
-    return JsonResponse(_review_to_dict(review))
+    return JsonResponse({**result.value, **result.snapshot})
 
 
 @login_required
@@ -371,32 +334,63 @@ def update_review_notes(request, pk):
     """Edit ``notes`` on an existing review row. Cross-user 404 (not 403)
     matches the project-wide convention from ``block_detail`` and
     ``template_detail``."""
-    oversized = reject_oversized_body(request)
-    if oversized is not None:
-        return oversized
-
-    try:
-        data = json.loads(request.body)
-    except json.JSONDecodeError:
-        return JsonResponse({"errors": {"body": "Invalid JSON."}}, status=400)
-    if not isinstance(data, dict):
-        return JsonResponse(
-            {"errors": {"body": "Request body must be a JSON object."}},
-            status=400,
-        )
+    data, err = parse_json_object(request)
+    if err is not None:
+        return err
 
     notes_value, notes_err = _validate_notes(data.get("notes"), required=True)
     if notes_err is not None:
         return notes_err
 
-    review = (
-        DailyReview.objects.filter(pk=pk, schedule__user=request.user)
-        .select_related("schedule")
-        .first()
-    )
-    if review is None:
+    schedule_id = DailyReview.objects.filter(
+        pk=pk, schedule__user=request.user
+    ).values_list("schedule_id", flat=True).first()
+    if schedule_id is None:
         return JsonResponse({"errors": {"detail": "Not found."}}, status=404)
+    return _write_notes(request.user.pk, schedule_id, notes_value, review_id=pk)
 
-    review.notes = notes_value
-    review.save(update_fields=["notes"])
-    return JsonResponse(_review_to_dict(review))
+
+def _write_notes(user_id, schedule_id, notes, *, review_id=None):
+    def write(_user):
+        schedule = Schedule.objects.select_for_update().filter(
+            pk=schedule_id, user_id=user_id
+        ).first()
+        if schedule is None:
+            return None
+        if review_id is not None:
+            review = DailyReview.objects.filter(pk=review_id, schedule=schedule).first()
+            if review is None:
+                return None
+        else:
+            review, _ = DailyReview.objects.get_or_create(schedule=schedule)
+        review.notes = notes
+        review.save(update_fields=["notes", "updated_at"])
+        stats = None
+        if not is_review_snapshot_current(schedule, review):
+            stats = compute_review_stats(schedule)
+        return _review_to_dict(schedule, review, stats=stats)
+
+    result = run_user_maintenance(user_id, write)
+    if result is None:
+        return JsonResponse({"errors": {"detail": "Not found."}}, status=404)
+    return JsonResponse(result)
+
+
+@login_required
+@require_http_methods(["PATCH"])
+def update_schedule_notes(request, date):
+    parsed_date, err = _parse_date(date)
+    if err is not None:
+        return err
+    data, err = parse_json_object(request)
+    if err is not None:
+        return err
+    notes, err = _validate_notes(data.get("notes"), required=True)
+    if err is not None:
+        return err
+    schedule_id = Schedule.objects.filter(
+        user=request.user, date=parsed_date
+    ).values_list("id", flat=True).first()
+    if schedule_id is None:
+        return JsonResponse({"errors": {"detail": "Not found."}}, status=404)
+    return _write_notes(request.user.pk, schedule_id, notes)

@@ -9,6 +9,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { flushPromises, mount, VueWrapper } from "@vue/test-utils"
 import { reactive, ref, type Ref } from "vue"
+import { makeCategories } from "./helpers/schedule"
 
 vi.mock("@inertiajs/vue3", () => ({
   router: { reload: vi.fn(), visit: vi.fn(), post: vi.fn() },
@@ -56,8 +57,10 @@ vi.mock("../src/composables/useUndo", () => ({
 // Controllable wall clock: today at 09:30, so a 09:00–10:00 block is current.
 const nowMinutes = ref<number | null>(570)
 const nowDate = ref<string | null>("2026-08-12")
+const todayDate = ref("2026-08-12")
+const currentHHMM = ref("09:30")
 vi.mock("../src/composables/useNowMinutes", () => ({
-  useNowMinutes: () => ({ nowMinutes, nowDate }),
+  useNowMinutes: () => ({ nowMinutes, nowDate, todayDate, currentHHMM }),
 }))
 
 vi.mock("../src/composables/useTravelRules", () => ({
@@ -73,6 +76,11 @@ vi.mock("../src/composables/useDrag", () => ({
   clampedDragDuration: () => 30,
   useDrag: () => ({
     isDragging: ref(false),
+    frozenRenderBounds: ref(null),
+    frozenNowMinutes: ref(null),
+    frozenPxPerMinute: ref(null),
+    frozenTimelineOriginMinutes: ref(null),
+    frozenWindow: ref(null),
     dragBlockId: ref<number | null>(null),
     ghostTop: ref(0),
     previewStartTime: ref(""),
@@ -102,16 +110,16 @@ const todoistState = makeProviderState()
 const habiticaState = makeProviderState()
 
 vi.mock("../src/composables/useCalendar", () => ({
-  useCalendar: () => ({ state: calendarState, fetchEvents: vi.fn(), refreshEvents: vi.fn(), fetchAccountStatus: vi.fn() }),
+  useCalendar: () => ({ state: calendarState, fetchEvents: vi.fn(), refreshEvents: vi.fn(), fetchAccountStatus: vi.fn(), invalidateAccount: vi.fn() }),
 }))
 vi.mock("../src/composables/useGoogleCalendar", () => ({
-  useGoogleCalendar: () => ({ state: googleCalendarState, fetchEvents: vi.fn(), refreshEvents: vi.fn(), fetchAccountStatus: vi.fn() }),
+  useGoogleCalendar: () => ({ state: googleCalendarState, fetchEvents: vi.fn(), refreshEvents: vi.fn(), fetchAccountStatus: vi.fn(), invalidateAccount: vi.fn() }),
 }))
 vi.mock("../src/composables/useTodoist", () => ({
-  useTodoist: () => ({ state: todoistState, fetchTasks: vi.fn(), refreshTasks: vi.fn(), completeTask: vi.fn(), fetchAccountStatus: vi.fn() }),
+  useTodoist: () => ({ state: todoistState, fetchTasks: vi.fn(), refreshTasks: vi.fn(), completeTask: vi.fn(), fetchAccountStatus: vi.fn(), invalidateAccount: vi.fn() }),
 }))
 vi.mock("../src/composables/useHabitica", () => ({
-  useHabitica: () => ({ state: habiticaState, fetchTasks: vi.fn(), refreshTasks: vi.fn(), completeTask: vi.fn(), fetchAccountStatus: vi.fn() }),
+  useHabitica: () => ({ state: habiticaState, fetchTasks: vi.fn(), refreshTasks: vi.fn(), completeTask: vi.fn(), fetchAccountStatus: vi.fn(), invalidateAccount: vi.fn() }),
 }))
 vi.mock("../src/composables/useExternalSourcePoll", () => ({
   useExternalSourcePoll: () => {},
@@ -188,32 +196,35 @@ function stubMatchMedia(): void {
 
 let wrapper: VueWrapper | null = null
 
-function makeCategory(color_id: UserCategory["color_id"]): UserCategory {
-  return {
-    id: 1,
-    slug: "work",
-    label: "Work",
-    color_id,
-    sort_order: 0,
-    is_sink: false,
-    is_new_block_default: false,
-  }
+function makeCatalogWithWorkColor(color_id: UserCategory["color_id"]): UserCategory[] {
+  return makeCategories().map((category) =>
+    category.slug === "work" ? { ...category, color_id } : category,
+  )
 }
 
 function mountPage(
   blocks: TimeBlock[],
   date = "2026-08-12",
-  categories: UserCategory[] = [],
+  categories: UserCategory[] = makeCategories(),
 ) {
   wrapper = mount(Schedule, {
     props: {
-      schedule: { id: 1, date, status: "active" } as ScheduleType,
+      schedule: { id: 1, date, status: "active", revision: 0 } as ScheduleType,
       blocks,
       date,
       categories,
       auto_draft_pending: false,
       has_template_for_type: true,
       slot_type: "weekday" as const,
+      auth_user_id: 7,
+      integration_bootstrap: {
+        snapshot_id: `pip-${date}`,
+        user_id: 7,
+        date,
+        time_zone: "UTC",
+        connected: { apple: false, google: false, todoist: false, habitica: false },
+        travel_rules: [],
+      },
     },
     global: { stubs: STUBS },
   })
@@ -373,13 +384,13 @@ describe("Schedule.vue focus indicator", () => {
     // otherwise the open PiP keeps the old colour until an unrelated edit.
     const win = makeFakeWindow()
     installFakePip(win)
-    mountPage([makeBlock()], "2026-08-12", [makeCategory("blue")])
+    mountPage([makeBlock()], "2026-08-12", makeCatalogWithWorkColor("blue"))
     await flushPromises()
     await vm().focusIndicator.open()
     await flushPromises()
     expect(win.document.querySelector(".fi-rail")?.getAttribute("style")).toContain("#3B82F6")
 
-    await wrapper!.setProps({ categories: [makeCategory("rose")] })
+    await wrapper!.setProps({ categories: makeCatalogWithWorkColor("rose") })
     await flushPromises()
     const style = win.document.querySelector(".fi-rail")?.getAttribute("style")
     expect(style).toContain("#E11D48")
@@ -404,7 +415,7 @@ describe("Schedule.vue focus indicator", () => {
     mountPage([makeBlock({ id: 7, is_completed: true })])
     await flushPromises()
     expect(vm().indicatorActive).toBe(false)
-    await wrapper!.setProps({ blocks: [makeBlock({ id: 7, is_completed: false })] })
+    await wrapper!.setProps({ schedule: { ...wrapper!.props("schedule"), revision: 1 }, blocks: [makeBlock({ id: 7, is_completed: false })] })
     await flushPromises()
     expect(vm().indicatorActive).toBe(true)
   })
@@ -647,6 +658,7 @@ describe("Schedule.vue focus indicator", () => {
     expect(win.document.body.textContent).toContain("Later")
 
     await wrapper!.setProps({
+      schedule: { ...wrapper!.props("schedule"), revision: 1 },
       blocks: [makeBlock({ id: 3, title: "Sooner", start_time: "11:00", end_time: "12:00" })],
     })
     await flushPromises()

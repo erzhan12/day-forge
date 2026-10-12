@@ -22,7 +22,13 @@ const { requestJsonMock, routerReload } = vi.hoisted(() => ({
 }))
 
 vi.mock("../src/composables/useHttp", () => ({
-  requestJson: (...args: unknown[]) => requestJsonMock(...args),
+  requestJson: async (...args: unknown[]) => {
+    const result = await requestJsonMock(...args)
+    if (!result.ok) return result
+    const date = String(args[0]).split("/")[4]
+    const revision = Number((args[2] as { expected_revision: number }).expected_revision) + (result.data?.applied ? 1 : 0)
+    return { ...result, data: { ...result.data, revision, schedule: { id: 1, date, status: "active", revision } } }
+  },
 }))
 
 vi.mock("@inertiajs/vue3", () => ({
@@ -33,8 +39,21 @@ import {
   _peekLatestRequestId,
   _resetChatStateForTests,
   clearAppliedResultForUndo,
-  useChat,
+  useChat as actualUseChat,
 } from "../src/composables/useChat"
+import { nextTick, ref } from "vue"
+import { createScheduleRevision } from "../src/composables/useScheduleRevision"
+
+let fixtureState: ReturnType<typeof createScheduleRevision> | undefined
+const fixtureRevision = ref(0)
+const fixtureDate = ref("2026-05-07")
+function useChat() {
+  const date = () => fixtureDate.value
+  // Updating this fixture represents the Inertia refresh after a conflict.
+  fixtureState = createScheduleRevision(date, () => ({ date: date(), revision: fixtureRevision.value }), { getBlocks: snapshotBlocks })
+  const chat = actualUseChat(fixtureState)
+  return { ...chat, setActiveDate: (next: string) => { fixtureDate.value = next; chat.setActiveDate(next) } }
+}
 import { SCHEDULE_CHANGED_RETRY_MESSAGE } from "../src/utils/aiScheduleConflict"
 
 const BLOCK = {
@@ -74,10 +93,127 @@ describe("useChat", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     _resetChatStateForTests()
+    fixtureRevision.value = 0
+    fixtureDate.value = "2026-05-07"
+    routerReload.mockImplementation((options) => {
+      if (fixtureState?.revision.value !== null && fixtureState?.revision.value !== undefined) fixtureRevision.value = fixtureState.revision.value
+      options.onSuccess?.()
+      options.onFinish?.()
+    })
   })
 
   afterEach(() => {
     _resetChatStateForTests()
+    fixtureRevision.value = 0
+    fixtureDate.value = "2026-05-07"
+    routerReload.mockImplementation((options) => {
+      if (fixtureState?.revision.value !== null && fixtureState?.revision.value !== undefined) fixtureRevision.value = fixtureState.revision.value
+      options.onSuccess?.()
+      options.onFinish?.()
+    })
+  })
+
+  it("binds chat writes to the captured account identity", async () => {
+    const owner = createScheduleRevision("2026-05-07", () => ({ id: 1, date: "2026-05-07", status: "active", revision: 0 }), { getBlocks: snapshotBlocks, getUserId: () => 7 })
+    const chat = actualUseChat(owner)
+    chat.setActiveDate("2026-05-07")
+    requestJsonMock.mockResolvedValue({ ok: true, data: { applied: false, explanation: "Done" } })
+    await chat.submitTurn("hello", snapshotBlocks, vi.fn())
+    expect(requestJsonMock.mock.calls[0][3]).toEqual({ expectedUserId: 7 })
+  })
+
+  it("uses the accepted canonical snapshot and revision for a follow-up without reload", async () => {
+    const chat = useChat()
+    chat.setActiveDate("2026-05-07")
+    requestJsonMock
+      .mockResolvedValueOnce({ ok: true, data: { applied: true, blocks: [{ ...BLOCK, title: "First" }] } })
+      .mockResolvedValueOnce({ ok: true, data: { applied: true, blocks: [{ ...BLOCK, title: "Second" }] } })
+    const pushUndo = vi.fn()
+    await chat.submitTurn("first", snapshotBlocks, pushUndo)
+    await chat.submitTurn("second", snapshotBlocks, pushUndo)
+    expect(requestJsonMock.mock.calls.map((call) => call[2].expected_revision)).toEqual([0, 1])
+    expect(pushUndo.mock.calls[0][0]).toMatchObject({ expected_revision: 1, previous_revision: 0, previousBlocks: [BLOCK] })
+    expect(pushUndo.mock.calls[1][0]).toMatchObject({ expected_revision: 2, previous_revision: 1, previousBlocks: [{ ...BLOCK, title: "First" }] })
+    expect(routerReload).not.toHaveBeenCalled()
+  })
+
+  it("blocks another turn while the first request owns the schedule", async () => {
+    const chat = useChat()
+    chat.setActiveDate("2026-05-07")
+    const deferred = makeDeferred()
+    requestJsonMock.mockReturnValueOnce(deferred.promise)
+    const first = chat.submitTurn("first", snapshotBlocks, vi.fn())
+    await chat.submitTurn("second", snapshotBlocks, vi.fn())
+    expect(requestJsonMock).toHaveBeenCalledTimes(1)
+    expect(chat.isProcessing.value).toBe(true)
+    expect(chat.messages.value.map((message) => message.content)).toEqual(["first"])
+    deferred.resolve({ ok: true, data: { applied: false, explanation: "Done" } })
+    await first
+    expect(chat.isProcessing.value).toBe(false)
+  })
+
+  it("keeps a new owner's chat isolated from an old owner's late response", async () => {
+    const first = useChat()
+    first.setActiveDate("2026-05-07")
+    first.draftInput.value = "Private unsent input"
+    first.apiHealthy.value = false
+    const deferred = makeDeferred()
+    requestJsonMock.mockReturnValueOnce(deferred.promise)
+    const pushUndo = vi.fn()
+    const pending = first.submitTurn("Private prompt", snapshotBlocks, pushUndo)
+    const newOwner = createScheduleRevision("2026-05-07", () => ({ id: 2, date: "2026-05-07", status: "active", revision: 0 }), { getBlocks: () => [] })
+    const second = actualUseChat(newOwner)
+    second.setActiveDate("2026-05-07")
+    expect(second.messages.value).toEqual([])
+    expect(second.draftInput.value).toBe("")
+    expect(second.apiHealthy.value).toBe(true)
+    fixtureState?.reset("dispose")
+    deferred.resolve({ ok: true, data: { applied: true, blocks: [{ ...BLOCK, title: "Old result" }] } })
+    await pending
+    expect(second.messages.value).toEqual([])
+    expect(newOwner.blocks.value).toEqual([])
+    expect(pushUndo).not.toHaveBeenCalled()
+  })
+
+  it("keeps two active owners' transcripts and input independent", () => {
+    const firstOwner = createScheduleRevision("2026-05-07", () => ({ id: 1, date: "2026-05-07", status: "active", revision: 0 }), { getBlocks: snapshotBlocks })
+    const secondOwner = createScheduleRevision("2026-05-07", () => ({ id: 2, date: "2026-05-07", status: "active", revision: 0 }), { getBlocks: snapshotBlocks })
+    const first = actualUseChat(firstOwner)
+    const second = actualUseChat(secondOwner)
+    first.setActiveDate("2026-05-07")
+    second.setActiveDate("2026-05-07")
+    first.draftInput.value = "First user's prompt"
+    first.messages.value = [{ role: "user", content: "First", ask: null, explanation: null, ts: 1 }]
+
+    expect(second.draftInput.value).toBe("")
+    expect(second.messages.value).toEqual([])
+    second.clearThread()
+    expect(first.messages.value).toHaveLength(1)
+
+    firstOwner.reset("session")
+    expect(first.draftInput.value).toBe("")
+    expect(second.activeDate.value).toBe("2026-05-07")
+  })
+
+  it("reconciles an unknown outcome once and keeps the writer busy until reload completes", async () => {
+    const chat = useChat()
+    chat.setActiveDate("2026-05-07")
+    requestJsonMock.mockResolvedValue({ ok: false, errors: { detail: "Network error" } })
+    let finish!: () => void
+    routerReload.mockImplementationOnce((options) => { finish = () => { options.onSuccess(); options.onFinish() } })
+    const pushUndo = vi.fn()
+    const pending = chat.submitTurn("unknown", snapshotBlocks, pushUndo)
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(fixtureState!.busy.value).toBe(true)
+    await chat.submitTurn("retry before reconciliation", snapshotBlocks, pushUndo)
+    expect(requestJsonMock).toHaveBeenCalledTimes(1)
+    finish()
+    await pending
+    expect(routerReload).toHaveBeenCalledTimes(1)
+    expect(requestJsonMock).toHaveBeenCalledTimes(1)
+    expect(pushUndo).not.toHaveBeenCalled()
+    expect(fixtureState!.busy.value).toBe(false)
   })
 
   it("submitTurn refuses when activeDate is null", async () => {
@@ -126,7 +262,7 @@ describe("useChat", () => {
     expect(pushUndo).toHaveBeenCalledWith(
       expect.objectContaining({ type: "ai", silent: true }),
     )
-    expect(routerReload).toHaveBeenCalledOnce()
+    expect(routerReload).not.toHaveBeenCalled()
     expect(chat.isProcessing.value).toBe(false)
   })
 
@@ -197,7 +333,7 @@ describe("useChat", () => {
     const applied = chat.messages.value.filter((m) => m.appliedResult)
     expect(applied).toHaveLength(2)
 
-    clearAppliedResultForUndo()
+    clearAppliedResultForUndo(fixtureState)
 
     const remaining = chat.messages.value.filter((m) => m.appliedResult)
     expect(remaining).toHaveLength(1)
@@ -231,22 +367,22 @@ describe("useChat", () => {
     await chat.submitTurn("second", snapshotBlocks, vi.fn())
 
     expect(requestJsonMock.mock.calls[0][2]).toEqual(
-      { messages: expect.any(Array) },
+      { expected_revision: expect.any(Number), messages: expect.any(Array) },
     )
     expect(requestJsonMock.mock.calls[1][2]).toEqual(
-      { messages: expect.any(Array) },
+      { expected_revision: expect.any(Number), messages: expect.any(Array) },
     )
     expect(formatSpy).not.toHaveBeenCalled()
     formatSpy.mockRestore()
   })
 
-  it("sends is_ask on assistant turns that carried an ask", async () => {
+  it.each(["I understood", "", " \t\n"])("sends a nonblank ask on the next turn with explanation %j", async (explanation) => {
     const chat = useChat()
     chat.setActiveDate("2026-05-07")
     requestJsonMock
       .mockResolvedValueOnce({
         ok: true,
-        data: { blocks: null, explanation: "I understood", ask: "when?", applied: false },
+        data: { blocks: null, explanation, ask: "when?", applied: false },
       })
       .mockResolvedValueOnce({
         ok: true,
@@ -284,6 +420,7 @@ describe("useChat", () => {
       })
 
     await chat.submitTurn("move gym", snapshotBlocks, vi.fn())
+    fixtureRevision.value += 1
     await chat.submitTurn("try again", snapshotBlocks, vi.fn())
     await chat.submitTurn("try again", snapshotBlocks, vi.fn())
 
@@ -421,7 +558,7 @@ describe("useChat", () => {
     expect(requestJsonMock).toHaveBeenCalledTimes(1)
     expect(pushUndo).not.toHaveBeenCalled()
     expect(routerReload).toHaveBeenCalledOnce()
-    expect(routerReload).toHaveBeenCalledWith({ only: ["blocks", "schedule"] })
+    expect(routerReload).toHaveBeenCalledWith(expect.objectContaining({ only: ["blocks", "schedule", "auth_user_id", "schedule_window"] }))
     expect(chat.apiHealthy.value).toBe(true)
     expect(chat.lastError.value).toBe(SCHEDULE_CHANGED_RETRY_MESSAGE)
     expect(chat.messages.value.length).toBe(2)
@@ -568,7 +705,7 @@ describe("useChat", () => {
   })
 
   describe("setActiveDate", () => {
-    it("clears thread on date change", () => {
+    it("clears thread on date change", async () => {
       const chat = useChat()
       chat.setActiveDate("2026-05-07")
       chat.messages.value = [
@@ -592,6 +729,7 @@ describe("useChat", () => {
       chat.pendingAsk.value = "?"
 
       chat.setActiveDate("2026-05-08")
+    await nextTick()
 
       expect(chat.messages.value).toEqual([])
       expect(chat.pendingAsk.value).toBe(null)
@@ -620,6 +758,7 @@ describe("useChat", () => {
         pushUndo,
       )
       chat.setActiveDate("2026-05-08")
+    await nextTick()
 
       deferred.resolve({
         ok: true,
@@ -652,6 +791,7 @@ describe("useChat", () => {
     // Navigate away — this clears the thread + bumps token + resets
     // spinner directly.
     chat.setActiveDate("2026-05-08")
+    await nextTick()
     expect(chat.isProcessing.value).toBe(false)
 
     // B is in-flight on day B.
@@ -707,6 +847,7 @@ describe("useChat", () => {
     const inFlightA = chat.submitTurn("A", snapshotBlocks, vi.fn())
 
     chat.setActiveDate("2026-05-08")
+    await nextTick()
 
     const deferredB = makeDeferred()
     requestJsonMock.mockReturnValueOnce(deferredB.promise)
@@ -741,6 +882,12 @@ describe("useChat", () => {
 describe("useChat fallback-literal guard", () => {
   beforeEach(() => {
     _resetChatStateForTests()
+    fixtureRevision.value = 0
+    routerReload.mockImplementation((options) => {
+      if (fixtureState?.revision.value !== null && fixtureState?.revision.value !== undefined) fixtureRevision.value = fixtureState.revision.value
+      options.onSuccess?.()
+      options.onFinish?.()
+    })
     requestJsonMock.mockReset()
   })
 

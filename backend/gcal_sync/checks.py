@@ -9,15 +9,9 @@ every ``DEBUG=False`` deploy — even if no user has connected Google. An
 optional-Google staging env must set all four or stay ``DEBUG=True``.
 """
 
+from common.integration_checks import ineffective_cache_with_accounts, invalid_fernet_setting
 from django.conf import settings
 from django.core.checks import Error, Warning, register
-from django.db.utils import OperationalError, ProgrammingError
-
-_INEFFECTIVE_CACHE_BACKENDS = (
-    "django.core.cache.backends.locmem.LocMemCache",
-    "django.core.cache.backends.filebased.FileBasedCache",
-    "django.core.cache.backends.dummy.DummyCache",
-)
 
 
 @register()
@@ -35,19 +29,12 @@ def warn_ineffective_cache_with_gcal_sync(app_configs, **kwargs):
     ``ProgrammingError`` on the first ``manage.py migrate`` (table absent).
     The ``try/except`` is required so a fresh DB can migrate.
     """
-    warnings = []
-    if settings.DEBUG:
-        return warnings
-    backend = settings.CACHES.get("default", {}).get("BACKEND", "")
-    if backend not in _INEFFECTIVE_CACHE_BACKENDS:
-        return warnings
+    from gcal_sync.models import GoogleCalendarAccount
 
-    try:
-        from gcal_sync.models import GoogleCalendarAccount
-        if not GoogleCalendarAccount.objects.exists():
-            return warnings
-    except (OperationalError, ProgrammingError):
-        return warnings
+    backend = ineffective_cache_with_accounts(GoogleCalendarAccount)
+    if backend is None:
+        return []
+    warnings = []
 
     warnings.append(
         Warning(
@@ -113,8 +100,8 @@ def error_google_oauth_config_missing_in_production(app_configs, **kwargs):
                 "ImproperlyConfigured at request time.",
                 hint=(
                     "Generate a key with "
-                    "`python -c \"from cryptography.fernet import Fernet; "
-                    "print(Fernet.generate_key().decode())\"` and set "
+                    '`python -c "from cryptography.fernet import Fernet; '
+                    'print(Fernet.generate_key().decode())"` and set '
                     "GOOGLE_OAUTH_TOKEN_KEY in your production environment."
                 ),
                 id="gcal_sync.E001",
@@ -122,19 +109,16 @@ def error_google_oauth_config_missing_in_production(app_configs, **kwargs):
         )
         return errors
 
-    from cryptography.fernet import Fernet
-    try:
-        Fernet(key.encode() if isinstance(key, str) else key)
-    except (ValueError, TypeError) as e:
+    if invalid_fernet_setting("GOOGLE_OAUTH_TOKEN_KEY"):
         errors.append(
             Error(
-                "GOOGLE_OAUTH_TOKEN_KEY is set but is not a valid Fernet key "
-                f"({type(e).__name__}: {e}). The first Google token write "
+                "GOOGLE_OAUTH_TOKEN_KEY is set but is not a valid Fernet key. "
+                "The first Google token write "
                 "would crash with ImproperlyConfigured.",
                 hint=(
                     "Regenerate the key with "
-                    "`python -c \"from cryptography.fernet import Fernet; "
-                    "print(Fernet.generate_key().decode())\"` and replace "
+                    '`python -c "from cryptography.fernet import Fernet; '
+                    'print(Fernet.generate_key().decode())"` and replace '
                     "GOOGLE_OAUTH_TOKEN_KEY in your production environment."
                 ),
                 id="gcal_sync.E001",

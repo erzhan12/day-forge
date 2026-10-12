@@ -1,4 +1,5 @@
 """Tests for the templates + rules CRUD endpoints."""
+
 import datetime
 import json
 
@@ -36,13 +37,9 @@ def good_blocks():
 @pytest.mark.django_db
 class TestTemplatesList:
     def test_list_per_user_only(self, auth_client, user, good_blocks):
-        Template.objects.create(
-            user=user, name="A", type="weekday", blocks=good_blocks
-        )
+        Template.objects.create(user=user, name="A", type="weekday", blocks=good_blocks)
         other = User.objects.create_user(username="o", password="x")
-        Template.objects.create(
-            user=other, name="other", type="weekday", blocks=[]
-        )
+        Template.objects.create(user=other, name="other", type="weekday", blocks=[])
 
         resp = auth_client.get("/api/templates/")
         assert resp.status_code == 200
@@ -70,12 +67,8 @@ class TestTemplatesCreate:
         # Persisted scoped to current user
         assert Template.objects.filter(user=user, name="Mine").exists()
 
-    def test_unique_user_type_returns_409(
-        self, auth_client, user, good_blocks
-    ):
-        Template.objects.create(
-            user=user, name="A", type="weekday", blocks=good_blocks
-        )
+    def test_unique_user_type_returns_409(self, auth_client, user, good_blocks):
+        Template.objects.create(user=user, name="A", type="weekday", blocks=good_blocks)
         resp = _post(
             auth_client,
             "/api/templates/",
@@ -95,9 +88,7 @@ class TestTemplatesCreate:
         assert resp.status_code == 201
         # Other user can create one too
         other = User.objects.create_user(username="o2", password="x")
-        Template.objects.create(
-            user=other, name="Theirs", type="weekday", blocks=good_blocks
-        )
+        Template.objects.create(user=other, name="Theirs", type="weekday", blocks=good_blocks)
         assert Template.objects.filter(type="weekday").count() == 2
 
     def test_invalid_block_returns_400(self, auth_client):
@@ -251,7 +242,7 @@ class TestTemplatesCustomWindow:
         # window would reject — B must succeed.
         other = User.objects.create_user(username="win_other", password="x")
         other_client = Client()
-        other_client.login(username="win_other", password="x")
+        other_client.force_login(other)
         resp = _post(
             other_client,
             "/api/templates/",
@@ -271,9 +262,7 @@ class TestTemplatesCustomWindow:
         assert resp.status_code == 201
         assert Template.objects.filter(user=other, name="B").exists()
 
-    def test_narrowing_window_does_not_mutate_stored_template(
-        self, auth_client, user
-    ):
+    def test_narrowing_window_does_not_mutate_stored_template(self, auth_client, user):
         """Narrowing the window never auto-edits an existing stored template
         whose blocks now fall outside the new bounds."""
         stored_blocks = [
@@ -304,9 +293,7 @@ class TestTemplatesCustomWindow:
         tpl = Template.objects.get(user=user, name="Keep")
         assert tpl.blocks == stored_blocks
 
-    def test_editing_template_after_narrowing_rejects_stale_blocks(
-        self, auth_client, user
-    ):
+    def test_editing_template_after_narrowing_rejects_stale_blocks(self, auth_client, user):
         """Once the window is narrowed, re-saving a template whose (previously
         valid) blocks now fall outside the window is rejected with a
         window-derived error — the edit cliff users would otherwise hit
@@ -347,9 +334,7 @@ class TestTemplatesCustomWindow:
 @pytest.mark.django_db
 class TestTemplateDetail:
     def test_put_updates(self, auth_client, user, good_blocks):
-        tpl = Template.objects.create(
-            user=user, name="Old", type="weekday", blocks=[]
-        )
+        tpl = Template.objects.create(user=user, name="Old", type="weekday", blocks=[])
         resp = _put(
             auth_client,
             f"/api/templates/{tpl.id}/",
@@ -362,9 +347,7 @@ class TestTemplateDetail:
 
     def test_cross_user_returns_404(self, auth_client, good_blocks):
         other = User.objects.create_user(username="o3", password="x")
-        tpl = Template.objects.create(
-            user=other, name="Theirs", type="weekday", blocks=[]
-        )
+        tpl = Template.objects.create(user=other, name="Theirs", type="weekday", blocks=[])
         resp = _put(
             auth_client,
             f"/api/templates/{tpl.id}/",
@@ -375,9 +358,7 @@ class TestTemplateDetail:
         assert tpl.name == "Theirs"
 
     def test_delete(self, auth_client, user):
-        tpl = Template.objects.create(
-            user=user, name="X", type="weekday", blocks=[]
-        )
+        tpl = Template.objects.create(user=user, name="X", type="weekday", blocks=[])
         resp = auth_client.delete(f"/api/templates/{tpl.id}/")
         assert resp.status_code == 200
         assert not Template.objects.filter(pk=tpl.id).exists()
@@ -409,9 +390,7 @@ class TestRulesCRUD:
             {"text": "No meetings before 9", "priority": 10},
         )
         assert resp.status_code == 201
-        assert Rule.objects.filter(
-            user=user, text="No meetings before 9"
-        ).exists()
+        assert Rule.objects.filter(user=user, text="No meetings before 9").exists()
 
     def test_create_without_priority_defaults_to_top(self, auth_client, user):
         first_resp = _post(auth_client, "/api/rules/", {"text": "Rule A"})
@@ -454,9 +433,7 @@ class TestRulesCRUD:
         theirs.refresh_from_db()
         assert theirs.priority == 42  # untouched by our compaction
 
-    def test_compaction_preserves_id_tiebreak_for_equal_priorities(
-        self, auth_client, user
-    ):
+    def test_compaction_preserves_id_tiebreak_for_equal_priorities(self, auth_client, user):
         # Two rules share a priority; the canonical order_by("-priority", "id")
         # tiebreak (lower id first) must survive compaction deterministically.
         older = Rule.objects.create(user=user, text="Older", priority=3)
@@ -472,9 +449,7 @@ class TestRulesCRUD:
 
     def test_patch_rule(self, auth_client, user):
         r = Rule.objects.create(user=user, text="Old", priority=5)
-        resp = _patch(
-            auth_client, f"/api/rules/{r.id}/", {"text": "New", "is_active": False}
-        )
+        resp = _patch(auth_client, f"/api/rules/{r.id}/", {"text": "New", "is_active": False})
         assert resp.status_code == 200
         r.refresh_from_db()
         assert r.text == "New"
@@ -500,9 +475,7 @@ class TestRulesCRUD:
     def test_cross_user_patch_returns_404(self, auth_client):
         other = User.objects.create_user(username="o5", password="x")
         r = Rule.objects.create(user=other, text="Theirs")
-        resp = _patch(
-            auth_client, f"/api/rules/{r.id}/", {"text": "hacked"}
-        )
+        resp = _patch(auth_client, f"/api/rules/{r.id}/", {"text": "hacked"})
         assert resp.status_code == 404
 
     def test_delete(self, auth_client, user):
@@ -538,9 +511,7 @@ class TestRulesCRUD:
         second_resp = _post(auth_client, "/api/rules/", {"text": "Rule two"})
         assert first_resp.status_code == second_resp.status_code == 201
 
-        delete_resp = auth_client.delete(
-            f"/api/rules/{first_resp.json()['id']}/"
-        )
+        delete_resp = auth_client.delete(f"/api/rules/{first_resp.json()['id']}/")
         assert delete_resp.status_code == 200
         third_resp = _post(auth_client, "/api/rules/", {"text": "Rule three"})
         assert third_resp.status_code == 201
@@ -549,9 +520,7 @@ class TestRulesCRUD:
         assert [rule["text"] for rule in listed] == ["Rule three", "Rule two"]
         assert {rule["priority"] for rule in listed} == {0, 1}
 
-    def test_rule_post_locks_user_before_count_and_create(
-        self, auth_client, user, monkeypatch
-    ):
+    def test_rule_post_locks_user_before_count_and_create(self, auth_client, user, monkeypatch):
         """Slice 7: Rule POST acquires the user row lock before count/create."""
         events: list[str] = []
         original_user_sfu = User.objects.select_for_update
@@ -577,9 +546,7 @@ class TestRulesCRUD:
             events.append("create")
             return original_create(*args, **kwargs)
 
-        monkeypatch.setattr(
-            User.objects, "select_for_update", user_sfu_spy, raising=True
-        )
+        monkeypatch.setattr(User.objects, "select_for_update", user_sfu_spy, raising=True)
         monkeypatch.setattr(Rule.objects, "filter", filter_spy, raising=True)
         monkeypatch.setattr(Rule.objects, "create", create_spy, raising=True)
 
@@ -591,9 +558,7 @@ class TestRulesCRUD:
         assert resp.status_code == 201
         assert events == ["user_lock", "count", "create"]
 
-    def test_rule_patch_locks_user_before_refetch_and_save(
-        self, auth_client, user, monkeypatch
-    ):
+    def test_rule_patch_locks_user_before_refetch_and_save(self, auth_client, user, monkeypatch):
         """Slice 7: Rule PATCH locks the user row before target re-fetch."""
         r = Rule.objects.create(user=user, text="Old", priority=1)
         call_order: list[str] = []
@@ -608,18 +573,14 @@ class TestRulesCRUD:
             call_order.append("get")
             return original_get(*args, **kwargs)
 
-        monkeypatch.setattr(
-            User.objects, "select_for_update", user_sfu_spy, raising=True
-        )
+        monkeypatch.setattr(User.objects, "select_for_update", user_sfu_spy, raising=True)
         monkeypatch.setattr(Rule.objects, "get", get_spy, raising=True)
 
         resp = _patch(auth_client, f"/api/rules/{r.id}/", {"text": "New"})
         assert resp.status_code == 200
         assert call_order == ["user_lock", "get"]
 
-    def test_rule_delete_locks_user_before_refetch(
-        self, auth_client, user, monkeypatch
-    ):
+    def test_rule_delete_locks_user_before_refetch(self, auth_client, user, monkeypatch):
         """Slice 7: Rule DELETE locks the user row before target re-fetch."""
         r = Rule.objects.create(user=user, text="Gone")
         call_order: list[str] = []
@@ -634,18 +595,14 @@ class TestRulesCRUD:
             call_order.append("get")
             return original_get(*args, **kwargs)
 
-        monkeypatch.setattr(
-            User.objects, "select_for_update", user_sfu_spy, raising=True
-        )
+        monkeypatch.setattr(User.objects, "select_for_update", user_sfu_spy, raising=True)
         monkeypatch.setattr(Rule.objects, "get", get_spy, raising=True)
 
         resp = auth_client.delete(f"/api/rules/{r.id}/")
         assert resp.status_code == 200
         assert call_order == ["user_lock", "get"]
 
-    def test_rule_patch_404_when_target_deleted_under_lock(
-        self, auth_client, user, monkeypatch
-    ):
+    def test_rule_patch_404_when_target_deleted_under_lock(self, auth_client, user, monkeypatch):
         """Slice 7: a delete between user lock and re-fetch returns uniform 404."""
         r = Rule.objects.create(user=user, text="Vanish")
         original_user_sfu = User.objects.select_for_update
@@ -654,9 +611,7 @@ class TestRulesCRUD:
             Rule.objects.filter(pk=r.pk).delete()
             return original_user_sfu(*args, **kwargs)
 
-        monkeypatch.setattr(
-            User.objects, "select_for_update", user_sfu_spy, raising=True
-        )
+        monkeypatch.setattr(User.objects, "select_for_update", user_sfu_spy, raising=True)
 
         resp = _patch(auth_client, f"/api/rules/{r.id}/", {"text": "Too late"})
         assert resp.status_code == 404
@@ -692,7 +647,8 @@ class TestRuleSwap:
         resp = _post(auth_client, self.URL, {"a": high.id, "b": low.id})
 
         assert resp.status_code == 200
-        assert lock_calls == ["user_lock"]
+        assert lock_calls
+        assert all(call == "user_lock" for call in lock_calls)
 
     def test_swap_two_rules_swaps_priority(self, auth_client, user):
         high = Rule.objects.create(user=user, text="High", priority=1)
@@ -756,9 +712,7 @@ class TestRuleSwap:
         # Malformed body must hit parse_swap_body's JSONDecodeError branch
         # before any id validation (mirrors the TestTravelRuleSwap case).
         # Bypass _post's json.dumps to send a raw non-JSON string.
-        resp = auth_client.post(
-            self.URL, "not json{", content_type="application/json"
-        )
+        resp = auth_client.post(self.URL, "not json{", content_type="application/json")
 
         assert resp.status_code == 400
         assert resp.json()["errors"]["body"] == "Invalid JSON."
@@ -788,9 +742,7 @@ class TestRuleSwap:
         low.refresh_from_db()
         assert (high.priority, low.priority) == (1, 0)  # unchanged
 
-    def test_swap_rolls_back_on_bulk_update_failure(
-        self, auth_client, user, monkeypatch
-    ):
+    def test_swap_rolls_back_on_bulk_update_failure(self, auth_client, user, monkeypatch):
         high = Rule.objects.create(user=user, text="High", priority=1)
         low = Rule.objects.create(user=user, text="Low", priority=0)
 
@@ -834,14 +786,12 @@ class TestRulePriorityBounds:
         resp = _post(
             auth_client,
             "/api/rules/",
-            {"text": "X", "priority": -10**12},
+            {"text": "X", "priority": -(10**12)},
         )
         assert resp.status_code == 400
         assert "priority" in resp.json()["errors"]
 
-    def test_create_accepts_priority_at_max_and_places_rule_on_top(
-        self, auth_client, user
-    ):
+    def test_create_accepts_priority_at_max_and_places_rule_on_top(self, auth_client, user):
         from templates_mgr.api import MAX_PRIORITY
 
         Rule.objects.create(user=user, text="Existing", priority=0)
@@ -858,9 +808,7 @@ class TestRulePriorityBounds:
 
     def test_patch_rejects_out_of_range_priority(self, auth_client, user):
         r = Rule.objects.create(user=user, text="X", priority=5)
-        resp = _patch(
-            auth_client, f"/api/rules/{r.id}/", {"priority": 10**12}
-        )
+        resp = _patch(auth_client, f"/api/rules/{r.id}/", {"priority": 10**12})
         assert resp.status_code == 400
         r.refresh_from_db()
         assert r.priority == 5  # unchanged
@@ -869,9 +817,7 @@ class TestRulePriorityBounds:
         from templates_mgr.api import MIN_PRIORITY
 
         r = Rule.objects.create(user=user, text="X", priority=0)
-        resp = _patch(
-            auth_client, f"/api/rules/{r.id}/", {"priority": MIN_PRIORITY}
-        )
+        resp = _patch(auth_client, f"/api/rules/{r.id}/", {"priority": MIN_PRIORITY})
         assert resp.status_code == 200
         r.refresh_from_db()
         assert r.priority == MIN_PRIORITY

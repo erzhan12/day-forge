@@ -16,6 +16,8 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { mount, VueWrapper, flushPromises } from "@vue/test-utils"
+import { runScheduleMutation, type ScheduleRevisionState } from "../src/composables/useScheduleRevision"
+import { makeCategories } from "./helpers/schedule"
 import { defineComponent, h, nextTick, reactive, ref, type Ref } from "vue"
 
 // --- mocks ---------------------------------------------------------------
@@ -34,15 +36,19 @@ const abandonInFlight = vi.fn()
 
 const isGeneratingDraft = ref(false)
 const lastDraftError: Ref<string | null> = ref(null)
+let revisionOwner: ScheduleRevisionState
 
 vi.mock("../src/composables/useDraft", () => ({
-  useDraft: () => ({
+  useDraft: (owner: ScheduleRevisionState) => {
+    revisionOwner = owner
+    return {
     isGeneratingDraft,
     lastDraftError,
     generateDraft,
     clearDraftError: vi.fn(),
     abandonInFlight,
-  }),
+  }
+  },
 }))
 
 vi.mock("../src/composables/useSchedule", () => ({
@@ -89,6 +95,8 @@ vi.mock("../src/composables/useTravelRules", () => ({
 
 vi.mock("../src/utils/travelRules", () => ({ matchTravelRule }))
 
+const dragIsDragging = ref(false)
+const cancelDrag = vi.fn(() => { dragIsDragging.value = false })
 vi.mock("../src/composables/useDrag", () => ({
   // Schedule.vue imports this named helper for its drag-ghost geometry; a
   // factory omitting it leaves the binding undefined and throws when a ghost
@@ -96,7 +104,12 @@ vi.mock("../src/composables/useDrag", () => ({
   clampedDragDuration: (b: { start_time: string; end_time: string }) =>
     b.start_time === b.end_time ? 5 : 30,
   useDrag: () => ({
-    isDragging: ref(false),
+    frozenRenderBounds: ref(null),
+    frozenNowMinutes: ref(null),
+    frozenPxPerMinute: ref(2),
+    frozenTimelineOriginMinutes: ref(null),
+    frozenWindow: ref(null),
+    isDragging: dragIsDragging,
     dragBlockId: ref<number | null>(null),
     ghostTop: ref(0),
     previewStartTime: ref(""),
@@ -105,7 +118,7 @@ vi.mock("../src/composables/useDrag", () => ({
     shiftedBlockIds: ref(new Set<number>()),
     startDrag: vi.fn(),
     endDrag: vi.fn(),
-    cancelDrag: vi.fn(),
+    cancelDrag,
   }),
 }))
 
@@ -127,6 +140,17 @@ const calendarState = makeProviderState()
 const googleCalendarState = makeProviderState()
 const todoistState = makeProviderState()
 const habiticaState = makeProviderState()
+
+function integrationBootstrap(date: string, zone: string) {
+  return {
+    snapshot_id: `test:${date}:${zone}`, user_id: 1, date, time_zone: zone,
+    connected: {
+      apple: calendarState.connected, google: googleCalendarState.connected,
+      todoist: todoistState.connected, habitica: habiticaState.connected,
+    },
+    travel_rules: [],
+  }
+}
 
 const calendarRefreshEvents = vi.fn()
 const googleCalendarRefreshEvents = vi.fn()
@@ -158,6 +182,7 @@ function resetExternalProviderMocks(): void {
 vi.mock("../src/composables/useCalendar", () => ({
   useCalendar: () => ({
     state: calendarState,
+    invalidateAccount: (account = "disconnected") => { calendarState.connected = account === "connected"; calendarState.statusKnown = true },
     fetchEvents: vi.fn(),
     refreshEvents: calendarRefreshEvents,
     fetchAccountStatus: vi.fn(),
@@ -167,6 +192,7 @@ vi.mock("../src/composables/useCalendar", () => ({
 vi.mock("../src/composables/useGoogleCalendar", () => ({
   useGoogleCalendar: () => ({
     state: googleCalendarState,
+    invalidateAccount: (account = "disconnected") => { googleCalendarState.connected = account === "connected"; googleCalendarState.statusKnown = true },
     fetchEvents: vi.fn(),
     refreshEvents: googleCalendarRefreshEvents,
     fetchAccountStatus: vi.fn(),
@@ -176,6 +202,7 @@ vi.mock("../src/composables/useGoogleCalendar", () => ({
 vi.mock("../src/composables/useTodoist", () => ({
   useTodoist: () => ({
     state: todoistState,
+    invalidateAccount: (account = "disconnected") => { todoistState.connected = account === "connected"; todoistState.statusKnown = true },
     fetchTasks: vi.fn(),
     refreshTasks: todoistRefreshTasks,
     completeTask: vi.fn(),
@@ -186,6 +213,7 @@ vi.mock("../src/composables/useTodoist", () => ({
 vi.mock("../src/composables/useHabitica", () => ({
   useHabitica: () => ({
     state: habiticaState,
+    invalidateAccount: (account = "disconnected") => { habiticaState.connected = account === "connected"; habiticaState.statusKnown = true },
     fetchTasks: vi.fn(),
     refreshTasks: habiticaRefreshTasks,
     completeTask: vi.fn(),
@@ -210,14 +238,14 @@ vi.mock("../src/composables/useExternalSourcePoll", () => ({
 
 // Import AFTER all mocks so the SUT picks them up.
 import Schedule from "../src/pages/Schedule.vue"
-import type { Schedule as ScheduleType, TimeBlock } from "../src/types"
+import type { Schedule as ScheduleType, TimeBlock, UserCategory } from "../src/types"
 import { useExternalCalendarPlacement } from "../src/composables/useExternalCalendarPlacement"
 import { EXTERNAL_TASKS_SIDEBAR_OPEN_KEY } from "../src/utils/externalTasksSidebarStorage"
 
 // --- helpers -------------------------------------------------------------
 
 function makeSchedule(date: string, status: ScheduleType["status"] = "draft"): ScheduleType {
-  return { id: 1, date, status }
+  return { id: 1, date, status, revision: 0 }
 }
 
 function makeBlock(id: number): TimeBlock {
@@ -292,6 +320,7 @@ function mountPage(props: {
   schedule: ScheduleType
   blocks: TimeBlock[]
   date: string
+  categories?: UserCategory[]
   auto_draft_pending?: boolean
   has_template_for_type?: boolean
   slot_type?: "weekday" | "weekend"
@@ -299,10 +328,13 @@ function mountPage(props: {
 }) {
   wrapper = mount(Schedule, {
     props: {
+      categories: makeCategories(),
       auto_draft_pending: false,
       has_template_for_type: true,
       slot_type: "weekday" as const,
       schedule_window: { start: "06:00", end: "23:00", time_zone: "Asia/Almaty" },
+      auth_user_id: 1,
+      integration_bootstrap: integrationBootstrap(props.date, props.schedule_window?.time_zone ?? "Asia/Almaty"),
       ...props,
     },
     global: { stubs: STUBS },
@@ -312,6 +344,8 @@ function mountPage(props: {
 
 describe("Schedule.vue auto-draft watcher", () => {
   beforeEach(() => {
+    dragIsDragging.value = false
+    cancelDrag.mockClear()
     stubLocalStorage()
     stubMatchMedia(false)
     resetExternalProviderMocks()
@@ -337,6 +371,30 @@ describe("Schedule.vue auto-draft watcher", () => {
     expect(page.findComponent({ name: "TimeZoneMismatchPrompt" }).props("timeZone")).toBe("Asia/Almaty")
   })
 
+  it("shows a reload error instead of schedule controls for an empty catalog", () => {
+    const page = mountPage({
+      schedule: makeSchedule("2026-05-04"),
+      blocks: [],
+      date: "2026-05-04",
+      categories: [],
+      auto_draft_pending: true,
+    })
+    expect(page.get('[role="alert"]').text()).toContain("Category data could not be loaded")
+    expect(page.find(".add-btn").exists()).toBe(false)
+    expect(generateDraft).not.toHaveBeenCalled()
+  })
+
+  it("cancels an active drag when a partial reload corrupts the catalog", async () => {
+    const page = mountPage({
+      schedule: makeSchedule("2026-05-04"), blocks: [], date: "2026-05-04",
+    })
+    dragIsDragging.value = true
+    await page.setProps({ categories: [] })
+    expect(cancelDrag).toHaveBeenCalledOnce()
+    expect(dragIsDragging.value).toBe(false)
+    expect(page.get('[role="alert"]').text()).toContain("Category data could not be loaded")
+  })
+
   it("(a) fires generateDraft once on first mount when auto_draft_pending=true and blocks are empty", async () => {
     mountPage({
       schedule: makeSchedule("2026-05-04"),
@@ -346,7 +404,7 @@ describe("Schedule.vue auto-draft watcher", () => {
     })
     await flushPromises()
     expect(generateDraft).toHaveBeenCalledTimes(1)
-    expect(generateDraft).toHaveBeenCalledWith("2026-05-04")
+    expect(generateDraft).toHaveBeenCalledWith("2026-05-04", pushUndo)
   })
 
   it("does NOT fire when auto_draft_pending=false on mount", async () => {
@@ -380,7 +438,7 @@ describe("Schedule.vue auto-draft watcher", () => {
     })
     await flushPromises()
     expect(generateDraft).toHaveBeenCalledTimes(1)
-    expect(generateDraft).toHaveBeenLastCalledWith("2026-05-04")
+    expect(generateDraft).toHaveBeenLastCalledWith("2026-05-04", pushUndo)
 
     // Inertia partial reload to a new date — same component instance.
     await w.setProps({
@@ -393,7 +451,7 @@ describe("Schedule.vue auto-draft watcher", () => {
     })
     await flushPromises()
     expect(generateDraft).toHaveBeenCalledTimes(2)
-    expect(generateDraft).toHaveBeenLastCalledWith("2026-05-05")
+    expect(generateDraft).toHaveBeenLastCalledWith("2026-05-05", pushUndo)
   })
 
   it("(c) does NOT refire after a partial reload populates blocks then clears them on the same date", async () => {
@@ -470,7 +528,28 @@ describe("Schedule.vue auto-draft watcher", () => {
     expect(generateDraft).toHaveBeenCalledTimes(1)
   })
 
-  it("pushes a 'draft' undo entry when generateDraft resolves successfully", async () => {
+  it("renders draft controls from the accepted response while Inertia props are unchanged", async () => {
+    const date = "2026-05-04"
+    const page = mountPage({ schedule: makeSchedule(date), blocks: [], date })
+    await flushPromises()
+    expect(page.findComponent({ name: "RegenerateDraftButton" }).exists()).toBe(true)
+    expect(page.findComponent({ name: "DraftBadge" }).props("show")).toBe(false)
+    await runScheduleMutation(revisionOwner, date, async () => ({ ok: true, data: {
+      revision: 1, schedule: { ...makeSchedule(date), revision: 1 }, blocks: [makeBlock(1)],
+    } }))
+    await flushPromises()
+    expect(page.props("blocks")).toEqual([])
+    expect(page.props("schedule").revision).toBe(0)
+    expect(page.findComponent({ name: "RegenerateDraftButton" }).exists()).toBe(false)
+    expect(page.findComponent({ name: "DraftBadge" }).props("show")).toBe(true)
+    await runScheduleMutation(revisionOwner, date, async () => ({ ok: true, data: {
+      revision: 2, schedule: { ...makeSchedule(date, "active"), revision: 2 }, blocks: [makeBlock(1)],
+    } }))
+    await flushPromises()
+    expect(page.findComponent({ name: "DraftBadge" }).props("show")).toBe(false)
+  })
+
+  it("passes undo registration to the draft owner", async () => {
     generateDraft.mockResolvedValueOnce({ ok: true, explanation: "Built from weekday template" })
     mountPage({
       schedule: makeSchedule("2026-05-04"),
@@ -479,12 +558,9 @@ describe("Schedule.vue auto-draft watcher", () => {
       auto_draft_pending: true,
     })
     await flushPromises()
-    expect(pushUndo).toHaveBeenCalledTimes(1)
-    const action = pushUndo.mock.calls[0][0]
-    expect(action.type).toBe("draft")
-    expect(action.scheduleDate).toBe("2026-05-04")
-    expect(action.previousBlocks).toEqual([])
-    expect(action.description).toBe("Built from weekday template")
+    expect(generateDraft).toHaveBeenCalledWith("2026-05-04", pushUndo)
+    // Accepted diff and revision validation belongs to useDraft.
+    expect(pushUndo).not.toHaveBeenCalled()
   })
 
   it("does NOT push undo when generateDraft fails", async () => {
@@ -571,6 +647,7 @@ describe("Schedule.vue chat surface routing (feature 0008)", () => {
   function mountStubbedSchedule() {
     return mount(Schedule, {
       props: {
+        categories: makeCategories(),
         schedule: makeSchedule("2026-05-04"),
         blocks: [],
         date: "2026-05-04",
@@ -616,13 +693,19 @@ describe("Schedule.vue chat surface routing (feature 0008)", () => {
     expect(getSchedulePageStyle(wrapper)).toContain("--chat-sidebar-width:32px")
   })
 
-  it("narrow viewport — renders CommandBar dock, not ChatSidebar; --chat-sidebar-width: 0px; .schedule-body has class has-dock", () => {
+  it("narrow viewport reserves the changing dock height on the whole page", async () => {
     stubMatchMedia(false)
     wrapper = mountStubbedSchedule()
     expect(wrapper.findComponent(CommandBar).exists()).toBe(true)
     expect(wrapper.findComponent(ChatSidebar).exists()).toBe(false)
     expect(getSchedulePageStyle(wrapper)).toContain("--chat-sidebar-width:0px")
-    expect(wrapper.find(".schedule-body").classes()).toContain("has-dock")
+    const dock = wrapper.findComponent(CommandBar)
+    dock.vm.$emit("height-change", 240)
+    await nextTick()
+    expect(getSchedulePageStyle(wrapper)).toContain("--chat-dock-height:240px")
+    dock.vm.$emit("height-change", 360)
+    await nextTick()
+    expect(getSchedulePageStyle(wrapper)).toContain("--chat-dock-height:360px")
   })
 
   it("narrow viewport ignores persisted sidebar=false (precedence rule)", () => {
@@ -660,11 +743,15 @@ describe("Schedule.vue chat surface routing (feature 0008)", () => {
     expect(wrapper.findComponent(ChatSidebar).exists()).toBe(false)
 
     expect(changeHandler).not.toBeNull()
+    wrapper.findComponent(CommandBar).vm.$emit("height-change", 300)
+    await nextTick()
+    expect(getSchedulePageStyle(wrapper)).toContain("--chat-dock-height:300px")
     changeHandler!({ matches: true })
     await nextTick()
 
     expect(wrapper.findComponent(ChatSidebar).exists()).toBe(true)
     expect(wrapper.findComponent(CommandBar).exists()).toBe(false)
+    expect(getSchedulePageStyle(wrapper)).toContain("--chat-dock-height:0px")
   })
 
   it(".schedule-page has box-sizing: content-box (CSS contract for padding-right model)", () => {
@@ -708,6 +795,7 @@ describe("Schedule.vue external source poll gating (feature 0031)", () => {
   function mountPollSchedule() {
     wrapper = mount(Schedule, {
       props: {
+        categories: makeCategories(),
         schedule: makeSchedule("2026-05-04"),
         blocks: [],
         date: "2026-05-04",
@@ -715,6 +803,8 @@ describe("Schedule.vue external source poll gating (feature 0031)", () => {
         has_template_for_type: true,
         slot_type: "weekday" as const,
         external_tasks_poll_interval: 60,
+        auth_user_id: 1,
+        integration_bootstrap: integrationBootstrap("2026-05-04", "UTC"),
       },
       global: {
         stubs: {
@@ -753,7 +843,7 @@ describe("Schedule.vue external source poll gating (feature 0031)", () => {
       category: "work",
       order: 0,
     }
-    listRules.mockResolvedValueOnce({ ok: true, rules: [matchedRule] })
+    // Matching uses the rules included in the same bootstrap as connections.
     matchTravelRule.mockReturnValueOnce(matchedRule)
     setPlacement("center")
     calendarState.statusKnown = true
@@ -775,6 +865,7 @@ describe("Schedule.vue external source poll gating (feature 0031)", () => {
 
     wrapper = mount(Schedule, {
       props: {
+        categories: makeCategories(),
         schedule: makeSchedule("2026-05-04"),
         blocks: [],
         date: "2026-05-04",
@@ -782,6 +873,8 @@ describe("Schedule.vue external source poll gating (feature 0031)", () => {
         has_template_for_type: true,
         slot_type: "weekday" as const,
         external_tasks_poll_interval: 60,
+        auth_user_id: 1,
+        integration_bootstrap: { ...integrationBootstrap("2026-05-04", "UTC"), travel_rules: [matchedRule] },
       },
       global: {
         stubs: {

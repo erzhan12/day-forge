@@ -73,9 +73,9 @@
     {% endcomment %}
     short-lived server-side cache (five minutes by default) so that repeated
     views do not re-query Google. Event titles and times are shown to you in the
-    calendar panel and are used only for display and for the optional
-    "add this event to my schedule" action. Google Calendar data is never
-    included in any prompt sent to an AI provider.
+    calendar panel. If you add an event to your schedule, its time and
+    category can be used when you ask AI to plan that day. Its event title
+    is hidden from AI prompts.
 </p>
 <div class="callout">
     <p>
@@ -100,10 +100,10 @@
     Two features send data there:
 </p>
 <ul>
-    <li><strong>Draft generation</strong> sends your day template, your planning rules, and a summary of recent days — block titles, times, categories, and completion ratios — so the model can propose a schedule.</li>
+    <li><strong>Draft generation</strong> sends your day template, your planning rules, and a summary of recent days: block times, categories, completion ratios, and titles you entered yourself. Titles of imported calendar events and older blocks whose source is unknown are replaced with a generic label.</li>
     <li>
         <strong>Chat</strong> sends the current day's blocks together with the
-        <em>entire visible conversation</em> — not just your latest message — on
+        <em>entire visible conversation</em> on
         every turn. The conversation lives only in your browser tab; clearing
         the thread, reloading the page, or moving to a different date resets it.
         If you have discussed something you would rather not send again, clear
@@ -111,8 +111,11 @@
     </li>
 </ul>
 <p>
-    Task text from Todoist and Habitica, and event titles from any calendar, are
-    <strong>never</strong> included in AI prompts. They are display-only.
+    Task text from Todoist and Habitica is shown in its own panel and is not
+    added to AI prompts. Imported calendar event titles are replaced with a
+    generic label in schedule context and chat history. Text you enter in a
+    chat message, planning rule, or template is sent when you use AI, even if
+    you copied it from a connected service.
 </p>
 
 <h3>Services you connected</h3>

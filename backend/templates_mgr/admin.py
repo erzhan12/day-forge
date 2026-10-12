@@ -5,17 +5,29 @@ from django.contrib.auth.admin import UserAdmin
 from templates_mgr.models import Rule, Template, UserPreferences
 
 
+class PolicyInspectionAdmin(admin.ModelAdmin):
+    """Inspect AI policy; account Settings owns serialized policy writes."""
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
 @admin.register(Template)
-class TemplateAdmin(admin.ModelAdmin):
+class TemplateAdmin(PolicyInspectionAdmin):
     list_display = ("name", "type", "user")
     list_filter = ("type", "user")
 
 
 @admin.register(Rule)
-class RuleAdmin(admin.ModelAdmin):
+class RuleAdmin(PolicyInspectionAdmin):
     list_display = ("short_text", "is_active", "priority", "user")
     list_filter = ("user",)
-    list_editable = ("is_active", "priority")
 
     @admin.display(description="Rule")
     def short_text(self, obj):

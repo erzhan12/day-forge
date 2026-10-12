@@ -6,6 +6,7 @@ import json
 import pytest
 from ai.models import AIInteraction
 from analytics.models import DailyReview
+from django.contrib.auth.hashers import identify_hasher
 from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.utils import timezone
@@ -93,8 +94,10 @@ def test_schedule_history_suffix_and_snapshot_modes(user, monkeypatch, capsys):
         "seeded with-review=2027-04-07 no-review=2027-04-08 target=2027-04-09\n"
     )
     reviewed = Schedule.objects.get(user=user, date="2027-04-07")
+    assert reviewed.status == Schedule.Status.REVIEWED
     assert reviewed.daily_review.planned_count == 4
     assert reviewed.daily_review.completed_count == 3
+    assert reviewed.daily_review.reviewed_revision == reviewed.revision
     unreviewed = Schedule.objects.get(user=user, date="2027-04-08")
     assert not DailyReview.objects.filter(schedule=unreviewed).exists()
     assert not Schedule.objects.filter(user=user, date="2027-04-09").exists()
@@ -107,16 +110,16 @@ def test_schedule_history_suffix_and_snapshot_modes(user, monkeypatch, capsys):
     )
     seed_schedule.main()
     output = capsys.readouterr().out
-    assert output.startswith("STATUS active\n")
+    assert output.startswith("STATUS reviewed\n")
     assert "BLOCK Standup 09:00:00 09:30:00\n" in output
 
 
 @pytest.mark.django_db
-def test_schedule_seeder_userless_and_rate_snapshot_contracts(user, monkeypatch, capsys):
-    # localdate mode takes no user and echoes the Django-local today.
-    _setenv(monkeypatch, SEED_MODE="localdate")
+def test_schedule_seeder_user_date_and_rate_snapshot_contracts(user, monkeypatch, capsys):
+    # localdate mode uses the same saved user timezone as the browser.
+    _setenv(monkeypatch, SEED_MODE="localdate", SEED_USERNAME=user.username)
     seed_schedule.main()
-    assert capsys.readouterr().out == f"{timezone.localdate().isoformat()}\n"
+    assert capsys.readouterr().out == f"{timezone.now().date().isoformat()}\n"
 
     # user_exists mode is the harness's pre-flight probe.
     _setenv(monkeypatch, SEED_MODE="user_exists", SEED_USERNAME=user.username)
@@ -335,6 +338,16 @@ def test_analytics_reviewed_seeder_recomputes_and_freezes(user, monkeypatch, cap
     assert schedule.status == Schedule.Status.REVIEWED
     assert schedule.daily_review.planned_count == 2
     assert schedule.daily_review.completed_count == 1
+    assert schedule.daily_review.reviewed_revision == schedule.revision
+
+    previous_revision = schedule.revision
+    schedule.daily_review.notes = "Kept note"
+    schedule.daily_review.save(update_fields=["notes"])
+    seed_analytics_reviewed.main()
+    schedule.refresh_from_db()
+    assert schedule.revision == previous_revision + 1
+    assert schedule.daily_review.reviewed_revision == schedule.revision
+    assert schedule.daily_review.notes == "Kept note"
 
 
 @pytest.mark.django_db
@@ -392,7 +405,9 @@ def test_preferences_seeder_resets_existing_rows_in_both_modes(user, monkeypatch
 
 
 @pytest.mark.django_db
-def test_todoist_seeder_preserves_strict_ensure_and_disconnect_markers(user, monkeypatch, capsys):
+def test_todoist_seeder_preserves_strict_ensure_and_disconnect_markers(
+    production_password_hashers, user, monkeypatch, capsys
+):
     _setenv(
         monkeypatch,
         SEED_USERNAME=user.username,
@@ -411,7 +426,9 @@ def test_todoist_seeder_preserves_strict_ensure_and_disconnect_markers(user, mon
     seed_todoist.main()
     assert capsys.readouterr().out == ("user created: True | deleted todoist accounts: 0\n")
     ensured = User.objects.get(username=ensured_name)
+    assert identify_hasher(ensured.password).algorithm == "pbkdf2_sha256"
     assert ensured.check_password("pw-test")
+    assert not ensured.check_password("wrong")
 
     # Re-running reset-ensure for an existing user skips set_password (created=False).
     seed_todoist.main()
@@ -454,15 +471,25 @@ def test_migrated_seeders_raise_runtimeerror_on_missing_required_env(monkeypatch
 
 
 @pytest.mark.django_db
-def test_cleanup_seeder_deletes_only_requested_dates(user, monkeypatch, capsys):
+def test_cleanup_seeder_clears_only_requested_dates_and_preserves_revision(
+    user, monkeypatch, capsys
+):
     kept = Schedule.objects.create(user=user, date=datetime.date(2027, 1, 2))
-    removed = Schedule.objects.create(user=user, date=datetime.date(2027, 1, 1))
+    removed = Schedule.objects.create(
+        user=user, date=datetime.date(2027, 1, 1), revision=7, status="active"
+    )
+    TimeBlock.objects.create(
+        schedule=removed, title="Reset", start_time="09:00", end_time="10:00"
+    )
     _setenv(
         monkeypatch,
         SEED_USERNAME=user.username,
         SEED_DATES_JSON=json.dumps(["2027-01-01"]),
     )
     seed_cleanup.main()
-    assert capsys.readouterr().out == "cleanup deleted rows: 1\n"
-    assert not Schedule.objects.filter(pk=removed.pk).exists()
+    assert capsys.readouterr().out == "cleanup cleared schedules: 1\n"
+    removed.refresh_from_db()
+    assert removed.revision == 8
+    assert removed.status == "draft"
+    assert not removed.time_blocks.exists()
     assert Schedule.objects.filter(pk=kept.pk).exists()

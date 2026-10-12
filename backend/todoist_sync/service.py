@@ -18,7 +18,7 @@ from datetime import date
 import requests
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
-from django.utils import timezone as django_tz
+from schedules.window import user_local_date
 
 from todoist_sync.schemas import NormalizedTask
 
@@ -38,15 +38,9 @@ _FILTER_PAGE_LIMIT = 200
 _MAX_FILTER_PAGES = 200
 
 
-def is_project_today(target_date: date) -> bool:
-    """Single source of truth for the today-vs-exact-date decision, shared by
-    ``_filter_query`` (here) and ``tasks_filter_scope`` (``todoist_sync.cache``).
-
-    The cache scope MUST match the filter the query actually used; keeping
-    both on this one helper prevents cache-miss / stale-data bugs from logic
-    drift between the two call sites.
-    """
-    return target_date == django_tz.localdate()
+def is_user_today(target_date: date, *, local_today: date) -> bool:
+    """Compare against the request's saved-timezone date snapshot."""
+    return target_date == local_today
 
 
 # ----- Typed exception hierarchy -----------------------------------------
@@ -165,21 +159,18 @@ def _normalize_task(task) -> NormalizedTask:
     )
 
 
-def _filter_query(target_date: date, *, include_overdue_carryover: bool = False) -> str:
+def _filter_query(target_date: date, *, local_today: date) -> str:
     """Map the selected date to a Todoist filter query.
 
-    When the schedule date is "today" (project ``TIME_ZONE``) **or** the
-    client requests overdue carryover (browser-local today can differ from
-    ``localdate()`` when ``TIME_ZONE`` is UTC and the user is ahead), use
-    ``"<YYYY-MM-DD> | overdue"`` — tasks due on that date plus all past-due
-    tasks. Pinning the literal date (not Todoist's ``today`` token) keeps
-    the window aligned with the selected schedule day.
+    When the schedule date is today in the user's saved timezone, include
+    overdue tasks. Pinning the literal date keeps the provider filter aligned
+    with the selected schedule day.
 
   Otherwise → the bare literal-date token ``"<YYYY-MM-DD>"``, which Todoist
     interprets as "due on that date" (``due:`` semantics). Do NOT use the
     ``date:`` keyword, which scopes by absolute date and ignores recurrence.
     """
-    if is_project_today(target_date) or include_overdue_carryover:
+    if is_user_today(target_date, local_today=local_today):
         return f"{target_date.isoformat()} | overdue"
     return target_date.isoformat()
 
@@ -223,7 +214,7 @@ def fetch_tasks_for_date(
     account,
     target_date: date,
     *,
-    include_overdue_carryover: bool = False,
+    local_today: date | None = None,
 ) -> list[NormalizedTask]:
     """Fetch and normalise Todoist tasks for one date.
 
@@ -233,9 +224,9 @@ def fetch_tasks_for_date(
     ``ImproperlyConfigured`` (key rotation) propagate so the view maps it to
     a config-shaped 500.
     """
-    query = _filter_query(
-        target_date, include_overdue_carryover=include_overdue_carryover
-    )
+    if local_today is None:
+        local_today = user_local_date(account.user)
+    query = _filter_query(target_date, local_today=local_today)
     token = account.get_token()  # one of two call sites (see complete_task)
     try:
         raw_tasks = _fetch_filtered_tasks(query, token)

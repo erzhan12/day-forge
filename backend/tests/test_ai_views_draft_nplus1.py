@@ -9,7 +9,7 @@ from analytics.models import DailyReview
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
-from schedules.models import Schedule
+from schedules.models import Schedule, TimeBlock
 from templates_mgr.models import Template
 
 TARGET_DATE = datetime.date(2026, 5, 4)
@@ -68,12 +68,18 @@ def draft_history(user):
         schedule = Schedule.objects.create(
             user=user,
             date=TARGET_DATE - datetime.timedelta(days=days_ago),
-            status=Schedule.Status.REVIEWED,
+            status=Schedule.Status.ACTIVE if days_ago == 1 else Schedule.Status.REVIEWED,
+            revision=2,
+        )
+        TimeBlock.objects.create(
+            schedule=schedule, title="Done", start_time=datetime.time(9, 0),
+            end_time=datetime.time(10, 0), is_completed=True,
         )
         DailyReview.objects.create(
             schedule=schedule,
             planned_count=4,
             completed_count=days_ago,
+            reviewed_revision=2,
         )
         schedules.append(schedule)
     return schedules

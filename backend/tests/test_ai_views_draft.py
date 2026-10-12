@@ -3,6 +3,7 @@
 Patches ``ai.views.run_draft`` so no network call is made; the view's DB
 interactions and the apply path are exercised for real.
 """
+
 import datetime
 import json
 from zoneinfo import ZoneInfo
@@ -32,10 +33,9 @@ def _post(client, url=URL, body=""):
 def _set_window(user, day_start, day_end):
     """Seed the per-user schedule window (feature 0053).
 
-    ``_apply_draft_sync`` resolves the window under its ``select_for_update``
-    lock via ``get_schedule_window`` → ``UserScheduleSettings`` and threads it
-    into ``_apply_add`` → ``_check_day_window``. Seeding a row is how a
-    non-default window reaches the draft guard in these integration tests.
+    ``_apply_draft_sync`` resolves the window under the write lock and passes
+    it to the shared planner. Seeding a row gives these integration tests a
+    non-default draft window.
     """
     UserScheduleSettings.objects.update_or_create(
         user=user, defaults={"day_start": day_start, "day_end": day_end}
@@ -49,6 +49,7 @@ def _patch_run(monkeypatch, behaviour):
         if isinstance(behaviour, Exception):
             raise behaviour
         return behaviour
+
     monkeypatch.setattr("ai.views.run_draft", _run)
 
 
@@ -99,17 +100,13 @@ class TestRouting:
         assert resp.status_code == 302
 
     def test_invalid_date(self, auth_client):
-        resp = _post(
-            auth_client, url="/api/ai/schedules/not-a-date/generate-draft/"
-        )
+        resp = _post(auth_client, url="/api/ai/schedules/not-a-date/generate-draft/")
         assert resp.status_code == 400
 
 
 @pytest.mark.django_db
 class TestHappyPath:
-    def test_generates_draft_and_keeps_status_draft(
-        self, auth_client, user, template, monkeypatch
-    ):
+    def test_generates_draft_and_keeps_status_draft(self, auth_client, user, template, monkeypatch):
         _patch_run(monkeypatch, _ok_result())
         resp = _post(auth_client)
         assert resp.status_code == 200
@@ -125,9 +122,7 @@ class TestHappyPath:
         assert log.kind == AIInteraction.Kind.DRAFT
         assert log.success is True
 
-    def test_draft_persists_past_block_incomplete(
-        self, auth_client, user, template, monkeypatch
-    ):
+    def test_draft_persists_past_block_incomplete(self, auth_client, user, template, monkeypatch):
         import ai.views as views
 
         fixed_utc = datetime.datetime(2026, 5, 4, 12, 0, tzinfo=datetime.UTC)
@@ -171,6 +166,27 @@ class TestHappyPath:
 
 
 @pytest.mark.django_db
+def test_draft_rate_limit_response_includes_retry_after(
+    auth_client, user, template, monkeypatch, settings
+):
+    settings.LLM_DRAFT_RATE_LIMIT_PER_HOUR = 1
+    key = f"ai_draft_rl:{user.id}"
+    cache.add(key, 1, 3600)
+
+    async def unexpected_provider_call(*args, **kwargs):
+        pytest.fail("A rate-limited draft must not call the AI provider")
+
+    monkeypatch.setattr("ai.views.run_draft", unexpected_provider_call)
+    response = _post(auth_client)
+
+    assert response.status_code == 429
+    assert response["Retry-After"] == "3600"
+    assert response.json() == {"errors": {"detail": "Rate limit exceeded. Try again later."}}
+    assert cache.get(key) == 2
+    assert not AIInteraction.objects.exists()
+
+
+@pytest.mark.django_db
 class TestDraftStoredTimezone:
     """Draft prompt context derives solely from persisted user settings."""
 
@@ -200,25 +216,18 @@ class TestDraftStoredTimezone:
         import ai.views as views
 
         original_settings = views.get_schedule_settings
-        original_window = views.get_schedule_window
         lookups = []
 
         def _settings_spy(subject):
-            lookups.append(("prompt", subject.pk))
+            lookups.append(subject.pk)
             return original_settings(subject)
 
-        def _window_spy(subject):
-            lookups.append(("apply", subject.pk))
-            return original_window(subject)
-
         monkeypatch.setattr(views, "get_schedule_settings", _settings_spy)
-        monkeypatch.setattr(views, "get_schedule_window", _window_spy)
         _patch_run(monkeypatch, _ok_result())
-
         response = _post(auth_client)
 
         assert response.status_code == 200, response.content
-        assert lookups == [("prompt", user.pk), ("apply", user.pk)]
+        assert lookups == [user.pk, user.pk]
 
     def test_next_draft_uses_timezone_changed_via_settings_api(
         self, auth_client, user, template, monkeypatch
@@ -250,7 +259,7 @@ class TestDraftStoredTimezone:
 
     @pytest.mark.parametrize(
         "body",
-        ["", "{}", '{"client_tz":"Not/AZone"}', '{"client_tz":[]}', "{", "[]"],
+        ["", "{}", '{"client_tz":"Not/AZone"}', '{"client_tz":[]}'],
     )
     def test_optional_timezone_body_is_ignored_in_favor_of_stored_zone(
         self, auth_client, user, template, monkeypatch, body
@@ -272,9 +281,7 @@ class TestDraftStoredTimezone:
         assert captured["now"].tzinfo == ZoneInfo("Asia/Almaty")
         assert captured["now"].strftime("%Y-%m-%d %H:%M:%S") == "2026-04-18 09:02:30"
 
-    def test_invalidly_encoded_optional_body_falls_back_without_error(
-        self, auth_client, template, monkeypatch
-    ):
+    def test_invalidly_encoded_draft_body_is_rejected(self, auth_client, template, monkeypatch):
         import ai.views as views
 
         captured = {}
@@ -293,20 +300,15 @@ class TestDraftStoredTimezone:
         )
 
         resp = _post(auth_client, body=b"\xff\xfe")
-        assert resp.status_code == 200, resp.content
-        # Draft bodies are no longer parsed for a timezone at all.
-        assert captured["now"].tzinfo == ZoneInfo("UTC")
-        assert captured["now"].strftime("%Y-%m-%d %H:%M:%S") == "2026-04-18 04:02:30"
+        assert resp.status_code == 400, resp.content
+        assert captured == {}
+        assert not AIInteraction.objects.exists()
 
 
 @pytest.mark.django_db
 class TestPreconditions:
-    def test_409_when_schedule_has_blocks(
-        self, auth_client, user, template, monkeypatch
-    ):
-        schedule = Schedule.objects.create(
-            user=user, date=datetime.date(2026, 5, 4)
-        )
+    def test_409_when_schedule_has_blocks(self, auth_client, user, template, monkeypatch):
+        schedule = Schedule.objects.create(user=user, date=datetime.date(2026, 5, 4))
         TimeBlock.objects.create(
             schedule=schedule,
             title="Existing",
@@ -339,13 +341,9 @@ class TestPreconditions:
         assert called["v"] is False
         assert AIInteraction.objects.count() == 0
 
-    def test_cross_user_template_does_not_satisfy_lookup(
-        self, auth_client, user, monkeypatch
-    ):
+    def test_cross_user_template_does_not_satisfy_lookup(self, auth_client, user, monkeypatch):
         other = User.objects.create_user(username="other-tpl", password="x")
-        Template.objects.create(
-            user=other, name="WD", type="weekday", blocks=[]
-        )
+        Template.objects.create(user=other, name="WD", type="weekday", blocks=[])
         # The current user has no template — should still 422.
         called = {"v": False}
 
@@ -370,9 +368,7 @@ class TestProviderErrors:
             (AIParseError("bad json", raw_response_text="<raw>"), 502),
         ],
     )
-    def test_errors_mapped(
-        self, auth_client, user, template, monkeypatch, exc, status
-    ):
+    def test_errors_mapped(self, auth_client, user, template, monkeypatch, exc, status):
         _patch_run(monkeypatch, exc)
         resp = _post(auth_client)
         assert resp.status_code == status
@@ -415,9 +411,7 @@ class TestApplyLocksScheduleRow:
     was invoked on the ``Schedule`` manager during the apply phase.
     """
 
-    def test_locks_schedule_row(
-        self, auth_client, user, template, monkeypatch
-    ):
+    def test_locks_schedule_row(self, auth_client, user, template, monkeypatch):
         from schedules.models import Schedule as _Schedule
 
         _patch_run(monkeypatch, _ok_result())
@@ -429,9 +423,7 @@ class TestApplyLocksScheduleRow:
             called["v"] = True
             return original(*args, **kwargs)
 
-        monkeypatch.setattr(
-            _Schedule.objects, "select_for_update", _spy, raising=True
-        )
+        monkeypatch.setattr(_Schedule.objects, "select_for_update", _spy, raising=True)
 
         resp = _post(auth_client)
         assert resp.status_code == 200, resp.content
@@ -456,9 +448,7 @@ class TestRateLimitDoesNotFireOnPreconditionFailure:
 
         return cache.get(f"ai_draft_rl:{user_id}") or 0
 
-    def test_422_no_template_does_not_increment(
-        self, auth_client, user, monkeypatch
-    ):
+    def test_422_no_template_does_not_increment(self, auth_client, user, monkeypatch):
         # No template fixture → 422.
         called = {"v": False}
 
@@ -472,12 +462,8 @@ class TestRateLimitDoesNotFireOnPreconditionFailure:
         assert called["v"] is False
         assert self._draft_count(user.id) == 0
 
-    def test_409_existing_blocks_does_not_increment(
-        self, auth_client, user, template, monkeypatch
-    ):
-        schedule = Schedule.objects.create(
-            user=user, date=datetime.date(2026, 5, 4)
-        )
+    def test_409_existing_blocks_does_not_increment(self, auth_client, user, template, monkeypatch):
+        schedule = Schedule.objects.create(user=user, date=datetime.date(2026, 5, 4))
         TimeBlock.objects.create(
             schedule=schedule,
             title="Existing",
@@ -485,16 +471,12 @@ class TestRateLimitDoesNotFireOnPreconditionFailure:
             end_time="09:00",
             category="work",
         )
-        monkeypatch.setattr(
-            "ai.views.run_draft", lambda *a, **k: _ok_result()
-        )
+        monkeypatch.setattr("ai.views.run_draft", lambda *a, **k: _ok_result())
         resp = _post(auth_client)
         assert resp.status_code == 409
         assert self._draft_count(user.id) == 0
 
-    def test_invalid_date_does_not_increment(
-        self, auth_client, user, template
-    ):
+    def test_invalid_date_does_not_increment(self, auth_client, user, template):
         resp = _post(
             auth_client,
             url="/api/ai/schedules/not-a-date/generate-draft/",
@@ -502,9 +484,7 @@ class TestRateLimitDoesNotFireOnPreconditionFailure:
         assert resp.status_code == 400
         assert self._draft_count(user.id) == 0
 
-    def test_oversized_body_does_not_increment(
-        self, auth_client, user, template
-    ):
+    def test_oversized_body_does_not_increment(self, auth_client, user, template):
         # 100 KB cap is in ``schedules.http``; send 200 KB.
         resp = auth_client.post(
             URL,
@@ -514,9 +494,7 @@ class TestRateLimitDoesNotFireOnPreconditionFailure:
         assert resp.status_code == 413
         assert self._draft_count(user.id) == 0
 
-    def test_provider_failure_does_increment(
-        self, auth_client, user, template, monkeypatch
-    ):
+    def test_provider_failure_does_increment(self, auth_client, user, template, monkeypatch):
         # 503 / 502 / 504 represent a real LLM call attempt — they
         # SHOULD increment the counter, otherwise a flapping provider
         # lets clients retry without limit.
@@ -540,19 +518,11 @@ class TestActiveRulesWiring:
     def test_only_authenticated_users_active_rules_are_passed(
         self, auth_client, user, template, monkeypatch
     ):
-        Rule.objects.create(
-            user=user, text="HIGH rule", priority=10, is_active=True
-        )
-        Rule.objects.create(
-            user=user, text="LOW rule", priority=1, is_active=True
-        )
-        Rule.objects.create(
-            user=user, text="INACTIVE", priority=99, is_active=False
-        )
+        Rule.objects.create(user=user, text="HIGH rule", priority=10, is_active=True)
+        Rule.objects.create(user=user, text="LOW rule", priority=1, is_active=True)
+        Rule.objects.create(user=user, text="INACTIVE", priority=99, is_active=False)
         other_user = User.objects.create_user(username="other", password="x")
-        Rule.objects.create(
-            user=other_user, text="OTHER USER", priority=99, is_active=True
-        )
+        Rule.objects.create(user=other_user, text="OTHER USER", priority=99, is_active=True)
 
         captured = {}
 
@@ -572,10 +542,8 @@ class TestActiveRulesWiring:
 
 @pytest.mark.django_db
 class TestDraftDayWindow:
-    """Feature 0053: the draft apply path threads the per-user window (resolved
-    under the apply lock in ``_apply_draft_sync``) into ``_apply_add`` →
-    ``_check_day_window``. The guard REJECTS out-of-window draft adds and names
-    the user's bound, not the stale default 23:00.
+    """The draft policy rejects out-of-window adds under the apply lock and
+    reports the user's configured bound.
     """
 
     def _draft_add(self, start, end):
@@ -634,3 +602,15 @@ class TestDraftDayWindow:
         assert len(blocks) == 1
         assert blocks[0].start_time.strftime("%H:%M") == "23:00"
         assert blocks[0].end_time.strftime("%H:%M") == "23:30"
+
+    def test_overlapping_draft_is_rejected_without_partial_writes(
+        self, auth_client, user, template, monkeypatch
+    ):
+        result = _ok_result()
+        result.parsed_actions[1]["start_time"] = "09:10"
+        _patch_run(monkeypatch, result)
+
+        resp = _post(auth_client)
+        assert resp.status_code == 400
+        schedule = Schedule.objects.get(user=user, date="2026-05-04")
+        assert not TimeBlock.objects.filter(schedule=schedule).exists()

@@ -3,6 +3,7 @@
 // stale-response guard.
 
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { ref } from "vue"
 
 type Deferred<T> = {
   promise: Promise<T>
@@ -82,6 +83,7 @@ describe("useGoogleCalendar.fetchEvents", () => {
     requestJsonMock.mockResolvedValueOnce({
       ok: false,
       status: 503,
+      data: { meta: { account_state: "disconnected", resource_state: "unavailable" } },
       errors: { detail: "No Google Calendar account configured" },
     })
     const cal = useGoogleCalendar()
@@ -96,6 +98,7 @@ describe("useGoogleCalendar.fetchEvents", () => {
     requestJsonMock.mockResolvedValueOnce({
       ok: false,
       status: 401,
+      data: { meta: { account_state: "connected", resource_state: "credentials_error" } },
       errors: { detail: "Google authorization failed" },
     })
     const cal = useGoogleCalendar()
@@ -290,6 +293,103 @@ describe("useGoogleCalendar.refreshEvents", () => {
     expect(cal.state.error).toBeNull()
   })
 
+  it.each([
+    ["provider_error", "unavailable", /service unavailable/i],
+    ["credentials_error", "reconnect_required", /authorization expired/i],
+  ] as const)("retains same-date events when every account has %s", async (resourceState, accountError, message) => {
+    requestJsonMock.mockResolvedValueOnce({
+      ok: true, status: 200,
+      data: { events: [eventPayload("keep", "Keep")], account_errors: [], meta: { account_state: "connected", resource_state: "ready" } },
+    }).mockResolvedValueOnce({
+      ok: true, status: 200,
+      data: {
+        events: [],
+        account_errors: [{ account_id: 1, email: "alice@gmail.com", error: accountError }],
+        meta: { account_state: "connected", resource_state: resourceState },
+      },
+    })
+    const cal = useGoogleCalendar()
+    await cal.fetchEvents("2026-05-07")
+    await cal.refreshEvents("2026-05-07")
+    expect(cal.state.events.map((event) => event.title)).toEqual(["Keep"])
+    expect(cal.state.accountErrors).toEqual([{ account_id: 1, email: "alice@gmail.com", error: accountError }])
+    expect(cal.state.resourceState).toBe(resourceState)
+    expect(cal.state.error).toMatch(message)
+    expect(cal.state.connected).toBe(true)
+  })
+
+  it("clears old rows on a successful empty day and replaces them on partial success", async () => {
+    requestJsonMock.mockResolvedValueOnce({
+      ok: true, status: 200,
+      data: { events: [eventPayload("old", "Old")], account_errors: [], meta: { account_state: "connected", resource_state: "ready" } },
+    }).mockResolvedValueOnce({
+      ok: true, status: 200,
+      data: { events: [], account_errors: [], meta: { account_state: "connected", resource_state: "ready" } },
+    }).mockResolvedValueOnce({
+      ok: true, status: 200,
+      data: {
+        events: [eventPayload("partial", "Partial")],
+        account_errors: [{ account_id: 2, email: "bob@gmail.com", error: "unavailable" }],
+        meta: { account_state: "connected", resource_state: "ready" },
+      },
+    })
+    const cal = useGoogleCalendar()
+    await cal.fetchEvents("2026-05-07")
+    await cal.refreshEvents("2026-05-07")
+    expect(cal.state.events).toEqual([])
+    expect(cal.state.error).toBeNull()
+    await cal.refreshEvents("2026-05-07")
+    expect(cal.state.events.map((event) => event.title)).toEqual(["Partial"])
+    expect(cal.state.accountErrors).toHaveLength(1)
+    expect(cal.state.error).toBeNull()
+  })
+
+  it("shows a first all-account failure without stale rows, including after a date or context change", async () => {
+    const context = ref("UTC:user-1")
+    const success = { ok: true, status: 200, data: { events: [eventPayload("old", "Old")], account_errors: [], meta: { account_state: "connected", resource_state: "ready" } } }
+    const failure = { ok: true, status: 200, data: {
+      events: [], account_errors: [{ account_id: 1, email: "alice@gmail.com", error: "unavailable" }],
+      meta: { account_state: "connected", resource_state: "provider_error" },
+    } }
+    requestJsonMock.mockResolvedValueOnce(failure).mockResolvedValueOnce(success)
+      .mockResolvedValueOnce(failure).mockResolvedValueOnce(success).mockResolvedValueOnce(failure)
+    const cal = useGoogleCalendar(() => context.value)
+    await cal.fetchEvents("2026-05-07")
+    expect(cal.state.events).toEqual([])
+    expect(cal.state.error).toMatch(/unavailable/i)
+    await cal.fetchEvents("2026-05-07")
+    await cal.fetchEvents("2026-05-08")
+    expect(cal.state.events).toEqual([])
+    expect(cal.state.error).toMatch(/unavailable/i)
+    await cal.fetchEvents("2026-05-08")
+    context.value = "Asia/Qatar:user-2"
+    expect(cal.state.events).toEqual([])
+    await cal.refreshEvents("2026-05-08")
+    expect(cal.state.events).toEqual([])
+    expect(cal.state.error).toMatch(/unavailable/i)
+  })
+
+  it("disconnect clears retained events and account failures", async () => {
+    requestJsonMock.mockResolvedValueOnce({
+      ok: true, status: 200,
+      data: { events: [eventPayload("keep", "Keep")], account_errors: [], meta: { account_state: "connected", resource_state: "ready" } },
+    }).mockResolvedValueOnce({
+      ok: true, status: 200,
+      data: {
+        events: [], account_errors: [{ account_id: 1, email: "alice@gmail.com", error: "unavailable" }],
+        meta: { account_state: "connected", resource_state: "provider_error" },
+      },
+    })
+    const cal = useGoogleCalendar()
+    await cal.fetchEvents("2026-05-07")
+    await cal.refreshEvents("2026-05-07")
+    cal.invalidateAccount("disconnected")
+    expect(cal.state.events).toEqual([])
+    expect(cal.state.accountErrors).toEqual([])
+    expect(cal.state.error).toBeNull()
+    expect(cal.state.connected).toBe(false)
+  })
+
   it("503 disconnected path still blanks events under silent refresh", async () => {
     requestJsonMock.mockResolvedValueOnce({
       ok: true,
@@ -303,6 +403,7 @@ describe("useGoogleCalendar.refreshEvents", () => {
     requestJsonMock.mockResolvedValueOnce({
       ok: false,
       status: 503,
+      data: { meta: { account_state: "disconnected", resource_state: "unavailable" } },
       errors: { detail: "No Google Calendar account configured" },
     })
     await cal.refreshEvents("2026-05-07")

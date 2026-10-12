@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, inject, onBeforeUnmount, ref, provide, toRef, watch } from "vue"
 import { Link, router } from "@inertiajs/vue3"
-import type { TimeBlock as TimeBlockType, Schedule, ScheduleSettingsWire, TravelRule, UserCategory } from "../types"
+import type { TimeBlock as TimeBlockType, Schedule, ScheduleSettingsWire, UserCategory } from "../types"
 import TimeZoneMismatchPrompt from "../components/TimeZoneMismatchPrompt.vue"
 import DateNavigator from "../components/DateNavigator.vue"
 import TimeBlock from "../components/TimeBlock.vue"
@@ -17,40 +17,19 @@ import ExternalRail4a from "../components/ExternalRail4a.vue"
 import DraftBadge from "../components/DraftBadge.vue"
 import RegenerateDraftButton from "../components/RegenerateDraftButton.vue"
 import ShowIndicatorButton from "../components/ShowIndicatorButton.vue"
-import {
-  FocusIndicatorControllerKey,
-  useFocusIndicatorController,
-} from "../composables/useFocusIndicatorController"
-import { todayString } from "../utils/date"
+import ExternalEventsPanel from "../components/ExternalEventsPanel.vue"
+import AddToScheduleDialog from "../components/AddToScheduleDialog.vue"
+import { FocusIndicatorControllerKey, useFocusIndicatorController } from "../composables/useFocusIndicatorController"
 import { useViewport } from "../composables/useViewport"
-import {
-  readChatSidebarOpen,
-  writeChatSidebarOpen,
-} from "../utils/chatSidebarStorage"
-import {
-  readExternalTasksSidebarOpen,
-  writeExternalTasksSidebarOpen,
-} from "../utils/externalTasksSidebarStorage"
-import {
-  timeToMinutes, findCurrentBlock,
-  remainingMinutesForBlock, computeRenderBounds, buildBaseDisplayItems,
-  spliceNowMarker, nowOffsetPercent as computeNowOffsetPercent,
-  type ScheduleDisplayItem, type ScheduleWindowBounds,
-} from "../utils/scheduleTime"
-import { useSchedule } from "../composables/useSchedule"
-import { useUndo } from "../composables/useUndo"
-import { useDrag, clampedDragDuration } from "../composables/useDrag"
-import { useDraft } from "../composables/useDraft"
-import { useChat } from "../composables/useChat"
-import { useCalendar } from "../composables/useCalendar"
-import { useGoogleCalendar } from "../composables/useGoogleCalendar"
-import type {
-  NormalizedEvent,
-  ProviderErrorBanner,
-} from "../types/calendar"
-import { useTodoist } from "../composables/useTodoist"
-import { useHabitica } from "../composables/useHabitica"
-import { useExternalSourcePoll } from "../composables/useExternalSourcePoll"
+import { readChatSidebarOpen, writeChatSidebarOpen } from "../utils/chatSidebarStorage"
+import { readExternalTasksSidebarOpen, writeExternalTasksSidebarOpen } from "../utils/externalTasksSidebarStorage"
+import { timeToMinutes, type ScheduleWindowBounds } from "../utils/scheduleTime"
+import { useSchedulePageController } from "../composables/useSchedulePageController"
+import { ScheduleDragKey, ScheduleContainerKey } from "../composables/scheduleContext"
+import { useDrag } from "../composables/useDrag"
+import { useTimelinePresentation } from "../composables/useTimelinePresentation"
+import { useExternalSources } from "../composables/useExternalSources"
+import { useEventImport, type IntegrationBootstrap } from "../composables/useEventImport"
 import { useThemeFromProps } from "../composables/useThemeFromProps"
 import { useActiveTheme } from "../composables/useActiveTheme"
 import { layoutForTheme, pxPerMinuteForLayout } from "../utils/layoutProfile"
@@ -58,41 +37,33 @@ import { useNowMinutes } from "../composables/useNowMinutes"
 import { useSoundNotifications } from "../composables/useSoundNotifications"
 import { useDesktopNotifications } from "../composables/useDesktopNotifications"
 import { useExternalCalendarPlacement } from "../composables/useExternalCalendarPlacement"
-import ExternalEventsPanel from "../components/ExternalEventsPanel.vue"
-import AddToScheduleDialog from "../components/AddToScheduleDialog.vue"
-import { useTravelRules } from "../composables/useTravelRules"
-import { matchTravelRule } from "../utils/travelRules"
+import { hasValidCategoryCatalog } from "../utils/categories"
 import "../app.css"
 
 useThemeFromProps()
 const activeTheme = useActiveTheme()
 const layout = computed(() => layoutForTheme(activeTheme.value))
 const pxPerMinute = computed(() => pxPerMinuteForLayout(layout.value))
-
-const props = withDefaults(
-  defineProps<{
-    schedule: Schedule
-    blocks: TimeBlockType[]
-    categories: UserCategory[]
-    date: string
-    auto_draft_pending?: boolean
-    has_template_for_type?: boolean
-    slot_type?: "weekday" | "weekend"
-    external_tasks_poll_interval?: number
-    schedule_window?: ScheduleSettingsWire
-  }>(),
-  {
-    auto_draft_pending: false,
-    has_template_for_type: false,
-    slot_type: "weekday",
-    // Mirrors settings.EXTERNAL_TASKS_POLL_INTERVAL_SECONDS. The backend
-    // always sends the prop, so this fallback is near-unreachable — but a
-    // divergent value here misleads tests and static analysis.
-    external_tasks_poll_interval: 60,
-    schedule_window: () => ({ start: "06:00", end: "23:00", time_zone: "UTC" }),
-  },
-)
-
+const props = withDefaults(defineProps<{
+  auth_user_id?: number | null
+  schedule: Schedule
+  blocks: TimeBlockType[]
+  categories: UserCategory[]
+  date: string
+  auto_draft_pending?: boolean
+  has_template_for_type?: boolean
+  slot_type?: "weekday" | "weekend"
+  external_tasks_poll_interval?: number
+  schedule_window?: ScheduleSettingsWire
+  integration_bootstrap?: IntegrationBootstrap
+}>(), {
+  auto_draft_pending: false,
+  has_template_for_type: false,
+  slot_type: "weekday",
+  external_tasks_poll_interval: 60,
+  schedule_window: () => ({ start: "06:00", end: "23:00", time_zone: "UTC" }),
+})
+const categoryCatalogValid = computed(() => hasValidCategoryCatalog(props.categories))
 const prefillStart = ref<string | undefined>()
 const prefillEnd = ref<string | undefined>()
 const scheduleBodyRef = ref<HTMLElement | null>(null)
@@ -102,500 +73,118 @@ const scheduleWindow = computed<ScheduleWindowBounds>(() => ({
   startMinutes: timeToMinutes(props.schedule_window.start),
   endMinutes: timeToMinutes(props.schedule_window.end),
 }))
-
-// Initialize composables
-const { reorderBlocks, updateBlock } = useSchedule(props.date)
-const getBlocks = () => props.blocks
-
-// Draft generation state — module-level singleton inside useDraft, single
-// consumer is this page.
-const { isGeneratingDraft, lastDraftError, generateDraft, abandonInFlight } =
-  useDraft()
-
-// Schedule-wide disabled flag: while a draft is generating or AI chat is
-// in flight, suppress all user mutation paths (form submit, inline edit,
-// completion toggle, delete, drag, gap-click-to-add, undo). Provided via
-// inject so child components don't need to thread it through props.
-const { setActiveDate: setChatActiveDate, isProcessing: isChatProcessing } =
-  useChat()
-const scheduleDisabled = computed(
-  () => isGeneratingDraft.value || isChatProcessing.value,
-)
-provide("scheduleDisabled", scheduleDisabled)
-
+const scheduleTimeZone = computed(() => props.schedule_window.time_zone)
 const {
+  scheduleRevision, canonicalBlocks, canonicalSchedule, getBlocks, reorderBlocks,
+  isGeneratingDraft, lastDraftError, scheduleDisabled,
   currentToast, pushUndo, performUndo, snapshotBlocks, dismissToast,
-} = useUndo(() => props.date, getBlocks, () => scheduleDisabled.value)
+  handleRegenerateClick, resetSession,
+} = useSchedulePageController({
+  getDate: () => props.date,
+  getSchedule: () => props.schedule,
+  getBlocks: () => props.blocks,
+  getUserId: () => props.auth_user_id,
+  getTimeZone: () => props.schedule_window.time_zone,
+  getAutoDraftPending: () => props.auto_draft_pending && categoryCatalogValid.value,
+  getMutationsDisabled: () => !categoryCatalogValid.value,
+})
 
-// Wall-clock signal (feature 0023): declared BEFORE useDrag and renderBounds
-// so the now-aware trailing anchor feeds both the drag-start frozen snapshot
-// and the live bounds. `todayNowMinutes` is non-null only on today — the
-// contract computeRenderBounds/buildBaseDisplayItems expect.
-const { nowMinutes, nowDate } = useNowMinutes(toRef(props, "date"))
-const todayNowMinutes = computed(() =>
-  nowDate.value === null ? null : nowMinutes.value,
-)
-
-// Reactively depends on nowMinutes: recomputes each 60s tick on today so the
-// trailing stub re-anchors as the idle gap grows. Ignored for layout during
-// drag (displayList reads the frozen snapshot instead). Single source for the
-// bounds formula — the useDrag getter below reads this computed so the
-// drag-start frozen snapshot can never diverge from the live bounds.
-const renderBounds = computed(() =>
-  computeRenderBounds(props.blocks, todayNowMinutes.value, scheduleWindow.value),
-)
-
-// 4a uses 0017 compact renderBounds, not a full-window axis.
-const timelineOriginMinutes = computed(() => renderBounds.value.renderStart)
-const timelineEndMinutes = computed(() => renderBounds.value.renderEnd)
-
+// One saved-zone clock supplies presentation, notifications and the PiP owner.
+const { nowMinutes, nowDate, todayDate, currentHHMM } = useNowMinutes(toRef(props, "date"), scheduleTimeZone)
+const todayNowMinutes = computed(() => nowDate.value === null ? null : nowMinutes.value)
+let drag: ReturnType<typeof useDrag> | undefined
 const {
-  isDragging, frozenRenderBounds, frozenNowMinutes, dragBlockId, ghostTop,
-  previewStartTime, previewEndTime, previewBlocks, shiftedBlockIds, startDrag,
-  endDrag, cancelDrag,
-} = useDrag(
+  renderBounds, timelineOriginMinutes, timelineEndMinutes, effectiveBlocks,
+  currentBlock, currentBlockRemaining, displayList, ghostHeight, ghostIsCompact,
+  itemHeight, nowOffsetPercent, presentation,
+} = useTimelinePresentation({
+  getBlocks,
+  getDate: () => props.date,
+  getWindow: () => scheduleWindow.value,
+  getNowMinutes: () => nowMinutes.value,
+  getNowDate: () => nowDate.value,
+  getPxPerMinute: () => pxPerMinute.value,
+  getDragState: () => drag ? {
+    isDragging: drag.isDragging.value,
+    previewBlocks: drag.previewBlocks.value,
+    dragBlockId: drag.dragBlockId.value,
+    frozenRenderBounds: drag.frozenRenderBounds.value,
+    frozenNowMinutes: drag.frozenNowMinutes.value,
+    frozenPxPerMinute: drag.frozenPxPerMinute.value,
+    frozenTimelineOriginMinutes: drag.frozenTimelineOriginMinutes.value,
+    frozenWindow: drag.frozenWindow.value,
+  } : null,
+})
+drag = useDrag(
   () => props.date, getBlocks, reorderBlocks, pushUndo, snapshotBlocks,
-  () => scheduleDisabled.value,
-  () => renderBounds.value,
-  () => todayNowMinutes.value,
-  () => scheduleWindow.value,
+  () => scheduleDisabled.value, () => renderBounds.value,
+  () => todayNowMinutes.value, () => scheduleWindow.value,
   () => pxPerMinute.value,
-  () => (layout.value === "4a" ? timelineOriginMinutes.value : null),
+  () => layout.value === "4a" ? timelineOriginMinutes.value : null,
+  () => `${props.date}|${props.schedule_window.time_zone}|${activeTheme.value}`,
 )
+const { isDragging, dragBlockId, ghostTop, previewStartTime, previewEndTime, shiftedBlockIds, startDrag } = drag
+watch(categoryCatalogValid, (valid) => {
+  if (!valid && drag?.isDragging.value) drag.cancelDrag()
+}, { flush: "sync" })
+provide(ScheduleDragKey, { startDrag, isDragging, dragBlockId, shiftedBlockIds })
+provide(ScheduleContainerKey, scheduleBodyRef)
+const draggedBlock = computed(() => canonicalBlocks.value.find(block => block.id === dragBlockId.value) ?? null)
 
-// Rendering a live layout against a frozen pointer coordinate system would
-// make a theme change mid-gesture visually misleading. Abort rather than
-// allowing an ambiguous drop.
-watch(layout, () => {
-  if (isDragging.value) cancelDrag()
-})
-
-// Provide to child components
-provide("undo", { pushUndo, snapshotBlocks })
-provide("drag", { startDrag, isDragging, dragBlockId, shiftedBlockIds })
-provide("scheduleContainer", scheduleBodyRef)
-
-// Apple Calendar (feature 0011): read-only events alongside the schedule.
-// Per-instance composable — each Schedule page owns its own state.
-const calendar = useCalendar()
-calendar.fetchAccountStatus()
-watch(
-  () => props.date,
-  (d) => calendar.fetchEvents(d),
-  { immediate: true },
-)
-
-// Google Calendar (feature 0022): multi-account read-only events merged into
-// the SAME ExternalEventsPanel. `fetchAccountStatus()` on mount seeds the
-// panel's `connected` from the account list immediately — without it a
-// Google-only user's panel stays hidden until the first events round-trip.
-const googleCalendar = useGoogleCalendar()
-googleCalendar.fetchAccountStatus()
-watch(
-  () => props.date,
-  (d) => googleCalendar.fetchEvents(d),
-  { immediate: true },
-)
-
-// Single chronological list (no grouping). Sort by the SAME tuple the backend
-// uses — (start, title, external_uid) — so Apple + Google interleave with
-// stable, deterministic tie-breaking matching each side's server sort.
-const mergedExternalEvents = computed<NormalizedEvent[]>(() =>
-  [...calendar.state.events, ...googleCalendar.state.events].sort((a, b) => {
-    if (a.start !== b.start) return a.start < b.start ? -1 : 1
-    if (a.title !== b.title) return a.title < b.title ? -1 : 1
-    if (a.external_uid === b.external_uid) return 0
-    return a.external_uid < b.external_uid ? -1 : 1
-  }),
-)
-
-const externalConnected = computed(
-  () => calendar.state.connected || googleCalendar.state.connected,
-)
-const externalLoading = computed(
-  () => calendar.state.loading || googleCalendar.state.loading,
-)
-
-// Errors are ADDITIVE, never suppressing: a Google 502 must not blank healthy
-// Apple events (and vice-versa). Build one banner per provider whose
-// whole-request fetch failed; the panel renders them above the list.
-const externalErrorBanners = computed<ProviderErrorBanner[]>(() => {
-  const banners: ProviderErrorBanner[] = []
-  if (calendar.state.error) {
-    banners.push({ provider: "apple", message: calendar.state.error })
-  }
-  if (googleCalendar.state.error) {
-    banners.push({ provider: "google", message: googleCalendar.state.error })
-  }
-  return banners
-})
-
-// Per-provider retry — an Apple failure must NOT refetch Google (and
-// vice-versa).
-function retryExternalFetch(provider: "apple" | "google") {
-  if (provider === "apple") {
-    calendar.fetchEvents(props.date)
-  } else {
-    googleCalendar.fetchEvents(props.date)
-  }
-}
-
-// Add-external-event-to-schedule (feature 0026). Travel rules are not an
-// Inertia prop on this page — fetch once via the composable. Matching
-// happens here (the panel only emits the clicked event).
-const travelRulesApi = useTravelRules()
-const travelRules = ref<TravelRule[]>([])
-const travelRulesReady = ref(false)
-// True once a fetch has failed and none has since succeeded. Surfaced in the
-// dialog: without it a rules outage silently produces an unpadded block that
-// looks exactly like a correct "no rule matched" result.
-const travelRulesError = ref(false)
-
-// Only a *successful* fetch marks the rules ready. Setting the flag on
-// failure would strand `travelRules` at [] permanently: the retry in
-// `handleAddToSchedule` is gated on !ready, so every later add would silently
-// match nothing and create the block at raw event times.
-//
-// The in-flight promise is shared so concurrent Add clicks (or a click landing
-// while the initial fetch is still open) await one request instead of firing a
-// GET each.
-let rulesFetchInFlight: ReturnType<typeof travelRulesApi.listRules> | null = null
-
-function fetchTravelRules() {
-  if (!rulesFetchInFlight) {
-    rulesFetchInFlight = travelRulesApi.listRules().then((result) => {
-      if (result.ok && result.rules) {
-        travelRules.value = result.rules
-        travelRulesReady.value = true
-        travelRulesError.value = false
-      } else {
-        travelRulesError.value = true
-      }
-      rulesFetchInFlight = null
-      return result
-    })
-  }
-  return rulesFetchInFlight
-}
-
-fetchTravelRules()
-
-const addDialogEvent = ref<NormalizedEvent | null>(null)
-const addDialogRule = ref<TravelRule | null>(null)
-
-async function handleAddToSchedule(ev: NormalizedEvent) {
-  // Avoid matching against [] if the user clicks before the initial fetch
-  // lands — or if that fetch failed, in which case this retries rather than
-  // silently skipping travel time forever. `fetchTravelRules` dedupes, so
-  // rapid clicks await one shared request instead of fanning out GETs.
-  if (!travelRulesReady.value) {
-    // The await below is a date-navigation window (issue #21). The dialog
-    // renders against the *live* `props.date`, so navigating while the fetch
-    // is open would pair this event with the newly-viewed day and POST it to
-    // the wrong schedule. Drop the stale click instead.
-    const clickedDate = props.date
-    await fetchTravelRules()
-    if (props.date !== clickedDate) return
-  }
-  addDialogRule.value = matchTravelRule(
-    travelRules.value,
-    ev.title,
-    ev.calendar_name,
-  )
-  addDialogEvent.value = ev
-}
-
-function closeAddDialog() {
-  addDialogEvent.value = null
-  addDialogRule.value = null
-}
-
-// Todoist (feature 0020): read-only task panel that follows the selected
-// date. Per-instance composable like `useCalendar`. The `!connected` panel
-// gate is why `fetchTasks` (not just `fetchAccountStatus`) owns `connected`
-// — see the divergence note in `useTodoist.ts`.
-const todoist = useTodoist()
-todoist.fetchAccountStatus()
-watch(
-  () => props.date,
-  (d) => todoist.fetchTasks(d),
-  { immediate: true },
-)
-function retryTodoistTasks() {
-  todoist.fetchTasks(props.date)
-}
-function completeTodoistTask(taskId: string) {
-  todoist.completeTask(taskId)
-}
-
-const habitica = useHabitica()
-habitica.fetchAccountStatus()
-watch(
-  () => props.date,
-  (d) => habitica.fetchTasks(d),
-  { immediate: true },
-)
-function retryHabiticaTasks() {
-  habitica.fetchTasks(props.date)
-}
-function completeHabiticaTask(taskId: string) {
-  habitica.completeTask(taskId)
-}
-// Single fan-out point for BOTH the manual Refresh button and the background
-// poll (tasks branch). Keeping one copy is the whole reason the sidebar is
-// source-agnostic: two copies drift, and the failure mode is silent — manual
-// Refresh and the poll would quietly cover different sets of sources. Adding
-// a third task source means editing exactly here. Calendars use a separate
-// fan-out (`refreshExternalCalendars`) so the task Refresh button stays
-// task-only.
-function refreshExternalTasks(date: string = props.date) {
-  if (todoist.state.statusKnown && todoist.state.connected) {
-    void todoist.refreshTasks(date)
-  }
-  if (habitica.state.statusKnown && habitica.state.connected) {
-    void habitica.refreshTasks(date)
-  }
-}
-
-// Single fan-out for connected calendars (background poll only — not wired
-// to the task Refresh button). Same statusKnown&&connected gate as tasks.
-function refreshExternalCalendars(date: string = props.date) {
-  if (calendar.state.statusKnown && calendar.state.connected) {
-    void calendar.refreshEvents(date)
-  }
-  if (googleCalendar.state.statusKnown && googleCalendar.state.connected) {
-    void googleCalendar.refreshEvents(date)
-  }
-}
-
-// Multi-turn chat thread (feature 0007). State lives in `useChat`
-// (module-level) so the bottom dock and the sidebar variant share one
-// thread. Re-anchor the active date here so navigation between days
-// always resets the thread — without this, a follow-up like "ага,
-// добавь его" authored against day A could mutate day B. The watcher is
-// `immediate: true` so first mount registers the date too.
-watch(
-  () => props.date,
-  (d) => {
-    setChatActiveDate(d)
-    // Mirror useChat: abandoning an in-flight draft unlocks the new day
-    // immediately and prevents a cross-date undo toast from wiping the
-    // generated blocks on the day the user left.
-    abandonInFlight()
-    // Hide undo toast for the previous day; stack entries are preserved
-    // so navigating back still allows undo on that date.
-    dismissToast()
-    // Same cross-date hazard: the dialog renders against the live
-    // `props.date`, so an open one silently retargets on navigation. For a
-    // same-day event that only disables Confirm (the event falls outside the
-    // new day), but an overnight event still intersects the next day, so
-    // Confirm would stay enabled and write *that* day's slice — different
-    // times than the user saw when they clicked Add. Close it instead.
-    closeAddDialog()
-  },
-  { immediate: true },
-)
-
-// Feature 0008 — viewport-driven chat surface choice.
-// Wide (≥1024px) → ChatSidebar (right-hand panel, controlled open
-// state); narrow → CommandBar dock. `useChat` is module-level so the
-// active thread survives the switch.
 const { isWide } = useViewport()
-const sidebarOpen = ref<boolean>(readChatSidebarOpen())
+const chatDockHeight = ref(0)
+const sidebarOpen = ref(readChatSidebarOpen())
 watch(sidebarOpen, writeChatSidebarOpen)
-
-const externalTasksSidebarOpen = ref<boolean>(readExternalTasksSidebarOpen())
+const externalTasksSidebarOpen = ref(readExternalTasksSidebarOpen())
 watch(externalTasksSidebarOpen, writeExternalTasksSidebarOpen)
-
-// Placement must be declared before the poller: its watch({ immediate: true })
-// evaluates externalPollActive → calendarsBranch → externalCalendarVisible
-// synchronously during setup (TDZ if these consts sit below the poll call).
 const { placement: externalCalendarPlacement } = useExternalCalendarPlacement()
-
-const externalCalendarInSidebar = computed(
-  () => externalCalendarPlacement.value === "sidebar",
-)
-const externalCalendarInCenter = computed(
-  () => externalCalendarPlacement.value === "center",
-)
-
-// Mirrors ExternalEventsPanel render conditions: center on any viewport;
-// sidebar only when the wide left rail is open. Keep in lockstep with the
-// template — center panel `v-if` below (search `variant="center"`) and the
-// sidebar slot gated by `ExternalTasksSidebar.vue` `v-if="open"`. If either
-// render condition changes, update this predicate.
-const externalCalendarVisible = computed(
-  () =>
-    externalCalendarInCenter.value ||
-    (externalCalendarInSidebar.value &&
-      isWide.value &&
-      externalTasksSidebarOpen.value),
-)
-
-const tasksBranch = computed(
-  () =>
-    isWide.value &&
-    externalTasksSidebarOpen.value &&
-    ((todoist.state.statusKnown && todoist.state.connected) ||
-      (habitica.state.statusKnown && habitica.state.connected)),
-)
-
-// Per-source statusKnown && connected mirrors tasksBranch — avoids a poll
-// tick during the brief account-status load window (connected before
-// statusKnown), where refreshExternalCalendars would only no-op anyway.
-const calendarsBranch = computed(
-  () =>
-    ((calendar.state.statusKnown && calendar.state.connected) ||
-      (googleCalendar.state.statusKnown && googleCalendar.state.connected)) &&
-    externalCalendarVisible.value,
-)
-
-// Background external-task and external-calendar sync: poll while either
-// the task rail (with a connected task source) or a visible calendar panel
-// is active.
-const externalPollActive = computed(
-  () => tasksBranch.value || calendarsBranch.value,
-)
-
-useExternalSourcePoll({
-  intervalSeconds: toRef(props, "external_tasks_poll_interval"),
-  date: toRef(props, "date"),
-  active: externalPollActive,
-  refresh: (d) => {
-    if (tasksBranch.value) refreshExternalTasks(d)
-    if (calendarsBranch.value) refreshExternalCalendars(d)
-  },
+const {
+  googleCalendar, todoist, habitica,
+  mergedExternalEvents, externalConnected, externalLoading, externalErrorBanners,
+  retryExternalFetch, retryTodoistTasks, completeTodoistTask,
+  retryHabiticaTasks, completeHabiticaTask, refreshExternalTasks, refreshExternalCalendars,
+  externalCalendarInSidebar, externalCalendarInCenter, externalCalendarVisible,
+  tasksBranch, calendarsBranch, externalPollActive, leftSidebarVisible,
+} = useExternalSources({
+  date: toRef(props, "date"), timeZone: scheduleTimeZone, todayDate,
+  userId: toRef(props, "auth_user_id"), bootstrap: toRef(props, "integration_bootstrap"),
+  isWide, sidebarOpen: externalTasksSidebarOpen, placement: externalCalendarPlacement,
+  pollIntervalSeconds: toRef(props, "external_tasks_poll_interval"),
 })
-
-const chatSidebarWidth = computed(() => {
-  if (!isWide.value) return "0px"
-  return sidebarOpen.value ? "380px" : "32px"
+const { addDialogEvent, addDialogRule, travelRulesError, handleAddToSchedule, closeAddDialog } = useEventImport({
+  date: toRef(props, "date"), timeZone: scheduleTimeZone,
+  userId: toRef(props, "auth_user_id"), bootstrap: toRef(props, "integration_bootstrap"),
 })
-
-// The left sidebar hosts the Todoist list and, when placement is "sidebar",
-// the external-calendar panel — so it shows when EITHER is connected.
-const leftSidebarVisible = computed(
-  () =>
-    (todoist.state.statusKnown && todoist.state.connected) ||
-    (habitica.state.statusKnown && habitica.state.connected) ||
-    (externalConnected.value && externalCalendarInSidebar.value),
-)
-
-const externalTasksSidebarWidth = computed(() => {
-  if (!isWide.value) return "0px"
-  if (!leftSidebarVisible.value) return "0px"
-  return externalTasksSidebarOpen.value ? "380px" : "32px"
-})
-
 const schedulePageStyle = computed(() => ({
-  "--chat-sidebar-width": chatSidebarWidth.value,
-  "--external-tasks-sidebar-width": externalTasksSidebarWidth.value,
+  "--chat-dock-height": isWide.value ? "0px" : `${chatDockHeight.value}px`,
+  "--chat-sidebar-width": !isWide.value ? "0px" : sidebarOpen.value ? "380px" : "32px",
+  "--external-tasks-sidebar-width": !isWide.value || !leftSidebarVisible.value
+    ? "0px" : externalTasksSidebarOpen.value ? "380px" : "32px",
 }))
-
-// Per-component-instance set of dates the auto-draft has already been
-// attempted for. Inertia's same-component navigation sometimes preserves
-// state and only refreshes props (partial reload), and partial reloads
-// explicitly do not remount, so onMounted is unreliable for "fire once
-// per new date." A watcher with this set covers first mount AND date
-// navigation reliably; a real remount (full Inertia visit) starts fresh,
-// which is correct: the server's `auto_draft_pending` is the
-// authoritative one-shot signal for "this is a brand-new schedule."
-const attemptedAutoDraftDates = new Set<string>()
-
-async function maybeGenerateDraft() {
-  if (
-    !props.auto_draft_pending ||
-    props.blocks.length !== 0 ||
-    attemptedAutoDraftDates.has(props.date)
-  ) {
-    return
-  }
-  attemptedAutoDraftDates.add(props.date)
-  await runDraft()
-}
-
-watch(
-  () => [props.date, props.auto_draft_pending, props.blocks.length] as const,
-  () => {
-    maybeGenerateDraft()
-  },
-  { immediate: true },
-)
-
-async function runDraft() {
-  const snapshot = snapshotBlocks()
-  // Bind undo to the date active when the draft request starts — if the
-  // user navigates dates while the LLM call is in flight, ``props.date``
-  // would shift and undo would restore this day's empty snapshot onto a
-  // different date. Issue #21.
-  const scheduleDate = props.date
-  const result = await generateDraft(scheduleDate)
-  if (result.ok && props.date === scheduleDate) {
-    pushUndo({
-      description: result.explanation || "Generated draft",
-      type: "draft",
-      previousBlocks: snapshot,
-      scheduleDate,
-    })
-  }
-}
-
-function handleRegenerateClick() {
-  runDraft()
-}
-
-// Analytics is past-/today-only AND meaningless on a never-edited
-// (draft) day — analytics_view returns 400 for future and 404 for
-// missing schedules, but a stale link in the nav would still feel
-// broken. Hide it locally for those cases.
-const showAnalyticsLink = computed(() => {
-  return props.date <= todayString() && props.schedule.status !== "draft"
-})
-
-// Sound notifications (issue #56): chime when the wall clock crosses a
-// block's start/end. Opt-in (read from localStorage inside the composable),
-// rides the same 60s sampler above — no extra interval. Off-today nulls from
-// useNowMinutes keep it silent on past/future dates.
+const showAnalyticsLink = computed(() => props.date <= todayDate.value && canonicalSchedule.value?.status !== "draft")
 useSoundNotifications(nowMinutes, nowDate, getBlocks)
-
-// Desktop notifications (issue #100): browser desktop notification when the
-// wall clock crosses a block's start/end. Opt-in + permission-gated (read
-// from localStorage inside the composable), rides the same 60s sampler and
-// shared boundary detector — no extra interval. Independent of the sound
-// toggle; off-today nulls from useNowMinutes keep it silent on past/future
-// dates.
 useDesktopNotifications(nowMinutes, nowDate, getBlocks)
 
-// During drag, use preview blocks for real-time visual feedback
-const effectiveBlocks = computed(() =>
-  isDragging.value && previewBlocks.value.length > 0
-    ? previewBlocks.value
-    : props.blocks,
-)
-
-const currentBlock = computed(() => {
-  if (nowMinutes.value === null || nowDate.value === null) return null
-  return findCurrentBlock(effectiveBlocks.value, nowMinutes.value, nowDate.value)
-})
-const currentBlockRemaining = computed(() =>
-  currentBlock.value && nowMinutes.value !== null
-    ? remainingMinutesForBlock(currentBlock.value, nowMinutes.value)
-    : null
-)
-
-// The production root provides this long-lived owner. Direct Schedule mounts
-// in focused component tests retain a component-scoped fallback.
+// PiP is owned by the application root and survives page navigation.
 const focusIndicatorController = inject(FocusIndicatorControllerKey, null) ?? useFocusIndicatorController()
-// `categories` is a watched source, not just read at trigger time: recolouring a
-// category in Settings changes neither the date nor the blocks, so without it
-// the PiP rail would keep the old colour until an unrelated edit fired the
-// watcher (feature 0079).
-watch([() => props.date, effectiveBlocks, () => props.categories], ([date, blocks]) => {
-  focusIndicatorController.publish(date, blocks, props.categories)
+const focusIndicatorGeneration = focusIndicatorController.publicationGeneration()
+watch([() => props.date, effectiveBlocks, () => props.categories, scheduleTimeZone], ([date, blocks]) => {
+  focusIndicatorController.publishIfGenerationMatches(
+    focusIndicatorGeneration,
+    date,
+    blocks,
+    categoryCatalogValid.value ? props.categories : [],
+    scheduleTimeZone.value,
+  )
 }, { immediate: true, deep: true })
 onBeforeUnmount(() => {
-  // A drag preview can be abandoned during page swap; retain canonical data.
-  focusIndicatorController.publish(props.date, props.blocks, props.categories)
+  focusIndicatorController.publishIfGenerationMatches(
+    focusIndicatorGeneration,
+    props.date,
+    canonicalBlocks.value,
+    categoryCatalogValid.value ? props.categories : [],
+    scheduleTimeZone.value,
+  )
 })
 const focusIndicator = focusIndicatorController.focusIndicator
 const indicatorActive = focusIndicatorController.indicatorActive
@@ -609,113 +198,40 @@ const focusIndicatorSupported = focusIndicator.supported
 const focusIndicatorOpen = focusIndicator.isOpen
 const focusIndicatorOpenError = focusIndicator.openError
 const openFocusIndicator = focusIndicator.open
-
-// Ghost element computed properties
-const draggedBlock = computed(() =>
-  dragBlockId.value !== null
-    ? props.blocks.find((b) => b.id === dragBlockId.value)
-    : null,
-)
-// Ghost sizing uses the same DISPLAY-CLAMPED span the renderer shows
-// (buildBaseDisplayItems clamps to [06:00, 23:00)): a day-bound-clamped
-// from-event block (feature 0026, raw 00:00–06:30 displayed 06:00–06:30)
-// must not size its ghost from the raw out-of-window span.
-// Shares `useDrag`'s geometry helper so the ghost can never again disagree
-// with the slot the drop will occupy (display-clamp + snap-grid round-up).
-function ghostClampedDuration(): number {
-  if (!draggedBlock.value) return 0
-  return clampedDragDuration(draggedBlock.value)
-}
-const ghostHeight = computed(() => {
-  if (!draggedBlock.value) return 0
-  return ghostClampedDuration() * pxPerMinute.value
-})
-const ghostIsCompact = computed(() => {
-  if (!draggedBlock.value) return false
-  return ghostClampedDuration() <= 30
-})
-
-// Build the display list: blocks and gaps with the now marker spliced in.
-// Every GEOMETRY input (activeRender* and the buildBaseDisplayItems now arg)
-// is frozen during drag so layout never jumps mid-gesture — renderBounds and
-// the live now are only read on the non-drag path. spliceNowMarker still
-// reads live now, so the red marker keeps moving during drag by design.
-const displayList = computed<ScheduleDisplayItem[]>(() => {
-  const frozenBounds = isDragging.value ? frozenRenderBounds.value : null
-  const activeRenderStart = frozenBounds
-    ? frozenBounds.renderStart
-    : renderBounds.value.renderStart
-  const activeRenderEnd = frozenBounds
-    ? frozenBounds.renderEnd
-    : renderBounds.value.renderEnd
-
-  const baseItems = buildBaseDisplayItems(
-    effectiveBlocks.value,
-    activeRenderStart,
-    activeRenderEnd,
-    frozenBounds ? frozenNowMinutes.value : todayNowMinutes.value,
-    scheduleWindow.value,
-  )
-
-  return spliceNowMarker(baseItems, nowMinutes.value, nowDate.value)
-})
-
-function itemHeight(item: ScheduleDisplayItem): string {
-  const minutes = item.render_minutes ?? item.duration_minutes
-  return `${minutes * pxPerMinute.value}px`
-}
-
-function nowOffsetPercent(item: ScheduleDisplayItem): string {
-  return computeNowOffsetPercent(item.start_time, item.end_time, nowMinutes.value)
-}
-
 function handleAddHere(payload: { start_time: string; end_time: string }) {
   prefillStart.value = payload.start_time
   prefillEnd.value = payload.end_time
 }
-
 function logout() {
+  resetSession()
   router.post("/accounts/logout/")
 }
-
-// Test seam — poll-gating internals asserted by Schedule.test.ts; not part
-// of the public component API. Do not wire parent code against these.
+// Stable integration-test seams; production consumers use the controllers.
 defineExpose({
-  externalPollActive,
-  externalCalendarVisible,
-  tasksBranch,
-  calendarsBranch,
-  refreshExternalTasks,
-  refreshExternalCalendars,
-  // Focus-indicator seam (features 0049/0066/0079) — asserted by integration
-  // tests; not a parent-facing API.
-  focusIndicator,
-  indicatorActive,
-  indicatorPercent,
-  indicatorNextBlock,
-  indicatorNextBlockTitle,
-  indicatorNextBlockRemaining,
-  indicatorPausePercent,
-  indicatorDayFinished,
+  externalPollActive, externalCalendarVisible, tasksBranch, calendarsBranch,
+  refreshExternalTasks, refreshExternalCalendars,
+  focusIndicator, indicatorActive, indicatorPercent, indicatorNextBlock,
+  indicatorNextBlockTitle, indicatorNextBlockRemaining, indicatorPausePercent, indicatorDayFinished,
 })
 </script>
 
 <template>
   <div
+    v-if="categoryCatalogValid"
     class="schedule-page"
     :class="{ 'layout-4a': layout === '4a' }"
     :style="schedulePageStyle"
   >
     <TimeZoneMismatchPrompt :time-zone="schedule_window.time_zone" />
-    <DateNavigator :date="date">
+    <DateNavigator :date="date" :today="todayDate">
       <template #status>
         <DraftBadge
-          :show="schedule.status === 'draft' && blocks.length > 0"
+          :show="canonicalSchedule?.status === 'draft' && canonicalBlocks.length > 0"
         />
       </template>
       <template #actions>
         <RegenerateDraftButton
-          v-if="schedule.status === 'draft' && blocks.length === 0"
+          v-if="canonicalSchedule?.status === 'draft' && canonicalBlocks.length === 0"
           :has-template="has_template_for_type"
           :slot-type="slot_type"
           @click="handleRegenerateClick"
@@ -741,6 +257,8 @@ defineExpose({
     <p v-if="lastDraftError" class="draft-error">{{ lastDraftError }}</p>
 
     <ExternalEventsPanel
+      :time-zone="schedule_window.time_zone"
+      :today-date="todayDate"
       v-if="externalConnected && externalCalendarInCenter"
       variant="center"
       :date="date"
@@ -764,8 +282,10 @@ defineExpose({
     <div
       ref="scheduleBodyRef"
       class="schedule-body"
-      :class="{ 'has-dock': !isWide }"
     >
+      <p v-if="scheduleRevision.synchronizing.value" class="schedule-sync-message" role="status">
+        Updating schedule. Refresh the page if it does not finish.
+      </p>
       <div v-if="isGeneratingDraft" class="draft-overlay" aria-live="polite">
         <span class="overlay-spinner" />
         <span class="overlay-text">Generating draft…</span>
@@ -797,10 +317,12 @@ defineExpose({
       <Timeline4a
         v-if="layout === '4a'"
         :blocks="effectiveBlocks"
+        :presentation="presentation"
         :date="date"
         :schedule-window="schedule_window"
         :now-minutes="nowMinutes"
         :now-date="nowDate"
+        :current-h-h-m-m="currentHHMM"
         :px-per-minute="pxPerMinute"
         :timeline-origin-minutes="timelineOriginMinutes"
         :timeline-end-minutes="timelineEndMinutes"
@@ -825,6 +347,7 @@ defineExpose({
             :categories="categories"
           />
           <NowLine
+            :label="currentHHMM"
             class="now-overlay"
             :style="{ top: nowOffsetPercent(item) }"
           />
@@ -845,6 +368,7 @@ defineExpose({
             @add-here="handleAddHere"
           />
           <NowLine
+            :label="currentHHMM"
             class="now-overlay"
             :style="{ top: nowOffsetPercent(item) }"
           />
@@ -903,6 +427,8 @@ defineExpose({
     />
 
     <ExternalRail4a
+      :time-zone="schedule_window.time_zone"
+      :today-date="todayDate"
       v-if="layout === '4a' && isWide && leftSidebarVisible"
       v-model:open="externalTasksSidebarOpen"
       :active-date="date"
@@ -950,6 +476,8 @@ defineExpose({
       <!-- External-calendar panel (feature 0022): stacked under the Todoist
            list inside the left sidebar. Wide-screen only. -->
       <ExternalEventsPanel
+      :time-zone="schedule_window.time_zone"
+      :today-date="todayDate"
         v-if="externalCalendarInSidebar"
         variant="sidebar"
         :date="date"
@@ -964,6 +492,7 @@ defineExpose({
       />
     </ExternalTasksSidebar>
     <AddToScheduleDialog
+      :time-zone="schedule_window.time_zone"
       v-if="addDialogEvent"
       :event="addDialogEvent"
       :matched-rule="addDialogRule"
@@ -986,7 +515,11 @@ defineExpose({
       :snapshot-blocks="snapshotBlocks"
       :push-undo="pushUndo"
       variant="dock"
+      @height-change="chatDockHeight = $event"
     />
+  </div>
+  <div v-else class="schedule-page" role="alert">
+    Category data could not be loaded. <a href="">Reload the page</a> to try again.
   </div>
 </template>
 
@@ -1002,6 +535,8 @@ defineExpose({
   background: var(--bg-schedule-gap);
   padding-right: var(--chat-sidebar-width, 0);
   padding-left: var(--external-tasks-sidebar-width, 0);
+  /* Reserve the dock's actual height after all content, including Logout. */
+  padding-bottom: var(--chat-dock-height, 0px);
 }
 
 /* Center 4a inside the viewport space left after both fixed rails. The legacy
@@ -1039,10 +574,9 @@ defineExpose({
   padding: 8px 16px;
 }
 
-/* Bottom padding only when the fixed dock is rendered (narrow viewport);
-   wide screens use the sidebar and don't need to clear the dock. */
-.schedule-body.has-dock {
-  padding-bottom: 88px;
+.schedule-sync-message {
+  color: var(--text-secondary);
+  font-size: 13px;
 }
 
 .draft-overlay {
@@ -1096,18 +630,9 @@ defineExpose({
   max-width: 880px;
 }
 
-.schedule-page.layout-4a :deep(.date-navigator) {
-  display: grid;
-  grid-template-columns: 40px minmax(190px, 1fr) auto;
-  gap: 12px;
-}
-
 .schedule-page.layout-4a :deep(.date-display) {
   align-items: flex-start;
-}
-
-.schedule-page.layout-4a :deep(.date-text) {
-  white-space: nowrap;
+  text-align: left;
 }
 
 .drag-ghost {

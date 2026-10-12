@@ -9,7 +9,6 @@ revalidated here before it can touch the DB. These validators are the
 primary enforcement, not a belt-and-suspenders check.
 """
 
-import datetime
 import re
 
 from django.conf import settings
@@ -76,8 +75,8 @@ def validate_action_shape(
 ) -> list[str]:
     """Return a list of per-action error strings. Empty list means OK.
 
-    Checks types and enum membership only — business rules like "block is on
-    the right schedule" or "no overlap" are enforced by the view.
+    Checks transport shape and operands. Schedule interval and overlap rules
+    are checked by the shared planner after actions are normalized.
 
     ``allow_untimed_add`` (feature 0067) is passed ``True`` only from the chat
     per-action loop (``service.run_chat``). When true, an ``add`` may omit BOTH
@@ -90,7 +89,7 @@ def validate_action_shape(
         return ["action must be an object"]
 
     action_type = action.get("type")
-    if action_type not in ALLOWED_ACTION_TYPES:
+    if not isinstance(action_type, str) or action_type not in ALLOWED_ACTION_TYPES:
         return [f"type must be one of {sorted(ALLOWED_ACTION_TYPES)}, got {action_type!r}"]
 
     # Feature 0067: an untimed chat add classifies by time-key presence. Reject
@@ -157,14 +156,8 @@ def validate_action_shape(
             ):
                 errors.append(f"changes.category must be one of {sorted(allowed_categories)}")
             for time_field in ("start_time", "end_time"):
-                if time_field in changes:
-                    value = changes[time_field]
-                    if not _is_hhmm(value):
-                        errors.append(f"changes.{time_field} must be HH:MM")
-                    elif int(value[-2:]) % GRID_MINUTES:
-                        errors.append(
-                            f"changes.{time_field} must use {GRID_MINUTES}-minute granularity"
-                        )
+                if time_field in changes and not _is_hhmm(changes[time_field]):
+                    errors.append(f"changes.{time_field} must be HH:MM")
             if "placement_direction" in action:
                 direction = action["placement_direction"]
                 if not isinstance(direction, str) or direction not in {"later", "earlier", "exact"}:
@@ -255,17 +248,6 @@ def validate_action_shape(
     ):
         errors.append(f"category must be one of {sorted(allowed_categories)}")
 
-    # For add, both times are required and must form a valid window.
-    if (
-        action_type == "add"
-        and _is_hhmm(action.get("start_time", ""))
-        and _is_hhmm(action.get("end_time", ""))
-    ):
-        start = datetime.datetime.strptime(action["start_time"], "%H:%M").time()
-        end = datetime.datetime.strptime(action["end_time"], "%H:%M").time()
-        if start >= end:
-            errors.append("start_time must be before end_time")
-
     return errors
 
 
@@ -304,7 +286,8 @@ def validate_chat_response_envelope(parsed) -> list[str]:
     Chat adds an ``ask`` field on top of ``actions`` + ``explanation``. The
     response is mutually exclusive: either commit to actions OR ask one
     clarifying question. Empty actions + null ask is also valid (chit-chat
-    / "thanks" turn).
+    / "thanks" turn), provided its explanation can become a valid assistant
+    transcript message on the next turn.
 
     Caps on ``ask`` and ``explanation`` length live in
     ``settings.LLM_CHAT_MAX_ASK_CHARS`` / ``LLM_MAX_EXPLANATION_CHARS``
@@ -335,10 +318,24 @@ def validate_chat_response_envelope(parsed) -> list[str]:
             pass
         elif not isinstance(ask, str):
             errors.append("'ask' must be a string or null")
-        elif ask == "":
-            errors.append("'ask' must be null or a non-empty string")
+        elif not ask.strip():
+            errors.append("'ask' must be null or a non-blank string")
         elif len(ask) > settings.LLM_CHAT_MAX_ASK_CHARS:
             errors.append(f"'ask' must be <= {settings.LLM_CHAT_MAX_ASK_CHARS} chars")
+
+    # The browser stores ask ?? explanation as assistant.content and sends it
+    # back on the next turn. No-ask replies, including accepted actions and
+    # no-ops, therefore need a non-blank explanation before any action applies.
+    # A real ask supplies that content itself, so its explanation may be blank.
+    if isinstance(explanation, str) and not explanation.strip() and parsed.get("ask") is None:
+        errors.append("'explanation' must be non-blank when 'ask' is null")
+
+    transcript_content = parsed.get("ask") if isinstance(parsed.get("ask"), str) else explanation
+    if (
+        isinstance(transcript_content, str)
+        and len(transcript_content) > settings.LLM_MAX_COMMAND_CHARS
+    ):
+        errors.append(f"assistant content must be <= {settings.LLM_MAX_COMMAND_CHARS} chars")
 
     # Mutually exclusive: ask set ⇒ no actions; actions set ⇒ ask null.
     if isinstance(actions, list) and "ask" in parsed:

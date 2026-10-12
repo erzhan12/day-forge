@@ -64,6 +64,29 @@ describe("TodoistTasksPanel", () => {
     expect(button.exists()).toBe(true)
     await button.trigger("click")
     expect(wrapper.emitted("retry")).toBeTruthy()
+    expect(wrapper.find(".todoist-empty").exists()).toBe(false)
+    expect(wrapper.find(".todoist-skeleton").exists()).toBe(false)
+  })
+
+  it("keeps loaded tasks visible and actionable beside a refresh error", async () => {
+    const wrapper = mount(TodoistTasksPanel, {
+      props: { tasks: [TASK_P1], loading: false, error: "Todoist service unavailable." },
+    })
+    expect(wrapper.find(".todoist-error").text()).toContain("unavailable")
+    expect(wrapper.findAll('[data-testid="todoist-task"]')).toHaveLength(1)
+    expect(wrapper.find(".todoist-empty").exists()).toBe(false)
+    await wrapper.find(".todoist-retry").trigger("click")
+    await wrapper.find('[data-testid="todoist-complete"]').trigger("change")
+    expect(wrapper.emitted("retry")).toHaveLength(1)
+    expect(wrapper.emitted("complete")).toEqual([["1"]])
+  })
+
+  it("keeps loaded tasks visible during a background refresh", () => {
+    const wrapper = mount(TodoistTasksPanel, {
+      props: { tasks: [TASK_P1], loading: true, error: null },
+    })
+    expect(wrapper.findAll('[data-testid="todoist-task"]')).toHaveLength(1)
+    expect(wrapper.find(".todoist-skeleton").exists()).toBe(false)
   })
 
   it("renders a list of tasks without a priority flag", () => {

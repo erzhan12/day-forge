@@ -1,4 +1,6 @@
+import { acceptedMutation } from "./helpers/mutation"
 import { describe, it, expect, vi } from "vitest"
+import { mount } from "@vue/test-utils"
 import {
   blocksExternallyMutated,
   resolveConflicts,
@@ -234,7 +236,87 @@ function makeFakeContainer() {
   return el
 }
 
+describe("useDrag lifecycle", () => {
+  it("cancels an active gesture on component unmount without committing or leaving listeners", () => {
+    const original = [makeBlock({ id: 1 })]
+    const reorderBlocks = vi.fn(async () => ({ ok: true as const }))
+    let drag!: ReturnType<typeof useDrag>
+    const wrapper = mount({
+      setup() {
+        drag = useDrag(
+          "2026-04-16", () => original, reorderBlocks, vi.fn(),
+          () => original.map((item) => ({ ...item })),
+        )
+        return () => null
+      },
+    })
+    const container = makeFakeContainer()
+    const documentAdd = vi.spyOn(document, "addEventListener")
+    const documentRemove = vi.spyOn(document, "removeEventListener")
+    const windowAdd = vi.spyOn(window, "addEventListener")
+    const windowRemove = vi.spyOn(window, "removeEventListener")
+    try {
+      drag.startDrag({ pointerId: 1, clientY: 0 } as PointerEvent, original[0], container)
+      const keydown = documentAdd.mock.calls.find(([type]) => type === "keydown")?.[1]
+      const resize = windowAdd.mock.calls.find(([type]) => type === "resize")?.[1]
+      expect(drag.isDragging.value).toBe(true)
+      expect(document.body.classList.contains("is-dragging")).toBe(true)
+
+      wrapper.unmount()
+
+      expect(drag.isDragging.value).toBe(false)
+      expect(drag.frozenRenderBounds.value).toBeNull()
+      expect(container.releasePointerCapture).toHaveBeenCalledWith(1)
+      expect(container.removeEventListener).toHaveBeenCalledWith(
+        "pointermove", expect.any(Function),
+      )
+      expect(container.removeEventListener).toHaveBeenCalledWith(
+        "pointerup", expect.any(Function),
+      )
+      expect(documentRemove).toHaveBeenCalledWith("keydown", keydown)
+      expect(windowRemove).toHaveBeenCalledWith("resize", resize)
+      expect(document.body.classList.contains("is-dragging")).toBe(false)
+      expect(reorderBlocks).not.toHaveBeenCalled()
+    } finally {
+      if (drag.isDragging.value) drag.cancelDrag()
+      documentAdd.mockRestore()
+      documentRemove.mockRestore()
+      windowAdd.mockRestore()
+      windowRemove.mockRestore()
+    }
+  })
+})
+
 describe("useDrag.endDrag (undo snapshot)", () => {
+  it.each(["no-op", "stale", "failed"])("does not register undo for a %s mutation result", async (kind) => {
+    const original = [makeBlock({ id: 1 })]
+    const result = kind === "no-op" ? acceptedMutation(original, "2026-04-16", 3, false)
+      : kind === "stale" ? { ok: true } : { ok: false, status: 409 }
+    const reorderBlocks = vi.fn(async () => result)
+    const pushUndo = vi.fn()
+    const drag = useDrag("2026-04-16", () => original, reorderBlocks, pushUndo, () => original.map((block) => ({ ...block })))
+    drag.startDrag({ pointerId: 1, clientY: 0 } as PointerEvent, original[0], makeFakeContainer())
+    drag.previewBlocks.value = [{ ...original[0], start_time: "11:00", end_time: "12:00" }]
+    await drag.endDrag()
+    expect(reorderBlocks).toHaveBeenCalledOnce()
+    expect(pushUndo).not.toHaveBeenCalled()
+  })
+
+  it("cancels drop if the schedule became disabled while the gesture was held", async () => {
+    const original = [makeBlock({ id: 1 })]
+    const reorderBlocks = vi.fn(async () => acceptedMutation(original))
+    const pushUndo = vi.fn()
+    let disabled = false
+    const drag = useDrag("2026-04-16", () => original, reorderBlocks, pushUndo,
+      () => original.map((block) => ({ ...block })), () => disabled)
+    drag.startDrag({ pointerId: 1, clientY: 0 } as PointerEvent, original[0], makeFakeContainer())
+    drag.previewBlocks.value = [{ ...original[0], start_time: "11:00", end_time: "12:00" }]
+    disabled = true
+    await drag.endDrag()
+    expect(reorderBlocks).not.toHaveBeenCalled()
+    expect(pushUndo).not.toHaveBeenCalled()
+  })
+
   it("pushes pre-drag blocks (not [], not the post-reset snapshot) into the undo action", async () => {
     // Regression test for the snapshot-after-resetState bug:
     //   - resetState() clears the module-scoped `snapshot` to []
@@ -255,7 +337,7 @@ describe("useDrag.endDrag (undo snapshot)", () => {
       original.map((b) => ({ ...b })),
     )
     const getCurrentBlocks = vi.fn(() => original)
-    const reorderBlocks = vi.fn(async () => ({ ok: true as const }))
+    const reorderBlocks = vi.fn(async () => acceptedMutation(original.map((block) => ({ ...block, title: "Confirmed title" })), "2026-04-16"))
     const pushUndo = vi.fn<(a: UndoAction) => void>()
 
     const drag = useDrag(
@@ -287,6 +369,9 @@ describe("useDrag.endDrag (undo snapshot)", () => {
     expect(action.type).toBe("drag")
     expect(action.silent).toBe(true)
     expect(action.scheduleDate).toBe("2026-04-16")
+    expect(action.expected_revision).toBe(4)
+    expect(action.previous_revision).toBe(3)
+    expect(action.previousBlocks[0].title).toBe("Confirmed title")
     // Critical: previousBlocks must hold the pre-drag state, not [] and
     // not the post-resetState snapshot.
     expect(action.previousBlocks).toHaveLength(2)
@@ -303,7 +388,7 @@ describe("useDrag.endDrag (undo snapshot)", () => {
     ]
     const snapshotBlocks = vi.fn(() => original.map((b) => ({ ...b })))
     const getCurrentBlocks = vi.fn(() => original)
-    const reorderBlocks = vi.fn(async () => ({ ok: true as const }))
+    const reorderBlocks = vi.fn(async () => acceptedMutation(original, "2026-04-17"))
     const pushUndo = vi.fn<(a: UndoAction) => void>()
     let currentDate = "2026-04-16"
 
@@ -332,7 +417,7 @@ describe("useDrag.endDrag (undo snapshot)", () => {
     expect(pushUndo.mock.calls[0][0].scheduleDate).toBe("2026-04-17")
   })
 
-  it("binds drag undo to the date that was active at drag start, not at drop", async () => {
+  it("cancels drop when the active date changed during the gesture", async () => {
     // Regression: pointer capture blocks date nav during the drag itself,
     // but cleanup() releases the pointer before `await reorderBlocks`.
     // During that await the user can navigate dates — and the undo must
@@ -344,7 +429,7 @@ describe("useDrag.endDrag (undo snapshot)", () => {
     ]
     const snapshotBlocks = vi.fn(() => original.map((b) => ({ ...b })))
     const getCurrentBlocks = vi.fn(() => original)
-    const reorderBlocks = vi.fn(async () => ({ ok: true as const }))
+    const reorderBlocks = vi.fn(async () => acceptedMutation(original, "2026-04-16"))
     const pushUndo = vi.fn<(a: UndoAction) => void>()
     let currentDate = "2026-04-16"
 
@@ -371,8 +456,8 @@ describe("useDrag.endDrag (undo snapshot)", () => {
 
     await drag.endDrag()
 
-    expect(pushUndo).toHaveBeenCalledOnce()
-    expect(pushUndo.mock.calls[0][0].scheduleDate).toBe("2026-04-16")
+    expect(reorderBlocks).not.toHaveBeenCalled()
+    expect(pushUndo).not.toHaveBeenCalled()
   })
 
   it("first drag's undo keeps its own snapshot when a second drag starts mid-await", async () => {
@@ -444,7 +529,7 @@ describe("useDrag.endDrag (undo snapshot)", () => {
     drag.previewStartTime.value = "12:00"
 
     // Now let drag 1 finish.
-    resolveReorder1({ ok: true })
+    resolveReorder1(acceptedMutation(day1, "2026-04-16"))
     await end1
 
     expect(pushUndo).toHaveBeenCalledOnce()

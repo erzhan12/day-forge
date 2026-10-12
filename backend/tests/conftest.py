@@ -1,6 +1,6 @@
 import django
 import pytest
-from django.conf import settings
+from django.conf import global_settings, settings
 from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.test import Client, override_settings
@@ -10,6 +10,29 @@ if not settings.configured:
     django.setup()
 
 from schedules.models import Schedule  # noqa: E402  (must come after django.setup)
+
+from tests.revision_client import RevisionClient  # noqa: E402
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _fast_test_password_hasher():
+    """Speed up fixture users without changing application settings."""
+    with override_settings(PASSWORD_HASHERS=["django.contrib.auth.hashers.MD5PasswordHasher"]):
+        yield
+
+
+@pytest.fixture
+def production_password_hashers():
+    """Exercise real password authentication with Django's production hashers."""
+    with override_settings(PASSWORD_HASHERS=global_settings.PASSWORD_HASHERS):
+        yield
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _test_static_root(tmp_path_factory):
+    """Keep WhiteNoise enabled with an existing root, without collectstatic."""
+    with override_settings(STATIC_ROOT=tmp_path_factory.mktemp("staticfiles")):
+        yield
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -94,8 +117,8 @@ def user(db):
 
 @pytest.fixture
 def auth_client(user):
-    client = Client()
-    client.login(username="testuser", password="testpass123")
+    client = RevisionClient()
+    client.force_login(user)
     return client
 
 
@@ -107,7 +130,7 @@ def csrf_client():
 @pytest.fixture
 def csrf_auth_client(user):
     client = Client(enforce_csrf_checks=True)
-    client.login(username="testuser", password="testpass123")
+    client.force_login(user)
     return client
 
 

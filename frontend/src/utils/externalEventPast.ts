@@ -1,29 +1,6 @@
 import type { NormalizedEvent } from "../types/calendar"
 
-/** Local minutes-since-midnight for an ISO8601 instant. */
-function isoToLocalMinutes(iso: string): number {
-  const d = new Date(iso)
-  return d.getHours() * 60 + d.getMinutes()
-}
-
-/** DST-safe local civil-day difference from `today` to the local date of `iso`. */
-function localDayDelta(today: string, iso: string): number {
-  // `today` is guaranteed `YYYY-MM-DD` by todayString(); a malformed value would
-  // make dayDelta NaN and NaN <= nowMinutes silently return false.
-  const [y, m, d] = today.split("-").map(Number)
-  const todayMidnight = new Date(y, m - 1, d)
-  const endDate = new Date(iso)
-  const endMidnight = new Date(
-    endDate.getFullYear(),
-    endDate.getMonth(),
-    endDate.getDate(),
-  )
-  // Math.round, not Math.floor: a spring-forward day is 23h, so the anchored
-  // diff can be N*86_400_000 - 3_600_000; floor would yield N-1 (DST off-by-one).
-  return Math.round(
-    (endMidnight.getTime() - todayMidnight.getTime()) / 86400000,
-  )
-}
+import { civilDayDelta, zonedDateTime } from "./date"
 
 /**
  * True when an external calendar row should render as past/faded.
@@ -39,12 +16,13 @@ export function isExternalEventPast(
   viewedDate: string,
   today: string,
   nowMinutes: number | null,
+  timeZone = "UTC",
 ): boolean {
   if (viewedDate < today) return true
   if (viewedDate > today) return false
   if (ev.all_day) return false
   if (nowMinutes === null) return false
-  const dayDelta = localDayDelta(today, ev.end)
-  const foldedEndMinutes = dayDelta * 1440 + isoToLocalMinutes(ev.end)
+  const end = zonedDateTime(new Date(ev.end), timeZone)
+  const foldedEndMinutes = civilDayDelta(today, end.date) * 1440 + end.minutes
   return foldedEndMinutes <= nowMinutes
 }

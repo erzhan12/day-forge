@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue"
+import { reactive, ref, watch } from "vue"
 import type { UserCategory } from "../../types"
 import { categoryPalette } from "../../utils/categoryPalette"
 import { orderedCategories } from "../../utils/categories"
@@ -13,10 +13,22 @@ const api = useCategories()
 const label = ref("")
 const newColor = ref("blue")
 const error = ref("")
+const drafts = reactive<Record<number, { label: string; color_id: string }>>({})
 
-function catError(v: string | string[] | undefined, fallback: string): string {
-  const raw = Array.isArray(v) ? v[0] : v
-  return raw ?? fallback
+watch(() => props.categories, (categories) => {
+  for (const category of categories) {
+    drafts[category.id] = { label: category.label, color_id: category.color_id }
+  }
+}, { immediate: true, deep: true })
+
+function catError(
+  category: string | string[] | undefined,
+  detail: string | string[] | undefined,
+  fallback: string,
+): string {
+  const raw = Array.isArray(category) ? category[0] : category
+  const detailMessage = Array.isArray(detail) ? detail[0] : detail
+  return raw ?? detailMessage ?? fallback
 }
 
 async function add() {
@@ -27,7 +39,7 @@ async function add() {
     newColor.value = "blue"
     api.refresh()
   } else {
-    error.value = catError(result.errors?.category, "Could not add category")
+    error.value = catError(result.errors?.category, result.errors?.detail, "Could not add category")
   }
 }
 
@@ -37,7 +49,12 @@ async function update(id: number, data: Record<string, unknown>) {
     error.value = ""
     api.refresh()
   } else {
-    error.value = catError(result.errors?.category, "Could not save category")
+    const category = props.categories.find((item) => item.id === id)
+    if (category && drafts[id]) {
+      if ("label" in data) drafts[id].label = category.label
+      if ("color_id" in data) drafts[id].color_id = category.color_id
+    }
+    error.value = catError(result.errors?.category, result.errors?.detail, "Could not save category")
   }
 }
 
@@ -48,7 +65,7 @@ async function remove(category: UserCategory) {
     error.value = ""
     api.refresh(true)
   } else {
-    error.value = catError(result.errors?.category, "Could not delete")
+    error.value = catError(result.errors?.category, result.errors?.detail, "Could not delete")
   }
 }
 
@@ -58,7 +75,7 @@ async function reorder(id: number, otherId: number) {
     error.value = ""
     api.refresh()
   } else {
-    error.value = catError(result.errors?.category, "Could not reorder")
+    error.value = catError(result.errors?.category, result.errors?.detail, "Could not reorder")
   }
 }
 </script>
@@ -77,12 +94,13 @@ async function reorder(id: number, otherId: number) {
     >
       <span class="swatch" :style="{ background: categoryPalette[category.color_id] }" />
       <input
-        :value="category.label"
+        :value="drafts[category.id]?.label ?? category.label"
+        @input="drafts[category.id].label = ($event.target as HTMLInputElement).value"
         @change="update(category.id, { label: ($event.target as HTMLInputElement).value })"
       />
       <select
-        :value="category.color_id"
-        @change="update(category.id, { color_id: ($event.target as HTMLSelectElement).value })"
+        :value="drafts[category.id]?.color_id ?? category.color_id"
+        @change="drafts[category.id].color_id = ($event.target as HTMLSelectElement).value; update(category.id, { color_id: ($event.target as HTMLSelectElement).value })"
       >
         <option v-for="(_, id) in categoryPalette" :key="id" :value="id">{{ id }}</option>
       </select>

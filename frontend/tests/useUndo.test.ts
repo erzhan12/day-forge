@@ -6,7 +6,10 @@ import type { TimeBlock, UndoAction } from "../src/types"
 const mockRestoreBlocks = vi.fn()
 vi.mock("../src/composables/useSchedule", () => ({
   useSchedule: () => ({
-    restoreBlocks: mockRestoreBlocks,
+    restoreBlocks: async (date: string, blocks: TimeBlock[], expectedRevision: number) => {
+      const result = await mockRestoreBlocks(date, blocks, expectedRevision)
+      return result.ok && !result.mutation ? { ...result, mutation: { expectedRevision: expectedRevision + 1 } } : result
+    },
   }),
 }))
 
@@ -33,8 +36,12 @@ function makeBlock(overrides: Partial<TimeBlock> = {}): TimeBlock {
   }
 }
 
+let actionRevision = 0
 function makeAction(overrides: Partial<UndoAction> = {}): UndoAction {
+  const previous_revision = actionRevision++
   return {
+    expected_revision: previous_revision + 1,
+    previous_revision,
     description: "Test action",
     type: "edit",
     previousBlocks: [makeBlock()],
@@ -73,6 +80,7 @@ function mountUndo(
 describe("useUndo", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    actionRevision = 0
     vi.useFakeTimers()
   })
 
@@ -162,7 +170,7 @@ describe("useUndo", () => {
   })
 
   it("performUndo keeps action on failure", async () => {
-    mockRestoreBlocks.mockResolvedValue({ ok: false, errors: { detail: "fail" } })
+    mockRestoreBlocks.mockResolvedValue({ ok: false, status: 400, errors: { detail: "fail" } })
     const { undo } = mountUndo()
     undo.pushUndo(makeAction({ description: "action" }))
 
@@ -170,6 +178,30 @@ describe("useUndo", () => {
 
     expect(undo.undoStack.value).toHaveLength(1)
     expect(undo.currentToast.value?.description).toMatch(/failed/i)
+  })
+
+  it("keeps authenticated provenance with each historical block through consecutive Undo", async () => {
+    mockRestoreBlocks.mockResolvedValue({ ok: true })
+    const blocks = [makeBlock({ id: 41, title: "Calendar appointment", restore_proof: "first-signed-proof" })]
+    const { undo } = mountUndo(blocks)
+    const firstSnapshot = undo.snapshotBlocks()
+    undo.pushUndo(makeAction({ previousBlocks: firstSnapshot }))
+
+    blocks[0] = makeBlock({ id: 52, title: "Calendar appointment", restore_proof: "second-signed-proof" })
+    const secondSnapshot = undo.snapshotBlocks()
+    undo.pushUndo(makeAction({ previousBlocks: secondSnapshot }))
+    secondSnapshot[0].restore_proof = "changed-after-registration"
+
+    await undo.performUndo()
+    await undo.performUndo()
+
+    expect(mockRestoreBlocks).toHaveBeenNthCalledWith(1, "2026-04-10", [
+      expect.objectContaining({ id: 52, restore_proof: "second-signed-proof", title: "Calendar appointment" }),
+    ], 2)
+    expect(mockRestoreBlocks).toHaveBeenNthCalledWith(2, "2026-04-10", [
+      expect.objectContaining({ id: 41, restore_proof: "first-signed-proof", title: "Calendar appointment" }),
+    ], 3)
+    expect(undo.undoStack.value).toHaveLength(0)
   })
 
   it("performUndo on empty stack shows 'Nothing to undo' toast", async () => {
@@ -276,14 +308,16 @@ describe("useUndo", () => {
 
     expect(mockRestoreBlocks).toHaveBeenCalledWith("2026-04-10", [
       {
+        id: 5,
         title: "Meeting",
         start_time: "09:00",
         end_time: "10:00",
         category: "personal",
         is_completed: false,
         sort_order: 0,
+        restore_proof: undefined,
       },
-    ])
+    ], expect.any(Number))
   })
 
   it("performUndo is a no-op when top action targets a different date", async () => {
@@ -324,7 +358,7 @@ describe("useUndo", () => {
 
     currentDate.value = "2026-04-10"
     await undo.performUndo()
-    expect(mockRestoreBlocks).toHaveBeenCalledWith("2026-04-10", [])
+    expect(mockRestoreBlocks).toHaveBeenCalledWith("2026-04-10", [], expect.any(Number))
     expect(undo.undoStack.value).toHaveLength(0)
   })
 
@@ -348,7 +382,7 @@ describe("useUndo", () => {
     // that entry, leaving B's entry intact for when the user returns to B.
     expect(mockRestoreBlocks).toHaveBeenCalledWith("2026-04-10", [
       expect.objectContaining({ title: "A block" }),
-    ])
+    ], expect.any(Number))
     expect(undo.undoStack.value).toHaveLength(1)
     expect(undo.undoStack.value[0].scheduleDate).toBe("2026-04-11")
   })
@@ -376,7 +410,7 @@ describe("useUndo", () => {
 
     // Object-identity lookup removes exactly the intended entry (length 19,
     // not 18) and never touches the wrong one.
-    expect(undo.undoStack.value).toHaveLength(19)
+    expect(undo.undoStack.value).toHaveLength(0)
     expect(undo.undoStack.value).not.toContain(top)
   })
 

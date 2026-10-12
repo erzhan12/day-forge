@@ -1,6 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { ref } from "vue"
-import { useExternalSourcePoll } from "../src/composables/useExternalSourcePoll"
+import { mount, type VueWrapper } from "@vue/test-utils"
+import { nextTick, ref } from "vue"
+import { useExternalSourcePoll, type ExternalSourcePollOptions } from "../src/composables/useExternalSourcePoll"
+
+let wrapper: VueWrapper | null = null
+
+function mountPoller(options: ExternalSourcePollOptions) {
+  wrapper = mount({
+    setup() {
+      useExternalSourcePoll(options)
+      return () => null
+    },
+  })
+  return wrapper
+}
 
 describe("useExternalSourcePoll", () => {
   beforeEach(() => {
@@ -16,6 +29,8 @@ describe("useExternalSourcePoll", () => {
   })
 
   afterEach(() => {
+    wrapper?.unmount()
+    wrapper = null
     vi.useRealTimers()
     vi.restoreAllMocks()
   })
@@ -26,7 +41,7 @@ describe("useExternalSourcePoll", () => {
     const date = ref("2026-06-23")
     const active = ref(true)
 
-    useExternalSourcePoll({ intervalSeconds, date, active, refresh })
+    mountPoller({ intervalSeconds, date, active, refresh })
 
     vi.advanceTimersByTime(60_000)
     expect(refresh).not.toHaveBeenCalled()
@@ -38,7 +53,7 @@ describe("useExternalSourcePoll", () => {
     const date = ref("2026-06-23")
     const active = ref(true)
 
-    useExternalSourcePoll({ intervalSeconds, date, active, refresh })
+    mountPoller({ intervalSeconds, date, active, refresh })
 
     vi.advanceTimersByTime(10_000)
     expect(refresh).toHaveBeenCalledTimes(1)
@@ -56,40 +71,64 @@ describe("useExternalSourcePoll", () => {
     const date = ref("2026-06-23")
     const active = ref(true)
 
-    useExternalSourcePoll({ intervalSeconds, date, active, refresh })
+    mountPoller({ intervalSeconds, date, active, refresh })
 
     vi.advanceTimersByTime(10_000)
     expect(refresh).toHaveBeenCalledTimes(1)
     expect(refresh).toHaveBeenCalledWith("2026-06-23")
   })
 
-  it("stops polling when active becomes false", () => {
+  it("stops polling when active becomes false", async () => {
     const refresh = vi.fn()
     const intervalSeconds = ref(10)
     const date = ref("2026-06-23")
     const active = ref(true)
 
-    useExternalSourcePoll({ intervalSeconds, date, active, refresh })
+    mountPoller({ intervalSeconds, date, active, refresh })
 
     vi.advanceTimersByTime(10_000)
     expect(refresh).toHaveBeenCalledTimes(1)
 
     active.value = false
+    await nextTick()
     vi.advanceTimersByTime(30_000)
     expect(refresh).toHaveBeenCalledTimes(1)
   })
 
-  it("uses the current date after navigation", () => {
+  it("uses the current date after navigation", async () => {
     const refresh = vi.fn()
     const intervalSeconds = ref(10)
     const date = ref("2026-06-23")
     const active = ref(true)
 
-    useExternalSourcePoll({ intervalSeconds, date, active, refresh })
+    mountPoller({ intervalSeconds, date, active, refresh })
 
     date.value = "2026-06-24"
+    await nextTick()
     vi.advanceTimersByTime(10_000)
     expect(refresh).toHaveBeenLastCalledWith("2026-06-24")
+  })
+
+  it("stops timers, visibility refreshes and reactive restarts after unmount", async () => {
+    const refresh = vi.fn()
+    const intervalSeconds = ref(10)
+    const date = ref("2026-06-23")
+    const active = ref(true)
+    const mounted = mountPoller({ intervalSeconds, date, active, refresh })
+
+    vi.advanceTimersByTime(10_000)
+    expect(refresh).toHaveBeenCalledTimes(1)
+    mounted.unmount()
+    wrapper = null
+
+    intervalSeconds.value = 5
+    date.value = "2026-06-24"
+    await nextTick()
+    document.dispatchEvent(new Event("visibilitychange"))
+    vi.advanceTimersByTime(30_000)
+
+    expect(refresh).toHaveBeenCalledTimes(1)
+    expect(vi.getTimerCount()).toBe(0)
   })
 
   it("skips ticks while the document is hidden", () => {
@@ -98,7 +137,7 @@ describe("useExternalSourcePoll", () => {
     const date = ref("2026-06-23")
     const active = ref(true)
 
-    useExternalSourcePoll({ intervalSeconds, date, active, refresh })
+    mountPoller({ intervalSeconds, date, active, refresh })
 
     Object.defineProperty(document, "hidden", {
       configurable: true,
@@ -114,7 +153,7 @@ describe("useExternalSourcePoll", () => {
     const date = ref("2026-06-23")
     const active = ref(true)
 
-    useExternalSourcePoll({ intervalSeconds, date, active, refresh })
+    mountPoller({ intervalSeconds, date, active, refresh })
 
     Object.defineProperty(document, "hidden", {
       configurable: true,

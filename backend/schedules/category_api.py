@@ -1,5 +1,6 @@
-import json
+from functools import wraps
 
+from common.http import parse_json_object
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.db.utils import IntegrityError
@@ -14,8 +15,9 @@ from schedules.categories import (
     swap_categories,
     update_category,
 )
-from schedules.http import parse_swap_body, reject_oversized_body
+from schedules.http import parse_swap_body
 from schedules.models import Category
+from schedules.mutations import ScheduleChanged, schedule_changed_response
 from schedules.ratelimit import (
     category_mutation_rate_limit_key,
     consume_rate_limit,
@@ -27,6 +29,17 @@ def _error(message, status=400):
     return JsonResponse({"errors": {"category": message}}, status=status)
 
 
+def _conflict_response(view):
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        try:
+            return view(*args, **kwargs)
+        except ScheduleChanged as exc:
+            return schedule_changed_response(exc)
+
+    return wrapped
+
+
 def _rate_limited(request):
     """Return a 429 response if this user's category-mutation budget is spent, else None."""
     key = category_mutation_rate_limit_key(request.user.id)
@@ -35,23 +48,9 @@ def _rate_limited(request):
     return None
 
 
-def _body(request):
-    oversized = reject_oversized_body(request)
-    if oversized:
-        return None, oversized
-    try:
-        data = json.loads(request.body)
-    except json.JSONDecodeError:
-        return None, JsonResponse({"errors": {"body": "Invalid JSON."}}, status=400)
-    if not isinstance(data, dict):
-        return None, JsonResponse(
-            {"errors": {"body": "Request body must be a JSON object."}}, status=400
-        )
-    return data, None
-
-
 @login_required
 @require_http_methods(["GET", "POST"])
+@_conflict_response
 def categories_collection(request):
     if request.method == "GET":
         return JsonResponse(
@@ -60,7 +59,7 @@ def categories_collection(request):
     limited = _rate_limited(request)
     if limited:
         return limited
-    data, err = _body(request)
+    data, err = parse_json_object(request)
     if err:
         return err
     try:
@@ -72,6 +71,7 @@ def categories_collection(request):
 
 @login_required
 @require_http_methods(["PATCH", "DELETE"])
+@_conflict_response
 def category_detail(request, pk):
     limited = _rate_limited(request)
     if limited:
@@ -90,7 +90,7 @@ def category_detail(request, pk):
         except ValueError as exc:
             return _error(str(exc))
         return JsonResponse({"ok": True})
-    data, err = _body(request)
+    data, err = parse_json_object(request)
     if err:
         return err
     try:
@@ -108,6 +108,7 @@ def category_detail(request, pk):
 
 @login_required
 @require_http_methods(["POST"])
+@_conflict_response
 def categories_swap(request):
     limited = _rate_limited(request)
     if limited:

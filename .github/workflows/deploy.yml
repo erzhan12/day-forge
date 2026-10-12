@@ -19,82 +19,12 @@ env:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-
-      # Security invariant (issue #194): the deploy job must never regress the
-      # SSH host-key pin. The regex anchors on a command position so this step's
-      # own prose/echoes that name the forbidden tool don't self-trip. A swap to
-      # a non-strict option (e.g. accept-new) is caught by the strict==total gate
-      # below, since it drops the strict count. This runs in the `test` job on
-      # every push to main and workflow_dispatch (the Deploy workflow does not
-      # trigger on pull_request); a failure blocks the whole build/push/deploy
-      # chain. Pre-merge (PR-time) enforcement is a deferred follow-up.
-      - name: Verify deploy SSH host-key pinning invariant
-        run: |
-          f=.github/workflows/deploy.yml
-          if grep -Eq '^[[:space:]]*(run:[[:space:]]+)?ssh-keyscan[[:space:]]' "$f"; then
-            echo "::error::deploy.yml reintroduced a runtime ssh-keyscan (TOFU)"; exit 1
-          fi
-          total=$(grep -cE '^[[:space:]]+(ssh|scp)[[:space:]]' "$f" || true)
-          strict=$(grep -cE '^[[:space:]]+(ssh|scp)[[:space:]].*StrictHostKeyChecking=yes.*UserKnownHostsFile=\$HOME/\.ssh/known_hosts' "$f" || true)
-          echo "ssh/scp invocations: ${total:-0}; strict+pinned: ${strict:-0}"
-          if [ "${strict:-0}" -ne "${total:-0}" ] || [ "${total:-0}" -eq 0 ]; then
-            echo "::error::not every ssh/scp carries StrictHostKeyChecking=yes + UserKnownHostsFile"; exit 1
-          fi
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884  # v10.3.0
-
-      - name: Set up Python
-        run: uv python install 3.14
-
-      - name: Install backend deps
-        run: uv sync --frozen
-
-      # Backend lint gate (issue #137): identical command to README's
-      # documented backend lint. Placed before pytest so a lint failure
-      # fails the job fast and gates the whole downstream build/push/deploy
-      # chain (build-and-push needs: test).
-      - name: Run backend lint
-        run: uv run ruff check backend/
-
-      - name: Run backend tests
-        # AI rate-limit tests assume LocMemCache (conftest pins it); leave
-        # LLM_API_KEY unset so ai.E001 does not require Redis in CI.
-        run: uv run pytest backend/tests/ -q
-
-      - name: Test deployment image retention
-        run: bash deployment/tests/test_image_retention.sh
-
-      - name: Set up Node
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1  # v7.1.0
-        with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install frontend deps
-        working-directory: frontend
-        run: npm ci --no-audit --no-fund
-
-      # Fail-closed security gate: blocks the deploy if any high/critical
-      # advisory hits the prod dependency graph (see docs/features/0102_REVIEW.md).
-      # EMERGENCY BYPASS (backend-only hotfix blocked by an unresolvable frontend
-      # advisory): trigger a manual `workflow_dispatch` run with skip_prod_audit=true.
-      # This leaves an audit trail in the Actions history and re-engages the gate
-      # automatically on the next push. Then open a follow-up to patch the dep.
-      - name: Frontend prod audit
-        if: ${{ !inputs.skip_prod_audit }}
-        working-directory: frontend
-        run: npm audit --omit=dev --audit-level=high
-
-      - name: Frontend type-check + tests
-        working-directory: frontend
-        run: |
-          npm run type-check
-          npm test
+    # Reuse exactly the same validation sequence for PRs and deployment.
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+    with:
+      skip_prod_audit: ${{ github.event_name == 'workflow_dispatch' && inputs.skip_prod_audit || false }}
 
   build-and-push:
     needs: test

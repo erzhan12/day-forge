@@ -10,13 +10,14 @@ catch ``IntegrityError`` to surface a structured 409 instead of a 500.
 """
 
 import datetime
-import json
 import logging
 from collections.abc import Iterable
+from functools import wraps
 
+from common.http import parse_json_object
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError
 from django.db.models import Max
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
@@ -25,11 +26,11 @@ from schedules.http import (
     is_plain_int,
     parse_swap_body,
     parse_time_or_error,
-    reject_oversized_body,
     swap_ordering_field,
     validate_five_minute_or_error,
     validate_time_range,
 )
+from schedules.mutations import ScheduleChanged, run_user_maintenance, schedule_changed_response
 from schedules.window import DEFAULT_WINDOW, ScheduleWindow, get_schedule_window
 
 from templates_mgr.models import Rule, Template, UserPreferences
@@ -55,6 +56,17 @@ MAX_RULES_PER_USER = 100
 # exists purely to fail fast at the API boundary.
 MIN_PRIORITY = -1_000_000
 MAX_PRIORITY = 1_000_000
+
+
+def _policy_conflicts(view):
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        try:
+            return view(*args, **kwargs)
+        except ScheduleChanged as exc:
+            return schedule_changed_response(exc)
+
+    return wrapped
 
 
 def _err(field: str, message: str, status: int = 400) -> JsonResponse:
@@ -257,45 +269,39 @@ def _parse_rule_patch_payload(data) -> tuple[dict, JsonResponse | None]:
 
 @login_required
 @require_http_methods(["GET", "POST"])
+@_policy_conflicts
 def templates_collection(request):
     if request.method == "GET":
         items = Template.objects.filter(user=request.user).order_by("type")
         return JsonResponse({"templates": [_template_to_dict(t) for t in items]})
 
-    oversized = reject_oversized_body(request)
-    if oversized is not None:
-        return oversized
-
-    try:
-        data = json.loads(request.body)
-    except json.JSONDecodeError:
-        return _err("body", "Invalid JSON.")
-
-    categories = ordered_categories(request.user)
-    cleaned, err = _parse_template_payload(
-        data, get_schedule_window(request.user), categories=categories
-    )
+    data, err = parse_json_object(request)
     if err is not None:
         return err
 
+    def create_template(locked_user):
+        cleaned, error = _parse_template_payload(
+            data, get_schedule_window(locked_user), categories=ordered_categories(locked_user)
+        )
+        if error is not None:
+            return error
+        return Template.objects.create(user=locked_user, **cleaned)
+
     try:
-        with transaction.atomic():
-            # No in-transaction category re-validation: _parse_template_payload
-            # already validated the blocks against the same categories. The
-            # blocks JSON field has no FK, so a category deleted in the tiny
-            # window before this write leaves a stale slug that folds to the
-            # sink on read (display-only) — not worth an extra guarded query.
-            tpl = Template.objects.create(user=request.user, **cleaned)
+        tpl = run_user_maintenance(request.user.pk, create_template)
     except IntegrityError:
         return JsonResponse(
-            {"errors": {"type": (f"Template for this {cleaned['type']} slot already exists.")}},
+            {"errors": {"type": f"Template for this {data.get('type')} slot already exists."}},
             status=409,
         )
+    if isinstance(tpl, JsonResponse):
+        return tpl
     return JsonResponse(_template_to_dict(tpl), status=201)
 
 
 @login_required
 @require_http_methods(["PUT", "DELETE"])
+@_policy_conflicts
 def template_detail(request, pk):
     try:
         tpl = Template.objects.get(pk=pk, user=request.user)
@@ -304,39 +310,39 @@ def template_detail(request, pk):
         return JsonResponse({"errors": {"detail": "Not found."}}, status=404)
 
     if request.method == "DELETE":
-        tpl.delete()
+        run_user_maintenance(
+            request.user.pk, lambda user: Template.objects.filter(pk=pk, user=user).delete()
+        )
         return JsonResponse({"ok": True})
 
-    oversized = reject_oversized_body(request)
-    if oversized is not None:
-        return oversized
-
-    try:
-        data = json.loads(request.body)
-    except json.JSONDecodeError:
-        return _err("body", "Invalid JSON.")
-
-    categories = ordered_categories(request.user)
-    cleaned, err = _parse_template_payload(
-        data, get_schedule_window(request.user), categories=categories
-    )
+    data, err = parse_json_object(request)
     if err is not None:
         return err
 
+    def update_template(locked_user):
+        cleaned, error = _parse_template_payload(
+            data, get_schedule_window(locked_user), categories=ordered_categories(locked_user)
+        )
+        if error is not None:
+            return error
+        try:
+            locked = Template.objects.get(pk=pk, user=locked_user)
+        except Template.DoesNotExist:
+            return JsonResponse({"errors": {"detail": "Not found."}}, status=404)
+        for field, value in cleaned.items():
+            setattr(locked, field, value)
+        locked.save(update_fields=list(cleaned))
+        return locked
+
     try:
-        with transaction.atomic():
-            # See templates_collection: upfront validation is sufficient; no
-            # in-transaction category re-check (blocks JSON has no FK; a raced
-            # delete folds to the sink on read).
-            tpl.name = cleaned["name"]
-            tpl.type = cleaned["type"]
-            tpl.blocks = cleaned["blocks"]
-            tpl.save()
+        tpl = run_user_maintenance(request.user.pk, update_template)
     except IntegrityError:
         return JsonResponse(
-            {"errors": {"type": (f"Template for this {cleaned['type']} slot already exists.")}},
+            {"errors": {"type": f"Template for this {data.get('type')} slot already exists."}},
             status=409,
         )
+    if isinstance(tpl, JsonResponse):
+        return tpl
     return JsonResponse(_template_to_dict(tpl))
 
 
@@ -364,33 +370,30 @@ def _compact_rule_priorities(user: User) -> None:
 
 @login_required
 @require_http_methods(["GET", "POST"])
+@_policy_conflicts
 def rules_collection(request):
     if request.method == "GET":
         items = Rule.objects.filter(user=request.user).order_by("-priority", "id")
         return JsonResponse({"rules": [_rule_to_dict(r) for r in items]})
 
-    oversized = reject_oversized_body(request)
-    if oversized is not None:
-        return oversized
-
-    try:
-        data = json.loads(request.body)
-    except json.JSONDecodeError:
-        return _err("body", "Invalid JSON.")
+    data, err = parse_json_object(request)
+    if err is not None:
+        return err
 
     cleaned, err = _parse_rule_create_payload(data)
     if err is not None:
         return err
 
-    with transaction.atomic():
-        User.objects.select_for_update().get(pk=request.user.pk)
+    explicit_priority = "priority" in cleaned
+
+    def create_rule(locked_user):
         if Rule.objects.filter(user=request.user).count() >= MAX_RULES_PER_USER:
             return _err(
                 "rules",
                 f"You have reached the maximum of {MAX_RULES_PER_USER} rules.",
                 status=400,
             )
-        if "priority" not in cleaned:
+        if not explicit_priority:
             # Default the new rule to the top of the list. The +1 is
             # load-bearing: it sorts the new row first under `-priority`
             # so the immediately-following _compact_rule_priorities()
@@ -405,18 +408,26 @@ def rules_collection(request):
         # priority — an explicit out-of-range value is compacted too.
         _compact_rule_priorities(request.user)
         rule.refresh_from_db(fields=["priority"])
+        return rule
+
+    rule = run_user_maintenance(request.user.pk, create_rule)
+    if isinstance(rule, JsonResponse):
+        return rule
     return JsonResponse(_rule_to_dict(rule), status=201)
 
 
 @login_required
 @require_http_methods(["POST"])
+@_policy_conflicts
 def rules_swap(request):
     parsed = parse_swap_body(request, noun="rule")
     if isinstance(parsed, JsonResponse):
         return parsed
     id_a, id_b = parsed
 
-    swapped = swap_ordering_field(request.user, Rule, "priority", id_a, id_b)
+    swapped = run_user_maintenance(
+        request.user.pk, lambda user: swap_ordering_field(user, Rule, "priority", id_a, id_b)
+    )
     if swapped is None:
         return JsonResponse({"errors": {"detail": "Not found."}}, status=404)
     return JsonResponse({"rules": [_rule_to_dict(rule) for rule in swapped]})
@@ -424,41 +435,43 @@ def rules_swap(request):
 
 @login_required
 @require_http_methods(["PATCH", "DELETE"])
+@_policy_conflicts
 def rule_detail(request, pk):
     if request.method == "DELETE":
-        with transaction.atomic():
-            User.objects.select_for_update().get(pk=request.user.pk)
+
+        def delete_rule(locked_user):
             try:
-                rule = Rule.objects.get(pk=pk, user=request.user)
+                rule = Rule.objects.get(pk=pk, user=locked_user)
             except Rule.DoesNotExist:
                 return JsonResponse({"errors": {"detail": "Not found."}}, status=404)
             rule.delete()
-            _compact_rule_priorities(request.user)
-        return JsonResponse({"ok": True})
+            _compact_rule_priorities(locked_user)
+            return JsonResponse({"ok": True})
 
-    oversized = reject_oversized_body(request)
-    if oversized is not None:
-        return oversized
+        return run_user_maintenance(request.user.pk, delete_rule)
 
-    try:
-        data = json.loads(request.body)
-    except json.JSONDecodeError:
-        return _err("body", "Invalid JSON.")
+    data, err = parse_json_object(request)
+    if err is not None:
+        return err
 
     cleaned, err = _parse_rule_patch_payload(data)
     if err is not None:
         return err
 
-    with transaction.atomic():
-        User.objects.select_for_update().get(pk=request.user.pk)
+    def update_rule(locked_user):
         try:
-            rule = Rule.objects.get(pk=pk, user=request.user)
+            rule = Rule.objects.get(pk=pk, user=locked_user)
         except Rule.DoesNotExist:
             return JsonResponse({"errors": {"detail": "Not found."}}, status=404)
 
         for field, value in cleaned.items():
             setattr(rule, field, value)
         rule.save(update_fields=list(cleaned.keys()))
+        return rule
+
+    rule = run_user_maintenance(request.user.pk, update_rule)
+    if isinstance(rule, JsonResponse):
+        return rule
     return JsonResponse(_rule_to_dict(rule))
 
 
@@ -511,22 +524,9 @@ def user_preferences(request):
         prefs = get_user_preferences(request.user)
         return _prefs_response(ui_preferences_payload(prefs))
 
-    oversized = reject_oversized_body(request)
-    if oversized is not None:
-        # ``reject_oversized_body`` returns a raw 413 JsonResponse; rebuild
-        # it through the cache-header helper so the proxy invariant holds.
-        return _prefs_response({"errors": {"body": "Request body too large."}}, status=413)
-
-    try:
-        data = json.loads(request.body)
-    except json.JSONDecodeError:
-        return _prefs_response({"errors": {"body": "Invalid JSON."}}, status=400)
-
-    if not isinstance(data, dict):
-        return _prefs_response(
-            {"errors": {"body": "Request body must be a JSON object."}},
-            status=400,
-        )
+    data, err = parse_json_object(request, response_factory=_prefs_response)
+    if err is not None:
+        return err
 
     # Extract recognized fields only (matches the existing PATCH pattern
     # in ``rule_detail``). Unknown keys are silently ignored.

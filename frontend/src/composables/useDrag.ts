@@ -1,6 +1,7 @@
-import { ref } from "vue"
+import { getCurrentScope, onScopeDispose, ref, watch } from "vue"
 import type { TimeBlock, UndoAction } from "../types"
 import type { ApiResult } from "./useSchedule"
+import { registerMutationUndo } from "./useMutationUndo"
 import { type DateSource, readDate } from "../utils/dateSource"
 import {
   DAY_START_MINUTES,
@@ -286,6 +287,7 @@ export function useDrag(
   // the long-standing positional API.
   getPxPerMinute?: () => number,
   getTimelineOriginMinutes?: () => number | null,
+  getDragContextKey?: () => string,
 ) {
   const isDragging = ref(false)
   const frozenRenderBounds = ref<RenderBounds | null>(null)
@@ -297,6 +299,7 @@ export function useDrag(
   const frozenNowMinutes = ref<number | null>(null)
   const frozenPxPerMinute = ref(PX_PER_MINUTE)
   const frozenTimelineOriginMinutes = ref<number | null>(null)
+  const frozenWindow = ref<ScheduleWindowBounds | null>(null)
   const dragBlockId = ref<number | null>(null)
   const ghostTop = ref(0)
   const previewStartTime = ref("")
@@ -316,9 +319,33 @@ export function useDrag(
   let dropValid = true
   let rafId = 0
   let pointerId = -1
+  let dragContextSignature = ""
+  let containerWidth = 0
+  let resizeObserver: ResizeObserver | null = null
+
+  function currentContextSignature(): string {
+    const window = getWindow?.() ?? DEFAULT_SCHEDULE_WINDOW
+    return [
+      readDate(date), window.start, window.end, window.startMinutes,
+      window.endMinutes, getPxPerMinute?.() ?? PX_PER_MINUTE,
+      getDragContextKey?.() ?? "",
+    ].join("|")
+  }
+
+  watch(currentContextSignature, (signature) => {
+    if (isDragging.value && signature !== dragContextSignature) cancelDrag()
+  }, { flush: "sync" })
+
+  function onViewportResize() {
+    if (isDragging.value) cancelDrag()
+  }
 
   function onPointerMove(e: PointerEvent) {
     if (!isDragging.value || !containerEl) return
+    if (currentContextSignature() !== dragContextSignature) {
+      cancelDrag()
+      return
+    }
     cancelAnimationFrame(rafId)
     rafId = requestAnimationFrame(() => updatePreview(e))
   }
@@ -349,10 +376,8 @@ export function useDrag(
     // rounds UP so a clamped start stays both in-view and on-grid; the
     // day-end clamp is on-grid by construction (DAY_END and the rounded
     // duration are both snap multiples).
-    const dayStartMinutes =
-      getWindow?.().startMinutes ?? DEFAULT_SCHEDULE_WINDOW.startMinutes
-    const dayEndMinutes =
-      getWindow?.().endMinutes ?? DEFAULT_SCHEDULE_WINDOW.endMinutes
+    const dayStartMinutes = frozenWindow.value?.startMinutes ?? DEFAULT_SCHEDULE_WINDOW.startMinutes
+    const dayEndMinutes = frozenWindow.value?.endMinutes ?? DEFAULT_SCHEDULE_WINDOW.endMinutes
 
     let newStart =
       Math.round((axisOrigin + minuteOffset) / SNAP_MINUTES) * SNAP_MINUTES
@@ -462,6 +487,8 @@ export function useDrag(
     // would commit a different time from the shown ghost.
     frozenPxPerMinute.value = getPxPerMinute?.() ?? PX_PER_MINUTE
     frozenTimelineOriginMinutes.value = getTimelineOriginMinutes?.() ?? null
+    frozenWindow.value = { ...(getWindow?.() ?? DEFAULT_SCHEDULE_WINDOW) }
+    dragContextSignature = currentContextSignature()
     const renderStart = frozenRenderBounds.value.renderStart
     const axisOrigin = frozenTimelineOriginMinutes.value ?? renderStart
 
@@ -494,11 +521,24 @@ export function useDrag(
     container.addEventListener("pointermove", onPointerMove)
     container.addEventListener("pointerup", onPointerUp)
     document.addEventListener("keydown", onKeydown)
+    window.addEventListener("resize", onViewportResize)
+    containerWidth = container.getBoundingClientRect().width
+    if (typeof ResizeObserver !== "undefined") {
+      resizeObserver = new ResizeObserver(() => {
+        if (isDragging.value && containerEl &&
+            containerEl.getBoundingClientRect().width !== containerWidth) cancelDrag()
+      })
+      resizeObserver.observe(container)
+    }
     document.body.classList.add("is-dragging")
   }
 
   async function endDrag() {
     if (!isDragging.value || !originalBlock) return
+    if (currentContextSignature() !== dragContextSignature) {
+      cancelDrag()
+      return
+    }
     cleanup()
 
     if (!dropValid || previewBlocks.value.length === 0) {
@@ -506,23 +546,8 @@ export function useDrag(
       return
     }
 
-    // Snapshot module-scoped drag state into local constants BEFORE
-    // resetState() so the in-flight undo action stays correctly bound to
-    // *this* drag's pre-drag blocks. Two reasons:
-    //
-    //   1. resetState() clears `snapshot` to []. Without the local
-    //      capture, the `pushUndo({ previousBlocks: snapshot })` below
-    //      would always push an empty array, and undoing a drag would
-    //      then restore the day with zero blocks (i.e. delete everything).
-    //   2. Even if (1) were fixed by reading `snapshot` before reset,
-    //      the await on `reorderBlocks` opens a window in which a
-    //      second `startDrag()` can overwrite the module-scoped snapshot
-    //      before this drag's `pushUndo` runs — so the first drag's
-    //      undo would get the second drag's snapshot.
-    //   3. `cleanup()` above has already released the pointer, so the
-    //      user can navigate dates during `await reorderBlocks` — the
-    //      undo's `scheduleDate` must stay bound to the day the drag
-    //      actually mutated, not the day the user has navigated to.
+    // Keep the gesture snapshot for geometry validation after resetState.
+    // Undo uses the controller's snapshot taken at mutation acceptance.
     const savedSnapshot = snapshot
     const savedScheduleDate = snapshotDate
     const draggedId = originalBlock.id
@@ -533,7 +558,8 @@ export function useDrag(
     // landed while the pointer was down — otherwise the reorder payload
     // would clobber those changes. Silent abort matches cancelDrag();
     // user feedback deferred — see tasks/todo.md § "Drag / Undo".
-    if (blocksExternallyMutated(savedSnapshot, getCurrentBlocks(), draggedId)) {
+    if (readDate(date) !== savedScheduleDate || isDisabled?.() ||
+        blocksExternallyMutated(savedSnapshot, getCurrentBlocks(), draggedId)) {
       resetState()
       return
     }
@@ -571,11 +597,9 @@ export function useDrag(
 
     const result = await reorderBlocks(updates)
     if (result.ok) {
-      pushUndo({
+      registerMutationUndo(result, pushUndo, {
         description: `Moved "${title}" to ${targetTime}`,
         type: "drag",
-        previousBlocks: savedSnapshot,
-        scheduleDate: savedScheduleDate,
         silent: true,
       })
     }
@@ -608,6 +632,9 @@ export function useDrag(
       containerEl.removeEventListener("pointerup", onPointerUp)
     }
     document.removeEventListener("keydown", onKeydown)
+    window.removeEventListener("resize", onViewportResize)
+    resizeObserver?.disconnect()
+    resizeObserver = null
     document.body.classList.remove("is-dragging")
   }
 
@@ -617,6 +644,7 @@ export function useDrag(
     frozenNowMinutes.value = null
     frozenPxPerMinute.value = PX_PER_MINUTE
     frozenTimelineOriginMinutes.value = null
+    frozenWindow.value = null
     dragBlockId.value = null
     ghostTop.value = 0
     previewStartTime.value = ""
@@ -631,7 +659,15 @@ export function useDrag(
     snapshot = []
     snapshotDate = ""
     dropValid = true
+    dragContextSignature = ""
+    containerWidth = 0
   }
+
+  // A page swap can remove the schedule container while the pointer is held.
+  // Release capture and listeners before the component's effect scope ends.
+  if (getCurrentScope()) onScopeDispose(() => {
+    if (isDragging.value) cancelDrag()
+  })
 
   return {
     isDragging,
@@ -639,6 +675,7 @@ export function useDrag(
     frozenNowMinutes,
     frozenPxPerMinute,
     frozenTimelineOriginMinutes,
+    frozenWindow,
     dragBlockId,
     ghostTop,
     previewStartTime,

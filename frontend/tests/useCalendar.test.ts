@@ -111,6 +111,7 @@ describe("useCalendar.fetchEvents", () => {
     requestJsonMock.mockResolvedValueOnce({
       ok: false,
       status: 503,
+      data: { meta: { account_state: "disconnected", resource_state: "unavailable" } },
       errors: { detail: "No CalDAV account configured" },
     })
     const calendar = useCalendar()
@@ -124,6 +125,7 @@ describe("useCalendar.fetchEvents", () => {
     requestJsonMock.mockResolvedValueOnce({
       ok: false,
       status: 401,
+      data: { meta: { account_state: "connected", resource_state: "credentials_error" } },
       errors: { detail: "Invalid Apple Calendar credentials" },
     })
     const calendar = useCalendar()

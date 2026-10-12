@@ -1,4 +1,4 @@
-"""Shared synchronous fixed-window rate limiting utilities."""
+"""Shared fixed-window counters for AI, connections, and category mutations."""
 
 import logging
 
@@ -21,6 +21,10 @@ def consume_rate_limit(key: str, limit: int) -> bool:
     and ``incr``, callers race to re-seed with ``add``: one establishes the
     new shared window and the others retry ``incr`` against it. Repeated
     eviction has a bounded retry budget and fails closed.
+
+    Async callers bridge this function with ``sync_to_async``. Django's
+    Redis backend implements atomic synchronous ``incr``; its inherited
+    ``aincr`` uses read-modify-write and resets the TTL to the default timeout.
     """
     if cache.add(key, 1, RATE_LIMIT_WINDOW_SECONDS):
         count = 1
@@ -54,8 +58,7 @@ def consume_rate_limit(key: str, limit: int) -> bool:
                     # could join its shared counter. Try to re-seed again.
                     continue
             else:
-                # Do not permit credential-verification attempts when the
-                # counter cannot be established reliably.
+                # Reject the request if a reliable counter cannot be established.
                 return False
 
     if count > limit:

@@ -1,7 +1,9 @@
 import datetime
 import json
+from unittest.mock import Mock
 
 import pytest
+from django.contrib.auth.hashers import identify_hasher
 from django.contrib.auth.models import User
 from schedules.models import Schedule, TimeBlock
 
@@ -24,6 +26,7 @@ class TestRootRedirect:
         assert "/schedule/" in resp.url
 
 
+@pytest.mark.usefixtures("production_password_hashers")
 class TestLoginView:
     def test_get_returns_200(self, client):
         resp = client.get("/accounts/login/")
@@ -31,20 +34,38 @@ class TestLoginView:
 
     @pytest.mark.django_db
     def test_post_valid_credentials(self, client, user):
+        assert identify_hasher(user.password).algorithm == "pbkdf2_sha256"
         resp = client.post(
             "/accounts/login/",
             {"username": "testuser", "password": "testpass123"},
         )
         assert resp.status_code == 302
         assert "/schedule/" in resp.url
+        assert client.session["_auth_user_id"] == str(user.pk)
+
+    @pytest.mark.django_db
+    def test_post_valid_json_credentials(self, client, user):
+        assert identify_hasher(user.password).algorithm == "pbkdf2_sha256"
+        resp = client.post(
+            "/accounts/login/",
+            json.dumps({"username": "testuser", "password": "testpass123"}),
+            content_type="application/json",
+            HTTP_X_INERTIA="true",
+        )
+        assert resp.status_code == 302
+        assert "/schedule/" in resp.url
+        assert client.session["_auth_user_id"] == str(user.pk)
 
     @pytest.mark.django_db
     def test_post_invalid_credentials(self, client, user):
         resp = client.post(
             "/accounts/login/",
             {"username": "testuser", "password": "wrong"},
+            HTTP_X_INERTIA="true",
         )
         assert resp.status_code == 200
+        assert resp.json()["props"]["errors"] == {"non_field": "Invalid credentials"}
+        assert "_auth_user_id" not in client.session
 
     @pytest.mark.django_db
     def test_authenticated_user_redirected(self, auth_client):
@@ -70,6 +91,99 @@ class TestLoginView:
         )
         assert resp.status_code == 302
         assert "/schedule/" in resp.url
+
+
+@pytest.mark.django_db
+class TestLoginInputValidation:
+    @pytest.mark.parametrize("body", [None, [], 42, 1.5, "credentials", True])
+    def test_non_object_json_rejected_before_authentication(self, client, monkeypatch, body):
+        authenticate = Mock(return_value=None)
+        monkeypatch.setattr("schedules.views.authenticate", authenticate)
+
+        resp = client.post(
+            "/accounts/login/",
+            json.dumps(body),
+            content_type="application/json",
+            HTTP_X_INERTIA="true",
+        )
+
+        assert resp.status_code == 200
+        assert resp.json()["component"] == "Login"
+        assert resp.json()["props"]["errors"] == {"non_field": "Invalid request body."}
+        assert "_auth_user_id" not in client.session
+        authenticate.assert_not_called()
+
+    @pytest.mark.parametrize("field", ["username", "password"])
+    @pytest.mark.parametrize("value", [None, [], {}, 42, 1.5, True])
+    def test_non_string_credentials_rejected_before_authentication(
+        self, client, monkeypatch, field, value
+    ):
+        authenticate = Mock(return_value=None)
+        monkeypatch.setattr("schedules.views.authenticate", authenticate)
+        body = {"username": "testuser", "password": "testpass123", field: value}
+
+        resp = client.post(
+            "/accounts/login/",
+            json.dumps(body),
+            content_type="application/json",
+            HTTP_X_INERTIA="true",
+        )
+
+        assert resp.status_code == 200
+        assert resp.json()["component"] == "Login"
+        assert resp.json()["props"]["errors"] == {"non_field": "Invalid request body."}
+        assert "_auth_user_id" not in client.session
+        authenticate.assert_not_called()
+
+    @pytest.mark.parametrize("body", ["{", b"\xff"])
+    def test_invalid_json_retains_login_error(self, client, monkeypatch, body):
+        authenticate = Mock(return_value=None)
+        monkeypatch.setattr("schedules.views.authenticate", authenticate)
+
+        resp = client.post(
+            "/accounts/login/",
+            body,
+            content_type="application/json",
+            HTTP_X_INERTIA="true",
+        )
+
+        assert resp.status_code == 200
+        assert resp.json()["component"] == "Login"
+        assert resp.json()["props"]["errors"] == {"non_field": "Invalid request body."}
+        assert "_auth_user_id" not in client.session
+        authenticate.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            {},
+            {"username": "testuser"},
+            {"password": "testpass123"},
+            {"username": "", "password": ""},
+        ],
+    )
+    def test_missing_or_empty_strings_retain_invalid_credentials(
+        self, client, monkeypatch, body
+    ):
+        authenticate = Mock(return_value=None)
+        monkeypatch.setattr("schedules.views.authenticate", authenticate)
+
+        resp = client.post(
+            "/accounts/login/",
+            json.dumps(body),
+            content_type="application/json",
+            HTTP_X_INERTIA="true",
+        )
+
+        assert resp.status_code == 200
+        assert resp.json()["component"] == "Login"
+        assert resp.json()["props"]["errors"] == {"non_field": "Invalid credentials"}
+        assert "_auth_user_id" not in client.session
+        authenticate.assert_called_once_with(
+            resp.wsgi_request,
+            username=body.get("username", ""),
+            password=body.get("password", ""),
+        )
 
 
 class TestLogoutView:
@@ -263,6 +377,7 @@ class TestCreateBlock:
             "/api/schedules/2026-04-07/blocks/",
             json.dumps({
                 "title": "CSRF Test",
+                "expected_revision": schedule.revision,
                 "start_time": "14:00",
                 "end_time": "15:00",
             }),
@@ -277,16 +392,16 @@ class TestCreateBlock:
         so it serializes with ``_apply_draft_sync`` on an empty day.
         Overlap-only ``TimeBlock`` locks acquire zero rows when the schedule
         is empty — see ``ai_views_draft.TestApplyLocksScheduleRow``."""
-        original = Schedule.objects.select_for_update
+        from django.db.models import QuerySet
+        original = QuerySet.select_for_update
         called = {"v": False}
 
-        def _spy(*args, **kwargs):
-            called["v"] = True
-            return original(*args, **kwargs)
+        def _spy(query, *args, **kwargs):
+            if query.model is Schedule:
+                called["v"] = True
+            return original(query, *args, **kwargs)
 
-        monkeypatch.setattr(
-            Schedule.objects, "select_for_update", _spy, raising=True
-        )
+        monkeypatch.setattr(QuerySet, "select_for_update", _spy)
         resp = auth_client.post(
             "/api/schedules/2026-04-07/blocks/",
             json.dumps({
@@ -516,7 +631,7 @@ class TestBlockDetail:
 
     @pytest.mark.django_db
     def test_patch_without_csrf_token_rejected(self, csrf_client, user, time_block):
-        csrf_client.login(username="testuser", password="testpass123")
+        csrf_client.force_login(user)
         resp = csrf_client.patch(
             f"/api/blocks/{time_block.pk}/",
             json.dumps({"title": "No CSRF"}),
@@ -526,7 +641,7 @@ class TestBlockDetail:
 
     @pytest.mark.django_db
     def test_delete_without_csrf_token_rejected(self, csrf_client, user, time_block):
-        csrf_client.login(username="testuser", password="testpass123")
+        csrf_client.force_login(user)
         resp = csrf_client.delete(f"/api/blocks/{time_block.pk}/")
         assert resp.status_code == 403
 

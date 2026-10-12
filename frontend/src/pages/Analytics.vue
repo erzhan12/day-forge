@@ -9,8 +9,10 @@ import StreakCounter from "../components/StreakCounter.vue"
 import SkippedTasks from "../components/SkippedTasks.vue"
 import DailyExportDialog from "../components/DailyExportDialog.vue"
 import { useAnalytics } from "../composables/useAnalytics"
-import { parseLocalDate } from "../utils/date"
+import { provideScheduleRevision } from "../composables/useScheduleRevision"
+import { formatCivilDate } from "../utils/date"
 import { useThemeFromProps } from "../composables/useThemeFromProps"
+import { hasValidCategoryCatalog } from "../utils/categories"
 import "../app.css"
 
 useThemeFromProps()
@@ -23,98 +25,113 @@ const props = withDefaults(defineProps<{
   date: string
   schedule_window?: ScheduleSettingsWire
   categories: UserCategory[]
+  auth_user_id?: number | null
 }>(), {
   schedule_window: () => ({ start: "06:00", end: "23:00", time_zone: "UTC" }),
 })
+const categoryCatalogValid = computed(() => hasValidCategoryCatalog(props.categories))
 
-const { isMarkingReviewed, lastError, markReviewed, saveNotes } = useAnalytics()
+const scheduleRevision = provideScheduleRevision(() => props.date, () => props.schedule, { getBlocks: () => props.blocks, getUserId: () => props.auth_user_id })
+const { isMarkingReviewed, lastError, markReviewed, saveNotes } = useAnalytics(scheduleRevision)
 
-const isReviewed = computed(() => props.schedule.status === "reviewed")
+const isReviewed = computed(() => scheduleRevision.schedule.value?.status === "reviewed")
+const hasCurrentReview = computed(() => isReviewed.value
+  && props.review.snapshot_kind === "frozen"
+  && props.review.schedule_id === scheduleRevision.schedule.value?.id
+  && props.review.reviewed_revision === scheduleRevision.revision.value)
+const summaryLabel = computed(() => hasCurrentReview.value ? "Reviewed summary"
+  : props.review.snapshot_kind === "frozen" ? "Summary needs update" : "Current progress")
+const statusLabel = computed(() => {
+  const status = scheduleRevision.schedule.value?.status
+  return status === "reviewed" ? "Reviewed" : status === "draft" ? "Draft" : status === "active" ? "Active" : ""
+})
 const isDailyExportOpen = ref(false)
 
-const formattedDate = computed(() => {
-  const d = parseLocalDate(props.date)
-  return d.toLocaleDateString("en-US", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  })
-})
+const formattedDate = computed(() => formatCivilDate(props.date))
 
-// Notes state — debounced auto-save. The input is uncontrolled in the
-// sense that user keystrokes update ``notesDraft`` immediately; the
-// server PATCH fires only after 1 s of inactivity. When the panel
-// re-renders with a new ``review`` (e.g. after mark-reviewed), we sync
-// the draft with the persisted value.
 const NOTES_DEBOUNCE_MS = 1000
 const notesDraft = ref(props.review.notes)
+const notesEdited = ref(false)
 let saveTimer: ReturnType<typeof setTimeout> | null = null
+let pendingNotes: { date: string; userId?: number; notes: string } | null = null
+
+function cancelPendingNotes() {
+  if (saveTimer) clearTimeout(saveTimer)
+  saveTimer = null
+  pendingNotes = null
+}
+
+function flushPendingNotes() {
+  if (saveTimer) clearTimeout(saveTimer)
+  saveTimer = null
+  const pending = pendingNotes
+  pendingNotes = null
+  if (pending) void saveNotes(pending.date, pending.notes, pending.userId)
+}
 
 watch(
-  () => props.review.id,
-  () => {
-    notesDraft.value = props.review.notes
+  () => [props.date, props.auth_user_id] as const,
+  ([, userId], [, previousUserId]) => {
+    if (userId !== previousUserId) cancelPendingNotes()
+    else flushPendingNotes()
+    notesDraft.value = userId === null ? "" : props.review.notes
+    notesEdited.value = false
   },
 )
 
-function onNotesInput() {
-  if (saveTimer) clearTimeout(saveTimer)
-  saveTimer = setTimeout(() => {
-    saveTimer = null
-    saveNotes(props.review.id, notesDraft.value)
-  }, NOTES_DEBOUNCE_MS)
-}
-
-// Flush a pending PATCH on unmount instead of dropping it — losing a
-// half-typed note because the user navigated < 1s after typing is
-// worse than the alternative. ``saveNotes`` is parameterised by
-// ``review.id``, so the request lands on the correct review even if a
-// new Analytics page mounts immediately afterwards. Inertia is an SPA
-// (no real page unload), so the in-flight fetch completes normally.
-// The ``!==`` guard avoids an idempotent no-op PATCH when the
-// debounce timer was armed by a keystroke that didn't actually change
-// the value.
-onUnmounted(() => {
-  if (saveTimer) {
-    clearTimeout(saveTimer)
-    saveTimer = null
-    if (notesDraft.value !== props.review.notes) {
-      saveNotes(props.review.id, notesDraft.value)
-    }
+watch(() => props.review.notes, (notes) => {
+  if (!notesEdited.value) notesDraft.value = notes
+  else if (notes === notesDraft.value) {
+    notesEdited.value = false
+    cancelPendingNotes()
   }
 })
 
+scheduleRevision.subscribeScopeReset((reason) => {
+  if (reason !== "user" && reason !== "session") return
+  cancelPendingNotes()
+  notesDraft.value = reason === "session" || props.auth_user_id === null ? "" : props.review.notes
+  notesEdited.value = false
+})
+
+function onNotesInput() {
+  if (saveTimer) clearTimeout(saveTimer)
+  notesEdited.value = true
+  pendingNotes = { date: props.date, userId: props.auth_user_id ?? undefined, notes: notesDraft.value }
+  saveTimer = setTimeout(flushPendingNotes, NOTES_DEBOUNCE_MS)
+}
+
+onUnmounted(flushPendingNotes)
+
 async function onMarkReviewed() {
-  // Pass notes only if the user already typed something pre-review;
-  // otherwise the empty body convention takes over and the backend
-  // doesn't write a notes value.
-  const notes = notesDraft.value.trim() ? notesDraft.value : undefined
+  const notes = notesEdited.value ? notesDraft.value : undefined
+  flushPendingNotes()
   await markReviewed(props.date, notes)
 }
 </script>
 
 <template>
-  <div class="analytics-page">
+  <div v-if="categoryCatalogValid" class="analytics-page">
     <TimeZoneMismatchPrompt :time-zone="schedule_window.time_zone" />
     <header class="page-header">
       <Link :href="`/schedule/${date}/`" class="back-link">&larr; Back to schedule</Link>
       <div class="title-row">
         <h1>{{ formattedDate }}</h1>
         <span
+          v-if="scheduleRevision.schedule.value"
           class="status-badge"
           :class="{ 'status-reviewed': isReviewed, 'status-active': !isReviewed }"
         >
-          {{ isReviewed ? "Reviewed" : "Active" }}
+          {{ statusLabel }}
         </span>
         <StreakCounter :streak="streak.current" :threshold="streak.threshold" />
         <button
-          v-if="!isReviewed"
+          v-if="!hasCurrentReview"
           class="mark-reviewed-btn"
-          :disabled="isMarkingReviewed"
+          :disabled="isMarkingReviewed || scheduleRevision.busy.value"
           @click="onMarkReviewed"
         >
-          {{ isMarkingReviewed ? "Saving…" : "Mark reviewed" }}
+          {{ isMarkingReviewed || scheduleRevision.busy.value ? "Saving…" : isReviewed ? "Update reviewed summary" : "Mark reviewed" }}
         </button>
         <button type="button" class="daily-export-btn" @click="isDailyExportOpen = true">
           Daily export
@@ -126,10 +143,11 @@ async function onMarkReviewed() {
     <DailyExportDialog
       v-if="isDailyExportOpen"
       :date="props.date"
-      :blocks="props.blocks"
+      :blocks="scheduleRevision.blocks.value"
       @close="isDailyExportOpen = false"
     />
 
+    <p class="summary-label">{{ summaryLabel }}</p>
     <div class="panels">
       <CompletionBar
         :completed="review.completed_count"
@@ -142,7 +160,7 @@ async function onMarkReviewed() {
         :window-end="schedule_window.end"
         :categories="categories"
       />
-      <SkippedTasks :blocks="blocks" :date="date" :categories="categories" />
+      <SkippedTasks :blocks="scheduleRevision.blocks.value" :date="date" :categories="categories" :time-zone="schedule_window.time_zone" />
       <section class="notes-card">
         <h3>Notes</h3>
         <textarea
@@ -154,6 +172,9 @@ async function onMarkReviewed() {
         />
       </section>
     </div>
+  </div>
+  <div v-else class="analytics-page" role="alert">
+    Category data could not be loaded. <a href="">Reload the page</a> to try again.
   </div>
 </template>
 
@@ -251,6 +272,11 @@ async function onMarkReviewed() {
 .panels {
   display: grid;
   gap: 12px;
+}
+.summary-label {
+  margin: 0 0 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
 }
 @media (min-width: 768px) {
   .panels {

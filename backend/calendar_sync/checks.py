@@ -4,15 +4,9 @@ Runs on every ``manage.py`` invocation (``runserver``, ``check``,
 ``migrate``). ``E001`` blocks startup; ``W001`` is informational.
 """
 
+from common.integration_checks import ineffective_cache_with_accounts, invalid_fernet_setting
 from django.conf import settings
 from django.core.checks import Error, Warning, register
-from django.db.utils import OperationalError, ProgrammingError
-
-_INEFFECTIVE_CACHE_BACKENDS = (
-    "django.core.cache.backends.locmem.LocMemCache",
-    "django.core.cache.backends.filebased.FileBasedCache",
-    "django.core.cache.backends.dummy.DummyCache",
-)
 
 
 @register()
@@ -38,23 +32,12 @@ def warn_ineffective_cache_with_calendar_sync(app_configs, **kwargs):
     ``try/except`` is required — without it, ``manage.py migrate``
     cannot run on a fresh database.
     """
+    from calendar_sync.models import CalDAVAccount
+
+    backend = ineffective_cache_with_accounts(CalDAVAccount)
+    if backend is None:
+        return []
     warnings = []
-    if settings.DEBUG:
-        return warnings
-    backend = settings.CACHES.get("default", {}).get("BACKEND", "")
-    if backend not in _INEFFECTIVE_CACHE_BACKENDS:
-        return warnings
-
-    # Defer the import until the check runs so the app registry is ready.
-    try:
-        from calendar_sync.models import CalDAVAccount
-
-        if not CalDAVAccount.objects.exists():
-            return warnings
-    except (OperationalError, ProgrammingError):
-        # Pre-migrate state: the table doesn't exist yet. Stay silent so
-        # ``manage.py migrate`` can run on a fresh database.
-        return warnings
 
     warnings.append(
         Warning(
@@ -114,17 +97,11 @@ def error_caldav_encryption_key_missing_in_production(app_configs, **kwargs):
         )
         return errors
 
-    # Local import so the check module stays import-light when the key
-    # is unset (most dev cases).
-    from cryptography.fernet import Fernet
-
-    try:
-        Fernet(key.encode() if isinstance(key, str) else key)
-    except (ValueError, TypeError) as e:
+    if invalid_fernet_setting("CALDAV_ENCRYPTION_KEY"):
         errors.append(
             Error(
                 "CALDAV_ENCRYPTION_KEY is set but is not a valid Fernet "
-                f"key ({type(e).__name__}: {e}). The first POST to "
+                "key. The first POST to "
                 "/api/calendar/account/ would crash inside set_password "
                 "with ImproperlyConfigured.",
                 hint=(

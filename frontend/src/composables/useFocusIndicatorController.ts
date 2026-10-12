@@ -25,7 +25,15 @@ export interface FocusIndicatorController {
   indicatorNextBlockRemaining: ComputedRef<number | null>
   indicatorPausePercent: ComputedRef<number | null>
   indicatorDayFinished: ComputedRef<boolean>
-  publish: (date: string, blocks: TimeBlock[], categories?: UserCategory[]) => void
+  publish: (date: string, blocks: TimeBlock[], categories?: UserCategory[], timeZone?: string) => void
+  publicationGeneration: () => number
+  publishIfGenerationMatches: (
+    generation: number,
+    date: string,
+    blocks: TimeBlock[],
+    categories?: UserCategory[],
+    timeZone?: string,
+  ) => boolean
   clearSnapshot: () => void
 }
 
@@ -55,9 +63,11 @@ function minutesUntil(hhmm: string, nowMinutes: number | null): number | null {
 export function useFocusIndicatorController(): FocusIndicatorController {
   const page = usePage()
   const retainedDate = ref("")
+  const retainedTimeZone = ref("UTC")
   const retainedBlocks = ref<TimeBlock[]>([])
   const retainedCategories = ref<UserCategory[]>([])
-  const { nowMinutes, nowDate } = useNowMinutes(retainedDate)
+  let publicationGeneration = 0
+  const { nowMinutes, nowDate } = useNowMinutes(retainedDate, retainedTimeZone)
 
   const activeBlock = computed(() =>
     activeUnfinishedBlock(retainedBlocks.value, nowMinutes.value, nowDate.value),
@@ -121,7 +131,8 @@ export function useFocusIndicatorController(): FocusIndicatorController {
     }),
   })
 
-  function publish(date: string, blocks: TimeBlock[], categories?: UserCategory[]): void {
+  function publish(date: string, blocks: TimeBlock[], categories?: UserCategory[], timeZone?: string): void {
+    if (timeZone !== undefined) retainedTimeZone.value = timeZone
     retainedDate.value = date
     retainedBlocks.value = copiedBlocks(blocks)
     // Explicit undefined check: an empty array is a real value here (it clears
@@ -131,21 +142,35 @@ export function useFocusIndicatorController(): FocusIndicatorController {
 
   function clearSnapshot(): void {
     retainedDate.value = ""
+    retainedTimeZone.value = "UTC"
     retainedBlocks.value = []
     retainedCategories.value = []
   }
 
+  function publishIfGenerationMatches(
+    generation: number,
+    date: string,
+    blocks: TimeBlock[],
+    categories?: UserCategory[],
+    timeZone?: string,
+  ): boolean {
+    if (generation !== publicationGeneration) return false
+    publish(date, blocks, categories, timeZone)
+    return true
+  }
+
   watch(
-    () => page?.component,
-    (component) => {
-      // Only a definite Login component is unauthenticated. No prop-presence
-      // inference: authenticated responses deliberately have no user marker.
-      if (component === "Login") {
+    () => [page?.component, page?.props?.auth_user_id] as const,
+    ([component, userId], previous) => {
+      const priorUserId = previous?.[1]
+      const changedUser = priorUserId !== undefined && userId !== undefined && userId !== priorUserId
+      if (component === "Login" || userId === null || changedUser) {
+        publicationGeneration += 1
         clearSnapshot()
         focusIndicator.cleanup()
       }
     },
-    { immediate: true },
+    { immediate: true, flush: "sync" },
   )
 
   return {
@@ -158,6 +183,8 @@ export function useFocusIndicatorController(): FocusIndicatorController {
     indicatorPausePercent,
     indicatorDayFinished,
     publish,
+    publicationGeneration: () => publicationGeneration,
+    publishIfGenerationMatches,
     clearSnapshot,
   }
 }

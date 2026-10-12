@@ -1,33 +1,17 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from "vue"
+import { ref, onMounted } from "vue"
 
-const nowTime = ref(formatCurrentTime())
+defineProps<{ label: string }>()
 const lineRef = ref<HTMLElement | null>(null)
-let interval: ReturnType<typeof setInterval> | null = null
-
-function formatCurrentTime(): string {
-  const now = new Date()
-  const h = String(now.getHours()).padStart(2, "0")
-  const m = String(now.getMinutes()).padStart(2, "0")
-  return `${h}:${m}`
-}
 
 onMounted(() => {
-  interval = setInterval(() => {
-    nowTime.value = formatCurrentTime()
-  }, 60_000)
-
   lineRef.value?.scrollIntoView({ behavior: "smooth", block: "center" })
-})
-
-onUnmounted(() => {
-  if (interval) clearInterval(interval)
 })
 </script>
 
 <template>
   <div ref="lineRef" class="now-line">
-    <span class="now-label">{{ nowTime }}</span>
+    <span class="now-label">{{ label }}</span>
     <div class="now-rule" />
   </div>
 </template>

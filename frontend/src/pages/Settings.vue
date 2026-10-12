@@ -20,7 +20,9 @@ import { useTodoistAccount } from "../composables/useTodoistAccount"
 // Keeps `<html data-theme>` in sync with ui_preferences across reloads.
 // Required convention for every authenticated page — see RULES.md.
 import { useThemeFromProps } from "../composables/useThemeFromProps"
-import { todayString } from "../utils/date"
+import { useNowMinutes } from "../composables/useNowMinutes"
+import { zonedDateTime } from "../utils/date"
+import { hasValidCategoryCatalog } from "../utils/categories"
 import "../app.css"
 
 useThemeFromProps()
@@ -29,9 +31,10 @@ const props = defineProps<{
   templates: Template[]
   rules: Rule[]
   travel_rules: TravelRule[]
-  categories?: UserCategory[]
+  categories: UserCategory[]
   schedule_window: ScheduleSettingsWire
 }>()
+const categoryCatalogValid = computed(() => hasValidCategoryCatalog(props.categories))
 
 const { activeTopic, topics, setTopic, markKeyboardIntent } = useSettingsTopic()
 
@@ -68,7 +71,7 @@ function refreshTemplates(): void { router.reload({ only: ["templates"] }) }
 function refreshRules(): void { router.reload({ only: ["rules"] }) }
 function refreshTravelRules(): void { router.reload({ only: ["travel_rules"] }) }
 
-const today = todayString()
+const { todayDate: today } = useNowMinutes(ref(""), computed(() => props.schedule_window.time_zone))
 
 // Apple Calendar (feature 0011) — connect / disconnect via CalDAV.
 const calendarAccount = useCalendarAccount()
@@ -171,7 +174,9 @@ const todoistBusy = computed(
 )
 const todoistVerifiedAt = computed(() => {
   const timestamp = todoistAccount.state.status?.last_verified_at
-  return timestamp ? new Date(timestamp).toLocaleString() : null
+  if (!timestamp) return null
+  const local = zonedDateTime(new Date(timestamp), props.schedule_window.time_zone)
+  return `${local.date} ${local.hhmm}`
 })
 
 async function handleTodoistConnect(): Promise<void> {
@@ -205,7 +210,9 @@ const habiticaBusy = computed(
 )
 const habiticaVerifiedAt = computed(() => {
   const timestamp = habiticaAccount.state.status?.last_verified_at
-  return timestamp ? new Date(timestamp).toLocaleString() : null
+  if (!timestamp) return null
+  const local = zonedDateTime(new Date(timestamp), props.schedule_window.time_zone)
+  return `${local.date} ${local.hhmm}`
 })
 const habiticaConnectedUserId = computed(
   () => habiticaAccount.state.status?.api_user_id ?? null,
@@ -235,7 +242,7 @@ async function handleHabiticaDisconnect(): Promise<void> {
 </script>
 
 <template>
-  <div class="settings-page">
+  <div v-if="categoryCatalogValid" class="settings-page">
     <TimeZoneMismatchPrompt :time-zone="schedule_window.time_zone" />
     <div class="settings-shell">
       <header class="page-header">
@@ -287,6 +294,7 @@ async function handleHabiticaDisconnect(): Promise<void> {
             :inert="activeTopic === 'integrations' ? undefined : true"
           >
             <SettingsIntegrationsPanel
+              :time-zone="schedule_window.time_zone"
               :calendar-form="calendarForm"
               :show-advanced="showAdvanced"
               :calendar-default-base-url="calendarDefaultBaseUrl"
@@ -351,6 +359,9 @@ async function handleHabiticaDisconnect(): Promise<void> {
         </main>
       </div>
     </div>
+  </div>
+  <div v-else class="settings-page" role="alert">
+    Category data could not be loaded. <a href="">Reload the page</a> to try again.
   </div>
 </template>
 

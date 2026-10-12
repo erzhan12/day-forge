@@ -6,9 +6,8 @@ account, and per-error-status envelope shape.
 
 Differences from CalDAV: a single ``token`` secret (no apple_id/base_url),
 an HTTP REST client (``requests``) mocked at the service layer instead of a
-DAV library, and a ``today | overdue`` filter whose branch depends on the
-project-local "today" — so the today-vs-exact-date test pins
-``timezone.localdate`` on a frozen value.
+DAV library, and a ``today | overdue`` filter whose branch uses the user's
+saved timezone.
 """
 
 import datetime
@@ -18,6 +17,7 @@ import pytest
 from cryptography.fernet import Fernet
 from django.contrib.auth.models import User
 from django.test import Client
+from schedules.window import get_schedule_settings
 from todoist_sync import service
 from todoist_sync.models import TodoistAccount
 
@@ -68,7 +68,7 @@ def user(db):
 @pytest.fixture
 def auth_client(user):
     client = Client()
-    client.login(username="todo-user", password="testpass123")
+    client.force_login(user)
     return client
 
 
@@ -301,13 +301,14 @@ class TestTasksEndpoint:
     def test_exact_and_overdue_filters_use_separate_cache_entries(
         self, auth_client, account
     ):
-        """A bare-date read must not poison the overdue-carryover cache."""
-        frozen_today = datetime.date(2026, 5, 8)
+        """A future-date cache entry cannot mask today's overdue query."""
+        get_schedule_settings(account.user)
         exact_task = {**RAW_TASK, "id": "exact", "content": "Exact only"}
         overdue_task = {**RAW_TASK, "id": "overdue", "content": "With overdue"}
+        clock = {"now": datetime.datetime(2026, 5, 8, 23, 59, tzinfo=datetime.UTC)}
         with patch(
-            "todoist_sync.service.django_tz.localdate",
-            return_value=frozen_today,
+            "todoist_sync.views.timezone.now",
+            side_effect=lambda: clock["now"],
         ), patch("todoist_sync.service.requests.get") as get:
             get.side_effect = [
                 _fake_response([exact_task]),
@@ -317,7 +318,8 @@ class TestTasksEndpoint:
             assert r1.status_code == 200
             assert len(r1.json()["tasks"]) == 1
 
-            r2 = auth_client.get("/api/todoist/tasks/2026-05-09/?carry_overdue=1")
+            clock["now"] = datetime.datetime(2026, 5, 9, 0, 1, tzinfo=datetime.UTC)
+            r2 = auth_client.get("/api/todoist/tasks/2026-05-09/")
             assert r2.status_code == 200
             assert len(r2.json()["tasks"]) == 2
             assert get.call_count == 2
@@ -365,14 +367,10 @@ class TestTasksEndpoint:
         assert "misconfigured" in body["errors"]["detail"].lower()
 
     def test_today_uses_date_overdue_filter(self, auth_client, account):
-        """On a frozen clock, ``selected_date == today`` → the generated
-        Todoist ``query`` is ``"<YYYY-MM-DD> | overdue"``. No CalDAV analog —
-        the filter string depends on "today", so we pin ``timezone.localdate``.
-        """
-        frozen_today = datetime.date(2026, 5, 7)
+        """A saved-zone today produces the Todoist overdue filter."""
         with patch(
-            "todoist_sync.service.django_tz.localdate",
-            return_value=frozen_today,
+            "todoist_sync.views.timezone.now",
+            return_value=datetime.datetime(2026, 5, 7, 12, tzinfo=datetime.UTC),
         ), patch("todoist_sync.service.requests.get") as get:
             get.return_value = _fake_response([RAW_TASK])
             resp = auth_client.get("/api/todoist/tasks/2026-05-07/")
@@ -380,16 +378,16 @@ class TestTasksEndpoint:
         _, kwargs = get.call_args
         assert kwargs["params"]["query"] == "2026-05-07 | overdue"
 
-    def test_carry_overdue_query_param(self, auth_client, account):
-        """``?carry_overdue=1`` requests overdue carryover when the schedule
-        date is browser-local today but not project-local today."""
-        frozen_today = datetime.date(2026, 5, 7)
+    def test_saved_zone_ahead_of_utc_uses_overdue(self, auth_client, user, account):
+        get_schedule_settings(user)
+        user.schedule_settings.time_zone = "Asia/Qatar"
+        user.schedule_settings.save()
         with patch(
-            "todoist_sync.service.django_tz.localdate",
-            return_value=frozen_today,
+            "todoist_sync.views.timezone.now",
+            return_value=datetime.datetime(2026, 5, 7, 22, tzinfo=datetime.UTC),
         ), patch("todoist_sync.service.requests.get") as get:
             get.return_value = _fake_response([RAW_TASK])
-            resp = auth_client.get("/api/todoist/tasks/2026-05-08/?carry_overdue=1")
+            resp = auth_client.get("/api/todoist/tasks/2026-05-08/")
         assert resp.status_code == 200
         _, kwargs = get.call_args
         assert kwargs["params"]["query"] == "2026-05-08 | overdue"
@@ -397,16 +395,80 @@ class TestTasksEndpoint:
     def test_other_date_uses_exact_date_filter(self, auth_client, account):
         """A past/future date (≠ today) → the bare literal-date token
         ``"<YYYY-MM-DD>"`` (due: semantics)."""
-        frozen_today = datetime.date(2026, 5, 7)
         with patch(
-            "todoist_sync.service.django_tz.localdate",
-            return_value=frozen_today,
+            "todoist_sync.views.timezone.now",
+            return_value=datetime.datetime(2026, 5, 7, 12, tzinfo=datetime.UTC),
         ), patch("todoist_sync.service.requests.get") as get:
             get.return_value = _fake_response([RAW_TASK])
             resp = auth_client.get("/api/todoist/tasks/2026-05-09/")
         assert resp.status_code == 200
         _, kwargs = get.call_args
         assert kwargs["params"]["query"] == "2026-05-09"
+
+    @pytest.mark.parametrize(
+        "instant, expected_query",
+        [
+            (
+                datetime.datetime(2026, 3, 9, 3, 30, tzinfo=datetime.UTC),
+                "2026-03-08 | overdue",
+            ),
+            (
+                datetime.datetime(2026, 3, 9, 4, 30, tzinfo=datetime.UTC),
+                "2026-03-08",
+            ),
+        ],
+    )
+    def test_dst_local_midnight_selects_filter(
+        self, auth_client, user, account, instant, expected_query
+    ):
+        get_schedule_settings(user)
+        user.schedule_settings.time_zone = "America/New_York"
+        user.schedule_settings.save()
+        with patch("todoist_sync.views.timezone.now", return_value=instant), patch(
+            "todoist_sync.service.requests.get",
+            return_value=_fake_response([]),
+        ) as get:
+            response = auth_client.get("/api/todoist/tasks/2026-03-08/")
+        assert response.status_code == 200
+        assert get.call_args.kwargs["params"]["query"] == expected_query
+
+    def test_timezone_change_during_fetch_rekeys_cache(self, auth_client, user, account):
+        get_schedule_settings(user)
+        queries = []
+
+        def provider(_url, **kwargs):
+            queries.append(kwargs["params"]["query"])
+            if len(queries) == 1:
+                user.schedule_settings.time_zone = "Asia/Qatar"
+                user.schedule_settings.save()
+                return _fake_response([{**RAW_TASK, "id": "old-zone"}])
+            return _fake_response([{**RAW_TASK, "id": "new-zone"}])
+
+        with patch(
+            "todoist_sync.views.timezone.now",
+            return_value=datetime.datetime(2026, 5, 7, 22, tzinfo=datetime.UTC),
+        ), patch("todoist_sync.service.requests.get", side_effect=provider):
+            first = auth_client.get("/api/todoist/tasks/2026-05-08/")
+            second = auth_client.get("/api/todoist/tasks/2026-05-08/")
+
+        assert [first.json()["tasks"][0]["id"], second.json()["tasks"][0]["id"]] == [
+            "old-zone", "new-zone"
+        ]
+        assert queries == ["2026-05-08", "2026-05-08 | overdue"]
+
+    def test_failed_refresh_preserves_cached_tasks(self, auth_client, account):
+        with patch("todoist_sync.service.requests.get") as get:
+            get.side_effect = [
+                _fake_response([RAW_TASK]),
+                _fake_response([], status_code=500),
+            ]
+            first = auth_client.get("/api/todoist/tasks/2026-05-07/")
+            failed = auth_client.get("/api/todoist/tasks/2026-05-07/?refresh=1")
+            cached = auth_client.get("/api/todoist/tasks/2026-05-07/")
+        assert first.status_code == 200
+        assert failed.status_code == 502
+        assert cached.json() == first.json()
+        assert get.call_count == 2
 
 
 # ---- Cache invalidation via versioned keys ------------------------------
@@ -576,9 +638,9 @@ class TestCompleteView:
         assert "misconfigured" in resp.json()["errors"]["detail"].lower()
 
     def test_post_without_csrf_token_returns_403(self, db):
-        User.objects.create_user(username="csrf-complete", password="x")
+        user = User.objects.create_user(username="csrf-complete", password="x")
         client = Client(enforce_csrf_checks=True)
-        client.login(username="csrf-complete", password="x")
+        client.force_login(user)
         resp = client.post("/api/todoist/tasks/1001/complete/")
         assert resp.status_code == 403
 
@@ -619,19 +681,16 @@ class TestRefreshBypass:
             assert r2.status_code == 200
             assert get.call_count == primed_calls + 1
 
-    def test_carry_overdue_with_refresh_keeps_overdue_scope(self, auth_client, account):
-        """No regression: ``carry_overdue=1`` alongside ``refresh=1`` still
-        drives the ``with_overdue`` filter query (the two flags are
-        independent)."""
-        frozen_today = datetime.date(2026, 5, 7)
+    def test_refresh_keeps_saved_zone_overdue_scope(self, auth_client, user, account):
+        get_schedule_settings(user)
+        user.schedule_settings.time_zone = "Asia/Qatar"
+        user.schedule_settings.save()
         with patch(
-            "todoist_sync.service.django_tz.localdate",
-            return_value=frozen_today,
+            "todoist_sync.views.timezone.now",
+            return_value=datetime.datetime(2026, 5, 7, 22, tzinfo=datetime.UTC),
         ), patch("todoist_sync.service.requests.get") as get:
             get.return_value = _fake_response([RAW_TASK])
-            resp = auth_client.get(
-                "/api/todoist/tasks/2026-05-08/?carry_overdue=1&refresh=1"
-            )
+            resp = auth_client.get("/api/todoist/tasks/2026-05-08/?refresh=1")
         assert resp.status_code == 200
         _, kwargs = get.call_args
         assert kwargs["params"]["query"] == "2026-05-08 | overdue"
@@ -645,9 +704,9 @@ class TestCsrfGuard:
     regression-catches an accidental ``@csrf_exempt``."""
 
     def test_post_without_csrf_token_returns_403(self, db):
-        User.objects.create_user(username="csrf-todo", password="x")
+        user = User.objects.create_user(username="csrf-todo", password="x")
         client = Client(enforce_csrf_checks=True)
-        client.login(username="csrf-todo", password="x")
+        client.force_login(user)
         resp = client.post(
             "/api/todoist/account/",
             data='{"token": "x"}',
@@ -656,9 +715,9 @@ class TestCsrfGuard:
         assert resp.status_code == 403
 
     def test_delete_without_csrf_token_returns_403(self, db):
-        User.objects.create_user(username="csrf-todo2", password="x")
+        user = User.objects.create_user(username="csrf-todo2", password="x")
         client = Client(enforce_csrf_checks=True)
-        client.login(username="csrf-todo2", password="x")
+        client.force_login(user)
         resp = client.delete("/api/todoist/account/")
         assert resp.status_code == 403
 

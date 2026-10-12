@@ -32,4 +32,34 @@ describe("HabiticaTasksSection", () => {
     expect(wrapper.text()).not.toContain("Daily")
     expect(wrapper.text()).not.toContain("Todo")
   })
+
+  it("keeps loaded tasks visible and actionable beside a refresh error", async () => {
+    const wrapper = mount(HabiticaTasksSection, {
+      props: { tasks: [DAILY], loading: false, error: "Habitica service unavailable." },
+    })
+    expect(wrapper.find(".habitica-error").text()).toContain("unavailable")
+    expect(wrapper.findAll('[data-testid="habitica-task"]')).toHaveLength(1)
+    expect(wrapper.find(".habitica-empty").exists()).toBe(false)
+    await wrapper.find(".habitica-retry").trigger("click")
+    await wrapper.find('[data-testid="habitica-complete"]').trigger("change")
+    expect(wrapper.emitted("retry")).toHaveLength(1)
+    expect(wrapper.emitted("complete")).toEqual([["d1"]])
+  })
+
+  it("shows only the error when a new date has no loaded tasks", () => {
+    const wrapper = mount(HabiticaTasksSection, {
+      props: { tasks: [], loading: false, error: "Habitica service unavailable." },
+    })
+    expect(wrapper.find(".habitica-error").exists()).toBe(true)
+    expect(wrapper.find(".habitica-empty").exists()).toBe(false)
+    expect(wrapper.find(".habitica-skeleton").exists()).toBe(false)
+  })
+
+  it("keeps loaded tasks visible during a background refresh", () => {
+    const wrapper = mount(HabiticaTasksSection, {
+      props: { tasks: [TODO], loading: true, error: null },
+    })
+    expect(wrapper.findAll('[data-testid="habitica-task"]')).toHaveLength(1)
+    expect(wrapper.find(".habitica-skeleton").exists()).toBe(false)
+  })
 })

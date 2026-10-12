@@ -138,6 +138,24 @@ class TestFetchEventsForDate:
         patched_dav_client.principal.return_value = _build_fake_principal([cal])
         assert service.fetch_events_for_date(account, datetime.date(2026, 5, 7)) == []
 
+    def test_cross_utc_midnight_event_is_in_qatar_local_day(
+        self, account, patched_dav_client
+    ):
+        event = _caldav_event(
+            "BEGIN:VCALENDAR\nVERSION:2.0\nBEGIN:VEVENT\nUID:late\n"
+            "DTSTART:20260506T223000Z\nDTEND:20260507T003000Z\n"
+            "SUMMARY:Late event\nEND:VEVENT\nEND:VCALENDAR"
+        )
+        cal = _build_fake_calendar("Personal", [event])
+        patched_dav_client.principal.return_value = _build_fake_principal([cal])
+
+        events = service.fetch_events_for_date(
+            account, datetime.date(2026, 5, 7), "Asia/Qatar"
+        )
+        assert [item.title for item in events] == ["Late event"]
+        start = cal.date_search.call_args.kwargs["start"]
+        assert start == datetime.datetime(2026, 5, 6, 21, tzinfo=datetime.UTC)
+
     def test_fetch_provider_failure_raises_provider(self, account, patched_dav_client):
         patched_dav_client.principal.side_effect = DAVError("boom")
         with pytest.raises(service.CalDAVProviderError):

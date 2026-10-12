@@ -18,7 +18,6 @@ import recurring_ical_events
 from caldav.lib.error import AuthorizationError, DAVError
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
-from django.utils import timezone as django_tz
 
 try:  # ``requests`` is a transitive caldav dep, but be defensive
     from requests.exceptions import Timeout as _RequestsTimeout
@@ -28,6 +27,7 @@ except Exception:  # pragma: no cover
     _TIMEOUT_EXC = (TimeoutError,)
 
 from calendar_sync.schemas import NormalizedEvent
+from calendar_sync.time import floating_datetime_to_utc, local_date_to_utc, local_day_bounds_utc
 
 logger = logging.getLogger(__name__)
 
@@ -85,30 +85,16 @@ def verify_credentials(apple_id: str, password: str, base_url: str) -> None:
 # ----- fetch_events_for_date ---------------------------------------------
 
 
-def _day_window(target_date: date) -> tuple[dt, dt]:
-    """``[start, end)`` in the project timezone, then handed to DAV.
-
-    V1 uses ``settings.TIME_ZONE`` (per-user TZ isn't stored). We pass
-    aware datetimes to ``date_search`` and to
-    ``recurring_ical_events.of(...).between``; both libraries accept
-    aware inputs.
-    """
-    tz = django_tz.get_current_timezone()
-    start = dt.combine(target_date, datetime.time.min, tzinfo=tz)
-    end = start + datetime.timedelta(days=1)
-    return start, end
+def _day_window(target_date: date, time_zone: str = "UTC") -> tuple[dt, dt]:
+    """UTC instants bounding the user's local date, including DST days."""
+    return local_day_bounds_utc(target_date, time_zone)
 
 
-def _to_utc(value):
-    """Promote naive datetimes to settings.TIME_ZONE, then convert to UTC."""
+def _to_utc(value, time_zone: str = "UTC"):
+    """Floating timed values use the user's zone; dates use local midnight."""
     if isinstance(value, dt):
-        if django_tz.is_naive(value):
-            value = django_tz.make_aware(value, django_tz.get_current_timezone())
-        return value.astimezone(datetime.UTC)
-    # ``date`` (all-day) — synthesize midnight in project TZ then UTC.
-    naive = dt.combine(value, datetime.time.min)
-    aware = django_tz.make_aware(naive, django_tz.get_current_timezone())
-    return aware.astimezone(datetime.UTC)
+        return floating_datetime_to_utc(value, time_zone)
+    return local_date_to_utc(value, time_zone)
 
 
 def _is_all_day(dtstart_value) -> bool:
@@ -116,7 +102,9 @@ def _is_all_day(dtstart_value) -> bool:
     return isinstance(dtstart_value, date) and not isinstance(dtstart_value, dt)
 
 
-def _normalize_vevent(vevent, calendar_name: str) -> NormalizedEvent | None:
+def _normalize_vevent(
+    vevent, calendar_name: str, time_zone: str = "UTC"
+) -> NormalizedEvent | None:
     """Build a NormalizedEvent from one expanded VEVENT; return None on
     malformed input rather than crashing the whole fetch."""
     try:
@@ -133,8 +121,8 @@ def _normalize_vevent(vevent, calendar_name: str) -> NormalizedEvent | None:
             # timed events have zero duration (instantaneous).
             dtend = dtstart + datetime.timedelta(days=1) if _is_all_day(dtstart) else dtstart
         all_day = _is_all_day(dtstart)
-        start_utc = _to_utc(dtstart)
-        end_utc = _to_utc(dtend)
+        start_utc = _to_utc(dtstart, time_zone)
+        end_utc = _to_utc(dtend, time_zone)
         uid = str(vevent.get("UID", ""))
         # Per the plan: include RECURRENCE-ID so each occurrence is unique.
         recurrence_id = vevent.get("RECURRENCE-ID")
@@ -149,6 +137,8 @@ def _normalize_vevent(vevent, calendar_name: str) -> NormalizedEvent | None:
             calendar_name=calendar_name,
             all_day=all_day,
             external_uid=uid,
+            start_date=dtstart if all_day else None,
+            end_date=dtend if all_day else None,
         )
     except (KeyError, ValueError, AttributeError, TypeError) as e:
         # Narrow to the exception types that ``icalendar`` /
@@ -212,14 +202,16 @@ def _expand_events(events_iter: Iterable, start: dt, end: dt) -> list:
     return out
 
 
-def fetch_events_for_date(account, target_date: date) -> list[NormalizedEvent]:
+def fetch_events_for_date(
+    account, target_date: date, time_zone: str = "UTC"
+) -> list[NormalizedEvent]:
     """Fetch and normalise CalDAV events for one date.
 
     The only function that decrypts the stored password. Wraps every
     provider error in the typed hierarchy so views translate to HTTP
     status without leaking caldav-lib types.
     """
-    start, end = _day_window(target_date)
+    start, end = _day_window(target_date, time_zone)
     password = account.get_password()  # only call site
     try:
         client = caldav.DAVClient(
@@ -253,12 +245,12 @@ def fetch_events_for_date(account, target_date: date) -> list[NormalizedEvent]:
                 raise
 
             for vevent in _expand_events(raw_events, start, end):
-                ev = _normalize_vevent(vevent, calendar_name)
+                ev = _normalize_vevent(vevent, calendar_name, time_zone)
                 if ev is None:
                     continue
                 # Defensive window guard — DAV servers occasionally
                 # return events slightly outside the requested window.
-                if ev.end <= _to_utc(start) or ev.start >= _to_utc(end):
+                if ev.end <= start or ev.start >= end:
                     continue
                 normalized.append(ev)
         # Stable order so the UI doesn't shuffle between fetches.

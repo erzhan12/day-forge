@@ -14,7 +14,8 @@ from ai.mutation_planner import (
     plan_mutations,
     snapshot_apply_context,
 )
-from schedules.http import parse_time
+from ai.schemas import validate_action_shape
+from schedules.time_validation import parse_time
 from schedules.window import DEFAULT_WINDOW
 
 # Feature 0053: the working-day window is now the canonical ``ScheduleWindow``
@@ -778,6 +779,26 @@ def test_update_metadata_persists_when_requested_time_conflicts():
     assert outcome.reason_code == "overlap"
     entry = result.diff.updates[0]
     assert entry.title == "Renamed" and not entry.start_changed and not entry.end_changed
+
+
+def test_off_grid_update_keeps_metadata_and_reports_partial_outcome():
+    action = _update(1, {"title": "Renamed", "end_time": "10:03"})
+    assert validate_action_shape(action, {"work"}) == []
+
+    result = plan_mutations(
+        _schedule([_block(1, "09:00", "10:00", title="Old")]),
+        [action],
+        day_start=DAY_START,
+        day_end=DAY_END,
+    )
+    assert isinstance(result, MutationPlan)
+    assert result.outcomes[0].status == "partial"
+    assert result.outcomes[0].reason_code == "granularity"
+    assert result.outcomes[0].applied_fields == ("title",)
+    assert result.outcomes[0].skipped_fields == ("end_time",)
+    assert len(result.diff.updates) == 1
+    assert result.diff.updates[0].title == "Renamed"
+    assert not result.diff.updates[0].end_changed
 
 
 def test_update_title_is_stripped():

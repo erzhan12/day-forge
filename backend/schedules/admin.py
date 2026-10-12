@@ -4,15 +4,28 @@ from django.db.models import Count
 from schedules.models import Schedule, TimeBlock, UserScheduleSettings
 
 
-class TimeBlockInline(admin.TabularInline):
+class ScheduleInspectionOnly:
+    """Day writes require revision validation through the scheduling API."""
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+class TimeBlockInline(ScheduleInspectionOnly, admin.TabularInline):
     model = TimeBlock
-    extra = 1
+    extra = 0
     fields = ("title", "start_time", "end_time", "category", "is_completed", "sort_order")
 
 
 @admin.register(Schedule)
-class ScheduleAdmin(admin.ModelAdmin):
-    list_display = ("date", "status", "block_count")
+class ScheduleAdmin(ScheduleInspectionOnly, admin.ModelAdmin):
+    list_display = ("date", "status", "revision", "block_count")
     list_filter = ("status",)
     inlines = [TimeBlockInline]
 
@@ -25,13 +38,13 @@ class ScheduleAdmin(admin.ModelAdmin):
 
 
 @admin.register(TimeBlock)
-class TimeBlockAdmin(admin.ModelAdmin):
+class TimeBlockAdmin(ScheduleInspectionOnly, admin.ModelAdmin):
     list_display = ("schedule", "title", "start_time", "end_time", "category", "is_completed")
     list_filter = ("category", "is_completed")
     list_select_related = ("schedule",)
 
 
 @admin.register(UserScheduleSettings)
-class UserScheduleSettingsAdmin(admin.ModelAdmin):
+class UserScheduleSettingsAdmin(ScheduleInspectionOnly, admin.ModelAdmin):
     list_display = ("user", "day_start", "day_end", "updated_at")
     list_select_related = ("user",)

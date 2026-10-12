@@ -13,6 +13,8 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 
 from schedules.models import UserScheduleSettings
+from schedules.mutations import run_user_maintenance
+from schedules.time_validation import grid_components
 
 DEFAULT_DAY_START = datetime.time(6, 0)
 DEFAULT_DAY_END = datetime.time(23, 0)
@@ -40,9 +42,10 @@ def check_time_on_grid(value: datetime.time) -> str | None:
     (string surface) and ``UserScheduleSettings.clean`` (model surface) so the
     grid/alignment rule lives in exactly one place.
     """
-    if value.second or value.microsecond:
+    off_minute_grid, sub_minute = grid_components(value)
+    if sub_minute:
         return "Must not include seconds."
-    if value.minute % 5:
+    if off_minute_grid:
         return "Must align to 5-minute granularity."
     return None
 
@@ -130,15 +133,21 @@ def validate_window(day_start_str, day_end_str) -> tuple[ScheduleWindow | None, 
 
 
 def get_schedule_settings(user) -> ScheduleSettings:
-    """Return a user's frozen window/timezone settings in one get-or-create."""
-    settings, _ = UserScheduleSettings.objects.get_or_create(
-        user=user,
-        defaults={
-            "day_start": DEFAULT_DAY_START,
-            "day_end": DEFAULT_DAY_END,
-            "time_zone": DEFAULT_TIME_ZONE,
-        },
-    )
+    """Read policy cheaply; serialize first-use creation with other policy writes."""
+    settings = UserScheduleSettings.objects.filter(user=user).first()
+    if settings is None:
+        def create_settings(locked_user):
+            row, _ = UserScheduleSettings.objects.get_or_create(
+                user=locked_user,
+                defaults={
+                    "day_start": DEFAULT_DAY_START,
+                    "day_end": DEFAULT_DAY_END,
+                    "time_zone": DEFAULT_TIME_ZONE,
+                },
+            )
+            return row
+
+        settings = run_user_maintenance(user.pk, create_settings)
     return ScheduleSettings(
         ScheduleWindow(settings.day_start, settings.day_end), settings.time_zone
     )

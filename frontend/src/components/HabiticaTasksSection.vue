@@ -32,7 +32,7 @@ const emit = defineEmits<{
       </button>
     </div>
 
-    <ul v-else-if="!loading && tasks.length > 0" class="habitica-list">
+    <ul v-if="tasks.length > 0" class="habitica-list">
       <li
         v-for="task in tasks"
         :key="task.id"
@@ -54,7 +54,7 @@ const emit = defineEmits<{
          visible "Loading…" text is suppressed in this branch, so the label
          lives here instead. -->
     <p
-      v-else-if="loading"
+      v-else-if="loading && !error"
       class="habitica-skeleton"
       role="status"
       aria-label="Loading Habitica tasks"
@@ -64,7 +64,7 @@ const emit = defineEmits<{
       <span class="habitica-skel-row" aria-hidden="true"></span>
     </p>
 
-    <p v-else class="habitica-empty">No Habitica tasks for this day.</p>
+    <p v-else-if="!error" class="habitica-empty">No Habitica tasks for this day.</p>
   </div>
 </template>
 
