@@ -54,3 +54,31 @@ def test_current_session_identity_header_allows_normal_write(client, user, sched
         content_type="application/json", HTTP_X_SCHEDULE_USER=str(user.pk),
     )
     assert response.status_code == 200
+
+
+@pytest.mark.django_db
+def test_old_session_identity_header_does_not_block_get(client, user, schedule):
+    client.force_login(user)
+
+    response = client.get(
+        f"/api/schedules/{schedule.date}/blocks/",
+        HTTP_X_SCHEDULE_USER="99999",
+    )
+
+    # The view only accepts POST. Reaching its method guard proves the
+    # identity middleware excludes reads from the stale-session check.
+    assert response.status_code == 405
+
+
+@pytest.mark.django_db
+def test_identity_header_on_unauthenticated_write_returns_session_invalid(client, schedule):
+    response = client.post(
+        f"/api/schedules/{schedule.date}/blocks/",
+        json.dumps({"title": "Must not be created"}),
+        content_type="application/json",
+        HTTP_X_SCHEDULE_USER="12345",
+    )
+
+    assert response.status_code == 401
+    assert response.json()["code"] == "session_invalid"
+    assert not TimeBlock.objects.filter(schedule=schedule).exists()

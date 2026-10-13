@@ -6,6 +6,7 @@ import json
 import pytest
 from analytics.models import DailyReview
 from common.http import MAX_REQUEST_BODY_BYTES, parse_json_object
+from django.http import JsonResponse
 from django.test import RequestFactory
 from schedules.models import Schedule
 
@@ -53,6 +54,23 @@ def test_body_limit_includes_boundary_and_precedes_decode():
     assert data is None
     assert error.status_code == 413
     assert json.loads(error.content) == {"errors": {"body": "Request body too large."}}
+
+
+def test_parser_uses_custom_response_factory_for_errors():
+    request = RequestFactory().post(
+        "/", b"x" * (MAX_REQUEST_BODY_BYTES + 1), content_type="application/json"
+    )
+
+    def private_response(data, **kwargs):
+        response = JsonResponse(data, **kwargs)
+        response["Cache-Control"] = "private, no-store"
+        return response
+
+    data, error = parse_json_object(request, response_factory=private_response)
+
+    assert data is None
+    assert error.status_code == 413
+    assert error["Cache-Control"] == "private, no-store"
 
 
 @pytest.mark.django_db
