@@ -2324,12 +2324,55 @@ class TestAutoPlacementIntegration:
         )
 
         assert response.status_code == 200, response.content
-        assert response.json()["applied"] is False
-        assert response.json()["ask"] == "What start time should the new block have after Gym?"
+        data = response.json()
+        assert data["applied"] is False
+        assert data["ask"] == "What start time should the new block have after Gym?"
+        assert data["revision"] == today_schedule.revision == 0
+        assert data["schedule"] == {
+            "id": today_schedule.id,
+            "date": "2026-04-18",
+            "status": Schedule.Status.DRAFT,
+            "revision": 0,
+        }
+        assert data["blocks"] is None
         titles = list(
             TimeBlock.objects.filter(schedule=today_schedule).values_list("title", flat=True)
         )
         assert titles == ["Gym"]
+
+    @pytest.mark.django_db
+    def test_relative_add_rejects_changed_context_during_ai_request(
+        self, auth_client, user, today_schedule, monkeypatch
+    ):
+        TimeBlock.objects.create(
+            schedule=today_schedule,
+            title="Gym",
+            start_time="09:00",
+            end_time="09:30",
+            category="personal",
+        )
+        rule = Rule.objects.create(user=user, text="Original rule", priority=5, is_active=True)
+
+        async def _run(messages, schedule, blocks, rules, now):
+            await sync_to_async(
+                Rule.objects.filter(pk=rule.pk).update,
+                thread_sensitive=True,
+            )(text="Changed during LLM")
+            return self._auto_add_result("Vocal", duration_minutes=25)
+
+        monkeypatch.setattr("ai.views.run_chat", _run)
+
+        response = _post(
+            auth_client,
+            {"messages": [_user_turn("add Vocal for 25 minutes after Gym with a 10-minute gap")]},
+        )
+
+        assert response.status_code == 409
+        assert response.json()["code"] == "schedule_changed"
+        assert AIInteraction.objects.get(schedule=today_schedule).success is False
+        assert list(
+            TimeBlock.objects.filter(schedule=today_schedule).values_list("title", flat=True)
+        ) == ["Gym"]
 
     @pytest.mark.django_db
     def test_relative_explicit_add_before_anchor_asks_without_mutating(

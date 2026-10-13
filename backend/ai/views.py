@@ -1131,9 +1131,14 @@ async def ai_chat(request, date):
     # otherwise put Vocal in the first free slot, possibly before Gym.
     relative_ask = relative_add_guard_ask(messages, result.parsed_actions, current_blocks)
     if relative_ask is not None:
+        try:
+            snapshot = await unchanged_snapshot()
+        except _Rollback as rb:
+            return rb.response
         await _mark_success(interaction)
         return JsonResponse(
             {
+                **snapshot,
                 "blocks": None,
                 "explanation": GUARD_EXPLANATION,
                 "ask": relative_ask,
