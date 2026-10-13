@@ -582,6 +582,11 @@ def _apply_draft_sync(
             locked_schedule, ctx.blocks, rules, schedule_settings, categories, template
         )
         if fingerprint != expected_fingerprint:
+            logger.warning(
+                "schedule_changed during AI draft apply (user=%s, schedule=%s)",
+                schedule.user_id,
+                schedule.id,
+            )
             raise ScheduleChanged()
         allowed_categories = {category.slug for category in categories}
         commands = []

@@ -304,6 +304,8 @@ def diff_candidates(
             block.sort_order,
             block.origin,
         )
+        # Negative temp IDs get more negative as blocks are allocated; reverse
+        # sorting restores the original creation order.
         for block in sorted(after.values(), key=lambda item: item.id, reverse=True)
         if block.id < 0
     )

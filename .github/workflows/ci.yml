@@ -73,11 +73,11 @@ jobs:
       # Fail-closed security gate: blocks the deploy if any high/critical
       # advisory hits the prod dependency graph (see docs/features/0102_REVIEW.md).
       # EMERGENCY BYPASS (backend-only hotfix blocked by an unresolvable frontend
-      # advisory): trigger a manual `workflow_dispatch` run with skip_prod_audit=true.
-      # This leaves an audit trail in the Actions history and re-engages the gate
-      # automatically on the next push. Then open a follow-up to patch the dep.
+      # advisory): manually dispatch deploy.yml with skip_prod_audit=true. Deploy
+      # passes that input to this reusable workflow through workflow_call. This
+      # leaves an audit trail and re-engages the gate automatically on the next push.
       - name: Frontend prod audit
-        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.skip_prod_audit) }}
+        if: ${{ !(github.event_name == 'workflow_call' && inputs.skip_prod_audit) }}
         working-directory: frontend
         run: npm audit --omit=dev --audit-level=high
 
