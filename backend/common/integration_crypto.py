@@ -11,7 +11,7 @@ def fernet_for_setting(setting_name: str) -> Fernet:
         raise ImproperlyConfigured(f"{setting_name} is not set.")
     try:
         return Fernet(key.encode() if isinstance(key, str) else key)
-    except ValueError, TypeError:
+    except (ValueError, TypeError):
         raise ImproperlyConfigured(f"{setting_name} is not a valid Fernet key.") from None
 
 

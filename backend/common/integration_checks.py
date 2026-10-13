@@ -18,7 +18,7 @@ def ineffective_cache_with_accounts(model) -> str | None:
         return None
     try:
         return backend if model.objects.exists() else None
-    except OperationalError, ProgrammingError:
+    except (OperationalError, ProgrammingError):
         # A fresh database has no integration tables during first migrate.
         return None
 
