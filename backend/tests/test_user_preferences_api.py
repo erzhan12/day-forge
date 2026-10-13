@@ -714,7 +714,7 @@ def test_preferences_isolated_per_user(db):
     UserPreferences.objects.create(user=bob, theme="light_premium")
 
     client = Client()
-    client.login(username="alice", password="pw")
+    client.force_login(alice)
     resp = client.get(reverse("user_preferences"))
     assert resp.json() == {
         "theme": "strategic",
@@ -722,7 +722,7 @@ def test_preferences_isolated_per_user(db):
     }
 
     client2 = Client()
-    client2.login(username="bob", password="pw")
+    client2.force_login(bob)
     resp = client2.get(reverse("user_preferences"))
     assert resp.json() == {
         "theme": "light_premium",
@@ -740,7 +740,7 @@ def test_suggestions_are_isolated_per_user(db):
         user=bob, theme="classic", chat_suggestions=["Bob only"]
     )
     client = Client()
-    client.login(username="suggest-alice", password="pw")
+    client.force_login(alice)
     resp = client.patch(
         reverse("user_preferences"),
         data=json.dumps({"chat_suggestions": ["Alice updated"]}),
@@ -766,7 +766,7 @@ def test_patch_does_not_leak_across_users(db):
     UserPreferences.objects.create(user=bob, theme="strategic")
 
     client = Client()
-    client.login(username="alice2", password="pw")
+    client.force_login(alice)
     resp = client.patch(
         reverse("user_preferences"),
         data=json.dumps({"theme": "light_premium"}),

@@ -14,8 +14,8 @@ const timed = (start: string, end: string): NormalizedEvent => ({
 
 const allDay: NormalizedEvent = {
   title: "Holiday",
-  start: "2026-05-07T00:00:00",
-  end: "2026-05-08T00:00:00",
+  start: "2026-05-07T00:00:00Z",
+  end: "2026-05-08T00:00:00Z",
   calendar_name: "Personal",
   all_day: true,
   external_uid: "uid-2",
@@ -26,8 +26,8 @@ describe("isExternalEventPast", () => {
   const today = "2026-05-07"
 
   it("marks timed events ended at or before nowMinutes on today", () => {
-    const ended = timed("2026-05-07T14:00:00", "2026-05-07T15:00:00")
-    const ongoing = timed("2026-05-07T16:00:00", "2026-05-07T17:00:00")
+    const ended = timed("2026-05-07T14:00:00Z", "2026-05-07T15:00:00Z")
+    const ongoing = timed("2026-05-07T16:00:00Z", "2026-05-07T17:00:00Z")
     const nowMinutes = 16 * 60
     expect(isExternalEventPast(ended, today, today, nowMinutes)).toBe(true)
     expect(isExternalEventPast(ongoing, today, today, nowMinutes)).toBe(false)
@@ -38,24 +38,24 @@ describe("isExternalEventPast", () => {
   })
 
   it("dims every event on a past viewed date", () => {
-    const ev = timed("2026-05-06T10:00:00", "2026-05-06T11:00:00")
+    const ev = timed("2026-05-06T10:00:00Z", "2026-05-06T11:00:00Z")
     expect(isExternalEventPast(ev, "2026-05-06", today, null)).toBe(true)
   })
 
   it("dims nothing on a future viewed date", () => {
-    const ev = timed("2026-05-08T10:00:00", "2026-05-08T11:00:00")
+    const ev = timed("2026-05-08T10:00:00Z", "2026-05-08T11:00:00Z")
     expect(isExternalEventPast(ev, "2026-05-08", today, null)).toBe(false)
   })
 
   it("keeps an overnight event not-past at late-evening nowMinutes", () => {
-    const overnight = timed("2026-05-07T23:00:00", "2026-05-08T00:30:00")
+    const overnight = timed("2026-05-07T23:00:00Z", "2026-05-08T00:30:00Z")
     expect(isExternalEventPast(overnight, today, today, 23 * 60)).toBe(false)
   })
 
   it("keeps an overnight event not-past at daytime nowMinutes (collapsed-clock bug case)", () => {
     // The core regression: without the day-delta fold, ev.end 00:30 collapses to
     // 30 min and 30 <= 900 marks the still-upcoming overnight event as past.
-    const overnight = timed("2026-05-07T23:00:00", "2026-05-08T00:30:00")
+    const overnight = timed("2026-05-07T23:00:00Z", "2026-05-08T00:30:00Z")
     expect(isExternalEventPast(overnight, today, today, 15 * 60)).toBe(false)
   })
 
@@ -63,12 +63,12 @@ describe("isExternalEventPast", () => {
     // Discriminating fixture: end clock-minutes (18:00 = 1080) exceed nowMinutes
     // (noon = 720), so the buggy no-fold compare returns false (1080 <= 720) and
     // only the negative-dayDelta fold makes it true (-1440 + 1080 = -360 <= 720).
-    const priorEnd = timed("2026-05-05T17:00:00", "2026-05-06T18:00:00")
+    const priorEnd = timed("2026-05-05T17:00:00Z", "2026-05-06T18:00:00Z")
     expect(isExternalEventPast(priorEnd, today, today, 12 * 60)).toBe(true)
   })
 
   it("returns false on today before the first tick (nowMinutes null)", () => {
-    const ev = timed("2026-05-07T09:00:00", "2026-05-07T10:00:00")
+    const ev = timed("2026-05-07T09:00:00Z", "2026-05-07T10:00:00Z")
     expect(isExternalEventPast(ev, today, today, null)).toBe(false)
   })
 })

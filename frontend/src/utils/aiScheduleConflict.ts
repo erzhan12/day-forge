@@ -5,6 +5,6 @@ export const SCHEDULE_CHANGED_RETRY_MESSAGE =
 
 export function isScheduleChangedConflict(result: ApiResult): boolean {
   return (
-    result.status === 409 && result.errors?.detail === "schedule_changed"
+    result.status === 409 && (result.code === "schedule_changed" || result.errors?.detail === "schedule_changed")
   )
 }

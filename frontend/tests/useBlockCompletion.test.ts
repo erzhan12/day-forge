@@ -1,208 +1,165 @@
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { flushPromises } from "@vue/test-utils"
 import type { TimeBlock } from "../src/types"
+import type { ApiResult } from "../src/composables/useSchedule"
 import { useBlockCompletion } from "../src/composables/useBlockCompletion"
+import { acceptedMutation } from "./helpers/mutation"
 
 function makeBlock(overrides: Partial<TimeBlock> = {}): TimeBlock {
-  return {
-    id: 1,
-    title: "Focus",
-    start_time: "09:00",
-    end_time: "10:00",
-    category: "work",
-    is_completed: false,
-    sort_order: 0,
-    ...overrides,
-  }
+  return { id: 1, title: "Focus", start_time: "09:00", end_time: "10:00", category: "work", is_completed: false, sort_order: 0, ...overrides }
 }
-
-function makeDeps(overrides: Record<string, unknown> = {}) {
+function makeDeps() {
   return {
-    updateBlock: vi.fn().mockResolvedValue({ ok: true }),
+    updateBlock: vi.fn().mockResolvedValue(acceptedMutation([makeBlock()], "2026-08-12")),
     undo: { pushUndo: vi.fn(), snapshotBlocks: vi.fn(() => [] as TimeBlock[]) },
     isDisabled: vi.fn(() => false),
-    ...overrides,
   }
 }
-
-afterEach(() => {
-  vi.useRealTimers()
-})
+function deferred() {
+  let resolve!: (result: ApiResult) => void
+  const promise = new Promise<ApiResult>((r) => { resolve = r })
+  return { promise, resolve }
+}
 
 describe("useBlockCompletion", () => {
-  it("complete() PATCHes is_completed:true, pushes a silent toggle undo, resolves 'success'", async () => {
+  it("registers confirmed snapshot and returned revision, without a request abort signal", async () => {
     const deps = makeDeps()
-    const c = useBlockCompletion(deps)
-    const outcome = await c.complete(makeBlock({ id: 7, title: "Deep work" }), "2026-08-12")
-
-    expect(outcome).toBe("success")
-    expect(deps.updateBlock).toHaveBeenCalledWith(
-      7,
-      { is_completed: true },
-      expect.objectContaining({ signal: expect.any(AbortSignal) }),
-    )
-    expect(deps.undo.pushUndo).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: "toggle",
-        silent: true,
-        description: 'Checked "Deep work"',
-      }),
-    )
-    expect(c.saving.value).toBe(false)
-    expect(c.errorState.value).toBe(false)
+    const completion = useBlockCompletion(deps)
+    expect(await completion.complete(makeBlock({ id: 7, title: "Deep work" }), "2026-08-12")).toBe("success")
+    expect(deps.updateBlock).toHaveBeenCalledWith(7, { is_completed: true }, { scheduleDate: "2026-08-12" })
+    expect(deps.undo.pushUndo).toHaveBeenCalledWith(expect.objectContaining({
+      type: "toggle", silent: true, description: 'Checked "Deep work"', previousBlocks: [makeBlock()],
+      previous_revision: 3, expected_revision: 4, scheduleDate: "2026-08-12",
+    }))
+    expect(deps.undo.snapshotBlocks).not.toHaveBeenCalled()
+    expect(completion.saving.value).toBe(false)
   })
 
-  it("setCompleted(desired=false) labels the undo 'Unchecked'", async () => {
+  it.each([400, 401, 403, 404, 409, 500, 502, 503, undefined])("never retries status %s or registers undo", async (status) => {
     const deps = makeDeps()
-    const c = useBlockCompletion(deps)
-    await c.setCompleted(makeBlock({ title: "Nap" }), "2026-08-12", false)
-    expect(deps.undo.pushUndo).toHaveBeenCalledWith(
-      expect.objectContaining({ description: 'Unchecked "Nap"' }),
-    )
+    deps.updateBlock.mockResolvedValue({ ok: false, status })
+    const completion = useBlockCompletion(deps)
+    expect(await completion.complete(makeBlock(), "2026-08-12")).toBe("failure")
+    expect(deps.updateBlock).toHaveBeenCalledOnce()
+    expect(deps.undo.pushUndo).not.toHaveBeenCalled()
+    expect(completion.errorState.value).toBe(true)
+    expect(completion.saving.value).toBe(false)
   })
 
-  it("is a no-op resolving 'superseded' when the schedule is disabled", async () => {
-    const deps = makeDeps({ isDisabled: vi.fn(() => true) })
-    const c = useBlockCompletion(deps)
-    const outcome = await c.complete(makeBlock(), "2026-08-12")
-    expect(outcome).toBe("superseded")
-    expect(deps.updateBlock).not.toHaveBeenCalled()
-    expect(c.saving.value).toBe(false)
+  it.each([new TypeError("lost response body"), new DOMException("Aborted", "AbortError")])("settles thrown transport failure without replaying PATCH", async (error) => {
+    const deps = makeDeps()
+    deps.updateBlock.mockRejectedValue(error)
+    const completion = useBlockCompletion(deps)
+    expect(await completion.complete(makeBlock(), "2026-08-12")).toBe("failure")
+    expect(deps.updateBlock).toHaveBeenCalledOnce()
+    expect(completion.saving.value).toBe(false)
   })
 
-  it("retries per the backoff, then resolves 'failure' with errorState set and saving cleared", async () => {
-    vi.useFakeTimers()
-    const deps = makeDeps({ updateBlock: vi.fn().mockResolvedValue({ ok: false }) })
-    const c = useBlockCompletion(deps)
-    const p = c.complete(makeBlock(), "2026-08-12")
+  it("serializes rapid intents and preserves both confirmed operations in history", async () => {
+    const firstWrite = deferred()
+    const secondWrite = deferred()
+    const deps = makeDeps()
+    deps.updateBlock.mockReturnValueOnce(firstWrite.promise).mockReturnValueOnce(secondWrite.promise)
+    const completion = useBlockCompletion(deps)
+    const first = completion.complete(makeBlock(), "2026-08-12")
+    deps.isDisabled.mockReturnValue(true) // Shared controller is busy on this row's write.
+    const second = completion.setCompleted(makeBlock(), "2026-08-12", false)
+    expect(deps.updateBlock).toHaveBeenCalledOnce()
+    firstWrite.resolve(acceptedMutation([makeBlock()], "2026-08-12", 3))
+    expect(await first).toBe("superseded")
     await flushPromises()
-    await vi.advanceTimersByTimeAsync(4300)
-    const outcome = await p
-    expect(outcome).toBe("failure")
-    expect(deps.updateBlock).toHaveBeenCalledTimes(4)
-    expect(c.errorState.value).toBe(true)
-    expect(c.saving.value).toBe(false)
+    expect(deps.updateBlock).toHaveBeenCalledTimes(2)
+    expect(completion.saving.value).toBe(true)
+    expect(deps.updateBlock.mock.calls[1][1]).toEqual({ is_completed: false })
+    secondWrite.resolve(acceptedMutation([makeBlock({ is_completed: true })], "2026-08-12", 4))
+    expect(await second).toBe("success")
+    expect(deps.undo.pushUndo).toHaveBeenCalledTimes(2)
+    expect(deps.undo.pushUndo.mock.calls[1][0]).toMatchObject({ description: 'Unchecked "Focus"', previous_revision: 4, expected_revision: 5 })
+    expect(completion.saving.value).toBe(false)
+  })
+
+  it.each([
+    { ok: false, status: 409, code: "schedule_changed" },
+    { ok: false, errors: { detail: "Network error" } },
+    { ok: true },
+    { ok: true, code: "schedule_reconciled" },
+    { ok: true, code: "schedule_sync_failed" },
+  ])("cancels pre-conflict queued intent for %j, then permits a fresh user intent", async (failedResult) => {
+    const write = deferred()
+    const deps = makeDeps()
+    deps.updateBlock.mockReturnValueOnce(write.promise)
+    const completion = useBlockCompletion(deps)
+    const first = completion.complete(makeBlock(), "2026-08-12")
+    const queued = completion.setCompleted(makeBlock(), "2026-08-12", false)
+    write.resolve(failedResult)
+    expect(await first).toBe(failedResult.ok ? "superseded" : "failure")
+    expect(await queued).toBe("superseded")
+    expect(deps.updateBlock).toHaveBeenCalledOnce()
+    expect(deps.undo.pushUndo).not.toHaveBeenCalled()
+    expect(completion.saving.value).toBe(false)
+    expect(await completion.complete(makeBlock(), "2026-08-12")).toBe("success")
+    expect(deps.updateBlock).toHaveBeenCalledTimes(2)
+  })
+
+  it("does not create undo for a no-op or success without accepted metadata", async () => {
+    const deps = makeDeps()
+    deps.updateBlock.mockResolvedValueOnce(acceptedMutation([], "2026-08-12", 3, false)).mockResolvedValueOnce({ ok: true })
+    const completion = useBlockCompletion(deps)
+    expect(await completion.complete(makeBlock(), "2026-08-12")).toBe("success")
+    expect(await completion.complete(makeBlock(), "2026-08-12")).toBe("success")
     expect(deps.undo.pushUndo).not.toHaveBeenCalled()
   })
 
-  it("clears errorState after a failure followed by a success", async () => {
-    vi.useFakeTimers()
-    const updateBlock = vi
-      .fn()
-      .mockResolvedValueOnce({ ok: false })
-      .mockResolvedValueOnce({ ok: false })
-      .mockResolvedValueOnce({ ok: false })
-      .mockResolvedValueOnce({ ok: false })
-      .mockResolvedValue({ ok: true })
-    const deps = makeDeps({ updateBlock })
-    const c = useBlockCompletion(deps)
-    const p1 = c.complete(makeBlock(), "2026-08-12")
-    await flushPromises()
-    await vi.advanceTimersByTimeAsync(4300)
-    await p1
-    expect(c.errorState.value).toBe(true)
-
-    vi.useRealTimers()
-    const outcome = await c.complete(makeBlock(), "2026-08-12")
-    expect(outcome).toBe("success")
-    expect(c.errorState.value).toBe(false)
-  })
-
-  it("a second call aborts the first: first resolves 'superseded', only the second pushes undo", async () => {
-    const updateBlock = vi.fn().mockImplementation((_id, _data, opts) => {
-      const signal: AbortSignal | undefined = opts?.signal
-      return new Promise((resolve, reject) => {
-        if (signal?.aborted) {
-          reject(new DOMException("Aborted", "AbortError"))
-          return
-        }
-        const onAbort = () => reject(new DOMException("Aborted", "AbortError"))
-        signal?.addEventListener("abort", onAbort, { once: true })
-        // Resolve ok only for a call whose signal is never aborted.
-        setTimeout(() => {
-          if (!signal?.aborted) resolve({ ok: true })
-        }, 0)
-      })
-    })
-    const deps = makeDeps({ updateBlock })
-    const c = useBlockCompletion(deps)
-    const first = c.complete(makeBlock(), "2026-08-12")
-    const second = c.complete(makeBlock(), "2026-08-12")
-    const [o1, o2] = await Promise.all([first, second])
-    expect(o1).toBe("superseded")
-    expect(o2).toBe("success")
-    expect(deps.undo.pushUndo).toHaveBeenCalledTimes(1)
-  })
-
-  it("captures the block id at call start (a later mutation cannot retarget the PATCH)", async () => {
+  it.each(["reset", "dispose"] as const)("%s detaches row UI, cancels unsent work and retains history for the accepted write", async (method) => {
+    const write = deferred()
     const deps = makeDeps()
-    const c = useBlockCompletion(deps)
+    deps.updateBlock.mockReturnValueOnce(write.promise)
+    const completion = useBlockCompletion(deps)
+    const first = completion.complete(makeBlock(), "2026-08-12")
+    const second = completion.setCompleted(makeBlock(), "2026-08-12", false)
+    completion[method]()
+    expect(completion.saving.value).toBe(false)
+    write.resolve(acceptedMutation([makeBlock()], "2026-08-12"))
+    expect(await first).toBe("superseded")
+    expect(await second).toBe("superseded")
+    expect(deps.updateBlock).toHaveBeenCalledOnce()
+    expect(deps.undo.pushUndo).toHaveBeenCalledOnce()
+    expect(completion.errorState.value).toBe(false)
+  })
+
+  it("does not register history after navigation when the controller omits mutation metadata", async () => {
+    const write = deferred()
+    const deps = makeDeps()
+    deps.updateBlock.mockReturnValueOnce(write.promise)
+    const completion = useBlockCompletion(deps)
+    const operation = completion.complete(makeBlock(), "2026-08-12")
+    completion.reset()
+    write.resolve({ ok: true })
+    expect(await operation).toBe("superseded")
+    expect(deps.undo.pushUndo).not.toHaveBeenCalled()
+  })
+
+  it("captures the original identity before mutable block props change", async () => {
+    const deps = makeDeps()
     const block = makeBlock({ id: 11 })
-    const p = c.complete(block, "2026-08-12")
+    const completion = useBlockCompletion(deps)
+    const operation = completion.complete(block, "2026-08-12")
     block.id = 999
-    await p
-    expect(deps.updateBlock).toHaveBeenCalledWith(11, { is_completed: true }, expect.anything())
+    await operation
+    expect(deps.updateBlock.mock.calls[0][0]).toBe(11)
   })
 
-  it("reset() clears saving + errorState", async () => {
-    vi.useFakeTimers()
-    const deps = makeDeps({ updateBlock: vi.fn().mockResolvedValue({ ok: false }) })
-    const c = useBlockCompletion(deps)
-    const p = c.complete(makeBlock(), "2026-08-12")
-    await flushPromises()
-    await vi.advanceTimersByTimeAsync(4300)
-    await p
-    expect(c.errorState.value).toBe(true)
-    c.reset()
-    expect(c.saving.value).toBe(false)
-    expect(c.errorState.value).toBe(false)
-  })
-
-  it("dispose() bumps generation so a late resolve bails 'superseded' without pushing undo", async () => {
-    let resolveUpdate: ((v: { ok: boolean }) => void) | null = null
-    const updateBlock = vi.fn().mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          resolveUpdate = resolve
-        }),
-    )
-    const deps = makeDeps({ updateBlock })
-    const c = useBlockCompletion(deps)
-    const p = c.complete(makeBlock(), "2026-08-12")
-    c.dispose()
-    resolveUpdate!({ ok: true })
-    const outcome = await p
-    expect(outcome).toBe("superseded")
-    expect(deps.undo.pushUndo).not.toHaveBeenCalled()
-  })
-
-  it("reset() on a freshly constructed instance is a no-op (no throw)", () => {
-    const c = useBlockCompletion(makeDeps())
-    expect(() => c.reset()).not.toThrow()
-    expect(c.saving.value).toBe(false)
-    expect(c.errorState.value).toBe(false)
-  })
-
-  it("dispose() on a freshly constructed instance is a no-op (no throw)", () => {
-    const c = useBlockCompletion(makeDeps())
-    expect(() => c.dispose()).not.toThrow()
-    expect(c.saving.value).toBe(false)
-    expect(c.errorState.value).toBe(false)
-  })
-
-  it("keeps two instances isolated: failing A leaves B untouched", async () => {
-    vi.useFakeTimers()
-    const a = useBlockCompletion(makeDeps({ updateBlock: vi.fn().mockResolvedValue({ ok: false }) }))
-    const b = useBlockCompletion(makeDeps())
-    const pa = a.complete(makeBlock(), "2026-08-12")
-    await flushPromises()
-    await vi.advanceTimersByTimeAsync(4300)
-    await pa
-    expect(a.errorState.value).toBe(true)
-    expect(b.errorState.value).toBe(false)
-    expect(b.saving.value).toBe(false)
-    // Resetting A must not touch B.
-    a.reset()
-    expect(b.errorState.value).toBe(false)
+  it("rejects new completion when disabled and clears errors after a later accepted request", async () => {
+    const deps = makeDeps()
+    const completion = useBlockCompletion(deps)
+    deps.isDisabled.mockReturnValue(true)
+    expect(await completion.complete(makeBlock(), "2026-08-12")).toBe("superseded")
+    expect(deps.updateBlock).not.toHaveBeenCalled()
+    deps.isDisabled.mockReturnValue(false)
+    deps.updateBlock.mockResolvedValueOnce({ ok: false })
+    await completion.complete(makeBlock(), "2026-08-12")
+    expect(completion.errorState.value).toBe(true)
+    await completion.complete(makeBlock(), "2026-08-12")
+    expect(completion.errorState.value).toBe(false)
   })
 })

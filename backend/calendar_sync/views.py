@@ -12,9 +12,10 @@ to match ``frontend/src/composables/useHttp.ts:77``.
 """
 
 import datetime
-import json
 import logging
 
+from common.http import parse_json_object
+from common.integration_response import resource_error, resource_meta
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ImproperlyConfigured
@@ -22,12 +23,12 @@ from django.db import transaction
 from django.http import HttpRequest, JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
-from schedules.http import reject_oversized_body
 from schedules.ratelimit import (
     connect_rate_limit_key,
     consume_rate_limit,
     rate_limited_response,
 )
+from schedules.window import get_schedule_settings
 
 from calendar_sync import cache as calendar_cache
 from calendar_sync import service
@@ -72,15 +73,35 @@ def _account_status_payload(account: CalDAVAccount | None) -> dict:
     }
 
 
-def _service_error_response(exc: Exception) -> JsonResponse:
+def _service_error_response(
+    exc: Exception, *, resource: bool = False, account_state: str = "connected"
+) -> JsonResponse:
     """Map ``CalDAVError`` subclasses to the standard envelope + status."""
     for cls, (status, detail) in _SERVICE_ERROR_STATUS.items():
         if isinstance(exc, cls):
+            if resource:
+                state = (
+                    "credentials_error"
+                    if status == 401
+                    else "unavailable"
+                    if status == 504
+                    else "provider_error"
+                )
+                return resource_error(
+                    detail, status, account_state=account_state, resource_state=state
+                )
             return _envelope(detail, status)
     # Unknown error class — log and return 500. Never let the raw error
     # bubble to the client; CalDAV stacktraces can include the URL with
     # credentials in some lib versions.
     logger.exception("Unexpected CalDAV service error")
+    if resource:
+        return resource_error(
+            "Apple Calendar error",
+            500,
+            account_state=account_state,
+            resource_state="unavailable",
+        )
     return _envelope("Apple Calendar error", 500)
 
 
@@ -107,13 +128,9 @@ def account(request: HttpRequest) -> JsonResponse:
         return JsonResponse(_account_status_payload(None))
 
     # POST — verify-then-upsert.
-    oversized = reject_oversized_body(request)
-    if oversized is not None:
-        return oversized
-    try:
-        data = json.loads(request.body or b"{}")
-    except json.JSONDecodeError:
-        return _envelope("Invalid JSON.", 400)
+    data, err = parse_json_object(request, allow_empty=True, error_field="detail")
+    if err is not None:
+        return err
 
     cleaned, errors = validate_account_payload(data)
     if errors:
@@ -128,24 +145,36 @@ def account(request: HttpRequest) -> JsonResponse:
     try:
         service.verify_credentials(cleaned["apple_id"], cleaned["password"], base_url)
     except service.CalDAVError as e:
-        return _service_error_response(e)
-
-    with transaction.atomic():
-        acc, _ = CalDAVAccount.objects.select_for_update().get_or_create(
-            user=request.user,
-            defaults={
-                "apple_id": cleaned["apple_id"],
-                "base_url": base_url,
-            },
+        return _service_error_response(
+            e,
+            resource=True,
+            account_state=(
+                "connected"
+                if CalDAVAccount.objects.filter(user=request.user).exists()
+                else "disconnected"
+            ),
         )
-        acc.apple_id = cleaned["apple_id"]
-        acc.base_url = base_url
-        acc.last_verified_at = timezone.now()
-        acc.set_password(cleaned["password"])
-        # Plain save — no ``update_fields`` — so ``auto_now=True`` fires
-        # on ``updated_at`` and the cache-key version advances. See the
-        # auto_now footgun note in calendar_sync/cache.py.
-        acc.save()
+
+    try:
+        with transaction.atomic():
+            acc, _ = CalDAVAccount.objects.select_for_update().get_or_create(
+                user=request.user,
+                defaults={"apple_id": cleaned["apple_id"], "base_url": base_url},
+            )
+            acc.apple_id = cleaned["apple_id"]
+            acc.base_url = base_url
+            acc.last_verified_at = timezone.now()
+            acc.set_password(cleaned["password"])
+            # Plain save bumps the cache-key version via auto_now.
+            acc.save()
+    except ImproperlyConfigured:
+        logger.exception("CalDAV encryption misconfigured for user %s", request.user.id)
+        return resource_error(
+            "Calendar service is misconfigured. Contact the administrator.",
+            500,
+            account_state="configuration_error",
+            resource_state="unavailable",
+        )
 
     return JsonResponse(_account_status_payload(acc))
 
@@ -164,7 +193,16 @@ def events(request: HttpRequest, date: str) -> JsonResponse:
     try:
         account_row = request.user.caldav_account
     except CalDAVAccount.DoesNotExist:
-        return _envelope("No CalDAV account configured", 503)
+        return resource_error(
+            "No CalDAV account configured",
+            503,
+            account_state="disconnected",
+            resource_state="unavailable",
+        )
+
+    # One saved timezone snapshot drives cache lookup, provider bounds and
+    # serialization for this request, even if settings change mid-fetch.
+    time_zone = get_schedule_settings(request.user).time_zone
 
     # ``?refresh=1`` forces a cache-bypass live re-fetch (manual Refresh /
     # background poll). Additive: a non-forced read still hits the cache,
@@ -172,12 +210,12 @@ def events(request: HttpRequest, date: str) -> JsonResponse:
     force_refresh = request.GET.get("refresh") == "1"
 
     if not force_refresh:
-        cached = calendar_cache.get_cached_events(account_row, parsed_date)
+        cached = calendar_cache.get_cached_events(account_row, parsed_date, time_zone)
         if cached is not None:
-            return JsonResponse({"events": cached})
+            return JsonResponse({"events": cached, "meta": resource_meta("connected", "ready")})
 
     try:
-        events_list = service.fetch_events_for_date(account_row, parsed_date)
+        events_list = service.fetch_events_for_date(account_row, parsed_date, time_zone)
     except ImproperlyConfigured:
         # Server-side encryption-key issue (e.g. CALDAV_ENCRYPTION_KEY
         # rotated while old rows persist). Surface as a 500 with a
@@ -185,13 +223,15 @@ def events(request: HttpRequest, date: str) -> JsonResponse:
         # 502 "Apple Calendar provider failure" — ops can act on the
         # real cause faster.
         logger.exception("CalDAV decryption misconfigured for user %s", request.user.id)
-        return _envelope(
+        return resource_error(
             "Calendar service is misconfigured. Contact the administrator.",
             500,
+            account_state="configuration_error",
+            resource_state="unavailable",
         )
     except service.CalDAVError as e:
-        return _service_error_response(e)
+        return _service_error_response(e, resource=True)
 
     payload = [normalized_event_to_dict(e) for e in events_list]
-    calendar_cache.set_cached_events(account_row, parsed_date, payload)
-    return JsonResponse({"events": payload})
+    calendar_cache.set_cached_events(account_row, parsed_date, payload, time_zone)
+    return JsonResponse({"events": payload, "meta": resource_meta("connected", "ready")})

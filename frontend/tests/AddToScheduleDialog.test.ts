@@ -1,3 +1,7 @@
+import { ScheduleUndoKey, ScheduleDisabledKey } from "../src/composables/scheduleContext"
+import { acceptedMutation } from "./helpers/mutation"
+import { makeCategories } from "./helpers/schedule"
+import type { TimeBlock } from "../src/types"
 // AddToScheduleDialog — Confirm gating, rule prefill, and undo parity.
 //
 // The plan locks several behaviours that are only reachable through this
@@ -11,7 +15,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest"
 import { mount } from "@vue/test-utils"
 import { ref } from "vue"
 
-const createBlockFromEvent = vi.fn().mockResolvedValue({ ok: true })
+const createBlockFromEvent = vi.fn()
 
 vi.mock("../src/composables/useSchedule", () => ({
   useSchedule: () => ({ createBlockFromEvent }),
@@ -31,8 +35,8 @@ function localEvent(startHM: string, endHM: string) {
   const [y, m, d] = DATE.split("-").map(Number)
   return {
     title: "Dentist",
-    start: new Date(y, m - 1, d, sh, sm).toISOString(),
-    end: new Date(y, m - 1, d, eh, em).toISOString(),
+    start: new Date(Date.UTC(y, m - 1, d, sh, sm)).toISOString(),
+    end: new Date(Date.UTC(y, m - 1, d, eh, em)).toISOString(),
     calendar_name: "Personal",
     all_day: false,
     external_uid: "uid-1",
@@ -53,6 +57,7 @@ const GYM_RULE: TravelRule = {
 function mountDialog(overrides: Record<string, unknown> = {}) {
   return mount(AddToScheduleDialog, {
     props: {
+      categories: makeCategories(),
       event: localEvent("14:07", "14:33"),
       matchedRule: null,
       date: DATE,
@@ -68,11 +73,15 @@ function confirmBtn(wrapper: ReturnType<typeof mountDialog>) {
 describe("AddToScheduleDialog", () => {
   beforeEach(() => {
     createBlockFromEvent.mockClear()
-    createBlockFromEvent.mockResolvedValue({ ok: true })
+    createBlockFromEvent.mockResolvedValue(acceptedMutation([], DATE))
   })
 
   it("enables Confirm for a normal timed event", () => {
     expect(confirmBtn(mountDialog()).attributes("disabled")).toBeUndefined()
+  })
+
+  it("disables Confirm when the category catalog is missing", () => {
+    expect(confirmBtn(mountDialog({ categories: [] })).attributes("disabled")).toBeDefined()
   })
 
   it("posts the exact off-grid times to the from-event endpoint", async () => {
@@ -136,38 +145,48 @@ describe("AddToScheduleDialog", () => {
 
   it("does not submit while scheduleDisabled is injected true", async () => {
     const wrapper = mount(AddToScheduleDialog, {
-      props: { event: localEvent("14:07", "14:33"), matchedRule: null, date: DATE },
-      global: { provide: { scheduleDisabled: ref(true) } },
+      props: { event: localEvent("14:07", "14:33"), matchedRule: null, date: DATE, categories: makeCategories() },
+      global: { provide: { [ScheduleDisabledKey]: ref(true) } },
     })
     expect(confirmBtn(wrapper).attributes("disabled")).toBeDefined()
     await confirmBtn(wrapper).trigger("click")
     expect(createBlockFromEvent).not.toHaveBeenCalled()
   })
 
-  it("pushes an undo entry snapshotted BEFORE the create", async () => {
+  it("uses the snapshot and revision from the confirmed create", async () => {
     const pushUndo = vi.fn()
-    const snapshotBlocks = vi.fn().mockReturnValue([{ id: 1 }])
+    const previousBlocks = [{ id: 1 }] as TimeBlock[]
+    createBlockFromEvent.mockResolvedValue(acceptedMutation(previousBlocks, DATE))
+    const snapshotBlocks = vi.fn().mockReturnValue([{ id: 99 }])
     const wrapper = mount(AddToScheduleDialog, {
-      props: { event: localEvent("14:07", "14:33"), matchedRule: null, date: DATE },
-      global: { provide: { undo: { pushUndo, snapshotBlocks } } },
+      props: { event: localEvent("14:07", "14:33"), matchedRule: null, date: DATE, categories: makeCategories() },
+      global: { provide: { [ScheduleUndoKey]: { pushUndo, snapshotBlocks } } },
     })
     await confirmBtn(wrapper).trigger("click")
     await Promise.resolve()
 
-    expect(snapshotBlocks).toHaveBeenCalled()
-    // Order matters, not just the calls: snapshotting AFTER the create would
-    // capture the post-create state and make undo a no-op. Assert the
-    // snapshot strictly precedes the request (issue #21 parity).
-    expect(snapshotBlocks.mock.invocationCallOrder[0]).toBeLessThan(
-      createBlockFromEvent.mock.invocationCallOrder[0],
-    )
+    expect(snapshotBlocks).not.toHaveBeenCalled()
     expect(pushUndo).toHaveBeenCalledWith(
       expect.objectContaining({
         type: "add",
         scheduleDate: DATE,
         previousBlocks: [{ id: 1 }],
+        expected_revision: 4,
+        previous_revision: 3,
       }),
     )
+  })
+
+  it("does not register undo for a no-op create", async () => {
+    createBlockFromEvent.mockResolvedValue(acceptedMutation([], DATE, 3, false))
+    const pushUndo = vi.fn()
+    const wrapper = mount(AddToScheduleDialog, {
+      props: { event: localEvent("14:07", "14:33"), matchedRule: null, date: DATE, categories: makeCategories() },
+      global: { provide: { [ScheduleUndoKey]: { pushUndo, snapshotBlocks: () => [] } } },
+    })
+    await confirmBtn(wrapper).trigger("click")
+    await Promise.resolve()
+    expect(pushUndo).not.toHaveBeenCalled()
   })
 
   it("does not push undo when the create fails", async () => {
@@ -177,9 +196,9 @@ describe("AddToScheduleDialog", () => {
     })
     const pushUndo = vi.fn()
     const wrapper = mount(AddToScheduleDialog, {
-      props: { event: localEvent("14:07", "14:33"), matchedRule: null, date: DATE },
+      props: { event: localEvent("14:07", "14:33"), matchedRule: null, date: DATE, categories: makeCategories() },
       global: {
-        provide: { undo: { pushUndo, snapshotBlocks: () => [] } },
+        provide: { [ScheduleUndoKey]: { pushUndo, snapshotBlocks: () => [] } },
       },
     })
     await confirmBtn(wrapper).trigger("click")
@@ -248,13 +267,14 @@ describe("AddToScheduleDialog", () => {
       const pushUndo = vi.fn()
       const wrapper = mount(AddToScheduleDialog, {
         props: {
+          categories: makeCategories(),
           event: localEvent("14:07", "14:33"),
           matchedRule: null,
           date: DATE,
           window: NARROW,
         },
         global: {
-          provide: { undo: { pushUndo, snapshotBlocks: () => [] } },
+          provide: { [ScheduleUndoKey]: { pushUndo, snapshotBlocks: () => [] } },
         },
       })
       await confirmBtn(wrapper).trigger("click")

@@ -10,11 +10,13 @@ vi.mock("@inertiajs/vue3", () => ({
 }))
 
 import CategoryBreakdown from "../src/components/CategoryBreakdown.vue"
+import { makeCategories } from "./helpers/schedule"
 
 describe("CategoryBreakdown", () => {
   it("renders rows for every category, even at zero minutes", () => {
     const wrapper = mount(CategoryBreakdown, {
       props: {
+        categories: makeCategories(),
         planned: { work: 240, personal: 0, health: 60, other: 0 },
         completed: { work: 180, personal: 0, health: 30, other: 0 },
       },
@@ -31,6 +33,7 @@ describe("CategoryBreakdown", () => {
   it("formats minutes as h/m correctly", () => {
     const wrapper = mount(CategoryBreakdown, {
       props: {
+        categories: makeCategories(),
         planned: { work: 90, personal: 0, health: 0, other: 0 },
         completed: { work: 60, personal: 0, health: 0, other: 0 },
       },
@@ -42,6 +45,7 @@ describe("CategoryBreakdown", () => {
   it("treats a rest day (all zeros) without dividing by zero", () => {
     const wrapper = mount(CategoryBreakdown, {
       props: {
+        categories: makeCategories(),
         planned: { work: 0, personal: 0, health: 0, other: 0 },
         completed: { work: 0, personal: 0, health: 0, other: 0 },
       },
@@ -55,6 +59,7 @@ describe("CategoryBreakdown", () => {
   it("normalises the planned bar against a CUSTOM window span, not the 1020-minute default", () => {
     const wrapper = mount(CategoryBreakdown, {
       props: {
+        categories: makeCategories(),
         planned: { work: 240, personal: 0, health: 0, other: 0 },
         completed: { work: 0, personal: 0, health: 0, other: 0 },
         // 09:00–17:00 → 480-minute span. 240/480 = 50%, whereas 240/1020 ≈ 23.5%.
@@ -71,6 +76,7 @@ describe("CategoryBreakdown", () => {
   it("falls back to the 06:00–23:00 (1020-minute) span when no window props are passed", () => {
     const wrapper = mount(CategoryBreakdown, {
       props: {
+        categories: makeCategories(),
         // 510/1020 = 50% under the default span.
         planned: { work: 510, personal: 0, health: 0, other: 0 },
         completed: { work: 0, personal: 0, health: 0, other: 0 },

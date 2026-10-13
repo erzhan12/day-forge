@@ -1,6 +1,6 @@
-# Day-Forge — Implementation Phases
+# Day Forge: Original Implementation Phases
 
-Derived from `day_forge_prd.md`. Each phase is self-contained and results in a working, testable state.
+This is the original seven-phase roadmap derived from `day_forge_prd.md`. It records planned milestones and file layouts from early development. Later features and refactors changed the implementation, so the phases below are historical context rather than instructions for current code. For the current architecture, use `docs/ARCHITECTURE.md` and `RULES.md`. For remaining work, use `tasks/todo.md` and `docs/REFACTORING_PLAN.md`. Deployment steps are in `deployment/README.md`.
 
 ---
 

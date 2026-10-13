@@ -9,6 +9,7 @@ import ExternalEventsPanel from "./ExternalEventsPanel.vue"
 
 const props = withDefaults(defineProps<{
   activeDate: string
+  timeZone?: string; todayDate?: string
   todoistTasks: TodoistTask[]; todoistLoading: boolean; todoistError: string | null; showTodoist?: boolean
   habiticaTasks: HabiticaTask[]; habiticaLoading: boolean; habiticaError: string | null; showHabitica?: boolean
   showCalendars?: boolean; events: NormalizedEvent[]; eventsLoading: boolean; eventErrors: ProviderErrorBanner[]; accountErrors: GoogleAccountError[]; externalConnected: boolean; nowMinutes: number | null
@@ -49,7 +50,7 @@ function resetProviderOnDateChange(
     awaitingCommit.value = true
   }
 }
-watch(() => props.activeDate, () => {
+watch(() => [props.activeDate, props.timeZone, props.todayDate], () => {
   resetProviderOnDateChange(props.todoistLoading, todoistBaselineIds, todoistRemainingIds, todoistSawLoad, todoistAwaitingCommit)
   resetProviderOnDateChange(props.habiticaLoading, habiticaBaselineIds, habiticaRemainingIds, habiticaSawLoad, habiticaAwaitingCommit)
 })
@@ -135,7 +136,7 @@ function toggle() { open.value = !open.value }
     <div v-if="open" class="rail-content">
       <section v-if="showTodoist" class="task-section"><div class="source-heading"><span>Todoist</span><small data-testid="todoist-session-progress">{{ todoistProgress.label }}</small></div><div class="progress"><i :style="{ width: todoistProgress.percent + '%' }" /></div><TodoistTasksPanel :tasks="todoistTasks" :loading="todoistLoading" :error="todoistError" @retry="emit('todoistRetry')" @complete="completeTodoist" /></section>
       <section v-if="showHabitica" class="task-section"><div class="source-heading"><span>Habitica</span><small data-testid="habitica-session-progress">{{ habiticaProgress.label }}</small></div><div class="progress"><i :style="{ width: habiticaProgress.percent + '%' }" /></div><HabiticaTasksSection :tasks="habiticaTasks" :loading="habiticaLoading" :error="habiticaError" @retry="emit('habiticaRetry')" @complete="completeHabitica" /></section>
-      <section v-if="showCalendars" class="calendar-section"><div class="source-heading"><span>Внешние календари</span><small>{{ events.length }} left</small></div><ExternalEventsPanel variant="sidebar" :date="activeDate" :now-minutes="nowMinutes" :events="events" :loading="eventsLoading" :error-banners="eventErrors" :account-errors="accountErrors" :connected="externalConnected" @retry="emit('retryExternal', $event)" @add-to-schedule="emit('addToSchedule', $event)" /></section>
+      <section v-if="showCalendars" class="calendar-section"><div class="source-heading"><span>Внешние календари</span><small>{{ events.length }} left</small></div><ExternalEventsPanel :time-zone="timeZone" :today-date="todayDate" variant="sidebar" :date="activeDate" :now-minutes="nowMinutes" :events="events" :loading="eventsLoading" :error-banners="eventErrors" :account-errors="accountErrors" :connected="externalConnected" @retry="emit('retryExternal', $event)" @add-to-schedule="emit('addToSchedule', $event)" /></section>
     </div>
   </aside>
 </template>

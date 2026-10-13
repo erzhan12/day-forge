@@ -1,50 +1,72 @@
+"""HTTP adapters for schedule commands.
+
+Transport parsing and category ownership live here. The planner validates the
+complete candidate schedule, and the R04 executor owns the atomic write.
+"""
+
 import datetime
-import json
 import logging
 import time
+from functools import wraps
 
+from common.http import parse_json_object
 from django.contrib.auth.decorators import login_required
-from django.core.exceptions import ValidationError
-from django.db import transaction
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
 from schedules.categories import default_category, ordered_categories, sink_category, validate_slug
-from schedules.http import (
-    block_to_dict,
-    is_plain_int,
-    parse_time,
-    parse_time_or_error,
-    reject_oversized_body,
-    validate_block_times,
-    validate_five_minute_or_error,
-    validate_sort_order,
-    validate_time_range,
+from schedules.commands import (
+    CreateCommand,
+    DeleteCommand,
+    ReorderCommand,
+    RestoreCommand,
+    UpdateCommand,
 )
-from schedules.models import Schedule, TimeBlock
-from schedules.window import clamp_boundary, get_schedule_window
+from schedules.http import (
+    is_plain_int,
+    parse_time_or_error,
+    validate_block_times,
+    validate_sort_order,
+)
+from schedules.models import TimeBlock
+from schedules.mutations import (
+    MutationRejected,
+    ScheduleChanged,
+    execute_schedule_mutation,
+    parse_expected_revision,
+    schedule_changed_response,
+)
+from schedules.persistence import persist_command_diff
+from schedules.planning import (
+    IMPORT,
+    MANUAL,
+    UNDO,
+    CommandError,
+    plan_commands,
+    snapshot_from_blocks,
+)
+from schedules.provenance import origin_from_restore_proof
+from schedules.serialization import serialize_block
+from schedules.window import get_schedule_window
 
 logger = logging.getLogger(__name__)
-
 MAX_REORDER_UPDATES = 100
 
-# Private aliases so the long-standing intra-file call sites below keep
-# compiling after helpers moved to ``schedules/http.py``. New code (and
-# cross-app callers) should import the public names directly from
-# ``schedules.http``.
-_reject_oversized_body = reject_oversized_body
-_is_plain_int = is_plain_int
-_parse_time = parse_time
-_parse_time_or_error = parse_time_or_error
-_validate_five_minute_or_error = validate_five_minute_or_error
-_validate_time_range = validate_time_range
-_validate_block_times = validate_block_times
-_validate_sort_order = validate_sort_order
-_block_to_dict = block_to_dict
+
+def _mutation_errors(view):
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        try:
+            return view(*args, **kwargs)
+        except ScheduleChanged as error:
+            return schedule_changed_response(error)
+        except MutationRejected as error:
+            return error.response
+
+    return wrapped
 
 
 def _outside_window_response(window):
-    """Stable skip envelope for a newly-calculated fully-outside interval."""
     return JsonResponse(
         {
             "skipped": True,
@@ -57,291 +79,171 @@ def _outside_window_response(window):
     )
 
 
+def _plan_error_response(error, *, overlap_message, window=None, missing_message="Not found."):
+    if error.code == "out_of_window":
+        return _outside_window_response(window)
+    if error.code == "unknown_block":
+        return JsonResponse({"errors": {"detail": missing_message}}, status=404)
+    message = overlap_message if error.code == "overlap" else error.message
+    return JsonResponse({"errors": {error.field: message}}, status=400)
+
+
+def _date_or_error(value):
+    try:
+        return datetime.date.fromisoformat(value), None
+    except ValueError:
+        return None, JsonResponse({"errors": {"date": "Invalid date format."}}, status=400)
+
+
+def _parse_required_times(data, *, block_id=None):
+    for field in ("start_time", "end_time"):
+        if field not in data:
+            suffix = f" (block {block_id})" if block_id is not None else ""
+            message = (
+                f"{field} is required{suffix}." if block_id is not None else f"{field} is required."
+            )
+            return None, None, JsonResponse({"errors": {field: message}}, status=400)
+        if block_id is None and not isinstance(data[field], str):
+            return (
+                None,
+                None,
+                JsonResponse({"errors": {field: f"{field} must be a string."}}, status=400),
+            )
+    start, error = parse_time_or_error("start_time", data["start_time"], block_id=block_id)
+    if error is not None:
+        return None, None, error
+    end, error = parse_time_or_error("end_time", data["end_time"], block_id=block_id)
+    return start, end, error
+
+
+def _create_block(request, date, *, policy):
+    parsed_date, error = _date_or_error(date)
+    if error is not None:
+        return error
+    data, error = parse_json_object(request)
+    if error is not None:
+        return error
+    for field in ("start_time", "end_time"):
+        if field not in data:
+            return JsonResponse({"errors": {field: f"{field} is required."}}, status=400)
+        if not isinstance(data[field], str):
+            return JsonResponse({"errors": {field: f"{field} must be a string."}}, status=400)
+    if "title" in data and not isinstance(data["title"], str):
+        return JsonResponse({"errors": {"title": "Title must be a string."}}, status=400)
+    if "category" in data and not isinstance(data["category"], str):
+        return JsonResponse({"errors": {"category": "Category must be a string."}}, status=400)
+    start, end, error = _parse_required_times(data)
+    if error is not None:
+        return error
+    _, _, error = validate_block_times(
+        data["start_time"], data["end_time"], enforce_granularity=policy == MANUAL
+    )
+    if error is not None:
+        return error
+    title = data.get("title", "").strip()
+    if not title:
+        return JsonResponse({"errors": {"title": "Title is required."}}, status=400)
+    if len(title) > 255:
+        return JsonResponse(
+            {"errors": {"title": "Title too long (max 255 characters)."}}, status=400
+        )
+    categories = ordered_categories(request.user)
+    default = default_category(categories) if policy == MANUAL else sink_category(categories)
+    category = data.get("category", default.slug)
+    try:
+        category = validate_slug(category, categories)
+    except ValueError as exc:
+        return JsonResponse({"errors": {"category": str(exc)}}, status=400)
+    expected_revision = parse_expected_revision(data)
+
+    def apply(ctx):
+        try:
+            fresh_category = validate_slug(category, ordered_categories(request.user))
+        except ValueError as exc:
+            return JsonResponse({"errors": {"category": str(exc)}}, status=400)
+        window = get_schedule_window(request.user)
+        origin = TimeBlock.Origin.CALENDAR if policy == IMPORT else TimeBlock.Origin.MANUAL
+        command = CreateCommand(title, start, end, fresh_category, sort_order=0, origin=origin)
+        try:
+            plan = plan_commands(
+                snapshot_from_blocks(ctx.schedule, ctx.blocks),
+                (command,),
+                policy=policy,
+                window=window,
+            )
+        except CommandError as exc:
+            return _plan_error_response(
+                exc, overlap_message="This block overlaps with an existing block.", window=window
+            )
+        created = persist_command_diff(ctx.schedule, ctx.blocks, plan.diff)
+        ctx.schedule.mark_active_on_edit()
+        return serialize_block(created[0])
+
+    result = execute_schedule_mutation(
+        request.user.pk, None, expected_revision, apply, date=parsed_date
+    )
+    return JsonResponse({**result.value, **result.snapshot}, status=201)
+
+
 @login_required
 @require_http_methods(["POST"])
+@_mutation_errors
 def create_block(request, date):
-    try:
-        parsed_date = datetime.date.fromisoformat(date)
-    except ValueError:
-        return JsonResponse({"errors": {"date": "Invalid date format."}}, status=400)
-
-    oversized = _reject_oversized_body(request)
-    if oversized is not None:
-        return oversized
-
-    try:
-        data = json.loads(request.body)
-    except json.JSONDecodeError:
-        return JsonResponse({"errors": {"body": "Invalid JSON."}}, status=400)
-
-    if not isinstance(data, dict):
-        return JsonResponse(
-            {"errors": {"body": "Request body must be a JSON object."}},
-            status=400,
-        )
-
-    # Explicit type checks: non-string title (``.strip()`` → AttributeError)
-    # or unhashable category (``in``-set → TypeError) would otherwise 500.
-    # Run before ``get_or_create`` so a malformed payload is rejected without
-    # the side effect of creating an empty Schedule row (mirrors
-    # ``create_block_from_event``).
-    for field in ("start_time", "end_time"):
-        if field not in data:
-            return JsonResponse({"errors": {field: f"{field} is required."}}, status=400)
-        if not isinstance(data[field], str):
-            return JsonResponse({"errors": {field: f"{field} must be a string."}}, status=400)
-    if "title" in data and not isinstance(data["title"], str):
-        return JsonResponse({"errors": {"title": "Title must be a string."}}, status=400)
-    if "category" in data and not isinstance(data["category"], str):
-        return JsonResponse({"errors": {"category": "Category must be a string."}}, status=400)
-
-    start, end, err = _validate_block_times(data["start_time"], data["end_time"])
-    if err is not None:
-        return err
-    window = get_schedule_window(request.user)
-    clamped = clamp_boundary(start, end, window, clamp_start=True, clamp_end=True)
-    if clamped is None:
-        return _outside_window_response(window)
-    start, end = clamped
-
-    title = data.get("title", "").strip()
-    if not title:
-        return JsonResponse({"errors": {"title": "Title is required."}}, status=400)
-    if len(title) > 255:
-        return JsonResponse(
-            {"errors": {"title": "Title too long (max 255 characters)."}}, status=400
-        )
-
-    categories = ordered_categories(request.user)
-    category = data.get("category", default_category(categories).slug)
-    try:
-        category = validate_slug(category, categories)
-    except ValueError as exc:
-        return JsonResponse({"errors": {"category": str(exc)}}, status=400)
-
-    schedule, _ = Schedule.objects.get_or_create(user=request.user, date=parsed_date)
-
-    # Lock the candidate-overlap rows to serialize concurrent inserts under
-    # PostgreSQL. SQLite ignores select_for_update silently but still
-    # serializes via its DB-level write lock.
-    try:
-        with transaction.atomic():
-            # Revalidate after entering the write transaction: a deleted slug
-            # cannot be reintroduced by a request that started earlier.
-            category = validate_slug(category, ordered_categories(request.user))
-            # Parent-row lock serializes with ``_apply_draft_sync`` (which
-            # also locks the Schedule row) so a concurrent draft apply on an
-            # empty day can't race past the in-lock emptiness check while we
-            # insert. Locking only overlapping TimeBlock rows acquires zero
-            # locks on an empty schedule — see ``ai.views._apply_draft_sync``.
-            Schedule.objects.select_for_update().get(pk=schedule.pk)
-            overlap = (
-                TimeBlock.objects.filter(
-                    schedule=schedule,
-                    start_time__lt=end,
-                    end_time__gt=start,
-                )
-                .select_for_update()
-                .exists()
-            )
-            if overlap:
-                return JsonResponse(
-                    {"errors": {"time": "This block overlaps with an existing block."}},
-                    status=400,
-                )
-            block = TimeBlock(
-                schedule=schedule,
-                title=title,
-                start_time=start,
-                end_time=end,
-                category=category,
-            )
-            block.full_clean()
-            block.save()
-    except ValidationError as e:
-        return JsonResponse({"errors": e.message_dict}, status=400)
-    except ValueError as exc:
-        # The in-transaction revalidation rejects a slug deleted mid-request;
-        # surface it as a clean 400, not a 500.
-        return JsonResponse({"errors": {"category": str(exc)}}, status=400)
-
-    schedule.mark_active_on_edit()
-    return JsonResponse(_block_to_dict(block), status=201)
+    return _create_block(request, date, policy=MANUAL)
 
 
 @login_required
 @require_http_methods(["POST"])
+@_mutation_errors
 def create_block_from_event(request, date):
-    """Create a block from an external calendar event (feature 0026).
-
-    A trimmed copy of ``create_block`` **minus the 5-minute granularity
-    check** — external events carry arbitrary minutes (e.g. 14:07) and the
-    clamp-to-day decision produces 23:59. Kept as a dedicated endpoint so
-    the off-grid bypass stays off the main manual-create path; this is the
-    single sanctioned off-grid caller. Every other invariant (title,
-    category, ``start < end``, overlap, locking) matches ``create_block``.
-    """
-    try:
-        parsed_date = datetime.date.fromisoformat(date)
-    except ValueError:
-        return JsonResponse({"errors": {"date": "Invalid date format."}}, status=400)
-
-    oversized = _reject_oversized_body(request)
-    if oversized is not None:
-        return oversized
-
-    try:
-        data = json.loads(request.body)
-    except json.JSONDecodeError:
-        return JsonResponse({"errors": {"body": "Invalid JSON."}}, status=400)
-
-    if not isinstance(data, dict):
-        return JsonResponse(
-            {"errors": {"body": "Request body must be a JSON object."}},
-            status=400,
-        )
-
-    # Explicit type checks: non-string title (``.strip()`` → AttributeError)
-    # or unhashable category (``in``-set → TypeError) would otherwise 500.
-    for field in ("start_time", "end_time"):
-        if field not in data:
-            return JsonResponse({"errors": {field: f"{field} is required."}}, status=400)
-        if not isinstance(data[field], str):
-            return JsonResponse({"errors": {field: f"{field} must be a string."}}, status=400)
-    if "title" in data and not isinstance(data["title"], str):
-        return JsonResponse({"errors": {"title": "Title must be a string."}}, status=400)
-    if "category" in data and not isinstance(data["category"], str):
-        return JsonResponse({"errors": {"category": "Category must be a string."}}, status=400)
-
-    # No ``validate_five_minute_or_error`` — off-grid times are the point.
-    start, err = _parse_time_or_error("start_time", data["start_time"])
-    if err is not None:
-        return err
-    end, err = _parse_time_or_error("end_time", data["end_time"])
-    if err is not None:
-        return err
-    # Guards the degenerate clamp where a fully-out-of-day event collapses
-    # to a zero-length range: 400 instead of a zero-length block.
-    err = _validate_time_range(start, end)
-    if err is not None:
-        return err
-    window = get_schedule_window(request.user)
-    clamped = clamp_boundary(start, end, window, clamp_start=True, clamp_end=True)
-    if clamped is None:
-        return _outside_window_response(window)
-    start, end = clamped
-
-    title = data.get("title", "").strip()
-    if not title:
-        return JsonResponse({"errors": {"title": "Title is required."}}, status=400)
-    if len(title) > 255:
-        return JsonResponse(
-            {"errors": {"title": "Title too long (max 255 characters)."}}, status=400
-        )
-
-    categories = ordered_categories(request.user)
-    category = data.get("category", sink_category(categories).slug)
-    try:
-        category = validate_slug(category, categories)
-    except ValueError as exc:
-        return JsonResponse({"errors": {"category": str(exc)}}, status=400)
-
-    schedule, _ = Schedule.objects.get_or_create(user=request.user, date=parsed_date)
-
-    try:
-        with transaction.atomic():
-            category = validate_slug(category, ordered_categories(request.user))
-            # Same locked-insert pattern as ``create_block`` — see the
-            # comments there for the draft-apply serialization rationale.
-            Schedule.objects.select_for_update().get(pk=schedule.pk)
-            overlap = (
-                TimeBlock.objects.filter(
-                    schedule=schedule,
-                    start_time__lt=end,
-                    end_time__gt=start,
-                )
-                .select_for_update()
-                .exists()
-            )
-            if overlap:
-                return JsonResponse(
-                    {"errors": {"time": "This block overlaps with an existing block."}},
-                    status=400,
-                )
-            block = TimeBlock(
-                schedule=schedule,
-                title=title,
-                start_time=start,
-                end_time=end,
-                category=category,
-            )
-            # ``exclude`` skips only the field-level five-minute validators;
-            # range was checked above and model ``clean()`` still runs.
-            block.full_clean(exclude=["start_time", "end_time"])
-            block.save()
-    except ValidationError as e:
-        return JsonResponse({"errors": e.message_dict}, status=400)
-    except ValueError as exc:
-        # In-transaction revalidation: a slug deleted mid-request → clean 400.
-        return JsonResponse({"errors": {"category": str(exc)}}, status=400)
-
-    schedule.mark_active_on_edit()
-    return JsonResponse(_block_to_dict(block), status=201)
+    return _create_block(request, date, policy=IMPORT)
 
 
 @login_required
 @require_http_methods(["PATCH", "DELETE"])
+@_mutation_errors
 def block_detail(request, pk):
     try:
         block = TimeBlock.objects.select_related("schedule").get(pk=pk)
     except TimeBlock.DoesNotExist:
         return JsonResponse({"errors": {"detail": "Not found."}}, status=404)
-
-    if block.schedule.user != request.user:
-        # Return 404 (not 403) when the caller doesn't own the block:
-        # a 403 would confirm that the requested ``pk`` exists in the DB,
-        # letting an authenticated attacker enumerate block IDs outside
-        # their own schedule. 403 is reserved for CSRF/middleware
-        # rejections. See OWASP "Broken Authorization" guidance.
+    if block.schedule.user_id != request.user.pk:
         return JsonResponse({"errors": {"detail": "Not found."}}, status=404)
+    data, error = parse_json_object(request, allow_empty=request.method == "DELETE")
+    if error is not None:
+        return error
+    schedule_id = block.schedule_id
 
     if request.method == "DELETE":
-        schedule = block.schedule
-        block.delete()
-        schedule.mark_active_on_edit()
-        return JsonResponse({"ok": True})
+        expected_revision = parse_expected_revision(data)
 
-    # PATCH
-    oversized = _reject_oversized_body(request)
-    if oversized is not None:
-        return oversized
+        def apply_delete(ctx):
+            try:
+                plan = plan_commands(
+                    snapshot_from_blocks(ctx.schedule, ctx.blocks),
+                    (DeleteCommand(pk),),
+                    policy=MANUAL,
+                )
+            except CommandError as exc:
+                return _plan_error_response(
+                    exc, overlap_message="This block overlaps with an existing block."
+                )
+            persist_command_diff(ctx.schedule, ctx.blocks, plan.diff)
+            ctx.schedule.mark_active_on_edit()
+            return {"ok": True}
 
-    try:
-        data = json.loads(request.body)
-    except json.JSONDecodeError:
-        return JsonResponse({"errors": {"body": "Invalid JSON."}}, status=400)
-
-    if not isinstance(data, dict):
-        return JsonResponse(
-            {"errors": {"body": "Request body must be a JSON object."}},
-            status=400,
+        result = execute_schedule_mutation(
+            request.user.pk, schedule_id, expected_revision, apply_delete
         )
+        return JsonResponse({**result.value, **result.snapshot})
 
-    # Stage all incoming changes in `pending` before touching the DB. Any
-    # parse / type / range error returns 400 *before* we enter the atomic
-    # block, so we don't hold a schedule-wide lock across validation.
-    pending: dict = {}
-
-    if "start_time" in data:
-        parsed, err = _parse_time_or_error("start_time", data["start_time"])
-        if err is not None:
-            return err
-        pending["start_time"] = parsed
-    if "end_time" in data:
-        parsed, err = _parse_time_or_error("end_time", data["end_time"])
-        if err is not None:
-            return err
-        pending["end_time"] = parsed
+    pending = {}
+    for field in ("start_time", "end_time"):
+        if field in data:
+            parsed, error = parse_time_or_error(field, data[field])
+            if error is not None:
+                return error
+            pending[field] = parsed
     if "title" in data:
         if not isinstance(data["title"], str):
             return JsonResponse({"errors": {"title": "Title must be a string."}}, status=400)
@@ -350,21 +252,16 @@ def block_detail(request, pk):
             return JsonResponse({"errors": {"title": "Title cannot be empty."}}, status=400)
         if len(title) > 255:
             return JsonResponse(
-                {"errors": {"title": "Title too long (max 255 characters)."}},
-                status=400,
+                {"errors": {"title": "Title too long (max 255 characters)."}}, status=400
             )
         pending["title"] = title
     if "is_completed" in data:
         if not isinstance(data["is_completed"], bool):
             return JsonResponse(
-                {"errors": {"is_completed": "is_completed must be a boolean."}},
-                status=400,
+                {"errors": {"is_completed": "is_completed must be a boolean."}}, status=400
             )
         pending["is_completed"] = data["is_completed"]
     if "category" in data:
-        # Guard before the ``in``-set check: an unhashable category
-        # (list/dict) would otherwise raise TypeError → 500 (mirrors
-        # ``create_block``).
         if not isinstance(data["category"], str):
             return JsonResponse({"errors": {"category": "Category must be a string."}}, status=400)
         try:
@@ -373,525 +270,262 @@ def block_detail(request, pk):
             return JsonResponse({"errors": {"category": str(exc)}}, status=400)
         pending["category"] = data["category"]
     if "sort_order" in data:
-        err = _validate_sort_order(data["sort_order"])
-        if err is not None:
-            return err
+        error = validate_sort_order(data["sort_order"])
+        if error is not None:
+            return error
         pending["sort_order"] = data["sort_order"]
 
-    time_change = "start_time" in pending or "end_time" in pending
-    schedule_id = block.schedule_id
+    expected_revision = parse_expected_revision(data)
 
-    try:
-        with transaction.atomic():
-            locked_schedule = Schedule.objects.select_for_update().get(pk=schedule_id)
-            if "category" in pending:
-                try:
-                    pending["category"] = validate_slug(
-                        pending["category"], ordered_categories(request.user)
-                    )
-                except ValueError as exc:
-                    return JsonResponse({"errors": {"category": str(exc)}}, status=400)
+    def apply(ctx):
+        target = next((item for item in ctx.blocks if item.pk == pk), None)
+        if target is None:
+            return JsonResponse({"errors": {"detail": "Not found."}}, status=404)
+        if "category" in pending:
+            try:
+                validate_slug(pending["category"], ordered_categories(request.user))
+            except ValueError as exc:
+                return JsonResponse({"errors": {"category": str(exc)}}, status=400)
+        window = get_schedule_window(request.user)
+        try:
+            plan = plan_commands(
+                snapshot_from_blocks(ctx.schedule, ctx.blocks),
+                (UpdateCommand(pk, **pending),),
+                policy=MANUAL,
+                window=window,
+            )
+        except CommandError as exc:
+            return _plan_error_response(
+                exc, overlap_message="This block overlaps with an existing block.", window=window
+            )
+        persist_command_diff(ctx.schedule, ctx.blocks, plan.diff)
+        if plan.diff.updates:
+            ctx.schedule.mark_active_on_edit()
+        return serialize_block(target)
 
-            if time_change:
-                # Close the PATCH-vs-PATCH TOCTOU race: two concurrent
-                # requests editing *different* blocks in the same schedule
-                # can each pass their own overlap check (neither transaction
-                # sees the other's pending time change) and end up
-                # overlapping. Holding a schedule-wide row lock before the
-                # overlap read serializes all time-changing edits through
-                # one queue, which closes the window. `select_for_update`
-                # is a no-op on SQLite — see schedules.W001.
-                #
-                # Materialise the locked queryset so the row locks are
-                # acquired now, and pull the target block out of it so we
-                # don't pay for a second SELECT just to refresh the same
-                # row that's already in memory under the lock.
-                schedule_blocks = list(
-                    TimeBlock.objects.filter(schedule_id=schedule_id).select_for_update()
-                )
-                block = next((b for b in schedule_blocks if b.pk == pk), None)
-                if block is None:
-                    return JsonResponse({"errors": {"detail": "Not found."}}, status=404)
-            else:
-                try:
-                    block = (
-                        TimeBlock.objects.filter(schedule_id=schedule_id, pk=pk)
-                        .select_for_update()
-                        .get()
-                    )
-                except TimeBlock.DoesNotExist:
-                    return JsonResponse({"errors": {"detail": "Not found."}}, status=404)
-
-            stored_start, stored_end = block.start_time, block.end_time
-
-            for field, value in pending.items():
-                setattr(block, field, value)
-
-            if time_change:
-                # Granularity only on times the client actually *changed*
-                # (feature 0026): a PATCH that alters only ``end_time`` on an
-                # off-grid from-event block must not re-fail the inherited
-                # off-grid ``start_time``, and re-submitting a stored off-grid
-                # value unchanged must not 400 either. Identical rule to
-                # ``reorder_blocks`` — the two paths validate the same way.
-                changed = [
-                    t
-                    for t, stored, key in (
-                        (block.start_time, stored_start, "start_time"),
-                        (block.end_time, stored_end, "end_time"),
-                    )
-                    if key in pending and t != stored
-                ]
-                if changed:
-                    err = _validate_five_minute_or_error(*changed)
-                    if err is not None:
-                        return err
-                changed_start = "start_time" in pending and block.start_time != stored_start
-                changed_end = "end_time" in pending and block.end_time != stored_end
-                if changed_start or changed_end:
-                    window = get_schedule_window(request.user)
-                    clamped = clamp_boundary(
-                        block.start_time,
-                        block.end_time,
-                        window,
-                        clamp_start=changed_start,
-                        clamp_end=changed_end,
-                    )
-                    if clamped is None:
-                        return _outside_window_response(window)
-                    block.start_time, block.end_time = clamped
-                err = _validate_time_range(block.start_time, block.end_time)
-                if err is not None:
-                    return err
-                overlap = (
-                    TimeBlock.objects.filter(
-                        schedule_id=schedule_id,
-                        start_time__lt=block.end_time,
-                        end_time__gt=block.start_time,
-                    )
-                    .exclude(pk=block.pk)
-                    .exists()
-                )
-                if overlap:
-                    return JsonResponse(
-                        {"errors": {"time": "This block overlaps with an existing block."}},
-                        status=400,
-                    )
-
-            # ``exclude`` keeps a completion toggle / title edit on an
-            # off-grid from-event block (feature 0026) from re-failing the
-            # field-level five-minute validators on *unchanged* times.
-            # Manual time edits enforced granularity + range explicitly
-            # above; model ``clean()`` (start >= end) still runs.
-            block.full_clean(exclude=["start_time", "end_time"])
-            block.save(update_fields=list(pending.keys()))
-            locked_schedule.mark_active_on_edit()
-    except ValidationError as e:
-        return JsonResponse({"errors": e.message_dict}, status=400)
-
-    return JsonResponse(_block_to_dict(block))
+    result = execute_schedule_mutation(request.user.pk, schedule_id, expected_revision, apply)
+    return JsonResponse({**result.value, **result.snapshot})
 
 
 @login_required
 @require_http_methods(["POST"])
+@_mutation_errors
 def reorder_blocks(request):
-    """Atomically apply a batch of block time/order updates.
-
-    Deployment note: per-request validation caps the payload at 100 blocks
-    (see ``MAX_REORDER_UPDATES`` below) and the raw body at
-    ``MAX_REQUEST_BODY_BYTES``, but that does not rate-limit the *frequency*
-    of requests. Production deployments should layer on a request-rate
-    limit at the reverse proxy to prevent DoS via rapid repeated reorders
-    against the locked overlap scan.
-
-    Example nginx config (place in ``http`` / ``server`` blocks)::
-
-        # Define a 10 MB shared zone, 10 requests/minute per client IP.
-        # 10 r/m is generous — a real drag-and-drop user triggers at
-        # most a handful of reorders per minute.
-        limit_req_zone $binary_remote_addr zone=reorder:10m rate=10r/m;
-
-        location = /api/blocks/reorder/ {
-            limit_req zone=reorder burst=5 nodelay;
-            proxy_pass http://django_upstream;
-        }
-
-    API gateways (Kong, APISIX, Cloudflare, AWS API Gateway) expose
-    equivalent rate-limit primitives — pick whichever lives closest to
-    your edge.
-    """
-    oversized = _reject_oversized_body(request)
-    if oversized is not None:
-        return oversized
-
-    try:
-        data = json.loads(request.body)
-    except json.JSONDecodeError:
-        return JsonResponse({"errors": {"body": "Invalid JSON."}}, status=400)
-
-    if not isinstance(data, dict):
-        return JsonResponse(
-            {"errors": {"body": "Request body must be a JSON object."}},
-            status=400,
-        )
-
+    """Apply a batch against the final candidate schedule under one lock."""
+    data, error = parse_json_object(request)
+    if error is not None:
+        return error
     updates = data.get("updates")
-    if not isinstance(updates, list) or len(updates) == 0:
+    if not isinstance(updates, list) or not updates:
         return JsonResponse(
-            {"errors": {"updates": "A non-empty list of updates is required."}},
-            status=400,
+            {"errors": {"updates": "A non-empty list of updates is required."}}, status=400
         )
-
-    # Defensive cap: a single drag in the UI only ever touches a handful of
-    # blocks. Reject pathological payloads up-front so a malicious client
-    # cannot force an expensive validation + locked overlap scan.
     if len(updates) > MAX_REORDER_UPDATES:
         return JsonResponse(
             {
                 "errors": {
-                    "updates": (f"Cannot update more than {MAX_REORDER_UPDATES} blocks at once.")
+                    "updates": f"Cannot update more than {MAX_REORDER_UPDATES} blocks at once."
                 }
             },
             status=400,
         )
-
-    # Validate each entry is a dict with an integer id
-    for i, u in enumerate(updates):
-        if not isinstance(u, dict):
+    for index, entry in enumerate(updates):
+        if not isinstance(entry, dict):
             return JsonResponse(
-                {"errors": {"updates": f"Entry {i} must be an object."}},
-                status=400,
+                {"errors": {"updates": f"Entry {index} must be an object."}}, status=400
             )
-        uid = u.get("id")
-        if uid is None or not _is_plain_int(uid):
+        if not is_plain_int(entry.get("id")):
             return JsonResponse(
-                {"errors": {"updates": f"Entry {i} must have an integer 'id'."}},
-                status=400,
+                {"errors": {"updates": f"Entry {index} must have an integer 'id'."}}, status=400
             )
-
-    # Check for duplicate IDs
-    ids = [u["id"] for u in updates]
+    ids = [entry["id"] for entry in updates]
     if len(ids) != len(set(ids)):
         return JsonResponse({"errors": {"updates": "Duplicate block IDs in request."}}, status=400)
-
-    update_map = {u["id"]: u for u in updates}
-    requested_ids = set(ids)
-
-    # Ownership-filtered preflight: resolve only rows owned by the caller.
-    # Missing and foreign ids must be indistinguishable 404s.
     owned_blocks = list(TimeBlock.objects.filter(id__in=ids, schedule__user=request.user))
-    owned_ids = {b.id for b in owned_blocks}
-    if owned_ids != requested_ids:
+    if {block.id for block in owned_blocks} != set(ids):
+        return JsonResponse({"errors": {"detail": "One or more blocks not found."}}, status=404)
+    schedule_ids = {block.schedule_id for block in owned_blocks}
+    if len(schedule_ids) != 1:
         return JsonResponse(
-            {"errors": {"detail": "One or more blocks not found."}},
-            status=404,
+            {"errors": {"updates": "All blocks must belong to the same schedule."}}, status=400
         )
-
-    owned_schedule_ids = {b.schedule_id for b in owned_blocks}
-    if len(owned_schedule_ids) > 1:
-        return JsonResponse(
-            {"errors": {"updates": "All blocks must belong to the same schedule."}},
-            status=400,
-        )
-
-    schedule_id = next(iter(owned_schedule_ids))
-
-    # Validate each update entry's contents (no DB access required).
-    # Granularity is deferred to the in-lock loop below: a drag payload
-    # renumbers *every* block's sort_order and re-submits unchanged
-    # (possibly off-grid, feature 0026) times, which must not 400. Format
-    # and range always run here; the batch overlap check runs in-lock.
-    for uid, entry in update_map.items():
+    commands = []
+    for entry in updates:
+        uid = entry["id"]
         for field in ("start_time", "end_time", "sort_order"):
             if field not in entry:
                 return JsonResponse(
-                    {"errors": {field: f"{field} is required for block {uid}."}},
-                    status=400,
+                    {"errors": {field: f"{field} is required for block {uid}."}}, status=400
                 )
-        _, _, err = _validate_block_times(
+        start, error = parse_time_or_error("start_time", entry["start_time"], block_id=uid)
+        if error is not None:
+            return error
+        end, error = parse_time_or_error("end_time", entry["end_time"], block_id=uid)
+        if error is not None:
+            return error
+        _, _, error = validate_block_times(
             entry["start_time"],
             entry["end_time"],
             block_id=uid,
             enforce_granularity=False,
         )
-        if err is not None:
-            return err
-        err = _validate_sort_order(entry["sort_order"], block_id=uid)
-        if err is not None:
-            return err
+        if error is not None:
+            return error
+        error = validate_sort_order(entry["sort_order"], block_id=uid)
+        if error is not None:
+            return error
+        commands.append(
+            UpdateCommand(uid, start_time=start, end_time=end, sort_order=entry["sort_order"])
+        )
+    expected_revision = parse_expected_revision(data)
+    started = time.monotonic()
+    schedule_id = next(iter(schedule_ids))
 
-    t0 = time.monotonic()
-    schedule = None
-    try:
-        with transaction.atomic():
-            locked_schedule = Schedule.objects.select_for_update().get(pk=schedule_id)
-            schedule_blocks = list(
-                TimeBlock.objects.filter(schedule_id=schedule_id).select_for_update().order_by("id")
+    def apply(ctx):
+        if not set(ids).issubset({block.pk for block in ctx.blocks}):
+            return JsonResponse({"errors": {"detail": "One or more blocks not found."}}, status=404)
+        window = get_schedule_window(request.user)
+        try:
+            plan = plan_commands(
+                snapshot_from_blocks(ctx.schedule, ctx.blocks),
+                (ReorderCommand(tuple(commands)),),
+                policy=MANUAL,
+                window=window,
             )
-
-            blocks_by_id = {b.id: b for b in schedule_blocks}
-            if not requested_ids.issubset(blocks_by_id.keys()):
-                return JsonResponse(
-                    {"errors": {"detail": "One or more blocks not found."}},
-                    status=404,
-                )
-
-            schedule = locked_schedule
-
-            # Build the candidate state from the in-memory blocks (no extra
-            # query) by mutating the updated blocks in place and including
-            # every schedule block in the overlap candidates.
-            blocks_to_save = []
-            # Single request-scoped window lookup — never inside the per-block
-            # loop (window.py docstring forbids the N+1).
-            window = get_schedule_window(request.user)
-            for b in schedule_blocks:
-                if b.id in update_map:
-                    entry = update_map[b.id]
-                    new_start = _parse_time(entry["start_time"])
-                    new_end = _parse_time(entry["end_time"])
-                    # Enforce granularity only on times that actually
-                    # changed: unchanged off-grid times (from-event
-                    # blocks, feature 0026) were already persisted as
-                    # valid; a *new* off-grid time still 400s.
-                    changed = [
-                        t
-                        for t, stored in (
-                            (new_start, b.start_time),
-                            (new_end, b.end_time),
-                        )
-                        if t != stored
-                    ]
-                    if changed:
-                        err = _validate_five_minute_or_error(*changed)
-                        if err is not None:
-                            return err
-                    changed_start = new_start != b.start_time
-                    changed_end = new_end != b.end_time
-                    if changed_start or changed_end:
-                        clamped = clamp_boundary(
-                            new_start,
-                            new_end,
-                            window,
-                            clamp_start=changed_start,
-                            clamp_end=changed_end,
-                        )
-                        # A reorder is atomic: an outside row aborts the
-                        # whole batch instead of committing a partial order.
-                        if clamped is None:
-                            return _outside_window_response(window)
-                        new_start, new_end = clamped
-                    b.start_time = new_start
-                    b.end_time = new_end
-                    b.sort_order = entry["sort_order"]
-                    blocks_to_save.append(b)
-
-            candidates = sorted(
-                ((b.start_time, b.end_time, b.sort_order) for b in schedule_blocks),
-                key=lambda c: (c[0], c[2]),
+        except CommandError as exc:
+            return _plan_error_response(
+                exc,
+                overlap_message="Reorder would cause overlapping blocks.",
+                window=window,
+                missing_message="One or more blocks not found.",
             )
-            for i in range(len(candidates) - 1):
-                if candidates[i][1] > candidates[i + 1][0]:
-                    return JsonResponse(
-                        {"errors": {"time": "Reorder would cause overlapping blocks."}},
-                        status=400,
-                    )
+        persist_command_diff(ctx.schedule, ctx.blocks, plan.diff)
+        if plan.diff.updates:
+            ctx.schedule.mark_active_on_edit()
 
-            for b in blocks_to_save:
-                # Same footgun as ``block_detail``: the field validators
-                # would re-fail unchanged off-grid times even after the
-                # selective granularity check above. Range and overlap
-                # were checked explicitly; model ``clean()`` still runs.
-                b.full_clean(exclude=["start_time", "end_time"])
-                b.save()
-
-            locked_schedule.mark_active_on_edit()
-    except ValidationError as e:
-        return JsonResponse({"errors": e.message_dict}, status=400)
-
-    # Return full block list for the schedule
-    result_blocks = TimeBlock.objects.filter(schedule=schedule).order_by("start_time", "sort_order")
-    logger.info(
-        "reorder_blocks: %d updates, %.3fs",
-        len(updates),
-        time.monotonic() - t0,
-    )
-    return JsonResponse(
-        {"blocks": [_block_to_dict(b) for b in result_blocks]},
-    )
+    result = execute_schedule_mutation(request.user.pk, schedule_id, expected_revision, apply)
+    logger.info("reorder_blocks: %d updates, %.3fs", len(updates), time.monotonic() - started)
+    return JsonResponse(result.snapshot)
 
 
 @login_required
 @require_http_methods(["POST"])
+@_mutation_errors
 def restore_blocks(request, date):
-    try:
-        parsed_date = datetime.date.fromisoformat(date)
-    except ValueError:
-        return JsonResponse({"errors": {"date": "Invalid date format."}}, status=400)
-
-    oversized = _reject_oversized_body(request)
-    if oversized is not None:
-        return oversized
-
-    try:
-        data = json.loads(request.body)
-    except json.JSONDecodeError:
-        return JsonResponse({"errors": {"body": "Invalid JSON."}}, status=400)
-
-    if not isinstance(data, dict):
-        return JsonResponse(
-            {"errors": {"body": "Request body must be a JSON object."}},
-            status=400,
-        )
-
-    blocks_data = data.get("blocks")
-    if not isinstance(blocks_data, list):
+    parsed_date, error = _date_or_error(date)
+    if error is not None:
+        return error
+    data, error = parse_json_object(request)
+    if error is not None:
+        return error
+    entries = data.get("blocks")
+    if not isinstance(entries, list):
         return JsonResponse({"errors": {"blocks": "A list of blocks is required."}}, status=400)
-
-    # Validate each block entry
-    validated = []
-    # The per-user catalog is invariant for the whole request — load it once,
-    # not once per restored block (avoids an N+1 on this mutation path).
     categories = ordered_categories(request.user)
     sink_slug = sink_category(categories).slug
-    for i, entry in enumerate(blocks_data):
+    commands = []
+    seen_proof_ids = set()
+    for index, entry in enumerate(entries):
         if not isinstance(entry, dict):
             return JsonResponse(
-                {"errors": {"blocks": f"Entry {i} must be an object."}},
-                status=400,
+                {"errors": {"blocks": f"Entry {index} must be an object."}}, status=400
             )
-        # Title
         title = entry.get("title", "")
         if not isinstance(title, str):
             return JsonResponse(
-                {"errors": {"title": f"Title must be a string (block {i})."}}, status=400
+                {"errors": {"title": f"Title must be a string (block {index})."}}, status=400
             )
         title = title.strip()
         if not title:
             return JsonResponse(
-                {"errors": {"title": f"Title is required (block {i})."}}, status=400
+                {"errors": {"title": f"Title is required (block {index})."}}, status=400
             )
         if len(title) > 255:
-            return JsonResponse({"errors": {"title": f"Title too long (block {i})."}}, status=400)
-
-        # Times
-        for field in ("start_time", "end_time"):
-            if field not in entry:
-                return JsonResponse(
-                    {"errors": {field: f"{field} is required (block {i})."}}, status=400
-                )
-        # Restore re-persists previously-valid states, which may include
-        # off-grid from-event blocks (feature 0026) — skip only the
-        # granularity check; format, range, and the snapshot-overlap
-        # check below all stay.
-        start, end, err = _validate_block_times(
+            return JsonResponse(
+                {"errors": {"title": f"Title too long (block {index})."}}, status=400
+            )
+        start, end, error = _parse_required_times(entry, block_id=index)
+        if error is not None:
+            return error
+        _, _, error = validate_block_times(
             entry["start_time"],
             entry["end_time"],
-            block_id=i,
+            block_id=index,
             enforce_granularity=False,
         )
-        if err is not None:
-            return err
-
-        # Category
+        if error is not None:
+            return error
         category = entry.get("category", sink_slug)
         if not isinstance(category, str):
             return JsonResponse(
-                {"errors": {"category": f"Category must be a string (block {i})."}},
-                status=400,
+                {"errors": {"category": f"Category must be a string (block {index})."}}, status=400
             )
         category = validate_slug(category, categories, unknown_to_sink=True)
-
-        # is_completed
-        is_completed = entry.get("is_completed", False)
-        if not isinstance(is_completed, bool):
+        completed = entry.get("is_completed", False)
+        if not isinstance(completed, bool):
             return JsonResponse(
-                {"errors": {"is_completed": f"is_completed must be a boolean (block {i})."}},
+                {"errors": {"is_completed": f"is_completed must be a boolean (block {index})."}},
                 status=400,
             )
-
-        # sort_order
         sort_order = entry.get("sort_order", 0)
-        err = _validate_sort_order(sort_order, block_id=i)
-        if err is not None:
-            return err
-
-        validated.append(
-            {
-                "title": title,
-                "start_time": start,
-                "end_time": end,
-                "category": category,
-                "is_completed": is_completed,
-                "sort_order": sort_order,
-            }
-        )
-
-    # Check for overlaps in the candidate set
-    validated.sort(key=lambda v: (v["start_time"], v["sort_order"]))
-    for i in range(len(validated) - 1):
-        if validated[i]["end_time"] > validated[i + 1]["start_time"]:
-            return JsonResponse({"errors": {"time": "Restored blocks would overlap."}}, status=400)
-
-    # Every per-block field was already validated above, so any bad-input
-    # request has 400'd before reaching this point — meaning the DB is still
-    # untouched on the failure path. Deferring get_or_create until here (vs.
-    # its old spot before the loop) is what makes that true for a brand-new
-    # date too: an invalid block no longer orphans an empty Schedule row
-    # (same class as #103).
-    schedule, _ = Schedule.objects.get_or_create(user=request.user, date=parsed_date)
-    # Apply atomically: delete all existing, then create the snapshot in a
-    # single ``bulk_create`` call. ``bulk_create`` skips ``Model.save()`` and
-    # ``Model.full_clean()``, so we ``full_clean()`` every instance in a
-    # pre-pass first. This runs after get_or_create because it needs each
-    # instance's ``schedule`` FK set; it is belt-and-suspenders only — every
-    # check it performs (title max-length, category choices == VALID_CATEGORIES,
-    # start<end via Model.clean) is already enforced by the manual loop above,
-    # so it cannot reject a block that got this far and thus never leaves an
-    # orphaned Schedule.
-    t0 = time.monotonic()
-    try:
-        instances = [
-            TimeBlock(
-                schedule=schedule,
-                title=v["title"],
-                start_time=v["start_time"],
-                end_time=v["end_time"],
-                category=v["category"],
-                is_completed=v["is_completed"],
-                sort_order=v["sort_order"],
+        error = validate_sort_order(sort_order, block_id=index)
+        if error is not None:
+            return error
+        proof = entry.get("restore_proof")
+        if proof is not None and not isinstance(proof, str):
+            return JsonResponse(
+                {"errors": {"restore_proof": f"Invalid restore proof (block {index})."}},
+                status=400,
             )
-            for v in validated
-        ]
-        for block in instances:
-            # Skip the field-level five-minute validators (off-grid
-            # from-event blocks restore verbatim); everything else —
-            # title/category field validation, model ``clean()`` — runs.
-            block.full_clean(exclude=["start_time", "end_time"])
+        block_id = entry.get("id")
+        if proof is not None:
+            if not is_plain_int(block_id) or block_id <= 0 or block_id in seen_proof_ids:
+                return JsonResponse(
+                    {"errors": {"id": f"Invalid restore block id (block {index})."}},
+                    status=400,
+                )
+            seen_proof_ids.add(block_id)
+        commands.append(
+            (CreateCommand(title, start, end, category, completed, sort_order), proof, block_id)
+        )
+    expected_revision = parse_expected_revision(data)
+    started = time.monotonic()
 
-        with transaction.atomic():
-            # Same parent-row lock as ``create_block`` — draft apply holds
-            # this lock while re-checking emptiness, so restore must queue
-            # behind it (and vice versa) on PostgreSQL.
-            Schedule.objects.select_for_update().get(pk=schedule.pk)
-            # Re-fold categories against a fresh catalog inside the write
-            # transaction: a category deleted between the pre-validation above
-            # and here must land on the sink, not resurrect the deleted slug.
-            fresh = ordered_categories(request.user)
-            for block in instances:
-                block.category = validate_slug(block.category, fresh, unknown_to_sink=True)
-            TimeBlock.objects.filter(schedule=schedule).delete()
-            if instances:
-                TimeBlock.objects.bulk_create(instances)
-    except ValidationError as e:
-        return JsonResponse({"errors": e.message_dict}, status=400)
+    def apply(ctx):
+        fresh = ordered_categories(request.user)
+        fresh_commands = []
+        for index, (command, proof, block_id) in enumerate(commands):
+            origin = TimeBlock.Origin.UNKNOWN
+            if proof is not None:
+                origin = origin_from_restore_proof(proof, ctx.schedule.id, block_id, command.title)
+                if origin is None:
+                    return JsonResponse(
+                        {"errors": {"restore_proof": f"Invalid restore proof (block {index})."}},
+                        status=400,
+                    )
+            fresh_commands.append(
+                CreateCommand(
+                    command.title,
+                    command.start_time,
+                    command.end_time,
+                    validate_slug(command.category, fresh, unknown_to_sink=True),
+                    command.is_completed,
+                    command.sort_order,
+                    origin=origin,
+                )
+            )
+        try:
+            plan = plan_commands(
+                snapshot_from_blocks(ctx.schedule, ctx.blocks),
+                (RestoreCommand(tuple(fresh_commands)),),
+                policy=UNDO,
+            )
+        except CommandError as exc:
+            return _plan_error_response(exc, overlap_message="Restored blocks would overlap.")
+        persist_command_diff(ctx.schedule, ctx.blocks, plan.diff, restore=True)
 
-    result_blocks = TimeBlock.objects.filter(schedule=schedule).order_by("start_time", "sort_order")
-    logger.info(
-        "restore_blocks: %d blocks, %.3fs",
-        len(validated),
-        time.monotonic() - t0,
+    result = execute_schedule_mutation(
+        request.user.pk, None, expected_revision, apply, date=parsed_date
     )
-    return JsonResponse(
-        {"blocks": [_block_to_dict(b) for b in result_blocks]},
-    )
+    logger.info("restore_blocks: %d blocks, %.3fs", len(commands), time.monotonic() - started)
+    return JsonResponse(result.snapshot)

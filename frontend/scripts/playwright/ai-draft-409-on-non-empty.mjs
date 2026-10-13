@@ -17,7 +17,7 @@
 //   3. UI login → navigate to date.
 //   4. Snapshot ai_draft_rl counter and AIInteraction count for this
 //      schedule BEFORE the request.
-//   5. Direct-POST /generate-draft/ with empty body.
+//   5. Direct-POST /generate-draft/ with the loaded schedule revision.
 //   6. Wire-level: 409, body {errors: {detail: "Schedule already has
 //      blocks; delete them before regenerating."}}.
 //   7. DB: no new TimeBlock, no new AIInteraction; rate-limit counter
@@ -160,10 +160,11 @@ try {
   }
 
   console.log("→ Direct-POST /generate-draft/ on non-empty schedule…")
+  const loadedSchedule = await page.evaluate(() => JSON.parse(document.getElementById("app").dataset.page).props.schedule)
   const postResult = await postWithCsrf(
     page,
     `${BASE}/api/ai/schedules/${SCHEDULE_DATE}/generate-draft/`,
-    {},
+    { expected_revision: loadedSchedule.revision },
   )
   await page.waitForTimeout(WAIT_FOR_SHORT_SETTLE_MS)
 

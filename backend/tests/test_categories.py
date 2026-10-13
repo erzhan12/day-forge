@@ -11,8 +11,9 @@ import json
 from unittest import mock
 
 import pytest
+from ai.prompts import build_draft_user_message
 from analytics.models import DailyReview
-from analytics.services import compute_review_stats
+from analytics.services import compute_review_stats, compute_streak, is_review_snapshot_current
 from analytics.views import _normalized_category_minutes
 from calendar_sync.models import TravelRule
 from django.contrib.auth import get_user_model
@@ -319,6 +320,131 @@ class TestDeleteRemap:
         review.refresh_from_db()
         assert review.planned_minutes_by_category["other"] == 30  # None coerced to 0
 
+    def test_delete_keeps_current_review_frozen_across_consumers(self, user, auth_client):
+        focus = self._make_focus(user)
+        date = datetime.date(2026, 5, 1)
+        sched = Schedule.objects.create(
+            date=date, user=user, status=Schedule.Status.REVIEWED, revision=4
+        )
+        TimeBlock.objects.create(
+            schedule=sched, title="Finished", start_time="08:00",
+            end_time="09:00", category="focus", is_completed=True,
+        )
+        TimeBlock.objects.create(
+            schedule=sched, title="Still open", start_time="09:00",
+            end_time="10:00", category="work",
+        )
+        review = DailyReview.objects.create(
+            schedule=sched, planned_count=2, completed_count=1,
+            skipped_count=0, notes="Keep this note", reviewed_revision=4,
+            planned_minutes_by_category={"focus": 60, "work": 60, "other": 15},
+            completed_minutes_by_category={"focus": 60, "work": 0, "other": 0},
+        )
+        reviewed_at = review.updated_at
+
+        delete_category(user, focus)
+
+        sched.refresh_from_db()
+        review.refresh_from_db()
+        assert sched.status == Schedule.Status.REVIEWED
+        assert sched.revision == 5
+        assert review.reviewed_revision == 5
+        assert is_review_snapshot_current(sched, review)
+        assert (review.planned_count, review.completed_count, review.skipped_count) == (2, 1, 0)
+        assert review.notes == "Keep this note"
+        assert review.updated_at == reviewed_at
+        assert review.planned_minutes_by_category == {"work": 60, "other": 75}
+        assert review.completed_minutes_by_category == {"work": 0, "other": 60}
+
+        auth_client.defaults["HTTP_X_INERTIA"] = "true"
+        response = auth_client.get(f"/analytics/{date.isoformat()}/")
+        assert response.status_code == 200
+        shown = json.loads(response.content)["props"]["review"]
+        assert shown["snapshot_kind"] == "frozen"
+        assert shown["skipped_count"] == 0  # Live past-day stats would count one.
+        assert shown["planned_minutes_by_category"]["other"] == 75
+        assert shown["notes"] == "Keep this note"
+
+        with mock.patch(
+            "analytics.services.compute_review_stats",
+            side_effect=AssertionError("streak recomputed a frozen review"),
+        ):
+            assert compute_streak(user, today=date + datetime.timedelta(days=1)) == 0
+        draft_day = Schedule.objects.create(user=user, date=date + datetime.timedelta(days=1))
+        with mock.patch(
+            "ai.prompts.compute_review_stats",
+            side_effect=AssertionError("draft history recomputed a frozen review"),
+        ):
+            message = build_draft_user_message(
+                draft_day, None, [sched], [], datetime.datetime(2026, 5, 2, 8)
+            )
+        assert "(completed: 1/2)" in message
+        assert " other completed=true" in message
+
+    def test_delete_does_not_revalidate_stale_review_or_bump_unaffected_day(self, user):
+        focus = self._make_focus(user)
+        changed = Schedule.objects.create(
+            date="2026-05-01", user=user, status=Schedule.Status.REVIEWED, revision=6
+        )
+        TimeBlock.objects.create(
+            schedule=changed, title="Focus", start_time="08:00",
+            end_time="09:00", category="focus",
+        )
+        stale = DailyReview.objects.create(
+            schedule=changed, reviewed_revision=3, notes="Old review",
+            planned_minutes_by_category={"focus": 60},
+        )
+        untouched = Schedule.objects.create(
+            date="2026-05-02", user=user, status=Schedule.Status.REVIEWED, revision=9
+        )
+        TimeBlock.objects.create(
+            schedule=untouched, title="Other", start_time="08:00",
+            end_time="09:00", category="other",
+        )
+        untouched_review = DailyReview.objects.create(
+            schedule=untouched, reviewed_revision=9,
+            planned_minutes_by_category={"focus": 0, "other": 60},
+        )
+        missing_key = Schedule.objects.create(
+            date="2026-05-03", user=user, status=Schedule.Status.REVIEWED, revision=11
+        )
+        TimeBlock.objects.create(
+            schedule=missing_key, title="Unmapped", start_time="08:00",
+            end_time="09:00", category="focus",
+        )
+        missing_key_review = DailyReview.objects.create(
+            schedule=missing_key, reviewed_revision=11,
+            planned_minutes_by_category={"other": 60},
+        )
+
+        delete_category(user, focus)
+
+        changed.refresh_from_db()
+        stale.refresh_from_db()
+        untouched.refresh_from_db()
+        untouched_review.refresh_from_db()
+        missing_key.refresh_from_db()
+        missing_key_review.refresh_from_db()
+        assert changed.revision == 7
+        assert stale.reviewed_revision == 3
+        assert not is_review_snapshot_current(changed, stale)
+        assert stale.notes == "Old review"
+        assert stale.planned_minutes_by_category == {"other": 60}
+        assert untouched.revision == 9
+        assert untouched_review.reviewed_revision == 9
+        assert untouched_review.planned_minutes_by_category == {"other": 60}
+        assert is_review_snapshot_current(untouched, untouched_review)
+        assert missing_key.revision == 12
+        assert missing_key_review.reviewed_revision == 12
+        assert missing_key_review.planned_minutes_by_category == {"other": 60}
+        assert is_review_snapshot_current(missing_key, missing_key_review)
+        with pytest.raises(Category.DoesNotExist):
+            delete_category(user, focus)
+        changed.refresh_from_db()
+        untouched.refresh_from_db()
+        missing_key.refresh_from_db()
+        assert (changed.revision, untouched.revision, missing_key.revision) == (7, 9, 12)
+
     def test_delete_of_default_promotes_sink(self, user):
         focus = self._make_focus(user)
         focus.is_new_block_default = True
@@ -335,19 +461,34 @@ class TestDeleteRemap:
         other = User.objects.create_user(username="u2", password="x")
         ordered_categories(other)
         create_category(other, "Focus", "rose")
-        sched_b = Schedule.objects.create(date="2026-05-03", user=other)
+        sched_b = Schedule.objects.create(
+            date="2026-05-03", user=other,
+            status=Schedule.Status.REVIEWED, revision=5,
+        )
         TimeBlock.objects.create(schedule=sched_b, title="B", start_time="08:00",
                                  end_time="09:00", category="focus")
+        review_b = DailyReview.objects.create(
+            schedule=sched_b, reviewed_revision=5,
+            planned_minutes_by_category={"focus": 60},
+        )
         delete_category(user, focus_a)
         # Other user's block + category untouched.
         assert TimeBlock.objects.get(title="B").category == "focus"
         assert Category.objects.filter(user=other, slug="focus").exists()
+        sched_b.refresh_from_db()
+        review_b.refresh_from_db()
+        assert sched_b.revision == 5
+        assert review_b.reviewed_revision == 5
+        assert review_b.planned_minutes_by_category == {"focus": 60}
 
     def test_delete_rolls_back_on_injected_failure(self, user):
         focus = self._make_focus(user)
-        sched = Schedule.objects.create(date="2026-05-04", user=user)
+        sched = Schedule.objects.create(
+            date="2026-05-04", user=user, status=Schedule.Status.REVIEWED, revision=2
+        )
         TimeBlock.objects.create(schedule=sched, title="F", start_time="08:00",
                                  end_time="09:00", category="focus")
+        review = DailyReview.objects.create(schedule=sched, reviewed_revision=2)
         with mock.patch(
             "schedules.categories.TravelRule.objects.filter",
             side_effect=RuntimeError("boom"),
@@ -357,6 +498,10 @@ class TestDeleteRemap:
         # Nothing committed: block not remapped, category row still present.
         assert TimeBlock.objects.get(title="F").category == "focus"
         assert Category.objects.filter(pk=focus.pk).exists()
+        sched.refresh_from_db()
+        review.refresh_from_db()
+        assert sched.revision == 2
+        assert review.reviewed_revision == 2
 
 
 # --------------------------------------------------------------------------- #
@@ -572,9 +717,9 @@ class TestCategoryMutationRateLimit:
         return _post(client, COLLECTION, {"label": label, "color_id": color})
 
     def _second_client(self):
-        User.objects.create_user(username="other", password="pw12345678")
+        other = User.objects.create_user(username="other", password="pw12345678")
         client = Client()
-        client.login(username="other", password="pw12345678")
+        client.force_login(other)
         return client
 
     def test_create_blocked_after_budget_spent(self, auth_client):

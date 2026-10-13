@@ -29,4 +29,5 @@ def test_0007_backfills_existing_settings_time_zone_to_utc():
         assert migrated.day_end == datetime.time(20, 0)
         assert migrated.user_id == user.id
     finally:
-        MigrationExecutor(connection).migrate(head_target)
+        executor = MigrationExecutor(connection)
+        executor.migrate(executor.loader.graph.leaf_nodes())

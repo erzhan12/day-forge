@@ -709,9 +709,7 @@ class TestCategoryAsk:
                 ),
             ),
         )
-        resp = _post(
-            auth_client, {"messages": [_user_turn("рабочая, and add gym 18:00-19:00")]}
-        )
+        resp = _post(auth_client, {"messages": [_user_turn("рабочая, and add gym 18:00-19:00")]})
         assert resp.status_code == 200
         data = resp.json()
         assert data["applied"] is True
@@ -966,6 +964,7 @@ class TestRateLimit:
         # Second call rate-limited.
         resp2 = _post(auth_client, {"messages": [_user_turn("hi again")]})
         assert resp2.status_code == 429
+        assert resp2["Retry-After"] == "3600"
         assert resp2.json()["errors"]["detail"] == "Rate limit exceeded. Try again later."
         assert cache.get(f"ai_chat_rl:{user.id}") == 2
         # 429 short-circuits before the apply/log path, so the rejected request
@@ -1251,7 +1250,7 @@ class TestChatBatchMutationExecutor:
             {"messages": [_user_turn("move gym")]},
         )
         assert resp.status_code == 409
-        assert resp.json()["errors"]["detail"] == "schedule_changed"
+        assert resp.json()["code"] == "schedule_changed"
         block.refresh_from_db()
         assert block.title == "Renamed during LLM"
         assert block.start_time.strftime("%H:%M") == "09:00"
@@ -1291,7 +1290,7 @@ class TestChatBatchMutationExecutor:
             {"messages": [_user_turn("move work")]},
         )
         assert resp.status_code == 409
-        assert resp.json()["errors"]["detail"] == "schedule_changed"
+        assert resp.json()["code"] == "schedule_changed"
         block.refresh_from_db()
         assert block.start_time.strftime("%H:%M") == "09:00"
         interaction = AIInteraction.objects.get(schedule=today_schedule)
@@ -1300,7 +1299,7 @@ class TestChatBatchMutationExecutor:
         assert today_schedule.status == Schedule.Status.DRAFT
 
     @pytest.mark.django_db
-    def test_chat_empty_actions_skips_apply_on_fingerprint_mismatch(
+    def test_chat_empty_actions_rejects_changed_context(
         self, auth_client, user, today_schedule, monkeypatch
     ):
         rule = Rule.objects.create(user=user, text="Original rule", priority=5, is_active=True)
@@ -1319,12 +1318,15 @@ class TestChatBatchMutationExecutor:
                 ask=None,
             )
 
-        def _spy_apply(schedule, result, *, expected_fingerprint, interaction_id=None):
+        def _spy_apply(
+            schedule, result, *, expected_revision, expected_fingerprint, interaction_id=None
+        ):
             apply_called["v"] = True
             return original_apply(
                 schedule,
                 result,
                 expected_fingerprint=expected_fingerprint,
+                expected_revision=expected_revision,
                 interaction_id=interaction_id,
             )
 
@@ -1338,13 +1340,11 @@ class TestChatBatchMutationExecutor:
             auth_client,
             {"messages": [_user_turn("thanks")]},
         )
-        assert resp.status_code == 200
-        assert apply_called["v"] is False
+        assert resp.status_code == 409
+        assert resp.json()["code"] == "schedule_changed"
+        assert apply_called["v"] is True
         interaction = AIInteraction.objects.get(schedule=today_schedule)
-        assert interaction.success is True
-        data = resp.json()
-        assert data["applied"] is False
-        assert data["blocks"] is None
+        assert interaction.success is False
 
 
 @pytest.mark.django_db
@@ -1699,14 +1699,14 @@ class TestSharedApplyCoverage:
             monkeypatch,
             AIChatResult("{}", actions, "Replace", None),
         )
-        original_full_clean = TimeBlock.full_clean
+        original_save = TimeBlock.save
 
-        def _failing_full_clean(self, *args, **kwargs):
+        def _failing_save(self, *args, **kwargs):
             if self.title == "Bad":
                 raise ValidationError({"title": "forced failure"})
-            return original_full_clean(self, *args, **kwargs)
+            return original_save(self, *args, **kwargs)
 
-        monkeypatch.setattr(TimeBlock, "full_clean", _failing_full_clean)
+        monkeypatch.setattr(TimeBlock, "save", _failing_save)
         resp = _post(auth_client, {"messages": [_user_turn("replace block")]})
         assert resp.status_code == 400
         assert resp.json()["errors"]["action_index"] == 1
@@ -1763,6 +1763,38 @@ class TestSharedApplyCoverage:
         assert resp.status_code == 200
         schedule.refresh_from_db()
         assert schedule.status == Schedule.Status.ACTIVE
+
+    @pytest.mark.parametrize("status", [Schedule.Status.DRAFT, Schedule.Status.REVIEWED])
+    def test_same_value_ai_update_does_not_change_status_or_revision(
+        self, auth_client, today_schedule, monkeypatch, status
+    ):
+        block = TimeBlock.objects.create(
+            schedule=today_schedule,
+            title="Focus",
+            start_time="09:00",
+            end_time="10:00",
+            category="work",
+        )
+        Schedule.objects.filter(pk=today_schedule.pk).update(status=status)
+        today_schedule.refresh_from_db()
+        revision = today_schedule.revision
+        _patch_run_chat(
+            monkeypatch,
+            AIChatResult(
+                "{}",
+                [{"type": "update", "task_id": block.pk, "changes": {"title": "Focus"}}],
+                "Already set",
+                None,
+            ),
+        )
+
+        resp = _post(auth_client, {"messages": [_user_turn("keep the same title")]})
+        assert resp.status_code == 200
+        assert resp.json()["applied"] is False
+        assert resp.json()["outcomes"][0]["status"] == "applied"
+        today_schedule.refresh_from_db()
+        assert today_schedule.status == status
+        assert today_schedule.revision == revision
 
     @pytest.mark.django_db
     def test_chat_happy_path_with_active_rule_and_nonempty_actions(
@@ -2292,12 +2324,55 @@ class TestAutoPlacementIntegration:
         )
 
         assert response.status_code == 200, response.content
-        assert response.json()["applied"] is False
-        assert response.json()["ask"] == "What start time should the new block have after Gym?"
+        data = response.json()
+        assert data["applied"] is False
+        assert data["ask"] == "What start time should the new block have after Gym?"
+        assert data["revision"] == today_schedule.revision == 0
+        assert data["schedule"] == {
+            "id": today_schedule.id,
+            "date": "2026-04-18",
+            "status": Schedule.Status.DRAFT,
+            "revision": 0,
+        }
+        assert data["blocks"] is None
         titles = list(
             TimeBlock.objects.filter(schedule=today_schedule).values_list("title", flat=True)
         )
         assert titles == ["Gym"]
+
+    @pytest.mark.django_db
+    def test_relative_add_rejects_changed_context_during_ai_request(
+        self, auth_client, user, today_schedule, monkeypatch
+    ):
+        TimeBlock.objects.create(
+            schedule=today_schedule,
+            title="Gym",
+            start_time="09:00",
+            end_time="09:30",
+            category="personal",
+        )
+        rule = Rule.objects.create(user=user, text="Original rule", priority=5, is_active=True)
+
+        async def _run(messages, schedule, blocks, rules, now):
+            await sync_to_async(
+                Rule.objects.filter(pk=rule.pk).update,
+                thread_sensitive=True,
+            )(text="Changed during LLM")
+            return self._auto_add_result("Vocal", duration_minutes=25)
+
+        monkeypatch.setattr("ai.views.run_chat", _run)
+
+        response = _post(
+            auth_client,
+            {"messages": [_user_turn("add Vocal for 25 minutes after Gym with a 10-minute gap")]},
+        )
+
+        assert response.status_code == 409
+        assert response.json()["code"] == "schedule_changed"
+        assert AIInteraction.objects.get(schedule=today_schedule).success is False
+        assert list(
+            TimeBlock.objects.filter(schedule=today_schedule).values_list("title", flat=True)
+        ) == ["Gym"]
 
     @pytest.mark.django_db
     def test_relative_explicit_add_before_anchor_asks_without_mutating(
@@ -2474,7 +2549,9 @@ class TestChatStoredTimezone:
         assert captured["now"].tzinfo == ZoneInfo("Asia/Almaty")
         assert captured["now"].strftime("%Y-%m-%d %H:%M:%S") == "2026-04-18 09:02:30"
 
-    def test_no_action_chat_looks_up_settings_once(self, auth_client, user, monkeypatch):
+    def test_no_action_chat_checks_settings_at_prompt_and_response(
+        self, auth_client, user, monkeypatch
+    ):
         import ai.views as views
 
         original = views.get_schedule_settings
@@ -2490,7 +2567,7 @@ class TestChatStoredTimezone:
         response = _post(auth_client, {"messages": [_user_turn("hi")]})
 
         assert response.status_code == 200
-        assert lookups == [user.pk]
+        assert lookups == [user.pk, user.pk]
 
     def test_applying_chat_looks_up_settings_at_prompt_and_apply_boundaries(
         self, auth_client, user, monkeypatch
@@ -2512,7 +2589,7 @@ class TestChatStoredTimezone:
         assert response.status_code == 200, response.content
         assert lookups == [user.pk, user.pk]
 
-    def test_validation_and_rate_limit_do_not_lookup_or_provision_settings(
+    def test_invalid_body_skips_settings_and_rate_limited_request_captures_context(
         self, auth_client, user, monkeypatch, settings
     ):
         import ai.views as views
@@ -2532,10 +2609,10 @@ class TestChatStoredTimezone:
 
         assert invalid.status_code == 400
         assert limited.status_code == 429
-        assert lookups == []
-        assert not UserScheduleSettings.objects.filter(user=user).exists()
+        assert lookups == [user.pk]
+        assert UserScheduleSettings.objects.filter(user=user).exists()
 
-    def test_apply_rereads_timezone_changed_via_settings_api_during_prompt(
+    def test_apply_rejects_timezone_changed_via_settings_api_during_prompt(
         self, auth_client, user, monkeypatch
     ):
         import ai.views as views
@@ -2558,9 +2635,10 @@ class TestChatStoredTimezone:
 
         response = _post(auth_client, {"messages": [_user_turn("add LeverX")]})
 
-        assert response.status_code == 200, response.content
+        assert response.status_code == 409, response.content
         assert captured["prompt_now"].tzinfo == ZoneInfo("UTC")
-        assert response.json()["blocks"][0]["start_time"] == "09:05"
+        assert response.json()["code"] == "schedule_changed"
+        assert not TimeBlock.objects.filter(schedule__user=user).exists()
 
     def test_untimed_add_uses_local_apply_floor(self, auth_client, user, monkeypatch):
         import ai.views as views
@@ -3276,9 +3354,7 @@ class TestReplayGuard:
         assert resp.json()["applied"] is True
 
     @pytest.mark.django_db
-    def test_direction_answer_update_is_not_guarded(
-        self, auth_client, today_schedule, monkeypatch
-    ):
+    def test_direction_answer_update_is_not_guarded(self, auth_client, today_schedule, monkeypatch):
         target = TimeBlock.objects.create(
             schedule=today_schedule,
             title="Focus",
@@ -3537,7 +3613,7 @@ class TestReplayGuard:
         assert TimeBlock.objects.filter(schedule=today_schedule).count() == 1
 
     @pytest.mark.django_db
-    def test_guard_precedes_fingerprint_check(
+    def test_replay_guard_response_rejects_changed_context(
         self, auth_client, today_schedule, monkeypatch
     ):
         TimeBlock.objects.create(
@@ -3577,13 +3653,11 @@ class TestReplayGuard:
                 ]
             },
         )
-        assert resp.status_code == 200, resp.content
-        assert resp.json()["outcomes"][0]["reason_code"] == "replay_guard"
+        assert resp.status_code == 409, resp.content
+        assert resp.json()["code"] == "schedule_changed"
 
     @pytest.mark.django_db
-    def test_pending_ask_without_flag_is_enforced(
-        self, auth_client, today_schedule, monkeypatch
-    ):
+    def test_pending_ask_without_flag_is_enforced(self, auth_client, today_schedule, monkeypatch):
         _patch_run_chat(
             monkeypatch,
             AIChatResult(
@@ -3741,9 +3815,7 @@ def test_conversational_question_does_not_disable_replay_guard(
     )
     responses = iter(
         [
-            json.dumps(
-                {"actions": [], "explanation": explanation, "ask": None}
-            ),
+            json.dumps({"actions": [], "explanation": explanation, "ask": None}),
             json.dumps(
                 {
                     "actions": [{"type": "add", "title": "Stretching[2]", "category": "personal"}],
@@ -3791,9 +3863,7 @@ class TestImplicitAddAuditUnaffected:
     ``test_ai_service_chat.py`` uses) so the audit row's ``user_command``
     is pinned against the actual rewrite, not a mocked stand-in."""
 
-    def test_audit_user_command_keeps_original_text(
-        self, auth_client, today_schedule, monkeypatch
-    ):
+    def test_audit_user_command_keeps_original_text(self, auth_client, today_schedule, monkeypatch):
         class _FakeMessage:
             def __init__(self, content):
                 self.content = content

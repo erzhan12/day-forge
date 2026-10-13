@@ -8,8 +8,8 @@ Validation mirrors ``templates_mgr.api._parse_rule_create_payload`` /
 ``_parse_rule_patch_payload``.
 """
 
-import json
 
+from common.http import parse_json_object
 from django.contrib.auth.decorators import login_required
 from django.db.models import Max
 from django.http import JsonResponse
@@ -18,7 +18,6 @@ from schedules.categories import ordered_categories
 from schedules.http import (
     is_plain_int,
     parse_swap_body,
-    reject_oversized_body,
     swap_ordering_field,
 )
 
@@ -201,14 +200,9 @@ def travel_rules_collection(request):
         items = TravelRule.objects.filter(user=request.user).order_by("order", "id")
         return JsonResponse({"travel_rules": [serialize_travel_rule(r) for r in items]})
 
-    oversized = reject_oversized_body(request)
-    if oversized is not None:
-        return oversized
-
-    try:
-        data = json.loads(request.body)
-    except json.JSONDecodeError:
-        return _err("body", "Invalid JSON.")
+    data, err = parse_json_object(request)
+    if err is not None:
+        return err
 
     categories = ordered_categories(request.user)
     cleaned, err = _parse_create_payload(data, categories)
@@ -281,14 +275,9 @@ def travel_rule_detail(request, pk):
         rule.delete()
         return JsonResponse({"ok": True})
 
-    oversized = reject_oversized_body(request)
-    if oversized is not None:
-        return oversized
-
-    try:
-        data = json.loads(request.body)
-    except json.JSONDecodeError:
-        return _err("body", "Invalid JSON.")
+    data, err = parse_json_object(request)
+    if err is not None:
+        return err
 
     cleaned, err = _parse_patch_payload(data, rule, ordered_categories(request.user))
     if err is not None:

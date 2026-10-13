@@ -6,9 +6,11 @@ export interface TimeBlock {
   category: string
   is_completed: boolean
   sort_order: number
+  restore_proof?: string
 }
 
 export interface Schedule {
+  revision: number
   id: number
   date: string // "YYYY-MM-DD"
   status: "draft" | "active" | "reviewed"
@@ -27,6 +29,9 @@ export interface UndoAction {
   type: "drag" | "edit" | "toggle" | "add" | "delete" | "ai" | "draft"
   previousBlocks: TimeBlock[]
   scheduleDate: string
+  expected_revision: number
+  previous_revision: number
+  generation?: number
   // When true, the action is pushed onto the undo stack (Cmd+Z still works)
   // but no toast is shown — used for obvious in-UI edits where the result is
   // already visible on the timeline (issue #54). Absence means "show toast".
@@ -89,7 +94,7 @@ export interface UserCategory {
 export type SoundEventType = "start" | "end"
 
 export interface DailyReview {
-  id: number
+  id: number | null
   schedule_id: number
   date: string // "YYYY-MM-DD"
   status: Schedule["status"]
@@ -101,8 +106,10 @@ export interface DailyReview {
   planned_minutes_by_category: CategoryMinutes
   completed_minutes_by_category: CategoryMinutes
   notes: string
-  created_at: string
-  updated_at: string
+  created_at: string | null
+  updated_at: string | null
+  snapshot_kind: "current" | "frozen"
+  reviewed_revision: number | null
 }
 
 export interface StreakInfo {

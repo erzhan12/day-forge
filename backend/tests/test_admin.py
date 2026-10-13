@@ -6,8 +6,8 @@ from ai.models import AIInteraction
 from analytics.admin import DailyReviewAdmin
 from django.contrib.admin.sites import AdminSite
 from django.test import RequestFactory
-from schedules.admin import ScheduleAdmin, TimeBlockAdmin
-from schedules.models import Schedule
+from schedules.admin import ScheduleAdmin, TimeBlockAdmin, UserScheduleSettingsAdmin
+from schedules.models import Schedule, TimeBlock, UserScheduleSettings
 from templates_mgr.admin import RuleAdmin, TemplateAdmin
 
 
@@ -25,6 +25,20 @@ def admin_request(request_factory, admin_user):
 
 @pytest.mark.django_db
 class TestScheduleAdmin:
+    @pytest.mark.parametrize("admin_type, model", [
+        (ScheduleAdmin, Schedule),
+        (TimeBlockAdmin, TimeBlock),
+        (UserScheduleSettingsAdmin, UserScheduleSettings),
+    ])
+    def test_day_and_policy_admin_surfaces_are_inspection_only(
+        self, admin_request, admin_type, model
+    ):
+        admin = admin_type(model, AdminSite())
+        assert admin.has_view_permission(admin_request) is True
+        assert admin.has_add_permission(admin_request) is False
+        assert admin.has_change_permission(admin_request) is False
+        assert admin.has_delete_permission(admin_request) is False
+
     def test_block_count_annotation(self, admin_request):
         schedule = Schedule.objects.create(date=datetime.date(2026, 5, 1), user=admin_request.user)
         schedule.time_blocks.create(title="A", start_time="09:00", end_time="10:00")

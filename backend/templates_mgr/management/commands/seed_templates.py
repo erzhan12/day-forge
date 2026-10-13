@@ -1,5 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
+from schedules.mutations import run_user_maintenance
 
 from templates_mgr.models import Rule, Template
 
@@ -54,25 +55,33 @@ class Command(BaseCommand):
         except UserModel.DoesNotExist as e:
             raise CommandError(f"User {username!r} does not exist.") from e
 
-        created = 0
+        def seed(locked_user):
+            created = 0
+            messages = []
 
-        for name, tpl_type, blocks in [
-            ("Default Weekday", Template.Type.WEEKDAY, WEEKDAY_BLOCKS),
-            ("Default Weekend", Template.Type.WEEKEND, WEEKEND_BLOCKS),
-        ]:
-            if not Template.objects.filter(user=user, type=tpl_type).exists():
-                Template.objects.create(user=user, name=name, type=tpl_type, blocks=blocks)
-                self.stdout.write(f"Created: {name} template for {username}")
-                created += 1
-            else:
-                self.stdout.write(f"Skipped: {name} template (already exists for {username})")
+            for name, tpl_type, blocks in [
+                ("Default Weekday", Template.Type.WEEKDAY, WEEKDAY_BLOCKS),
+                ("Default Weekend", Template.Type.WEEKEND, WEEKEND_BLOCKS),
+            ]:
+                if not Template.objects.filter(user=user, type=tpl_type).exists():
+                    Template.objects.create(user=user, name=name, type=tpl_type, blocks=blocks)
+                    messages.append(f"Created: {name} template for {username}")
+                    created += 1
+                else:
+                    messages.append(f"Skipped: {name} template (already exists for {username})")
 
-        for text, priority in DEFAULT_RULES:
-            if not Rule.objects.filter(user=user, text=text).exists():
-                Rule.objects.create(user=user, text=text, priority=priority)
-                self.stdout.write(f"Created rule for {username}: {text}")
-                created += 1
-            else:
-                self.stdout.write(f"Skipped rule for {username}: {text} (already exists)")
+            for text, priority in DEFAULT_RULES:
+                if not Rule.objects.filter(user=user, text=text).exists():
+                    Rule.objects.create(user=user, text=text, priority=priority)
+                    messages.append(f"Created rule for {username}: {text}")
+                    created += 1
+                else:
+                    messages.append(f"Skipped rule for {username}: {text} (already exists)")
+
+            return created, messages
+
+        created, messages = run_user_maintenance(user.pk, seed)
+        for message in messages:
+            self.stdout.write(message)
 
         self.stdout.write(self.style.SUCCESS(f"Done. {created} item(s) created for {username}."))

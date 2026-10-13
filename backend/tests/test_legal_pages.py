@@ -170,11 +170,12 @@ class TestPrivacyDisclosures:
     def test_discloses_draft_history_egress(self, body):
         assert "Draft generation" in body
 
-    def test_states_task_and_event_text_never_reaches_the_llm(self, body):
-        # The counterpart invariant: Todoist/Habitica/calendar text is
-        # display-only and must never be described as AI input.
-        assert "never" in body
-        assert "included in AI prompts" in body
+    def test_discloses_imported_title_redaction_and_schedule_metadata(self, body):
+        assert "Imported calendar event titles are replaced with a" in body
+        assert "generic label in schedule context and chat history" in body
+        assert "its time and category can be used" in body
+        assert "Text you enter in a" in body
+        assert "not added to AI prompts" in body
 
     def test_states_ai_messages_are_logged_verbatim(self, body):
         assert "verbatim" in body

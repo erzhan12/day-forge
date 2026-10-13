@@ -5,14 +5,17 @@ hard-idempotent POST), and ``update_review_notes`` (PATCH). The
 non-obvious cases here are the idempotency / race rules — see the
 inline comments before each test for what they pin.
 """
+
 import datetime
 import json
 
 import pytest
 from analytics.models import DailyReview
-from analytics.services import recompute_review_from_schedule
+from analytics.services import freeze_review_snapshot
 from django.contrib.auth.models import User
+from django.db import connection
 from django.test import Client
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 from schedules.models import Schedule, TimeBlock, UserScheduleSettings
 
@@ -24,9 +27,11 @@ def _freeze(monkeypatch, fixed_utc):
 
     monkeypatch.setattr(window.timezone, "now", lambda: fixed_utc)
 
+
 ANALYTICS_URL = "/analytics/{date}/"
 MARK_REVIEWED_URL = "/api/analytics/schedules/{date}/mark-reviewed/"
 NOTES_URL = "/api/analytics/reviews/{pk}/notes/"
+SCHEDULE_NOTES_URL = "/api/analytics/schedules/{date}/notes/"
 
 
 def _make_block(schedule, start, end, *, completed=False, category="work"):
@@ -66,9 +71,7 @@ def past_date():
 
 @pytest.fixture
 def active_schedule(user, past_date):
-    s = Schedule.objects.create(
-        user=user, date=past_date, status=Schedule.Status.ACTIVE
-    )
+    s = Schedule.objects.create(user=user, date=past_date, status=Schedule.Status.ACTIVE)
     _make_block(s, "09:00", "10:00", completed=True)
     _make_block(s, "10:00", "11:00", completed=False)
     return s
@@ -76,9 +79,7 @@ def active_schedule(user, past_date):
 
 @pytest.fixture
 def reviewed_schedule(user, past_date):
-    s = Schedule.objects.create(
-        user=user, date=past_date, status=Schedule.Status.REVIEWED
-    )
+    s = Schedule.objects.create(user=user, date=past_date, status=Schedule.Status.REVIEWED)
     _make_block(s, "09:00", "10:00", completed=True)
     _make_block(s, "10:00", "11:00", completed=False)
     DailyReview.objects.create(
@@ -87,6 +88,7 @@ def reviewed_schedule(user, past_date):
         completed_count=1,
         skipped_count=1,
         notes="frozen notes",
+        reviewed_revision=s.revision,
     )
     return s
 
@@ -98,9 +100,7 @@ class TestAnalyticsView:
         assert resp.status_code == 404
 
     def test_400_on_future_date(self, auth_inertia_client):
-        future = (
-            timezone.localdate() + datetime.timedelta(days=30)
-        ).isoformat()
+        future = (timezone.localdate() + datetime.timedelta(days=30)).isoformat()
         resp = auth_inertia_client.get(ANALYTICS_URL.format(date=future))
         assert resp.status_code == 400
 
@@ -108,15 +108,29 @@ class TestAnalyticsView:
         resp = auth_inertia_client.get(ANALYTICS_URL.format(date="not-a-date"))
         assert resp.status_code == 400
 
-    def test_recomputes_on_active_schedule(
+    def test_warm_get_does_not_write_database(
         self, auth_inertia_client, active_schedule, past_date
     ):
-        """Each visit while ACTIVE refreshes the snapshot — ``updated_at``
-        must strictly advance between two visits (pins the "fresh while
-        active" rule)."""
+        url = ANALYTICS_URL.format(date=past_date)
+        assert auth_inertia_client.get(url).status_code == 200
+        with CaptureQueriesContext(connection) as queries:
+            response = auth_inertia_client.get(url)
+        assert response.status_code == 200
+        writes = [
+            query["sql"] for query in queries
+            if query["sql"].lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE"))
+        ]
+        assert writes == []
+
+    def test_recomputes_on_active_schedule(self, auth_inertia_client, active_schedule, past_date):
+        """Current statistics follow blocks without creating a review row."""
         resp1 = auth_inertia_client.get(ANALYTICS_URL.format(date=past_date))
         assert resp1.status_code == 200
-        first_updated_at = _props(resp1)["review"]["updated_at"]
+        first = _props(resp1)["review"]
+        assert first["id"] is None
+        assert first["updated_at"] is None
+        assert first["snapshot_kind"] == "current"
+        assert not DailyReview.objects.filter(schedule=active_schedule).exists()
 
         # Toggle a block so the recompute has something to capture.
         block = active_schedule.time_blocks.get(start_time="10:00")
@@ -125,12 +139,11 @@ class TestAnalyticsView:
 
         resp2 = auth_inertia_client.get(ANALYTICS_URL.format(date=past_date))
         review = _props(resp2)["review"]
-        assert review["updated_at"] > first_updated_at
         assert review["completed_count"] == 2
+        assert review["updated_at"] is None
+        assert not DailyReview.objects.filter(schedule=active_schedule).exists()
 
-    def test_frozen_on_reviewed_schedule(
-        self, auth_inertia_client, reviewed_schedule, past_date
-    ):
+    def test_frozen_on_reviewed_schedule(self, auth_inertia_client, reviewed_schedule, past_date):
         """A ``REVIEWED`` schedule serves the frozen snapshot — even if
         blocks have changed since (which shouldn't happen via the API
         but we still pin the contract)."""
@@ -139,20 +152,39 @@ class TestAnalyticsView:
         resp2 = auth_inertia_client.get(ANALYTICS_URL.format(date=past_date))
         assert _props(resp2)["review"]["updated_at"] == first_updated_at
         assert _props(resp2)["review"]["notes"] == "frozen notes"
+        assert _props(resp2)["review"]["snapshot_kind"] == "frozen"
+
+    def test_stale_reviewed_snapshot_uses_current_stats_without_writing(
+        self, auth_inertia_client, reviewed_schedule, past_date
+    ):
+        review = reviewed_schedule.daily_review
+        review.reviewed_revision = reviewed_schedule.revision + 1
+        review.completed_count = 0
+        review.save(update_fields=["reviewed_revision", "completed_count"])
+        before = review.updated_at
+
+        response = auth_inertia_client.get(ANALYTICS_URL.format(date=past_date))
+        shown = _props(response)["review"]
+        assert shown["snapshot_kind"] == "current"
+        assert shown["completed_count"] == 1
+        assert shown["notes"] == "frozen notes"
+        assert shown["reviewed_revision"] == reviewed_schedule.revision + 1
+        review.refresh_from_db()
+        assert review.completed_count == 0
+        assert review.updated_at == before
 
     def test_back_compat_recomputes_reviewed_without_row(
         self, auth_inertia_client, user, past_date
     ):
         """A ``reviewed`` schedule predating Phase 6 has no DailyReview;
         the view should recompute once and serve."""
-        s = Schedule.objects.create(
-            user=user, date=past_date, status=Schedule.Status.REVIEWED
-        )
+        s = Schedule.objects.create(user=user, date=past_date, status=Schedule.Status.REVIEWED)
         _make_block(s, "09:00", "10:00", completed=True)
         assert not DailyReview.objects.filter(schedule=s).exists()
         resp = auth_inertia_client.get(ANALYTICS_URL.format(date=past_date))
         assert resp.status_code == 200
-        assert DailyReview.objects.filter(schedule=s).exists()
+        assert _props(resp)["review"]["snapshot_kind"] == "current"
+        assert not DailyReview.objects.filter(schedule=s).exists()
 
     def test_forwards_blocks_for_skipped_panel(
         self, auth_inertia_client, active_schedule, past_date
@@ -160,13 +192,9 @@ class TestAnalyticsView:
         resp = auth_inertia_client.get(ANALYTICS_URL.format(date=past_date))
         props = _props(resp)
         assert len(props["blocks"]) == 2
-        assert {"id", "title", "start_time", "end_time", "category"}.issubset(
-            props["blocks"][0]
-        )
+        assert {"id", "title", "start_time", "end_time", "category"}.issubset(props["blocks"][0])
 
-    def test_includes_streak_payload(
-        self, auth_inertia_client, active_schedule, past_date
-    ):
+    def test_includes_streak_payload(self, auth_inertia_client, active_schedule, past_date):
         resp = auth_inertia_client.get(ANALYTICS_URL.format(date=past_date))
         streak = _props(resp)["streak"]
         assert "current" in streak
@@ -178,15 +206,11 @@ class TestAnalyticsView:
 class TestAnalyticsFutureGateUsesUserTimezone:
     """The future-date gate reads the user's persisted zone, not UTC."""
 
-    def test_allows_user_local_today_east_of_utc(
-        self, auth_inertia_client, user, monkeypatch
-    ):
+    def test_allows_user_local_today_east_of_utc(self, auth_inertia_client, user, monkeypatch):
         UserScheduleSettings.objects.create(user=user, time_zone="Asia/Almaty")
         # UTC 2026-05-03T20:00 → Almaty 2026-05-04 (local today).
         Schedule.objects.create(user=user, date=datetime.date(2026, 5, 4))
-        _freeze(
-            monkeypatch, datetime.datetime(2026, 5, 3, 20, 0, tzinfo=datetime.UTC)
-        )
+        _freeze(monkeypatch, datetime.datetime(2026, 5, 3, 20, 0, tzinfo=datetime.UTC))
         resp = auth_inertia_client.get(ANALYTICS_URL.format(date="2026-05-04"))
         assert resp.status_code != 400
         assert resp.status_code == 200
@@ -194,20 +218,14 @@ class TestAnalyticsFutureGateUsesUserTimezone:
     def test_rejects_user_local_tomorrow(self, auth_inertia_client, user, monkeypatch):
         UserScheduleSettings.objects.create(user=user, time_zone="Asia/Almaty")
         # Almaty today = 05-04; 05-05 is local tomorrow.
-        _freeze(
-            monkeypatch, datetime.datetime(2026, 5, 3, 20, 0, tzinfo=datetime.UTC)
-        )
+        _freeze(monkeypatch, datetime.datetime(2026, 5, 3, 20, 0, tzinfo=datetime.UTC))
         resp = auth_inertia_client.get(ANALYTICS_URL.format(date="2026-05-05"))
         assert resp.status_code == 400
 
-    def test_west_of_utc_rejects_utc_today_as_future(
-        self, auth_inertia_client, user, monkeypatch
-    ):
+    def test_west_of_utc_rejects_utc_today_as_future(self, auth_inertia_client, user, monkeypatch):
         UserScheduleSettings.objects.create(user=user, time_zone="America/Los_Angeles")
         # UTC 2026-05-04T03:00 → LA still 2026-05-03; 05-04 is LA tomorrow.
-        _freeze(
-            monkeypatch, datetime.datetime(2026, 5, 4, 3, 0, tzinfo=datetime.UTC)
-        )
+        _freeze(monkeypatch, datetime.datetime(2026, 5, 4, 3, 0, tzinfo=datetime.UTC))
         resp = auth_inertia_client.get(ANALYTICS_URL.format(date="2026-05-04"))
         assert resp.status_code == 400
 
@@ -215,22 +233,18 @@ class TestAnalyticsFutureGateUsesUserTimezone:
 @pytest.mark.django_db
 class TestAnalyticsWiringUsesUserTimezone:
     """The view resolves the user-local instant/date once and threads it into
-    ``compute_streak`` (today=) and ``recompute_review_from_schedule`` (now=).
+    ``compute_streak`` (today=) and ``compute_review_stats`` (now=).
 
     Isolated from the future-gate confound by requesting a PAST date (valid
     under both clocks) and spying on the injected kwargs (approach (a)).
     """
 
-    def test_streak_wiring_passes_user_local_today(
-        self, auth_inertia_client, user, monkeypatch
-    ):
+    def test_streak_wiring_passes_user_local_today(self, auth_inertia_client, user, monkeypatch):
         from analytics import views as analytics_views
 
         UserScheduleSettings.objects.create(user=user, time_zone="Asia/Almaty")
         Schedule.objects.create(user=user, date=datetime.date(2026, 4, 1))
-        _freeze(
-            monkeypatch, datetime.datetime(2026, 5, 3, 20, 0, tzinfo=datetime.UTC)
-        )
+        _freeze(monkeypatch, datetime.datetime(2026, 5, 3, 20, 0, tzinfo=datetime.UTC))
 
         captured = {}
 
@@ -249,25 +263,19 @@ class TestAnalyticsWiringUsesUserTimezone:
         self, auth_inertia_client, user, monkeypatch
     ):
         from analytics import views as analytics_views
-        from analytics.services import recompute_review_from_schedule
+        from analytics.services import compute_review_stats
 
         UserScheduleSettings.objects.create(user=user, time_zone="Asia/Almaty")
         Schedule.objects.create(user=user, date=datetime.date(2026, 4, 1))
-        _freeze(
-            monkeypatch, datetime.datetime(2026, 5, 3, 20, 0, tzinfo=datetime.UTC)
-        )
+        _freeze(monkeypatch, datetime.datetime(2026, 5, 3, 20, 0, tzinfo=datetime.UTC))
 
         captured = {}
 
-        def spy_recompute(schedule, *, now=None, categories=None):
+        def spy_compute(schedule, *, now=None, categories=None):
             captured["now"] = now
-            return recompute_review_from_schedule(
-                schedule, now=now, categories=categories
-            )
+            return compute_review_stats(schedule, now=now, categories=categories)
 
-        monkeypatch.setattr(
-            analytics_views, "recompute_review_from_schedule", spy_recompute
-        )
+        monkeypatch.setattr(analytics_views, "compute_review_stats", spy_compute)
         resp = auth_inertia_client.get(ANALYTICS_URL.format(date="2026-04-01"))
         assert resp.status_code == 200
         now = captured["now"]
@@ -280,18 +288,14 @@ class TestAnalyticsWiringUsesUserTimezone:
 @pytest.mark.django_db
 class TestMarkReviewed:
     def test_400_on_draft_schedule(self, auth_client, user, past_date):
-        Schedule.objects.create(
-            user=user, date=past_date, status=Schedule.Status.DRAFT
-        )
+        Schedule.objects.create(user=user, date=past_date, status=Schedule.Status.DRAFT)
         resp = auth_client.post(
             MARK_REVIEWED_URL.format(date=past_date), "", content_type="application/json"
         )
         assert resp.status_code == 400
         assert not DailyReview.objects.exists()
 
-    def test_active_to_reviewed_persists_and_flips(
-        self, auth_client, active_schedule, past_date
-    ):
+    def test_active_to_reviewed_persists_and_flips(self, auth_client, active_schedule, past_date):
         resp = auth_client.post(
             MARK_REVIEWED_URL.format(date=past_date),
             "",
@@ -303,6 +307,8 @@ class TestMarkReviewed:
         review = DailyReview.objects.get(schedule=active_schedule)
         assert review.planned_count == 2
         assert review.completed_count == 1
+        assert review.reviewed_revision == active_schedule.revision
+        assert resp.json()["snapshot_kind"] == "frozen"
 
     def test_idempotent_returns_same_snapshot_unchanged_updated_at(
         self, auth_client, active_schedule, past_date
@@ -323,6 +329,47 @@ class TestMarkReviewed:
         )
         second = json.loads(resp2.content)
         assert first["updated_at"] == second["updated_at"]
+        assert first["reviewed_revision"] == second["revision"]
+
+    def test_repeat_post_repairs_stale_reviewed_snapshot_without_revision_bump(
+        self, auth_client, reviewed_schedule, past_date
+    ):
+        review = reviewed_schedule.daily_review
+        review.reviewed_revision = None
+        review.completed_count = 0
+        review.save(update_fields=["reviewed_revision", "completed_count"])
+        before_revision = reviewed_schedule.revision
+
+        response = auth_client.post(
+            MARK_REVIEWED_URL.format(date=past_date),
+            "{malformed",
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        assert response.json()["snapshot_kind"] == "frozen"
+        assert response.json()["completed_count"] == 1
+        assert response.json()["notes"] == "frozen notes"
+        reviewed_schedule.refresh_from_db()
+        review.refresh_from_db()
+        assert reviewed_schedule.revision == before_revision
+        assert review.reviewed_revision == before_revision
+        assert review.completed_count == 1
+
+    def test_repeat_post_recovers_missing_review_without_revision_bump(
+        self, auth_client, user, past_date
+    ):
+        schedule = Schedule.objects.create(
+            user=user, date=past_date, status=Schedule.Status.REVIEWED, revision=4
+        )
+        _make_block(schedule, "09:00", "10:00", completed=True)
+        response = auth_client.post(
+            MARK_REVIEWED_URL.format(date=past_date), "", content_type="application/json"
+        )
+        assert response.status_code == 200
+        assert response.json()["reviewed_revision"] == 4
+        assert DailyReview.objects.get(schedule=schedule).completed_count == 1
+        schedule.refresh_from_db()
+        assert schedule.revision == 4
 
     def test_idempotent_ignores_different_notes_on_reviewed(
         self, auth_client, reviewed_schedule, past_date
@@ -368,9 +415,7 @@ class TestMarkReviewed:
         review = DailyReview.objects.get(schedule=active_schedule)
         assert review.notes == "Felt focused"
 
-    def test_empty_body_accepted_on_active(
-        self, auth_client, active_schedule, past_date
-    ):
+    def test_empty_body_accepted_on_active(self, auth_client, active_schedule, past_date):
         """A bare ``fetch(url, { method: 'POST' })`` shouldn't 400 on
         the parser before the validator can decide whether the body is
         needed at all."""
@@ -381,9 +426,7 @@ class TestMarkReviewed:
         )
         assert resp.status_code == 200
 
-    def test_invalid_json_on_active_path_400s(
-        self, auth_client, active_schedule, past_date
-    ):
+    def test_invalid_json_on_active_path_400s(self, auth_client, active_schedule, past_date):
         """The parser is reached on the ACTIVE path under the lock —
         malformed JSON is a real error there."""
         resp = auth_client.post(
@@ -393,9 +436,7 @@ class TestMarkReviewed:
         )
         assert resp.status_code == 400
 
-    def test_oversized_body_returns_413(
-        self, auth_client, active_schedule, past_date
-    ):
+    def test_oversized_body_returns_413(self, auth_client, active_schedule, past_date):
         big = "x" * 200_000
         resp = auth_client.post(
             MARK_REVIEWED_URL.format(date=past_date),
@@ -404,9 +445,7 @@ class TestMarkReviewed:
         )
         assert resp.status_code == 413
 
-    def test_locks_parent_schedule_row(
-        self, auth_client, active_schedule, past_date, monkeypatch
-    ):
+    def test_locks_parent_schedule_row(self, auth_client, active_schedule, past_date, monkeypatch):
         """Mirror of ``ai_views_draft.TestApplyLocksScheduleRow``: the
         active→reviewed path must call
         ``Schedule.objects.select_for_update`` so concurrent edits queue
@@ -419,9 +458,7 @@ class TestMarkReviewed:
             called["v"] = True
             return original(*args, **kwargs)
 
-        monkeypatch.setattr(
-            Schedule.objects, "select_for_update", _spy, raising=True
-        )
+        monkeypatch.setattr(Schedule.objects, "select_for_update", _spy, raising=True)
         resp = auth_client.post(
             MARK_REVIEWED_URL.format(date=past_date),
             "",
@@ -430,9 +467,7 @@ class TestMarkReviewed:
         assert resp.status_code == 200
         assert called["v"]
 
-    def test_ignores_extra_fields(
-        self, auth_client, active_schedule, past_date
-    ):
+    def test_ignores_extra_fields(self, auth_client, active_schedule, past_date):
         """Project-wide convention: unknown fields are silently dropped
         (no strict mode anywhere). ``evil_status`` and ``schedule_id``
         must not influence the result."""
@@ -459,64 +494,38 @@ class TestMarkReviewed:
         """Simulate a concurrent commit between the pre-lock check and
         the lock acquisition: the under-lock SELECT returns a REVIEWED
         schedule. The view must serve the snapshot without calling
-        ``recompute_review_from_schedule``. Pins the double-checked
+        ``freeze_review_snapshot``. Pins the double-checked
         locking pattern."""
         # Pre-create the snapshot (mark_reviewed_if_active is what
         # would normally write it; we emulate the just-committed state).
-        recompute_review_from_schedule(active_schedule)
+        freeze_review_snapshot(active_schedule, revision=active_schedule.revision + 1)
 
-        # Have the under-lock GET return a copy with status REVIEWED so
-        # the recheck branch fires. We patch the QuerySet returned by
-        # ``select_for_update().prefetch_related(...)`` so its ``get``
-        # yields our doctored schedule.
         from analytics import views as analytics_views
+        from django.db.models import F
 
-        recompute_calls = {"n": 0}
-        original_recompute = analytics_views.recompute_review_from_schedule
+        freeze_calls = {"n": 0}
+        original_freeze = analytics_views.freeze_review_snapshot
+        original_execute = analytics_views.execute_schedule_mutation
 
-        def _counting_recompute(*args, **kwargs):
-            recompute_calls["n"] += 1
-            return original_recompute(*args, **kwargs)
+        def _counting_freeze(*args, **kwargs):
+            freeze_calls["n"] += 1
+            return original_freeze(*args, **kwargs)
 
-        monkeypatch.setattr(
-            analytics_views,
-            "recompute_review_from_schedule",
-            _counting_recompute,
-        )
+        def _concurrent_review(*args, **kwargs):
+            Schedule.objects.filter(pk=active_schedule.pk).update(
+                status=Schedule.Status.REVIEWED, revision=F("revision") + 1
+            )
+            return original_execute(*args, **kwargs)
 
-        # Build the doctored schedule.
-        doctored = Schedule.objects.get(pk=active_schedule.pk)
-        doctored.status = Schedule.Status.REVIEWED
-
-        def _patched_sfu(*args, **kwargs):
-            # Intentionally bypass the real queryset chain — we only
-            # need ``.prefetch_related().get()`` to return our doctored
-            # schedule, simulating a concurrent commit between the
-            # pre-lock check and the lock acquisition.
-            class _Wrapper:
-                def prefetch_related(self, *a, **k):
-                    return self
-
-                def get(self_inner, **kwargs):  # noqa: N805
-                    return doctored
-
-            return _Wrapper()
-
-        monkeypatch.setattr(
-            Schedule.objects, "select_for_update", _patched_sfu, raising=True
-        )
-
+        monkeypatch.setattr(analytics_views, "freeze_review_snapshot", _counting_freeze)
+        monkeypatch.setattr(analytics_views, "execute_schedule_mutation", _concurrent_review)
         resp = auth_client.post(
-            MARK_REVIEWED_URL.format(date=past_date),
-            "",
-            content_type="application/json",
+            MARK_REVIEWED_URL.format(date=past_date), "{", content_type="application/json"
         )
         assert resp.status_code == 200
-        # The under-lock branch is the REVIEWED idempotent path — it
-        # MUST NOT recompute (only the pre-test setup call counts).
-        # That setup call ran BEFORE we installed the monkeypatch, so
-        # ``recompute_calls["n"]`` should be exactly 0.
-        assert recompute_calls["n"] == 0
+        assert resp.json()["revision"] == 1
+        assert resp.json()["schedule"]["status"] == Schedule.Status.REVIEWED
+        assert freeze_calls["n"] == 0
 
 
 @pytest.mark.django_db
@@ -532,9 +541,7 @@ class TestMarkReviewedUsesUserTimezone:
     because it is frozen.
     """
 
-    def test_freeze_uses_user_local_day_east_of_utc(
-        self, auth_client, user, monkeypatch
-    ):
+    def test_freeze_uses_user_local_day_east_of_utc(self, auth_client, user, monkeypatch):
         # UTC 2026-05-03T20:00 → Almaty is already 2026-05-04T01:00, so a
         # May-3 schedule is a PAST day and its uncompleted 22:00–23:00 block
         # is skipped. On UTC ``now``, May 3 is still today and 22:00 has not
@@ -556,9 +563,7 @@ class TestMarkReviewedUsesUserTimezone:
         review = DailyReview.objects.get(schedule=schedule)
         assert review.skipped_count == 1
 
-    def test_freeze_uses_user_local_day_west_of_utc(
-        self, auth_client, user, monkeypatch
-    ):
+    def test_freeze_uses_user_local_day_west_of_utc(self, auth_client, user, monkeypatch):
         # Mirror image: UTC 2026-05-04T03:00 → Los Angeles is still
         # 2026-05-03T20:00, so May 3 is TODAY there and a 22:00–23:00 block
         # has not ended yet — not skipped. On UTC ``now`` May 3 is already a
@@ -580,9 +585,7 @@ class TestMarkReviewedUsesUserTimezone:
         review = DailyReview.objects.get(schedule=schedule)
         assert review.skipped_count == 0
 
-    def test_back_compat_recompute_uses_user_local_day(
-        self, auth_client, user, monkeypatch
-    ):
+    def test_back_compat_recompute_uses_user_local_day(self, auth_client, user, monkeypatch):
         """The pre-Phase-6 back-compat path persists a snapshot too.
 
         A REVIEWED schedule with no ``DailyReview`` row recomputes once and
@@ -607,9 +610,7 @@ class TestMarkReviewedUsesUserTimezone:
         assert json.loads(resp.content)["skipped_count"] == 1
         assert DailyReview.objects.get(schedule=schedule).skipped_count == 1
 
-    def test_frozen_snapshot_matches_the_get_panel(
-        self, auth_inertia_client, user, monkeypatch
-    ):
+    def test_frozen_snapshot_matches_the_get_panel(self, auth_inertia_client, user, monkeypatch):
         """The point of the fix: POST freeze == GET recompute.
 
         Asserts the two agree rather than pinning a hardcoded number, so the
@@ -643,7 +644,7 @@ class TestMarkReviewedUsesUserTimezone:
 class TestUpdateReviewNotes:
     @pytest.fixture
     def review(self, active_schedule):
-        return recompute_review_from_schedule(active_schedule)
+        return DailyReview.objects.create(schedule=active_schedule)
 
     def test_updates_notes(self, auth_client, review):
         resp = auth_client.patch(
@@ -656,11 +657,9 @@ class TestUpdateReviewNotes:
         assert review.notes == "new notes"
 
     def test_cross_user_404(self, review):
-        other_user = User.objects.create_user(
-            username="other", password="pw"
-        )
+        other_user = User.objects.create_user(username="other", password="pw")
         client = Client()
-        client.login(username="other", password="pw")
+        client.force_login(other_user)
         resp = client.patch(
             NOTES_URL.format(pk=review.id),
             json.dumps({"notes": "hax"}),
@@ -723,3 +722,83 @@ class TestUpdateReviewNotes:
         review.refresh_from_db()
         assert review.notes == "ok"
         assert review.completed_count != 999
+
+    def test_date_route_lazily_creates_notes_without_schedule_revision(
+        self, auth_client, active_schedule, past_date
+    ):
+        assert not DailyReview.objects.filter(schedule=active_schedule).exists()
+        response = auth_client.patch(
+            SCHEDULE_NOTES_URL.format(date=past_date),
+            json.dumps({"notes": "Daily note"}),
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        assert response.json()["snapshot_kind"] == "current"
+        assert response.json()["completed_count"] == 1
+        review = DailyReview.objects.get(schedule=active_schedule)
+        assert review.notes == "Daily note"
+        assert review.reviewed_revision is None
+        active_schedule.refresh_from_db()
+        assert active_schedule.revision == 0
+
+        marked = auth_client.post(
+            MARK_REVIEWED_URL.format(date=past_date), "", content_type="application/json"
+        )
+        assert marked.status_code == 200
+        assert marked.json()["notes"] == "Daily note"
+
+    def test_date_route_is_user_owned(self, auth_client, active_schedule, past_date):
+        other_user = User.objects.create_user(username="other-date-route", password="pw")
+        client = Client()
+        client.force_login(other_user)
+        response = client.patch(
+            SCHEDULE_NOTES_URL.format(date=past_date),
+            json.dumps({"notes": "Other user"}),
+            content_type="application/json",
+        )
+        assert response.status_code == 404
+        assert not DailyReview.objects.filter(schedule=active_schedule).exists()
+
+    def test_date_route_rejects_changed_session_header(
+        self, auth_client, active_schedule, past_date
+    ):
+        response = auth_client.patch(
+            SCHEDULE_NOTES_URL.format(date=past_date),
+            json.dumps({"notes": "Wrong account"}),
+            content_type="application/json",
+            HTTP_X_SCHEDULE_USER="99999",
+        )
+        assert response.status_code == 401
+        assert response.json()["code"] == "session_invalid"
+        assert not DailyReview.objects.filter(schedule=active_schedule).exists()
+
+
+@pytest.mark.django_db
+def test_analytics_snapshot_keeps_revision_and_blocks_from_same_capture(
+    auth_inertia_client, active_schedule, past_date, monkeypatch
+):
+    from analytics import views as analytics_views
+    from schedules.mutations import execute_schedule_mutation
+
+    original_preferences = analytics_views.get_user_preferences
+    preferences_calls = 0
+
+    def rename(ctx):
+        ctx.schedule.time_blocks.update(title="Later edit")
+
+    def preferences_after_write(user):
+        nonlocal preferences_calls
+        preferences_calls += 1
+        if preferences_calls == 2:
+            execute_schedule_mutation(user.pk, active_schedule.pk, 0, rename)
+        return original_preferences(user)
+
+    monkeypatch.setattr(analytics_views, "get_user_preferences", preferences_after_write)
+    response = auth_inertia_client.get(ANALYTICS_URL.format(date=past_date))
+    assert response.status_code == 200
+    props = _props(response)
+    assert props["schedule"]["revision"] == 0
+    assert all(block["title"] == "t" for block in props["blocks"])
+    active_schedule.refresh_from_db()
+    assert active_schedule.revision == 1
+    assert set(active_schedule.time_blocks.values_list("title", flat=True)) == {"Later edit"}

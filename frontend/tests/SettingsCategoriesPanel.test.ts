@@ -107,6 +107,48 @@ describe("SettingsCategoriesPanel", () => {
     expect(wrapper.find(".error-text").text()).toBe("Save failed")
   })
 
+  it("restores the accepted label after consecutive rejections with the same error", async () => {
+    api.update
+      .mockResolvedValueOnce({ ok: false, errors: { category: "Save failed" } })
+      .mockResolvedValueOnce({ ok: false, errors: { category: "Save failed" } })
+    const wrapper = mount(SettingsCategoriesPanel, { props: { categories: SEED } })
+
+    for (const attemptedLabel of ["Rejected one", "Rejected two"]) {
+      const input = wrapper.findAll(".category-row")[0].find("input")
+      ;(input.element as HTMLInputElement).value = attemptedLabel
+      await input.trigger("input")
+      await input.trigger("change")
+      await flushPromises()
+      expect((wrapper.findAll(".category-row")[0].find("input").element as HTMLInputElement).value).toBe("Work")
+    }
+
+    expect(wrapper.find(".error-text").text()).toBe("Save failed")
+  })
+
+  it("restores the accepted color when an update is rejected", async () => {
+    api.update.mockResolvedValueOnce({ ok: false, errors: { category: "Save failed" } })
+    const wrapper = mount(SettingsCategoriesPanel, { props: { categories: SEED } })
+    const select = wrapper.findAll(".category-row")[0].find("select")
+    ;(select.element as HTMLSelectElement).value = "violet"
+    await select.trigger("change")
+    await flushPromises()
+    expect((wrapper.findAll(".category-row")[0].find("select").element as HTMLSelectElement).value).toBe("blue")
+  })
+
+  it.each([
+    [409, "Category changed elsewhere"],
+    [429, "Too many category updates"],
+  ])("surfaces errors.detail for update status %i", async (status, detail) => {
+    api.update.mockResolvedValueOnce({ ok: false, status, errors: { detail } })
+    const wrapper = mount(SettingsCategoriesPanel, { props: { categories: SEED } })
+    const input = wrapper.findAll(".category-row")[0].find("input")
+    ;(input.element as HTMLInputElement).value = "Work Edited"
+    await input.trigger("input")
+    await input.trigger("change")
+    await flushPromises()
+    expect(wrapper.find(".error-text").text()).toBe(detail)
+  })
+
   it("surfaces an inline error when the API rejects a delete", async () => {
     api.remove.mockResolvedValueOnce({ ok: false, errors: { category: "Delete failed" } })
     const wrapper = mount(SettingsCategoriesPanel, { props: { categories: SEED } })

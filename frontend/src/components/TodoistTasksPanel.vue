@@ -22,7 +22,7 @@ const emit = defineEmits<{
       <button type="button" class="todoist-retry" @click="emit('retry')">Retry</button>
     </div>
 
-    <ul v-else-if="!loading && tasks.length > 0" class="todoist-list">
+    <ul v-if="tasks.length > 0" class="todoist-list">
       <li
         v-for="task in tasks"
         :key="task.id"
@@ -40,14 +40,14 @@ const emit = defineEmits<{
       </li>
     </ul>
 
-    <p v-else-if="loading" class="todoist-skeleton" aria-hidden="true">
+    <p v-else-if="loading && !error" class="todoist-skeleton" aria-hidden="true">
       <span class="todoist-skel-row"></span>
       <span class="todoist-skel-row"></span>
       <span class="todoist-skel-row"></span>
       <span class="todoist-skel-row"></span>
     </p>
 
-    <p v-else class="todoist-empty">No tasks scheduled for this day.</p>
+    <p v-else-if="!error" class="todoist-empty">No tasks scheduled for this day.</p>
   </div>
 </template>
 

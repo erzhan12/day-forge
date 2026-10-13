@@ -1,0 +1,1453 @@
+[
+  {
+    "id": "bare_activity_ru",
+    "source_tests": [
+      "test_ai_implicit_add.py",
+      "test_ai_views_chat.py"
+    ],
+    "now": "2026-04-18T08:00:00+00:00",
+    "date": "2026-04-18",
+    "schedule": [],
+    "rules": [
+      "Allow lunch as a personal block."
+    ],
+    "categories": {},
+    "turns": [
+      {
+        "user": "Обед",
+        "recorded_response": {
+          "actions": [
+            {
+              "type": "add",
+              "title": "Обед",
+              "category": "personal"
+            }
+          ],
+          "explanation": "Добавил обед.",
+          "ask": null
+        },
+        "expect": {
+          "status": 200,
+          "applied": true,
+          "ask": null,
+          "provider_user": "добавь Обед",
+          "blocks": [
+            {
+              "title": "Обед",
+              "start_time": "08:00",
+              "end_time": "08:25",
+              "category": "personal"
+            }
+          ],
+          "forbidden_titles": [
+            "Обед[2]"
+          ],
+          "applied_action_indices": [
+            0
+          ]
+        },
+        "desired_actions": [
+          {
+            "type": "add",
+            "title": "Обед",
+            "category": "personal"
+          }
+        ]
+      }
+    ],
+    "provenance": "Synthetic completion based on the named existing tests; no live provider or user data."
+  },
+  {
+    "id": "bare_activity_en",
+    "source_tests": [
+      "test_ai_implicit_add.py",
+      "test_ai_service_chat.py"
+    ],
+    "now": "2026-04-18T08:00:00+00:00",
+    "date": "2026-04-18",
+    "schedule": [],
+    "rules": [],
+    "categories": {},
+    "turns": [
+      {
+        "user": "Reading emails 30 min",
+        "recorded_response": {
+          "actions": [
+            {
+              "type": "add",
+              "title": "Reading emails",
+              "category": "work",
+              "duration_minutes": 30
+            }
+          ],
+          "explanation": "Added reading emails.",
+          "ask": null
+        },
+        "expect": {
+          "status": 200,
+          "applied": true,
+          "ask": null,
+          "provider_user": "add Reading emails 30 min",
+          "blocks": [
+            {
+              "title": "Reading emails",
+              "start_time": "08:00",
+              "end_time": "08:30",
+              "category": "work"
+            }
+          ],
+          "applied_action_indices": [
+            0
+          ]
+        },
+        "desired_actions": [
+          {
+            "type": "add",
+            "title": "Reading emails",
+            "category": "work",
+            "duration_minutes": 30
+          }
+        ]
+      }
+    ],
+    "provenance": "Synthetic completion based on the named existing tests; no live provider or user data."
+  },
+  {
+    "id": "pending_clarification",
+    "source_tests": [
+      "test_ai_implicit_add.py",
+      "test_ai_views_chat.py"
+    ],
+    "now": "2026-04-18T08:00:00+00:00",
+    "date": "2026-04-18",
+    "schedule": [],
+    "rules": [],
+    "categories": {},
+    "turns": [
+      {
+        "user": "add Gym",
+        "recorded_response": {
+          "actions": [],
+          "explanation": "What time should Gym start?",
+          "ask": "What time should Gym start?"
+        },
+        "expect": {
+          "status": 200,
+          "applied": false,
+          "ask": "present",
+          "blocks": [],
+          "applied_action_indices": []
+        },
+        "desired_actions": []
+      },
+      {
+        "user": "18:00",
+        "recorded_response": {
+          "actions": [
+            {
+              "type": "add",
+              "title": "Gym",
+              "category": "health",
+              "start_time": "18:00",
+              "end_time": "18:30"
+            }
+          ],
+          "explanation": "Added Gym.",
+          "ask": null
+        },
+        "expect": {
+          "status": 200,
+          "applied": true,
+          "ask": null,
+          "provider_user": "18:00",
+          "blocks": [
+            {
+              "title": "Gym",
+              "start_time": "18:00",
+              "end_time": "18:30",
+              "category": "health"
+            }
+          ],
+          "applied_action_indices": [
+            0
+          ]
+        },
+        "desired_actions": [
+          {
+            "type": "add",
+            "title": "Gym",
+            "category": "health",
+            "start_time": "18:00",
+            "end_time": "18:30"
+          }
+        ]
+      }
+    ],
+    "provenance": "Synthetic completion based on the named existing tests; no live provider or user data."
+  },
+  {
+    "id": "error_retry",
+    "source_tests": [
+      "test_ai_implicit_add.py",
+      "test_ai_replay_guard.py"
+    ],
+    "now": "2026-04-18T08:00:00+00:00",
+    "date": "2026-04-18",
+    "schedule": [],
+    "rules": [],
+    "categories": {},
+    "turns": [
+      {
+        "user": "add Momentum",
+        "recorded_response": "{invalid",
+        "expect": {
+          "status": 502,
+          "blocks": [],
+          "applied_action_indices": []
+        },
+        "desired_actions": []
+      },
+      {
+        "user": "try again",
+        "recorded_response": {
+          "actions": [
+            {
+              "type": "add",
+              "title": "Momentum",
+              "category": "personal",
+              "start_time": "14:00",
+              "end_time": "14:30"
+            }
+          ],
+          "explanation": "Added Momentum.",
+          "ask": null
+        },
+        "expect": {
+          "status": 200,
+          "applied": true,
+          "ask": null,
+          "provider_user": "try again",
+          "blocks": [
+            {
+              "title": "Momentum",
+              "start_time": "14:00",
+              "end_time": "14:30",
+              "category": "personal"
+            }
+          ],
+          "applied_action_indices": [
+            0
+          ]
+        },
+        "desired_actions": [
+          {
+            "type": "add",
+            "title": "Momentum",
+            "category": "personal",
+            "start_time": "14:00",
+            "end_time": "14:30"
+          }
+        ]
+      }
+    ],
+    "provenance": "Synthetic completion based on the named existing tests; no live provider or user data."
+  },
+  {
+    "id": "refusal_after_ask",
+    "source_tests": [
+      "test_ai_replay_guard.py",
+      "test_ai_service_chat.py"
+    ],
+    "now": "2026-04-18T08:00:00+00:00",
+    "date": "2026-04-18",
+    "schedule": [],
+    "rules": [],
+    "categories": {},
+    "turns": [
+      {
+        "user": "add Lunch",
+        "recorded_response": {
+          "actions": [],
+          "explanation": "What time for Lunch?",
+          "ask": "What time for Lunch?"
+        },
+        "expect": {
+          "status": 200,
+          "applied": false,
+          "ask": "present",
+          "blocks": [],
+          "applied_action_indices": []
+        },
+        "desired_actions": []
+      },
+      {
+        "user": "No, cancel",
+        "recorded_response": {
+          "actions": [],
+          "explanation": "Canceled.",
+          "ask": null
+        },
+        "expect": {
+          "status": 200,
+          "applied": false,
+          "ask": null,
+          "blocks": [],
+          "forbidden_titles": [
+            "Lunch"
+          ],
+          "applied_action_indices": []
+        },
+        "desired_actions": []
+      }
+    ],
+    "provenance": "Synthetic completion based on the named existing tests; no live provider or user data."
+  },
+  {
+    "id": "refusal_bad_model_add_known_gap",
+    "source_tests": [
+      "test_ai_replay_guard.py",
+      "test_ai_views_chat.py"
+    ],
+    "now": "2026-04-18T08:00:00+00:00",
+    "date": "2026-04-18",
+    "schedule": [],
+    "rules": [],
+    "categories": {},
+    "turns": [
+      {
+        "user": "add Gym",
+        "recorded_response": {
+          "actions": [],
+          "explanation": "What time should Gym start?",
+          "ask": "What time should Gym start?"
+        },
+        "expect": {
+          "status": 200,
+          "applied": false,
+          "ask": "present",
+          "blocks": [],
+          "applied_action_indices": []
+        },
+        "desired_actions": []
+      },
+      {
+        "user": "cancel that",
+        "recorded_response": {
+          "actions": [
+            {
+              "type": "add",
+              "title": "Gym",
+              "category": "health",
+              "start_time": "18:00",
+              "end_time": "18:30"
+            }
+          ],
+          "explanation": "Added Gym.",
+          "ask": null
+        },
+        "desired": {
+          "applied": false,
+          "forbidden_titles": [
+            "Gym"
+          ]
+        },
+        "known_gap": "false_addition",
+        "expect": {
+          "status": 200,
+          "applied": true,
+          "ask": null,
+          "blocks": [
+            {
+              "title": "Gym",
+              "start_time": "18:00",
+              "end_time": "18:30",
+              "category": "health"
+            }
+          ],
+          "applied_action_indices": [
+            0
+          ]
+        },
+        "desired_actions": []
+      }
+    ],
+    "provenance": "Synthetic completion based on the named existing tests; no live provider or user data."
+  },
+  {
+    "id": "explicit_repeat",
+    "source_tests": [
+      "test_ai_replay_guard.py",
+      "test_ai_views_chat.py"
+    ],
+    "now": "2026-04-18T08:00:00+00:00",
+    "date": "2026-04-18",
+    "schedule": [],
+    "rules": [
+      "Use [N] when a requested name repeats."
+    ],
+    "categories": {},
+    "turns": [
+      {
+        "user": "add Gym",
+        "recorded_response": {
+          "actions": [
+            {
+              "type": "add",
+              "title": "Gym",
+              "category": "health",
+              "start_time": "12:00",
+              "end_time": "12:30"
+            }
+          ],
+          "explanation": "Added Gym.",
+          "ask": null
+        },
+        "expect": {
+          "status": 200,
+          "applied": true,
+          "blocks": [
+            {
+              "title": "Gym",
+              "start_time": "12:00",
+              "end_time": "12:30",
+              "category": "health"
+            }
+          ],
+          "applied_action_indices": [
+            0
+          ]
+        },
+        "desired_actions": [
+          {
+            "type": "add",
+            "title": "Gym",
+            "category": "health",
+            "start_time": "12:00",
+            "end_time": "12:30"
+          }
+        ]
+      },
+      {
+        "user": "add Gym again at 13:00",
+        "recorded_response": {
+          "actions": [
+            {
+              "type": "add",
+              "title": "Gym[2]",
+              "category": "health",
+              "start_time": "13:00",
+              "end_time": "13:30"
+            }
+          ],
+          "explanation": "Added another Gym.",
+          "ask": null
+        },
+        "expect": {
+          "status": 200,
+          "applied": true,
+          "ask": null,
+          "blocks": [
+            {
+              "title": "Gym",
+              "start_time": "12:00",
+              "end_time": "12:30",
+              "category": "health"
+            },
+            {
+              "title": "Gym[2]",
+              "start_time": "13:00",
+              "end_time": "13:30",
+              "category": "health"
+            }
+          ],
+          "applied_action_indices": [
+            0
+          ]
+        },
+        "desired_actions": [
+          {
+            "type": "add",
+            "title": "Gym[2]",
+            "category": "health",
+            "start_time": "13:00",
+            "end_time": "13:30"
+          }
+        ]
+      }
+    ],
+    "provenance": "Synthetic completion based on the named existing tests; no live provider or user data."
+  },
+  {
+    "id": "replayed_prior_add",
+    "source_tests": [
+      "test_ai_views_chat.py",
+      "test_ai_replay_guard.py"
+    ],
+    "now": "2026-04-18T08:00:00+00:00",
+    "date": "2026-04-18",
+    "schedule": [],
+    "rules": [
+      "Use [N] when a requested name repeats."
+    ],
+    "categories": {},
+    "turns": [
+      {
+        "user": "add Momentum",
+        "recorded_response": {
+          "actions": [
+            {
+              "type": "add",
+              "title": "Momentum",
+              "category": "personal",
+              "start_time": "12:00",
+              "end_time": "12:30"
+            }
+          ],
+          "explanation": "Added Momentum.",
+          "ask": null
+        },
+        "expect": {
+          "status": 200,
+          "applied": true,
+          "blocks": [
+            {
+              "title": "Momentum",
+              "start_time": "12:00",
+              "end_time": "12:30",
+              "category": "personal"
+            }
+          ],
+          "applied_action_indices": [
+            0
+          ]
+        },
+        "desired_actions": [
+          {
+            "type": "add",
+            "title": "Momentum",
+            "category": "personal",
+            "start_time": "12:00",
+            "end_time": "12:30"
+          }
+        ]
+      },
+      {
+        "user": "Notes",
+        "recorded_response": {
+          "actions": [
+            {
+              "type": "add",
+              "title": "Momentum[2]",
+              "category": "personal",
+              "start_time": "13:00",
+              "end_time": "13:30"
+            }
+          ],
+          "explanation": "Added Momentum again.",
+          "ask": null
+        },
+        "expect": {
+          "status": 200,
+          "applied": false,
+          "ask": "present",
+          "reason_codes": [
+            "replay_guard"
+          ],
+          "provider_user": "add Notes",
+          "blocks": [
+            {
+              "title": "Momentum",
+              "start_time": "12:00",
+              "end_time": "12:30",
+              "category": "personal"
+            }
+          ],
+          "forbidden_titles": [
+            "Momentum[2]"
+          ],
+          "applied_action_indices": []
+        },
+        "desired": {
+          "applied": true,
+          "ask": null,
+          "forbidden_titles": [
+            "Momentum[2]"
+          ]
+        },
+        "known_gap": "unnecessary_ask_from_model_replay",
+        "desired_actions": [
+          {
+            "type": "add",
+            "title": "Notes",
+            "category": "other"
+          }
+        ]
+      }
+    ],
+    "provenance": "Synthetic completion based on the named existing tests; no live provider or user data."
+  },
+  {
+    "id": "identical_titles_exact_id",
+    "source_tests": [
+      "test_ai_views_chat.py",
+      "test_ai_mutation_planner.py"
+    ],
+    "now": "2026-04-18T08:00:00+00:00",
+    "date": "2026-04-18",
+    "schedule": [
+      {
+        "ref": "first",
+        "title": "Call",
+        "start_time": "12:00",
+        "end_time": "12:30",
+        "category": "work"
+      },
+      {
+        "ref": "second",
+        "title": "Call",
+        "start_time": "14:00",
+        "end_time": "14:30",
+        "category": "work"
+      }
+    ],
+    "rules": [],
+    "categories": {},
+    "turns": [
+      {
+        "user": "Move the later Call to 15:00",
+        "recorded_response": {
+          "actions": [
+            {
+              "type": "move",
+              "task_id": "$second",
+              "start_time": "15:00",
+              "end_time": "15:30"
+            }
+          ],
+          "explanation": "Moved the later Call.",
+          "ask": null
+        },
+        "expect": {
+          "status": 200,
+          "applied": true,
+          "blocks": [
+            {
+              "title": "Call",
+              "start_time": "12:00",
+              "end_time": "12:30",
+              "category": "work"
+            },
+            {
+              "title": "Call",
+              "start_time": "15:00",
+              "end_time": "15:30",
+              "category": "work"
+            }
+          ],
+          "unchanged_refs": [
+            "first"
+          ],
+          "applied_action_indices": [
+            0
+          ]
+        },
+        "desired_actions": [
+          {
+            "type": "move",
+            "task_id": "$second",
+            "start_time": "15:00",
+            "end_time": "15:30"
+          }
+        ]
+      }
+    ],
+    "provenance": "Synthetic completion based on the named existing tests; no live provider or user data."
+  },
+  {
+    "id": "partial_apply",
+    "source_tests": [
+      "test_ai_views_chat.py",
+      "test_ai_mutation_planner.py"
+    ],
+    "now": "2026-04-18T08:00:00+00:00",
+    "date": "2026-04-18",
+    "schedule": [
+      {
+        "ref": "meeting",
+        "title": "Meeting",
+        "start_time": "12:00",
+        "end_time": "13:00",
+        "category": "work"
+      }
+    ],
+    "rules": [],
+    "categories": {},
+    "turns": [
+      {
+        "user": "add Reading at 10 and Lunch at noon",
+        "recorded_response": {
+          "actions": [
+            {
+              "type": "add",
+              "title": "Reading",
+              "category": "personal",
+              "start_time": "10:00",
+              "end_time": "10:30"
+            },
+            {
+              "type": "add",
+              "title": "Lunch",
+              "category": "personal",
+              "start_time": "12:00",
+              "end_time": "12:30"
+            }
+          ],
+          "explanation": "Placed Reading. Lunch needs another time.",
+          "ask": null
+        },
+        "expect": {
+          "status": 200,
+          "applied": true,
+          "partial": true,
+          "ask": "present",
+          "blocks": [
+            {
+              "title": "Reading",
+              "start_time": "10:00",
+              "end_time": "10:30",
+              "category": "personal"
+            },
+            {
+              "title": "Meeting",
+              "start_time": "12:00",
+              "end_time": "13:00",
+              "category": "work"
+            }
+          ],
+          "forbidden_titles": [
+            "Lunch"
+          ],
+          "unchanged_refs": [
+            "meeting"
+          ],
+          "applied_action_indices": [
+            0
+          ]
+        },
+        "desired_actions": [
+          {
+            "type": "add",
+            "title": "Reading",
+            "category": "personal",
+            "start_time": "10:00",
+            "end_time": "10:30"
+          },
+          {
+            "type": "add",
+            "title": "Lunch",
+            "category": "personal",
+            "start_time": "12:00",
+            "end_time": "12:30"
+          }
+        ]
+      },
+      {
+        "user": "13:30",
+        "recorded_response": {
+          "actions": [
+            {
+              "type": "add",
+              "title": "Lunch",
+              "category": "personal",
+              "start_time": "13:30",
+              "end_time": "14:00"
+            }
+          ],
+          "explanation": "Placed Lunch at 13:30.",
+          "ask": null
+        },
+        "expect": {
+          "status": 200,
+          "applied": true,
+          "ask": null,
+          "provider_user": "13:30",
+          "blocks": [
+            {
+              "title": "Reading",
+              "start_time": "10:00",
+              "end_time": "10:30",
+              "category": "personal"
+            },
+            {
+              "title": "Meeting",
+              "start_time": "12:00",
+              "end_time": "13:00",
+              "category": "work"
+            },
+            {
+              "title": "Lunch",
+              "start_time": "13:30",
+              "end_time": "14:00",
+              "category": "personal"
+            }
+          ],
+          "unchanged_refs": [
+            "meeting"
+          ],
+          "applied_action_indices": [
+            0
+          ]
+        },
+        "desired_actions": [
+          {
+            "type": "add",
+            "title": "Lunch",
+            "category": "personal",
+            "start_time": "13:30",
+            "end_time": "14:00"
+          }
+        ]
+      }
+    ],
+    "provenance": "Synthetic completion based on the named existing tests; no live provider or user data."
+  },
+  {
+    "id": "category_label_ru",
+    "source_tests": [
+      "test_ai_category_resolution.py",
+      "test_ai_views_chat.py"
+    ],
+    "now": "2026-04-18T08:00:00+00:00",
+    "date": "2026-04-18",
+    "schedule": [],
+    "rules": [],
+    "categories": {
+      "work": "Работа"
+    },
+    "turns": [
+      {
+        "user": "добавь отчёт в категорию Работа",
+        "recorded_response": {
+          "actions": [
+            {
+              "type": "add",
+              "title": "Отчёт",
+              "category": "Работа",
+              "start_time": "12:00",
+              "end_time": "12:30"
+            }
+          ],
+          "explanation": "Добавил отчёт.",
+          "ask": null
+        },
+        "expect": {
+          "status": 200,
+          "applied": true,
+          "blocks": [
+            {
+              "title": "Отчёт",
+              "start_time": "12:00",
+              "end_time": "12:30",
+              "category": "work"
+            }
+          ],
+          "applied_action_indices": [
+            0
+          ]
+        },
+        "desired_actions": [
+          {
+            "type": "add",
+            "title": "Отчёт",
+            "category": "work",
+            "start_time": "12:00",
+            "end_time": "12:30"
+          }
+        ]
+      }
+    ],
+    "provenance": "Synthetic completion based on the named existing tests; no live provider or user data."
+  },
+  {
+    "id": "category_label_en",
+    "source_tests": [
+      "test_ai_category_resolution.py",
+      "test_ai_views_chat.py"
+    ],
+    "now": "2026-04-18T08:00:00+00:00",
+    "date": "2026-04-18",
+    "schedule": [],
+    "rules": [],
+    "categories": {},
+    "turns": [
+      {
+        "user": "add report to Work",
+        "recorded_response": {
+          "actions": [
+            {
+              "type": "add",
+              "title": "Report",
+              "category": "Work",
+              "start_time": "12:00",
+              "end_time": "12:30"
+            }
+          ],
+          "explanation": "Added the report.",
+          "ask": null
+        },
+        "expect": {
+          "status": 200,
+          "applied": true,
+          "blocks": [
+            {
+              "title": "Report",
+              "start_time": "12:00",
+              "end_time": "12:30",
+              "category": "work"
+            }
+          ],
+          "applied_action_indices": [
+            0
+          ]
+        },
+        "desired_actions": [
+          {
+            "type": "add",
+            "title": "Report",
+            "category": "work",
+            "start_time": "12:00",
+            "end_time": "12:30"
+          }
+        ]
+      }
+    ],
+    "provenance": "Synthetic completion based on the named existing tests; no live provider or user data."
+  },
+  {
+    "id": "api_cross_day_transcript_replay",
+    "source_tests": [
+      "test_ai_replay_guard.py",
+      "test_ai_views_chat.py"
+    ],
+    "now": "2026-04-18T08:00:00+00:00",
+    "date": "2026-04-18",
+    "schedule": [],
+    "rules": [],
+    "categories": {},
+    "turns": [
+      {
+        "user": "add Stretching",
+        "recorded_response": {
+          "actions": [
+            {
+              "type": "add",
+              "title": "Stretching",
+              "category": "health",
+              "start_time": "12:00",
+              "end_time": "12:30"
+            }
+          ],
+          "explanation": "Added Stretching.",
+          "ask": null
+        },
+        "expect": {
+          "status": 200,
+          "applied": true,
+          "blocks": [
+            {
+              "title": "Stretching",
+              "start_time": "12:00",
+              "end_time": "12:30",
+              "category": "health"
+            }
+          ],
+          "applied_action_indices": [
+            0
+          ]
+        },
+        "desired_actions": [
+          {
+            "type": "add",
+            "title": "Stretching",
+            "category": "health",
+            "start_time": "12:00",
+            "end_time": "12:30"
+          }
+        ]
+      },
+      {
+        "date": "2026-04-19",
+        "user": "Notes",
+        "recorded_response": {
+          "actions": [
+            {
+              "type": "add",
+              "title": "Stretching[2]",
+              "category": "health",
+              "start_time": "12:00",
+              "end_time": "12:30"
+            }
+          ],
+          "explanation": "Added Stretching again.",
+          "ask": null
+        },
+        "expect": {
+          "status": 200,
+          "applied": false,
+          "ask": "present",
+          "reason_codes": [
+            "replay_guard"
+          ],
+          "blocks": [],
+          "forbidden_titles": [
+            "Stretching[2]"
+          ],
+          "applied_action_indices": []
+        },
+        "desired": {
+          "applied": true,
+          "ask": null,
+          "forbidden_titles": [
+            "Stretching[2]"
+          ]
+        },
+        "known_gap": "unnecessary_ask_from_model_replay",
+        "desired_actions": [
+          {
+            "type": "add",
+            "title": "Notes",
+            "category": "other"
+          }
+        ]
+      }
+    ],
+    "final_days": {
+      "2026-04-18": [
+        {
+          "title": "Stretching",
+          "start_time": "12:00",
+          "end_time": "12:30",
+          "category": "health"
+        }
+      ],
+      "2026-04-19": []
+    },
+    "provenance": "Synthetic direct-API transcript reuse across dates, based on replay guard tests; the current UI clears chat on date change."
+  },
+  {
+    "id": "stale_revision_preempts_sdk",
+    "source_tests": [
+      "test_ai_revision.py",
+      "test_ai_views_chat.py"
+    ],
+    "now": "2026-04-18T08:00:00+00:00",
+    "date": "2026-04-18",
+    "schedule": [
+      {
+        "ref": "work",
+        "title": "Work",
+        "start_time": "12:00",
+        "end_time": "13:00",
+        "category": "work"
+      }
+    ],
+    "rules": [],
+    "categories": {},
+    "turns": [
+      {
+        "user": "move Work to 14:00",
+        "before": {
+          "bump_revision": true
+        },
+        "expected_revision": 0,
+        "recorded_response": null,
+        "expect": {
+          "status": 409,
+          "provider_calls": 0,
+          "blocks": [
+            {
+              "title": "Work",
+              "start_time": "12:00",
+              "end_time": "13:00",
+              "category": "work"
+            }
+          ],
+          "unchanged_refs": [
+            "work"
+          ],
+          "applied_action_indices": []
+        },
+        "desired_actions": []
+      }
+    ],
+    "provenance": "Synthetic completion based on the named existing tests; no live provider or user data."
+  },
+  {
+    "id": "ui_date_switch_clears_transcript",
+    "source_tests": [
+      "test_ai_replay_guard.py",
+      "test_ai_views_chat.py"
+    ],
+    "provenance": "Synthetic current-UI transcript reset on date change; no live provider or user data.",
+    "now": "2026-04-18T08:00:00+00:00",
+    "date": "2026-04-18",
+    "schedule": [],
+    "rules": [],
+    "categories": {},
+    "turns": [
+      {
+        "user": "add Stretching",
+        "recorded_response": {
+          "actions": [
+            {
+              "type": "add",
+              "title": "Stretching",
+              "category": "health",
+              "start_time": "12:00",
+              "end_time": "12:30"
+            }
+          ],
+          "explanation": "Added Stretching.",
+          "ask": null
+        },
+        "expect": {
+          "status": 200,
+          "applied": true,
+          "blocks": [
+            {
+              "title": "Stretching",
+              "start_time": "12:00",
+              "end_time": "12:30",
+              "category": "health"
+            }
+          ],
+          "applied_action_indices": [
+            0
+          ]
+        },
+        "desired_actions": [
+          {
+            "type": "add",
+            "title": "Stretching",
+            "category": "health",
+            "start_time": "12:00",
+            "end_time": "12:30"
+          }
+        ]
+      },
+      {
+        "date": "2026-04-19",
+        "reset_transcript": true,
+        "user": "Notes",
+        "recorded_response": {
+          "actions": [
+            {
+              "type": "add",
+              "title": "Notes",
+              "category": "other",
+              "start_time": "12:00",
+              "end_time": "12:30"
+            }
+          ],
+          "explanation": "Added Notes.",
+          "ask": null
+        },
+        "expect": {
+          "status": 200,
+          "applied": true,
+          "provider_user": "add Notes",
+          "blocks": [
+            {
+              "title": "Notes",
+              "start_time": "12:00",
+              "end_time": "12:30",
+              "category": "other"
+            }
+          ],
+          "applied_action_indices": [
+            0
+          ]
+        },
+        "desired_actions": [
+          {
+            "type": "add",
+            "title": "Notes",
+            "category": "other",
+            "start_time": "12:00",
+            "end_time": "12:30"
+          }
+        ]
+      }
+    ],
+    "final_days": {
+      "2026-04-18": [
+        {
+          "title": "Stretching",
+          "start_time": "12:00",
+          "end_time": "12:30",
+          "category": "health"
+        }
+      ],
+      "2026-04-19": [
+        {
+          "title": "Notes",
+          "start_time": "12:00",
+          "end_time": "12:30",
+          "category": "other"
+        }
+      ]
+    }
+  },
+  {
+    "id": "lost_success_response_retry_known_gap",
+    "source_tests": [
+      "test_ai_replay_guard.py",
+      "test_ai_views_chat.py"
+    ],
+    "provenance": "Synthetic client-lost-success-response case; completion is invented to characterize the lack of request idempotency.",
+    "now": "2026-04-18T08:00:00+00:00",
+    "date": "2026-04-18",
+    "schedule": [],
+    "rules": [],
+    "categories": {},
+    "turns": [
+      {
+        "user": "add Gym",
+        "recorded_response": {
+          "actions": [
+            {
+              "type": "add",
+              "title": "Gym",
+              "category": "health",
+              "start_time": "12:00",
+              "end_time": "12:30"
+            }
+          ],
+          "explanation": "Added Gym.",
+          "ask": null
+        },
+        "client_error_after_commit": true,
+        "expect": {
+          "status": 200,
+          "applied": true,
+          "blocks": [
+            {
+              "title": "Gym",
+              "start_time": "12:00",
+              "end_time": "12:30",
+              "category": "health"
+            }
+          ],
+          "applied_action_indices": [
+            0
+          ]
+        },
+        "desired_actions": [
+          {
+            "type": "add",
+            "title": "Gym",
+            "category": "health",
+            "start_time": "12:00",
+            "end_time": "12:30"
+          }
+        ]
+      },
+      {
+        "user": "try again",
+        "recorded_response": {
+          "actions": [
+            {
+              "type": "add",
+              "title": "Gym[2]",
+              "category": "health",
+              "start_time": "13:00",
+              "end_time": "13:30"
+            }
+          ],
+          "explanation": "Added Gym again.",
+          "ask": null
+        },
+        "desired": {
+          "applied": false,
+          "forbidden_titles": [
+            "Gym[2]"
+          ]
+        },
+        "known_gap": "false_addition",
+        "expect": {
+          "status": 200,
+          "applied": true,
+          "blocks": [
+            {
+              "title": "Gym",
+              "start_time": "12:00",
+              "end_time": "12:30",
+              "category": "health"
+            },
+            {
+              "title": "Gym[2]",
+              "start_time": "13:00",
+              "end_time": "13:30",
+              "category": "health"
+            }
+          ],
+          "applied_action_indices": [
+            0
+          ]
+        },
+        "desired_actions": []
+      }
+    ]
+  },
+  {
+    "id": "multi_ask_error_retry",
+    "source_tests": [
+      "test_ai_replay_guard.py",
+      "test_ai_views_chat.py"
+    ],
+    "provenance": "Synthetic multi-ask retry based on replay guard tests; no live provider or user data.",
+    "now": "2026-04-18T08:00:00+00:00",
+    "date": "2026-04-18",
+    "schedule": [],
+    "rules": [],
+    "categories": {},
+    "turns": [
+      {
+        "user": "add Gym",
+        "recorded_response": {
+          "actions": [],
+          "explanation": "How long should Gym be?",
+          "ask": "How long should Gym be?"
+        },
+        "expect": {
+          "status": 200,
+          "applied": false,
+          "ask": "present",
+          "blocks": [],
+          "applied_action_indices": []
+        },
+        "desired_actions": []
+      },
+      {
+        "user": "30 minutes",
+        "recorded_response": {
+          "actions": [],
+          "explanation": "Past or from now forward?",
+          "ask": "Past or from now forward?"
+        },
+        "expect": {
+          "status": 200,
+          "applied": false,
+          "ask": "present",
+          "blocks": [],
+          "applied_action_indices": []
+        },
+        "desired_actions": []
+      },
+      {
+        "user": "later today",
+        "recorded_response": "{invalid",
+        "expect": {
+          "status": 502,
+          "blocks": [],
+          "applied_action_indices": []
+        },
+        "desired_actions": []
+      },
+      {
+        "user": "try again",
+        "recorded_response": {
+          "actions": [
+            {
+              "type": "add",
+              "title": "Gym",
+              "category": "health",
+              "start_time": "13:00",
+              "end_time": "13:30"
+            }
+          ],
+          "explanation": "Added Gym.",
+          "ask": null
+        },
+        "expect": {
+          "status": 200,
+          "applied": true,
+          "ask": null,
+          "provider_user": "try again",
+          "blocks": [
+            {
+              "title": "Gym",
+              "start_time": "13:00",
+              "end_time": "13:30",
+              "category": "health"
+            }
+          ],
+          "applied_action_indices": [
+            0
+          ]
+        },
+        "desired_actions": [
+          {
+            "type": "add",
+            "title": "Gym",
+            "category": "health",
+            "start_time": "13:00",
+            "end_time": "13:30"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreign_task_ownership",
+    "source_tests": [
+      "test_ai_views_chat.py",
+      "test_ai_mutation_planner.py"
+    ],
+    "provenance": "Synthetic cross-user task reference based on existing ownership tests; no live provider or user data.",
+    "now": "2026-04-18T08:00:00+00:00",
+    "date": "2026-04-18",
+    "schedule": [],
+    "foreign_schedule": [
+      {
+        "ref": "private",
+        "title": "Private",
+        "start_time": "12:00",
+        "end_time": "12:30",
+        "category": "work"
+      }
+    ],
+    "rules": [],
+    "categories": {},
+    "turns": [
+      {
+        "user": "remove the Private block",
+        "recorded_response": {
+          "actions": [
+            {
+              "type": "remove",
+              "task_id": "$private"
+            }
+          ],
+          "explanation": "Removed Private.",
+          "ask": null
+        },
+        "expect": {
+          "status": 400,
+          "provider_calls": 1,
+          "blocks": [],
+          "foreign_blocks": [
+            {
+              "title": "Private",
+              "start_time": "12:00",
+              "end_time": "12:30",
+              "category": "work"
+            }
+          ],
+          "applied_action_indices": []
+        },
+        "desired_actions": []
+      }
+    ]
+  }
+]

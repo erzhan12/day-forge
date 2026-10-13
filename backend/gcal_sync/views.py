@@ -18,13 +18,16 @@ import datetime
 import logging
 import secrets
 
+from asgiref.sync import sync_to_async
 from calendar_sync.schemas import normalized_event_to_dict
+from common.integration_response import resource_error, resource_meta
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ImproperlyConfigured
 from django.db import transaction
 from django.http import HttpRequest, HttpResponseRedirect, JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
+from schedules.window import get_schedule_settings
 
 from gcal_sync import cache as gcal_cache
 from gcal_sync import service
@@ -38,9 +41,7 @@ _SERVICE_ERROR_STATUS = {
     service.GoogleCalProviderError: (502, "Google Calendar provider failure"),
 }
 
-_CONFIG_500_DETAIL = (
-    "Google Calendar service is misconfigured. Contact the administrator."
-)
+_CONFIG_500_DETAIL = "Google Calendar service is misconfigured. Contact the administrator."
 
 
 def _envelope(detail: str, status: int, **extra) -> JsonResponse:
@@ -55,14 +56,10 @@ def _accounts_payload(user) -> list[dict]:
             "id": acc.id,
             "email": acc.email,
             "last_verified_at": (
-                acc.last_verified_at.isoformat()
-                if acc.last_verified_at
-                else None
+                acc.last_verified_at.isoformat() if acc.last_verified_at else None
             ),
         }
-        for acc in GoogleCalendarAccount.objects.filter(user=user).order_by(
-            "email", "id"
-        )
+        for acc in GoogleCalendarAccount.objects.filter(user=user).order_by("email", "id")
     ]
 
 
@@ -93,9 +90,7 @@ def callback(request: HttpRequest) -> HttpResponseRedirect:
         return HttpResponseRedirect("/settings/?google=error&reason=denied")
     code = request.GET.get("code")
     if not code:
-        return HttpResponseRedirect(
-            "/settings/?google=error&reason=missing_code"
-        )
+        return HttpResponseRedirect("/settings/?google=error&reason=missing_code")
 
     # 3) Exchange code → tokens + identity (sync; this view stays sync).
     #    Catch broadly (not just GoogleCalError): an unexpected failure inside
@@ -106,20 +101,16 @@ def callback(request: HttpRequest) -> HttpResponseRedirect:
     try:
         info = service.exchange_code(code, query_state)
     except Exception:
-        logger.exception(
-            "Google OAuth code exchange failed for user %s", request.user.id
-        )
+        logger.exception("Google OAuth code exchange failed for user %s", request.user.id)
         return HttpResponseRedirect("/settings/?google=error&reason=provider")
 
     # 4) Upsert under a row lock. Uniqueness (user, google_account_id) makes
     #    reconnect idempotent. Plain save() → auto_now → cache version rotates.
     with transaction.atomic():
-        acc, _ = (
-            GoogleCalendarAccount.objects.select_for_update().get_or_create(
-                user=request.user,
-                google_account_id=info["google_account_id"],
-                defaults={"email": info["email"]},
-            )
+        acc, _ = GoogleCalendarAccount.objects.select_for_update().get_or_create(
+            user=request.user,
+            google_account_id=info["google_account_id"],
+            defaults={"email": info["email"]},
         )
         acc.email = info["email"]
         acc.set_refresh_token(info["refresh_token"])
@@ -146,9 +137,7 @@ def accounts(request: HttpRequest) -> JsonResponse:
 def account_detail(request: HttpRequest, account_id: int) -> JsonResponse:
     # Scoped to request.user (IDOR guard); idempotent. Versioned cache keys
     # make prior entries unreachable. Returns the refreshed list.
-    GoogleCalendarAccount.objects.filter(
-        user=request.user, id=account_id
-    ).delete()
+    GoogleCalendarAccount.objects.filter(user=request.user, id=account_id).delete()
     return JsonResponse({"accounts": _accounts_payload(request.user)})
 
 
@@ -169,11 +158,18 @@ async def events(request: HttpRequest, date: str) -> JsonResponse:
     # proxy in an async body raises SynchronousOnlyOperation.
     user = await request.auser()
 
-    accounts_list = [
-        acc async for acc in GoogleCalendarAccount.objects.filter(user=user)
-    ]
+    accounts_list = [acc async for acc in GoogleCalendarAccount.objects.filter(user=user)]
     if not accounts_list:
-        return _envelope("No Google Calendar account configured", 503)
+        return resource_error(
+            "No Google Calendar account configured",
+            503,
+            account_state="disconnected",
+            resource_state="unavailable",
+        )
+
+    # Resolve once. Cache reads and all account fetches must describe the
+    # same local day if the user edits settings while requests are in flight.
+    time_zone = (await sync_to_async(get_schedule_settings)(user)).time_zone
 
     merged: list[dict] = []
     account_errors: list[dict] = []
@@ -188,14 +184,14 @@ async def events(request: HttpRequest, date: str) -> JsonResponse:
     pending: list = []
     for acc in accounts_list:
         if not force_refresh:
-            cached = await gcal_cache.get_cached_events(acc, target_date)
+            cached = await gcal_cache.get_cached_events(acc, target_date, time_zone)
             if cached is not None:
                 merged.extend(cached)
                 continue
         pending.append(acc)
 
     results = await asyncio.gather(
-        *[service.fetch_events_for_account(acc, target_date) for acc in pending],
+        *[service.fetch_events_for_account(acc, target_date, time_zone) for acc in pending],
         return_exceptions=True,
     )
 
@@ -208,7 +204,12 @@ async def events(request: HttpRequest, date: str) -> JsonResponse:
                 user.id,
                 exc_info=result,
             )
-            return _envelope(_CONFIG_500_DETAIL, 500)
+            return resource_error(
+                _CONFIG_500_DETAIL,
+                500,
+                account_state="configuration_error",
+                resource_state="unavailable",
+            )
 
     for acc, result in zip(pending, results):
         if isinstance(result, service.GoogleCalAuthError):
@@ -219,9 +220,7 @@ async def events(request: HttpRequest, date: str) -> JsonResponse:
                     "error": "reconnect_required",
                 }
             )
-        elif isinstance(
-            result, (service.GoogleCalTimeoutError, service.GoogleCalProviderError)
-        ):
+        elif isinstance(result, (service.GoogleCalTimeoutError, service.GoogleCalProviderError)):
             account_errors.append(
                 {"account_id": acc.id, "email": acc.email, "error": "unavailable"}
             )
@@ -238,10 +237,25 @@ async def events(request: HttpRequest, date: str) -> JsonResponse:
             )
         else:
             payload = [normalized_event_to_dict(ev) for ev in result]
-            await gcal_cache.set_cached_events(acc, target_date, payload)
+            await gcal_cache.set_cached_events(acc, target_date, payload, time_zone)
             merged.extend(payload)
 
     # Final merge sort by (start, title, external_uid) — ISO-8601 UTC start
     # strings sort chronologically, matching the per-account server sort.
     merged.sort(key=lambda e: (e["start"], e["title"], e["external_uid"]))
-    return JsonResponse({"events": merged, "account_errors": account_errors})
+    # A partial result is usable even when another account needs attention.
+    # If every account failed, report the resource failure explicitly while
+    # retaining the existing 200 and per-account error contract.
+    if len(account_errors) < len(accounts_list):
+        resource_state = "ready"
+    elif any(error["error"] == "unavailable" for error in account_errors):
+        resource_state = "provider_error"
+    else:
+        resource_state = "credentials_error"
+    return JsonResponse(
+        {
+            "events": merged,
+            "account_errors": account_errors,
+            "meta": resource_meta("connected", resource_state),
+        }
+    )

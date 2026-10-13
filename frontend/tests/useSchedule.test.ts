@@ -5,13 +5,20 @@ vi.mock("@inertiajs/vue3", () => ({
   router: { reload: vi.fn() },
 }))
 
-import { useSchedule } from "../src/composables/useSchedule"
+import { useSchedule as actualUseSchedule } from "../src/composables/useSchedule"
 import { router } from "@inertiajs/vue3"
+import { makeRevisionState, revisionEnvelope } from "./helpers/schedule"
+import type { DateSource } from "../src/utils/dateSource"
+
+function useSchedule(date: DateSource) {
+  return actualUseSchedule(date, makeRevisionState(date))
+}
 
 describe("useSchedule", () => {
   beforeEach(() => {
     vi.restoreAllMocks()
     vi.mocked(router.reload).mockClear()
+    vi.mocked(router.reload).mockImplementation((options) => { options?.onError?.({}); options?.onFinish?.({} as never) })
     // Clear cookies
     document.cookie = "XSRF-TOKEN=; expires=Thu, 01 Jan 1970 00:00:00 GMT"
   })
@@ -20,7 +27,7 @@ describe("useSchedule", () => {
     document.cookie = "XSRF-TOKEN=test-token-123"
     const fetchSpy = vi.fn().mockResolvedValue({
       ok: true,
-      text: () => Promise.resolve('{"id":1}'),
+      text: () => Promise.resolve(JSON.stringify({ id: 1, ...revisionEnvelope("2026-04-10") })),
     })
     vi.stubGlobal("fetch", fetchSpy)
 
@@ -33,7 +40,7 @@ describe("useSchedule", () => {
   })
 
   it("returns ok and data on success", async () => {
-    const body = { id: 1, title: "Test" }
+    const body = { id: 1, title: "Test", ...revisionEnvelope("2026-04-10") }
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
       ok: true,
       text: () => Promise.resolve(JSON.stringify(body)),
@@ -44,13 +51,13 @@ describe("useSchedule", () => {
 
     expect(result.ok).toBe(true)
     expect(result.data).toEqual(body)
-    expect(router.reload).toHaveBeenCalledWith({ only: ["blocks", "schedule"] })
+    expect(router.reload).not.toHaveBeenCalled()
   })
 
   it("accepts a plain string date (backward compatibility)", async () => {
     const fetchSpy = vi.fn().mockResolvedValue({
       ok: true,
-      text: () => Promise.resolve('{"id":1}'),
+      text: () => Promise.resolve(JSON.stringify({ id: 1, ...revisionEnvelope("2026-05-14") })),
     })
     vi.stubGlobal("fetch", fetchSpy)
 
@@ -72,7 +79,7 @@ describe("useSchedule", () => {
   it("resolves createBlock date lazily from a getter", async () => {
     const fetchSpy = vi.fn().mockResolvedValue({
       ok: true,
-      text: () => Promise.resolve('{"id":1}'),
+      text: () => Promise.resolve(JSON.stringify({ id: 1, ...revisionEnvelope("2026-04-11") })),
     })
     vi.stubGlobal("fetch", fetchSpy)
 
@@ -149,7 +156,7 @@ describe("useSchedule", () => {
   it("sends reorderBlocks with correct payload", async () => {
     const fetchSpy = vi.fn().mockResolvedValue({
       ok: true,
-      text: () => Promise.resolve('{"blocks":[]}'),
+      text: () => Promise.resolve(JSON.stringify({ blocks: [], ...revisionEnvelope("2026-04-10") })),
     })
     vi.stubGlobal("fetch", fetchSpy)
 
@@ -165,14 +172,14 @@ describe("useSchedule", () => {
     const [url, options] = fetchSpy.mock.calls[0]
     expect(url).toBe("/api/blocks/reorder/")
     expect(options.method).toBe("POST")
-    expect(JSON.parse(options.body)).toEqual({ updates })
-    expect(router.reload).toHaveBeenCalledWith({ only: ["blocks", "schedule"] })
+    expect(JSON.parse(options.body)).toEqual({ updates, expected_revision: 0 })
+    expect(router.reload).not.toHaveBeenCalled()
   })
 
   it("sends restoreBlocks with correct payload", async () => {
     const fetchSpy = vi.fn().mockResolvedValue({
       ok: true,
-      text: () => Promise.resolve('{"blocks":[]}'),
+      text: () => Promise.resolve(JSON.stringify({ blocks: [], ...revisionEnvelope("2026-04-10") })),
     })
     vi.stubGlobal("fetch", fetchSpy)
 
@@ -180,21 +187,21 @@ describe("useSchedule", () => {
     const blocks = [
       { title: "A", start_time: "08:00", end_time: "09:00", category: "work", is_completed: false, sort_order: 0 },
     ]
-    const result = await restoreBlocks("2026-04-10", blocks)
+    const result = await restoreBlocks("2026-04-10", blocks, 0)
 
     expect(result.ok).toBe(true)
     expect(fetchSpy).toHaveBeenCalledOnce()
     const [url, options] = fetchSpy.mock.calls[0]
     expect(url).toBe("/api/schedules/2026-04-10/blocks/restore/")
     expect(options.method).toBe("POST")
-    expect(JSON.parse(options.body)).toEqual({ blocks })
-    expect(router.reload).toHaveBeenCalledWith({ only: ["blocks", "schedule"] })
+    expect(JSON.parse(options.body)).toEqual({ blocks, expected_revision: 0 })
+    expect(router.reload).not.toHaveBeenCalled()
   })
 
   it("sends createBlockFromEvent to the from-event endpoint", async () => {
     const fetchSpy = vi.fn().mockResolvedValue({
       ok: true,
-      text: () => Promise.resolve('{"id":7}'),
+      text: () => Promise.resolve(JSON.stringify({ id: 7, ...revisionEnvelope("2026-04-10") })),
     })
     vi.stubGlobal("fetch", fetchSpy)
 
@@ -213,8 +220,8 @@ describe("useSchedule", () => {
     const [url, options] = fetchSpy.mock.calls[0]
     expect(url).toBe("/api/schedules/2026-04-10/blocks/from-event/")
     expect(options.method).toBe("POST")
-    expect(JSON.parse(options.body)).toEqual(payload)
-    expect(router.reload).toHaveBeenCalledWith({ only: ["blocks", "schedule"] })
+    expect(JSON.parse(options.body)).toEqual({ ...payload, expected_revision: 0 })
+    expect(router.reload).not.toHaveBeenCalled()
   })
 
   it("routes createBlockFromEvent away from the manual create endpoint", async () => {
@@ -222,7 +229,7 @@ describe("useSchedule", () => {
     // through the granularity-enforcing path and 400 every real event.
     const fetchSpy = vi.fn().mockResolvedValue({
       ok: true,
-      text: () => Promise.resolve("{}"),
+      text: () => Promise.resolve(JSON.stringify(revisionEnvelope("2026-04-10"))),
     })
     vi.stubGlobal("fetch", fetchSpy)
 
@@ -241,7 +248,7 @@ describe("useSchedule", () => {
     let currentDate = "2026-06-01"
     const fetchSpy = vi.fn().mockResolvedValue({
       ok: true,
-      text: () => Promise.resolve("{}"),
+      text: () => Promise.resolve(JSON.stringify(revisionEnvelope("2026-06-02"))),
     })
     vi.stubGlobal("fetch", fetchSpy)
 

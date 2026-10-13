@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import type { Ref } from "vue"
 import { computed, inject, toRef } from "vue"
+import { ScheduleDisabledKey } from "../composables/scheduleContext"
 import type {
   GoogleAccountError,
   NormalizedEvent,
   ProviderErrorBanner,
 } from "../types/calendar"
-import { todayString } from "../utils/date"
+import { todayString, zonedDateTime } from "../utils/date"
 import { isExternalEventPast } from "../utils/externalEventPast"
 
 const props = withDefaults(
@@ -16,13 +16,15 @@ const props = withDefaults(
     connected: boolean
     // Schedule date (YYYY-MM-DD) — drives past-event fading on today.
     date?: string
+    timeZone?: string
+    todayDate?: string
     // Minutes-since-midnight sampler from Schedule's useNowMinutes; null
     // off-today or before the first tick.
     nowMinutes?: number | null
     // `sidebar` — nested in the left Todoist sidebar (tighter margins).
     // `center` — legacy placement above the schedule body.
     variant?: "sidebar" | "center"
-    // Whole-request provider failures (Apple 502/504, Google 401/502/504).
+    // Provider failures, including Google's 200 all-account failure.
     // Rendered as NON-suppressing banners above the list — a single
     // provider's failure must not blank the other provider's healthy events.
     errorBanners?: ProviderErrorBanner[]
@@ -35,11 +37,12 @@ const props = withDefaults(
     variant: "sidebar",
     date: () => todayString(),
     nowMinutes: null,
+    timeZone: "UTC",
   },
 )
 
 const viewedDate = toRef(props, "date")
-const today = computed(() => todayString())
+const today = computed(() => props.todayDate ?? todayString(props.timeZone))
 
 function eventIsPast(ev: NormalizedEvent): boolean {
   return isExternalEventPast(
@@ -47,6 +50,7 @@ function eventIsPast(ev: NormalizedEvent): boolean {
     viewedDate.value,
     today.value,
     props.nowMinutes,
+    props.timeZone,
   )
 }
 
@@ -57,14 +61,13 @@ const emit = defineEmits<{
 
 // From-event add is a schedule mutation path — honor the same disable
 // signal as AddBlockForm / drag / gap-click (draft generation, AI chat).
-const scheduleDisabled = inject<Ref<boolean> | null>("scheduleDisabled", null)
+const scheduleDisabled = inject(ScheduleDisabledKey, null)
 const addDisabled = computed(() => Boolean(scheduleDisabled?.value))
 
 // Compose-time format: ISO8601 → HH:MM in viewer's local TZ. All-day
 // events show a flat "All day" badge instead of a time range.
 function formatTime(iso: string): string {
-  const d = new Date(iso)
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })
+  return zonedDateTime(new Date(iso), props.timeZone).hhmm
 }
 </script>
 

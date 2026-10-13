@@ -401,14 +401,28 @@ async def run_chat(messages, schedule, blocks, rules, now, categories=None) -> A
     category_pairs, sink_slug = _category_context(categories)
 
     schedule_context = build_chat_user_message(schedule, blocks, now, rules)
-    prior_transcript = serialise_prior_turns(messages[:-1])
-    latest_user_turn = messages[-1]["content"]
+    # A server reply can quote an imported title, and the browser sends prior
+    # replies back on the next turn. Redact before JSON transcript encoding.
+    protected_titles = sorted(
+        {b.title for b in blocks if getattr(b, "origin", "manual") != "manual" and b.title},
+        key=len,
+        reverse=True,
+    )
+
+    def redact(content: str) -> str:
+        for title in protected_titles:
+            content = content.replace(title, "[private block]")
+        return content
+
+    provider_messages = [{**message, "content": redact(message["content"])} for message in messages]
+    prior_transcript = serialise_prior_turns(provider_messages[:-1])
+    latest_user_turn = provider_messages[-1]["content"]
     # Feature 0083 Addendum D: rewrite the LLM-bound copy only, when the
     # latest turn carries no explicit instruction. The stored transcript,
     # the audit ``user_command``, the transcript hash, and the replay
     # guard all keep using the original ``messages`` (unmutated here) and
     # therefore the original text — see ``ai/implicit_add.py``.
-    llm_latest_user_turn = apply_implicit_add(latest_user_turn, messages)
+    llm_latest_user_turn = apply_implicit_add(latest_user_turn, provider_messages)
 
     chat_messages = [
         {

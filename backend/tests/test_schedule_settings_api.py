@@ -48,6 +48,20 @@ def test_get_first_call_returns_default_window(auth_client, user):
     assert resp.headers["Cache-Control"] == "private, no-store"
 
 
+def test_get_first_use_busy_conflict_is_controlled_and_private(auth_client, user, monkeypatch):
+    from schedules.mutations import ScheduleChanged
+
+    def busy(_user):
+        raise ScheduleChanged()
+
+    monkeypatch.setattr("schedules.settings_api.get_schedule_settings", busy)
+    response = auth_client.get(reverse(URL_NAME))
+    assert response.status_code == 409
+    assert response.json()["code"] == "schedule_changed"
+    assert response.headers["Cache-Control"] == "private, no-store"
+    assert not UserScheduleSettings.objects.filter(user=user).exists()
+
+
 def test_get_returns_saved_window(auth_client, user):
     UserScheduleSettings.objects.create(
         user=user, day_start=datetime.time(8, 0), day_end=datetime.time(22, 30)
@@ -342,7 +356,7 @@ def test_get_isolated_per_user(db):
     )
 
     client_a = Client()
-    client_a.login(username="alice_sw", password="pw")
+    client_a.force_login(alice)
     assert client_a.get(reverse(URL_NAME)).json() == {
         "day_start": "07:00",
         "day_end": "19:00",
@@ -350,7 +364,7 @@ def test_get_isolated_per_user(db):
     }
 
     client_b = Client()
-    client_b.login(username="bob_sw", password="pw")
+    client_b.force_login(bob)
     assert client_b.get(reverse(URL_NAME)).json() == {
         "day_start": "05:00",
         "day_end": "22:00",
@@ -370,7 +384,7 @@ def test_patch_does_not_leak_across_users(db):
     )
 
     client_a = Client()
-    client_a.login(username="alice_sw2", password="pw")
+    client_a.force_login(alice)
     resp = client_a.patch(
         reverse(URL_NAME),
         data=json.dumps({"day_start": "09:00", "day_end": "17:00"}),
@@ -392,7 +406,7 @@ def test_patch_does_not_leak_across_users(db):
     )
 
     client_b = Client()
-    client_b.login(username="bob_sw2", password="pw")
+    client_b.force_login(bob)
     assert client_b.get(reverse(URL_NAME)).json() == {
         "day_start": "08:00",
         "day_end": "20:00",
@@ -406,7 +420,7 @@ def test_custom_time_zone_patch_does_not_leak_across_users(db):
     UserScheduleSettings.objects.create(user=alice, time_zone="UTC")
     UserScheduleSettings.objects.create(user=bob, time_zone="Europe/Berlin")
     client_a = Client()
-    client_a.login(username="alice_tz", password="pw")
+    client_a.force_login(alice)
 
     response = client_a.patch(
         reverse(URL_NAME),

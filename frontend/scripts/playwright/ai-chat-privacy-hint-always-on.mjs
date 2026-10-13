@@ -73,10 +73,14 @@ try {
   // irrelevant for Test 6 — we only need the response to be 200 + valid
   // JSON so `useChat` appends the assistant bubble and the thread renders.
   await page.route(/\/api\/ai\/schedules\/[^/]+\/chat\/$/, async (route) => {
+    const revision = route.request().postDataJSON().expected_revision + 1
+    const date = route.request().url().match(/\/schedules\/([^/]+)\/chat\/$/)[1]
     return route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
+        revision,
+        schedule: { id: 1, date, status: "active", revision },
         blocks: [
           {
             id: 9999,

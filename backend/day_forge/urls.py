@@ -207,4 +207,9 @@ urlpatterns = [
         analytics_views.update_review_notes,
         name="update_review_notes",
     ),
+    path(
+        "api/analytics/schedules/<str:date>/notes/",
+        analytics_views.update_schedule_notes,
+        name="update_schedule_notes",
+    ),
 ]

@@ -181,7 +181,9 @@ class TestSqliteProductionWarning:
         warning = warnings[0]
         assert warning.id == "schedules.W001"
         assert "SQLite" in warning.msg
-        assert "select_for_update" in warning.msg
+        assert "writer lock" in warning.msg
+        assert "revision" in warning.msg
+        assert "controlled conflict" in warning.msg
 
     def test_silent_when_debug_false_on_postgres(self):
         """On non-SQLite vendors the check should not fire."""

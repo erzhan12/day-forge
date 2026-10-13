@@ -34,7 +34,7 @@ const TODAY = "2026-05-03"
 describe("SkippedTasks", () => {
   beforeEach(() => {
     vi.useFakeTimers()
-    vi.setSystemTime(new Date(2026, 4, 3, 12, 0)) // 2026-05-03 12:00 local
+    vi.setSystemTime(new Date("2026-05-03T12:00:00Z"))
   })
 
   afterEach(() => {
@@ -109,7 +109,7 @@ describe("SkippedTasks", () => {
     expect(wrapper.findAll(".skipped-row").length).toBe(1)
 
     // Advance system clock past 13:00 and trigger the 1-min interval.
-    vi.setSystemTime(new Date(2026, 4, 3, 13, 30))
+    vi.setSystemTime(new Date("2026-05-03T13:30:00Z"))
     vi.advanceTimersByTime(60_000)
     await flushPromises()
 

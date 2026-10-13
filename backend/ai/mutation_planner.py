@@ -10,36 +10,34 @@ import hashlib
 import json
 import logging
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
-from django.core.exceptions import ValidationError
-from schedules.http import parse_time, times_overlap
-from schedules.validators import validate_five_minute_granularity
-from schedules.window import DEFAULT_WINDOW, ScheduleWindow, clamp_boundary
+from schedules.commands import (
+    BlockCandidate,
+    BlockSnapshot,
+    MutationDiff,
+    ScheduleSnapshot,
+)
+from schedules.planning import (
+    AI,
+    CommandError,
+    diff_candidates,
+    snapshot_from_blocks,
+    validate_block_interval,
+    validate_final_state,
+)
+from schedules.time_validation import (
+    parse_time,
+    times_overlap,
+)
+from schedules.window import DEFAULT_WINDOW, ScheduleWindow
 
 from ai.free_slot import GRID_MINUTES
 
 logger = logging.getLogger(__name__)
 
 _UNKNOWN_TASK_DETAIL = "Referenced block no longer exists; it may have been deleted. Please retry."
-
-
-@dataclass(frozen=True)
-class BlockSnapshot:
-    id: int
-    start_time: datetime.time
-    end_time: datetime.time
-    title: str
-    category: str
-    is_completed: bool
-
-
-@dataclass(frozen=True)
-class ScheduleSnapshot:
-    id: int
-    date: datetime.date
-    blocks: tuple[BlockSnapshot, ...]
 
 
 @dataclass(frozen=True)
@@ -54,29 +52,6 @@ class ApplyContextSnapshot:
     schedule: ScheduleSnapshot
     rules: tuple[RuleSnapshot, ...]
     fingerprint: str
-
-
-@dataclass
-class BlockCandidate:
-    id: int
-    start_time: datetime.time
-    end_time: datetime.time
-    title: str
-    category: str
-    is_completed: bool
-    source_action_index: int | None = None
-
-    @classmethod
-    def from_snapshot(cls, snap: BlockSnapshot) -> BlockCandidate:
-        return cls(
-            id=snap.id,
-            start_time=snap.start_time,
-            end_time=snap.end_time,
-            title=snap.title,
-            category=snap.category,
-            is_completed=snap.is_completed,
-            source_action_index=None,
-        )
 
 
 # Feature 0067: deterministic auto-placement of untimed chat ``add`` actions.
@@ -123,41 +98,6 @@ class UpdateMutation:
 class DeleteMutation:
     action_index: int
     task_id: int
-
-
-@dataclass(frozen=True)
-class DeleteDiffEntry:
-    block_id: int
-    action_index: int
-
-
-@dataclass(frozen=True)
-class UpdateDiffEntry:
-    block_id: int
-    start_time: datetime.time
-    end_time: datetime.time
-    action_index: int
-    title: str | None = None
-    category: str | None = None
-    start_changed: bool = True
-    end_changed: bool = True
-
-
-@dataclass(frozen=True)
-class CreateDiffEntry:
-    temp_id: int
-    title: str
-    category: str
-    start_time: datetime.time
-    end_time: datetime.time
-    action_index: int
-
-
-@dataclass(frozen=True)
-class MutationDiff:
-    deletes: tuple[DeleteDiffEntry, ...]
-    updates: tuple[UpdateDiffEntry, ...]
-    creates: tuple[CreateDiffEntry, ...]
 
 
 @dataclass(frozen=True)
@@ -273,6 +213,7 @@ def _block_payload(block: BlockSnapshot) -> dict[str, Any]:
         "title": block.title,
         "category": block.category,
         "is_completed": block.is_completed,
+        "origin": block.origin,
     }
 
 
@@ -303,26 +244,6 @@ def _fingerprint_payload(
 def _hash_payload(payload: dict[str, Any]) -> str:
     encoded = json.dumps(payload, sort_keys=True, ensure_ascii=False)
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
-
-
-def snapshot_from_blocks(schedule, blocks: Iterable) -> ScheduleSnapshot:
-    """Build a locked schedule snapshot from ORM ``Schedule`` + block rows."""
-    block_snaps = tuple(
-        BlockSnapshot(
-            id=b.id,
-            start_time=b.start_time,
-            end_time=b.end_time,
-            title=b.title,
-            category=b.category,
-            is_completed=b.is_completed,
-        )
-        for b in blocks
-    )
-    return ScheduleSnapshot(
-        id=schedule.id,
-        date=schedule.date,
-        blocks=tuple(sorted(block_snaps, key=lambda b: b.id)),
-    )
 
 
 def _rules_from_iterable(rules: Iterable) -> tuple[RuleSnapshot, ...]:
@@ -390,22 +311,9 @@ def compute_apply_context_fingerprint(
         if blocks_list and isinstance(blocks_list[0], BlockSnapshot):
             block_snaps = tuple(sorted(blocks_list, key=lambda b: b.id))
         elif blocks_list:
-            # ORM rows without a schedule object (unusual); mirror snapshot_from_blocks.
+            schedule_stub = ScheduleSnapshot(schedule_id, schedule_date, ())
             block_snaps = tuple(
-                sorted(
-                    (
-                        BlockSnapshot(
-                            id=b.id,
-                            start_time=b.start_time,
-                            end_time=b.end_time,
-                            title=b.title,
-                            category=b.category,
-                            is_completed=b.is_completed,
-                        )
-                        for b in blocks_list
-                    ),
-                    key=lambda b: b.id,
-                )
+                sorted(snapshot_from_blocks(schedule_stub, blocks_list).blocks, key=lambda b: b.id)
             )
         else:
             block_snaps = ()
@@ -736,6 +644,8 @@ def _build_candidate(
             category=upd.new_category if upd.new_category is not None else base.category,
             is_completed=base.is_completed,
             source_action_index=upd.action_index,
+            sort_order=base.sort_order,
+            origin=base.origin,
         )
 
     for create in creates:
@@ -812,14 +722,9 @@ def plan_mutations(
             category=current.category,
             is_completed=current.is_completed,
             source_action_index=current.source_action_index,
+            sort_order=current.sort_order,
+            origin=current.origin,
         )
-
-    def invalid_grid(value: datetime.time) -> bool:
-        try:
-            validate_five_minute_granularity(value)
-        except ValidationError:
-            return True
-        return False
 
     # Intrinsic validation and the narrowly-scoped near-edge clamping pass.
     for task_id, upd in merged_updates.items():
@@ -868,48 +773,24 @@ def plan_mutations(
             if derived_end % GRID_MINUTES:
                 reject(task_id, "granularity")
                 continue
-        if (
-            upd.start_supplied
-            and start > window.day_end
-            or upd.end_supplied
-            and end < window.day_start
+        if (upd.start_supplied and start > window.day_end) or (
+            upd.end_supplied and end < window.day_start
         ):
             reject(task_id, "out_of_window")
             continue
-        if (upd.start_supplied and invalid_grid(start)) or (upd.end_supplied and invalid_grid(end)):
-            reject(task_id, "granularity")
-            continue
-        if start >= end:
-            reject(task_id, "interval")
-            continue
-        # A derived bare-move end is checked but never silently clamped.
-        if upd.bare_move_derived_end and end > window.day_end:
-            reject(task_id, "out_of_window")
-            continue
-        clamped = clamp_boundary(
-            start,
-            end,
-            window,
-            clamp_start=upd.start_supplied and start < window.day_start,
-            clamp_end=upd.end_supplied and end > window.day_end,
-        )
-        if clamped is None:
-            reject(task_id, "out_of_window")
-            continue
-        start, end = clamped
-        if (upd.start_supplied and start != upd.new_start) or (
-            upd.end_supplied and end != upd.new_end
-        ):
-            current = candidate[task_id]
-            candidate[task_id] = BlockCandidate(
-                current.id,
-                start,
-                end,
-                current.title,
-                current.category,
-                current.is_completed,
-                current.source_action_index,
+        try:
+            candidate[task_id] = validate_block_interval(
+                snapshot_by_id[task_id], candidate[task_id],
+                policy=AI, window=window,
+                start_changed=upd.start_supplied,
+                end_changed=(
+                    upd.end_supplied or upd.bare_move_derived_end or upd.duration_derived_end
+                ),
+                clamp_start=upd.start_supplied,
+                clamp_end=upd.end_supplied,
             )
+        except CommandError as error:
+            reject(task_id, error.code)
 
     for create in creates:
         # Feature 0067: auto-placement creates have no times to clamp/validate
@@ -918,64 +799,31 @@ def plan_mutations(
             continue
         temp_id = -(create.action_index + 1)
         accepted_changed.add(temp_id)
-        start, end = create.start_time, create.end_time
-        if invalid_grid(start) or invalid_grid(end):
-            reject(temp_id, "granularity")
-            continue
-        if start >= end:
-            reject(temp_id, "interval")
-            continue
-        if start > window.day_end or end < window.day_start:
-            reject(temp_id, "out_of_window")
-            continue
-        clamped = clamp_boundary(
-            start,
-            end,
-            window,
-            clamp_start=start < window.day_start,
-            clamp_end=end > window.day_end,
-        )
-        if clamped is None:
-            reject(temp_id, "out_of_window")
-            continue
-        if clamped != (start, end):
-            current = candidate[temp_id]
-            candidate[temp_id] = BlockCandidate(
-                current.id,
-                clamped[0],
-                clamped[1],
-                current.title,
-                current.category,
-                current.is_completed,
-                current.source_action_index,
+        try:
+            candidate[temp_id] = validate_block_interval(
+                None, candidate[temp_id], policy=AI, window=window,
             )
+        except CommandError as error:
+            reject(temp_id, error.code)
 
     # Rebuild after every rejection round.  This avoids action-order wins.
     for _round in range(len(accepted_changed) + 1):
         changed_vs_unchanged: dict[int, set[int]] = {}
         changed_vs_changed: dict[int, set[int]] = {}
-        ids = sorted(candidate)
-        for position, left_id in enumerate(ids):
-            left = candidate[left_id]
-            for right_id in ids[position + 1 :]:
-                right = candidate[right_id]
-                if not times_overlap(
-                    left.start_time, left.end_time, right.start_time, right.end_time
-                ):
-                    continue
-                left_changed, right_changed = (
-                    left_id in accepted_changed,
-                    right_id in accepted_changed,
+        for overlap in validate_final_state(candidate.values()):
+            left_id, right_id = overlap.left_id, overlap.right_id
+            left_changed, right_changed = (
+                left_id in accepted_changed, right_id in accepted_changed,
+            )
+            if left_changed ^ right_changed:
+                changed_id, unchanged_id = (
+                    (left_id, right_id) if left_changed else (right_id, left_id)
                 )
-                if left_changed ^ right_changed:
-                    changed_id, unchanged_id = (
-                        (left_id, right_id) if left_changed else (right_id, left_id)
-                    )
-                    if unchanged_id > 0:
-                        changed_vs_unchanged.setdefault(changed_id, set()).add(unchanged_id)
-                elif left_changed and right_changed:
-                    changed_vs_changed.setdefault(left_id, set()).add(right_id)
-                    changed_vs_changed.setdefault(right_id, set()).add(left_id)
+                if unchanged_id > 0:
+                    changed_vs_unchanged.setdefault(changed_id, set()).add(unchanged_id)
+            elif left_changed and right_changed:
+                changed_vs_changed.setdefault(left_id, set()).add(right_id)
+                changed_vs_changed.setdefault(right_id, set()).add(left_id)
         if changed_vs_unchanged:
             for block_id, conflicts in changed_vs_unchanged.items():
                 reject(block_id, "overlap", tuple(sorted(conflicts)))
@@ -1055,16 +903,25 @@ def plan_mutations(
                 is_completed=False,
                 source_action_index=create.action_index,
             )
+            try:
+                candidate[temp_id] = validate_block_interval(
+                    None, candidate[temp_id], policy=AI, window=window,
+                )
+            except CommandError as error:
+                reject(temp_id, error.code)
+                continue
+            overlaps = validate_final_state(candidate.values())
+            if any(temp_id in (pair.left_id, pair.right_id) for pair in overlaps):
+                reject(temp_id, "overlap")
+                continue
             # Marked accepted only after a slot is secured (mirrors the
             # explicit-create path); no_slot rejects never add it, so reject()
             # has nothing to discard for a skipped auto.
             accepted_changed.add(temp_id)
 
-    update_entries: list[UpdateDiffEntry] = []
     outcomes: list[ActionOutcome] = []
     for task_id in sorted(merged_updates):
         upd = merged_updates[task_id]
-        current = candidate[task_id]
         time_requested = (
             upd.start_supplied
             or upd.end_supplied
@@ -1072,25 +929,8 @@ def plan_mutations(
             or upd.duration_derived_end
         )
         time_accepted = task_id not in rejected and time_requested
-        start_changed = time_accepted and upd.start_supplied
-        end_changed = time_accepted and (
-            upd.end_supplied or upd.bare_move_derived_end or upd.duration_derived_end
-        )
         title = upd.new_title
         category = upd.new_category
-        if title is not None or category is not None or start_changed or end_changed:
-            update_entries.append(
-                UpdateDiffEntry(
-                    task_id,
-                    current.start_time,
-                    current.end_time,
-                    upd.action_index,
-                    title,
-                    category,
-                    start_changed,
-                    end_changed,
-                )
-            )
         applied = []
         skipped = []
         if title is not None:
@@ -1133,21 +973,9 @@ def plan_mutations(
             )
         )
 
-    create_entries: list[CreateDiffEntry] = []
     for create in creates:
         temp_id = -(create.action_index + 1)
         if temp_id not in rejected:
-            current = candidate[temp_id]
-            create_entries.append(
-                CreateDiffEntry(
-                    temp_id,
-                    create.title,
-                    create.category,
-                    current.start_time,
-                    current.end_time,
-                    create.action_index,
-                )
-            )
             outcomes.append(
                 ActionOutcome(
                     create.action_index,
@@ -1170,9 +998,6 @@ def plan_mutations(
                 )
             )
 
-    delete_entries = tuple(
-        DeleteDiffEntry(d.task_id, d.action_index) for d in sorted(deletes, key=lambda d: d.task_id)
-    )
     outcomes.extend(ActionOutcome(d.action_index, d.task_id, "applied") for d in deletes)
     outcomes.sort(key=lambda outcome: outcome.action_index)
     statuses = [outcome.status for outcome in outcomes]
@@ -1183,8 +1008,14 @@ def plan_mutations(
         if not any(status in {"applied", "partial"} for status in statuses)
         else "partial"
     )
-    return PartialPlan(
-        MutationDiff(delete_entries, tuple(update_entries), tuple(create_entries)),
-        tuple(outcomes),
-        overall,
+    final_diff = diff_candidates(
+        snapshot, candidate.values(),
+        delete_action_indices={item.task_id: item.action_index for item in deletes},
     )
+    # AI creates use the same order allocation as manual appends at persistence
+    # time. Their temporary candidate order is only a planning placeholder.
+    final_diff = replace(
+        final_diff,
+        creates=tuple(replace(entry, sort_order=None) for entry in final_diff.creates),
+    )
+    return PartialPlan(final_diff, tuple(outcomes), overall)

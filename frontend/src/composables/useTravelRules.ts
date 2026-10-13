@@ -36,8 +36,8 @@ function asTravelRule(raw: unknown): TravelRule | undefined {
 }
 
 export function useTravelRules() {
-  async function listRules(): Promise<TravelRulesListResult> {
-    const result = await requestJson("/api/calendar/travel-rules/", "GET")
+  async function listRules(options?: { signal?: AbortSignal }): Promise<TravelRulesListResult> {
+    const result = await requestJson("/api/calendar/travel-rules/", "GET", undefined, options)
     if (result.ok) {
       const list = (result.data?.travel_rules as TravelRule[]) ?? []
       return { ok: true, status: result.status, data: result.data, rules: list }

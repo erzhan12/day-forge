@@ -1,22 +1,15 @@
 import { getCurrentInstance, onUnmounted, ref } from "vue"
 import type { TimeBlock, UndoAction } from "../types"
-import type { ApiResult } from "./useSchedule"
+import type { ApiResult, ScheduleRequestOptions } from "./useSchedule"
+import { registerMutationUndo } from "./useMutationUndo"
 
-// Module scope: shared across every call-site instance (pure constants, no
-// per-instance state). All failures retry (including 4xx) — accepted tradeoff:
-// a genuine validation 4xx pays the full 4.3s backoff before the error
-// surfaces. (Lifted verbatim from the pre-refactor TimeBlock.vue.)
-const TOGGLE_RETRY_DELAYS_MS = [300, 1000, 3000] as const
-const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
-
-/** Terminal outcome of a completion chain (see 0049 plan § Outcome contract). */
 export type CompletionOutcome = "success" | "failure" | "superseded"
 
 interface BlockCompletionDeps {
   updateBlock: (
     id: number,
     data: Record<string, unknown>,
-    options?: { signal?: AbortSignal },
+    options?: ScheduleRequestOptions,
   ) => Promise<ApiResult>
   undo?: {
     pushUndo: (action: UndoAction) => void
@@ -25,117 +18,95 @@ interface BlockCompletionDeps {
   isDisabled: () => boolean
 }
 
-/**
- * Shared block-completion controller. **Per-call-site factory, NOT a
- * singleton** — every call returns a fresh, independent state bundle. The
- * retry/backoff loop, generation-guard, abort-on-supersede, and silent-undo
- * logic live here (one module → the timeline checkbox and the PiP indicator
- * cannot diverge); each call site owns its own reactive state so per-row
- * spinners and the abort-on-list-reshape invariant (issue #21) are preserved.
- */
+/** Completion intents are serialized; the schedule controller owns each write. */
 export function useBlockCompletion(deps: BlockCompletionDeps) {
   const { updateBlock, undo, isDisabled } = deps
-
   const saving = ref(false)
   const errorState = ref(false)
-  // Plain counter, not a ref: nothing subscribes to it reactively — it only
-  // tags each chain so a superseding reset/dispose/re-toggle can bail the old one.
   let generation = 0
-  let toggleAbort: AbortController | null = null
+  let lifetime = 0
+  let queueEpoch = 0
+  let pending = 0
+  let queue: Promise<unknown> | null = null
+  let disposed = false
 
-  async function setCompleted(
+  function setCompleted(
     block: TimeBlock,
     date: string,
     desired: boolean,
   ): Promise<CompletionOutcome> {
-    if (isDisabled()) return "superseded"
-
-    // Abort any in-flight PATCH so a slow superseded write is less likely to
-    // commit after a newer toggle. Best-effort guard, not a distributed
-    // ordering guarantee.
-    toggleAbort?.abort()
-    const ac = new AbortController()
-    toggleAbort = ac
-    const myGen = ++generation
-    errorState.value = false
-    saving.value = true
-
-    const snapshot = undo?.snapshotBlocks()
-    // Capture the block's object properties live at mutation start (see issue
-    // #21): a mid-backoff list reshape must not retarget the PATCH or mislabel
-    // the undo. (`date` is a primitive param — already captured by value.)
+    if (disposed || (isDisabled() && !saving.value)) return Promise.resolve("superseded")
+    const myGeneration = ++generation
+    const myLifetime = lifetime
+    const myQueueEpoch = queueEpoch
     const blockId = block.id
     const blockTitle = block.title
+    pending++
+    saving.value = true
+    errorState.value = false
 
-    for (let attempt = 0; attempt < TOGGLE_RETRY_DELAYS_MS.length + 1; attempt++) {
-      let result: ApiResult | { ok: false }
+    async function write(): Promise<CompletionOutcome> {
+      // A reused row cancels its unsent intents. An already accepted write
+      // remains owned by the schedule controller until reconciliation finishes.
+      if (disposed || myLifetime !== lifetime || myQueueEpoch !== queueEpoch) return "superseded"
+      let result: ApiResult
       try {
-        result = await updateBlock(blockId, { is_completed: desired }, { signal: ac.signal })
-      } catch (err) {
-        // Superseding toggle aborted this chain — bail without touching state.
-        if (err instanceof DOMException && err.name === "AbortError") return "superseded"
+        result = await updateBlock(blockId, { is_completed: desired }, { scheduleDate: date })
+      } catch {
+        // No retry: the server may have committed before the response was lost.
+        // useSchedule reconciles this result and keeps the shared owner busy.
         result = { ok: false }
       }
-      // Newer toggle (or dispose/reset) superseded this chain — bail cleanly.
-      if (myGen !== generation) return "superseded"
-      if (result.ok) {
-        if (undo && snapshot) {
-          // Label from the value this chain writes, not a captured prop: a
-          // rapid re-toggle can leave the prop stale and mislabel the action.
-          const action = desired ? "Checked" : "Unchecked"
-          undo.pushUndo({
-            description: `${action} "${blockTitle}"`,
-            type: "toggle",
-            previousBlocks: snapshot,
-            scheduleDate: date,
-            silent: true,
-          })
-        }
-        saving.value = false
-        return "success"
+      registerMutationUndo(result, undo?.pushUndo, {
+        description: `${desired ? "Checked" : "Unchecked"} "${blockTitle}"`,
+        type: "toggle",
+        silent: true,
+      })
+      // Intents collected before a conflict or uncertain result must not be
+      // applied to the freshly reconciled external state. A later user click
+      // can start a new queue after the owner has finished reconciliation.
+      const chainBroken = !result.ok || !result.mutation || result.code === "schedule_reconciled" ||
+        result.code === "schedule_sync_failed" || Boolean(result.synchronizationError)
+      if (chainBroken) queueEpoch++
+      if (disposed || myLifetime !== lifetime) return "superseded"
+      if (!result.ok) {
+        errorState.value = true
+        return "failure"
       }
-      if (attempt < TOGGLE_RETRY_DELAYS_MS.length) {
-        await sleep(TOGGLE_RETRY_DELAYS_MS[attempt])
-        if (myGen !== generation) return "superseded"
-      }
+      if (myGeneration !== generation) return "superseded"
+      errorState.value = false
+      return "success"
     }
 
-    // Retries exhausted. (No post-loop generation re-check: the final iteration
-    // has no async boundary between the post-await in-loop guard and here, so
-    // `generation` cannot change — a reset/dispose mid-await is already caught
-    // by that guard.)
-    saving.value = false
-    errorState.value = true
-    return "failure"
+    // Start the first request synchronously; subsequent intents await the
+    // complete request/reconciliation lifecycle before acquiring another write.
+    const operation = queue ? queue.then(write) : write()
+    const settled = operation.finally(() => {
+      pending--
+      if (myLifetime === lifetime && !disposed) saving.value = pending > 0
+      if (queue === settled) queue = null
+    })
+    queue = settled
+    return settled
   }
 
   function complete(block: TimeBlock, date: string): Promise<CompletionOutcome> {
     return setCompleted(block, date, true)
   }
 
-  /**
-   * Identity-change reset (reused row / active block swap): abort the in-flight
-   * chain AND clear `saving`/`errorState` so the prior block's spinner/error
-   * never sticks on the next block. Mirrors TimeBlock.vue's `block.id` watcher.
-   */
   function reset(): void {
-    toggleAbort?.abort()
+    lifetime++
+    queueEpoch++
     generation++
     saving.value = false
     errorState.value = false
   }
 
-  /**
-   * Unmount disposal: abort + bump generation ONLY (no state clear — the
-   * call-site is gone). A late resolve then bails `"superseded"` and cannot
-   * `pushUndo`. Mirrors TimeBlock.vue's `onUnmounted`.
-   */
   function dispose(): void {
-    toggleAbort?.abort()
-    generation++
+    disposed = true
+    reset()
   }
 
   if (getCurrentInstance()) onUnmounted(dispose)
-
   return { saving, errorState, setCompleted, complete, reset, dispose }
 }

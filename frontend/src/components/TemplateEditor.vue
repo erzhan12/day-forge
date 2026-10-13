@@ -61,11 +61,16 @@ function startCreate() {
 }
 
 function addBlock() {
+  const category = defaultCategory(props.categories ?? [])?.slug
+  if (!category) {
+    errorMessage.value = "Category data could not be loaded. Reload the page and try again."
+    return
+  }
   blocks.value.push({
     title: "",
     start_time: "09:00",
     end_time: "10:00",
-    category: defaultCategory(props.categories ?? [])?.slug ?? "work",
+    category,
   })
 }
 

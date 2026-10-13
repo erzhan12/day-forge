@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { GoogleAccount } from "../../types/calendar"
 import ExternalCalendarPlacementToggle from "../ExternalCalendarPlacementToggle.vue"
+import { zonedDateTime } from "../../utils/date"
 
 interface CalendarForm {
   apple_id: string
@@ -17,7 +18,8 @@ interface HabiticaForm {
   api_token: string
 }
 
-defineProps<{
+const props = defineProps<{
+  timeZone?: string
   calendarForm: CalendarForm
   showAdvanced: boolean
   calendarDefaultBaseUrl: string
@@ -54,6 +56,10 @@ defineProps<{
   handleHabiticaConnect: () => unknown
   handleHabiticaDisconnect: () => unknown
 }>()
+
+function verifiedDate(timestamp: string): string {
+  return zonedDateTime(new Date(timestamp), props.timeZone ?? "UTC").date
+}
 </script>
 
 <template>
@@ -164,7 +170,7 @@ defineProps<{
         <li v-for="account in googleAccounts" :key="account.id" class="google-account-row">
           <span class="google-account-email">{{ account.email }}</span>
           <span v-if="account.last_verified_at" class="google-account-verified">
-            verified {{ new Date(account.last_verified_at).toLocaleDateString() }}
+            verified {{ verifiedDate(account.last_verified_at) }}
           </span>
           <button
             type="button"

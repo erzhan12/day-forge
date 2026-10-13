@@ -24,6 +24,7 @@ vi.mock("../src/composables/useTravelRules", () => ({
 }))
 
 import TravelRulesList from "../src/components/TravelRulesList.vue"
+import { makeCategories } from "./helpers/schedule"
 import type { TravelRule } from "../src/types"
 
 // No `as TravelRule` cast: the annotation alone must typecheck, so a field
@@ -48,7 +49,7 @@ function mountList(rules: TravelRule[] = RULES) {
   deleteRule.mockClear()
   updateRule.mockClear()
   swapRules.mockClear()
-  return mount(TravelRulesList, { props: { rules } })
+  return mount(TravelRulesList, { props: { rules, categories: makeCategories() } })
 }
 
 function upButtons(wrapper: ReturnType<typeof mountList>) {

@@ -139,7 +139,7 @@ export function seed(scriptName, env = {}, options = {}) {
 export function djangoToday() {
   const output = seed(
     "seed_schedule",
-    { SEED_MODE: "localdate" },
+    { SEED_MODE: "localdate", SEED_USERNAME: USERNAME },
     { encoding: "utf8" },
   )
   const match = output.match(/^\d{4}-\d{2}-\d{2}$/m)

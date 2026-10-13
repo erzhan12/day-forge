@@ -1,5 +1,8 @@
+import { ScheduleUndoKey } from "../src/composables/scheduleContext"
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { mount } from "@vue/test-utils"
+import { acceptedMutation } from "./helpers/mutation"
+import { makeCategories } from "./helpers/schedule"
 import type { TimeBlock } from "../src/types"
 
 const mockCreateBlock = vi.fn()
@@ -14,12 +17,12 @@ import AddBlockForm from "../src/components/AddBlockForm.vue"
 const mockPushUndo = vi.fn()
 const mockSnapshotBlocks = vi.fn(() => [])
 
-function mountForm(props: { date: string; initialStartTime?: string; initialEndTime?: string }) {
+function mountForm(props: { date: string; initialStartTime?: string; initialEndTime?: string }, categories = makeCategories()) {
   return mount(AddBlockForm, {
-    props,
+    props: { ...props, categories },
     global: {
       provide: {
-        undo: { pushUndo: mockPushUndo, snapshotBlocks: mockSnapshotBlocks },
+        [ScheduleUndoKey]: { pushUndo: mockPushUndo, snapshotBlocks: mockSnapshotBlocks },
       },
     },
   })
@@ -58,7 +61,7 @@ describe("AddBlockForm", () => {
   })
 
   it("submits with valid data and resets form", async () => {
-    mockCreateBlock.mockResolvedValue({ ok: true })
+    mockCreateBlock.mockResolvedValue(acceptedMutation())
     const wrapper = mountForm({ date: "2026-04-10" })
     await wrapper.find(".add-btn").trigger("click")
     await wrapper.find(".title-input").setValue("New Block")
@@ -107,8 +110,17 @@ describe("AddBlockForm", () => {
     expect((select.element as HTMLSelectElement).value).toBe("work")
   })
 
+  it("rejects a submission when no catalog arrived", async () => {
+    const wrapper = mountForm({ date: "2026-04-10" }, [])
+    await wrapper.find(".add-btn").trigger("click")
+    await wrapper.find(".title-input").setValue("New Block")
+    await wrapper.find("form").trigger("submit")
+    expect(mockCreateBlock).not.toHaveBeenCalled()
+    expect(wrapper.get(".error-banner").text()).toContain("Category data could not be loaded")
+  })
+
   it("pushUndo called on successful add", async () => {
-    mockCreateBlock.mockResolvedValue({ ok: true })
+    mockCreateBlock.mockResolvedValue(acceptedMutation())
     const wrapper = mountForm({ date: "2026-04-10" })
     await wrapper.find(".add-btn").trigger("click")
     await wrapper.find(".title-input").setValue("New Block")
@@ -117,6 +129,30 @@ describe("AddBlockForm", () => {
     expect(mockPushUndo).toHaveBeenCalledWith(
       expect.objectContaining({ type: "add", description: 'Added "New Block"', silent: true }),
     )
+  })
+
+  it("does not create undo for a confirmed no-op", async () => {
+    mockCreateBlock.mockResolvedValue(acceptedMutation([], "2026-04-10", 3, false))
+    const wrapper = mountForm({ date: "2026-04-10" })
+    await wrapper.find(".add-btn").trigger("click")
+    await wrapper.find(".title-input").setValue("New Block")
+    await wrapper.find("form").trigger("submit")
+    await vi.dynamicImportSettled()
+    expect(mockPushUndo).not.toHaveBeenCalled()
+  })
+
+  it("rejects duplicate form submission while the accepted request is pending", async () => {
+    let resolveCreate!: (value: ReturnType<typeof acceptedMutation>) => void
+    mockCreateBlock.mockReturnValueOnce(new Promise((resolve) => { resolveCreate = resolve }))
+    const wrapper = mountForm({ date: "2026-04-10" })
+    await wrapper.find(".add-btn").trigger("click")
+    await wrapper.find(".title-input").setValue("New Block")
+    await wrapper.find("form").trigger("submit")
+    await wrapper.find("form").trigger("submit")
+    expect(mockCreateBlock).toHaveBeenCalledOnce()
+    resolveCreate(acceptedMutation())
+    await vi.dynamicImportSettled()
+    expect(mockPushUndo).toHaveBeenCalledOnce()
   })
 
   it("pushUndo NOT called on failed add", async () => {
@@ -168,7 +204,7 @@ describe("AddBlockForm", () => {
     expect(mockPushUndo).not.toHaveBeenCalled()
   })
 
-  it("pushUndo binds scheduleDate to the date active when the request started, not when it resolved (issue #21)", async () => {
+  it("does not register stale create history after date navigation", async () => {
     // Simulate user navigating to a new date while createBlock is in
     // flight: without the fix, ``pushUndo`` would read ``props.date``
     // after the await and capture the new date, so undo would restore
@@ -187,8 +223,6 @@ describe("AddBlockForm", () => {
     await wrapper.setProps({ date: "2026-04-11" })
     resolveCreate({ ok: true })
     await vi.dynamicImportSettled()
-    expect(mockPushUndo).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "add", scheduleDate: "2026-04-10" }),
-    )
+    expect(mockPushUndo).not.toHaveBeenCalled()
   })
 })

@@ -1,28 +1,20 @@
 <script setup lang="ts">
 import { computed } from "vue"
 import { Link, router } from "@inertiajs/vue3"
-import { parseLocalDate, toLocalDateString, todayString } from "../utils/date"
+import { addCivilDays, formatCivilDate, todayString } from "../utils/date"
 
 const props = defineProps<{
   date: string
+  today?: string
+  timeZone?: string
 }>()
 
-const formatted = computed(() => {
-  const d = parseLocalDate(props.date)
-  return d.toLocaleDateString("en-US", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  })
-})
+const formatted = computed(() => formatCivilDate(props.date))
 
-const today = computed(() => todayString())
+const today = computed(() => props.today ?? todayString(props.timeZone ?? "UTC"))
 
 function offsetDate(offset: number): string {
-  const d = parseLocalDate(props.date)
-  d.setDate(d.getDate() + offset)
-  return toLocalDateString(d)
+  return addCivilDays(props.date, offset)
 }
 
 function navigate(date: string) {
@@ -57,8 +49,10 @@ function navigate(date: string) {
 <style scoped>
 .date-navigator {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   padding: 16px;
   background: var(--bg-panel);
 }
@@ -66,6 +60,7 @@ function navigate(date: string) {
 .nav-btn {
   width: 40px;
   height: 40px;
+  flex-shrink: 0;
   border: 1px solid var(--border-strong);
   border-radius: 8px;
   background: var(--bg-panel);
@@ -82,12 +77,16 @@ function navigate(date: string) {
 
 .date-display {
   display: flex;
+  flex: 1;
+  min-width: min(220px, 100%);
   flex-direction: column;
   align-items: center;
   gap: 4px;
+  text-align: center;
 }
 
 .date-text {
+  max-width: 100%;
   font-size: 18px;
   font-weight: 600;
   color: var(--text-primary);
@@ -108,7 +107,11 @@ function navigate(date: string) {
 
 .right-controls {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
+  max-width: 100%;
+  margin-left: auto;
   gap: 8px;
 }
 

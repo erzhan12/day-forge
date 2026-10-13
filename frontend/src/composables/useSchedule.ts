@@ -1,23 +1,32 @@
-import { router } from "@inertiajs/vue3"
 import { type DateSource, readDate } from "../utils/dateSource"
 import { type ApiResult, type RequestOptions, requestJson } from "./useHttp"
 
+import { useScheduleRevision, runScheduleMutation, type ScheduleRevisionState } from "./useScheduleRevision"
+
 export type { ApiResult }
 
-async function apiFetch(
-  url: string,
-  method: string,
-  body?: Record<string, unknown>,
-  options?: RequestOptions,
-): Promise<ApiResult> {
-  const result = await requestJson(url, method, body, options)
-  if (result.ok) {
-    router.reload({ only: ["blocks", "schedule"] })
-  }
-  return result
+export interface ScheduleRequestOptions extends RequestOptions {
+  scheduleDate?: string
+  expectedRevision?: number
+  kind?: "forward" | "undo"
 }
 
-export function useSchedule(date: DateSource) {
+export function useSchedule(date: DateSource, explicitRevision?: ScheduleRevisionState) {
+  const revision = useScheduleRevision(explicitRevision)
+
+  async function apiFetch(
+    url: string,
+    method: string,
+    body: Record<string, unknown> = {},
+    options?: ScheduleRequestOptions,
+    targetDate = options?.scheduleDate ?? readDate(date),
+  ): Promise<ApiResult> {
+    return runScheduleMutation(revision, targetDate, (capture) =>
+      requestJson(url, method, { ...body, expected_revision: capture.revision }, { ...options, expectedUserId: capture.userId }),
+      { expectedRevision: options?.expectedRevision, kind: options?.kind },
+    )
+  }
+
   function createBlock(data: {
     title: string
     start_time: string
@@ -45,7 +54,7 @@ export function useSchedule(date: DateSource) {
   function updateBlock(
     id: number,
     data: Record<string, unknown>,
-    options?: RequestOptions,
+    options?: ScheduleRequestOptions,
   ): Promise<ApiResult> {
     return apiFetch(`/api/blocks/${id}/`, "PATCH", data, options)
   }
@@ -60,6 +69,7 @@ export function useSchedule(date: DateSource) {
       start_time: string
       end_time: string
       sort_order: number
+      restore_proof?: string
     }>,
   ): Promise<ApiResult> {
     return apiFetch("/api/blocks/reorder/", "POST", { updates })
@@ -68,6 +78,7 @@ export function useSchedule(date: DateSource) {
   function restoreBlocks(
     targetDate: string,
     blocks: Array<{
+      id?: number
       title: string
       start_time: string
       end_time: string
@@ -75,11 +86,14 @@ export function useSchedule(date: DateSource) {
       is_completed: boolean
       sort_order: number
     }>,
+    expectedRevision: number,
   ): Promise<ApiResult> {
     return apiFetch(
       `/api/schedules/${targetDate}/blocks/restore/`,
       "POST",
       { blocks },
+      { expectedRevision, kind: "undo" },
+      targetDate,
     )
   }
 

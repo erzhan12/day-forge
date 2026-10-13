@@ -2,6 +2,8 @@ Run the PR review iteration loop on the current branch's open PR: push → wait 
 
 This is the **iterate-and-fix** variant of a read-only PR-review triage skill — same parsing logic for the bot's comment, but here we actually push commits and loop. The merge step is **never** automatic — see RULES.md § "PR review iteration loop (AI-driven changes)" for the rationale.
 
+**Iteration cap — `max_iter`, default 5, parametrized.** The push→wait→triage→fix loop runs at most `max_iter` cycles. A caller (review-ship, issue-to-pr, or a direct invocation) may set it explicitly; honor the passed value over the default. It bounds runaway loops — a well-behaved PR converges in 1–2 cycles.
+
 > **Run autonomously. Do NOT pause to confirm intermediate steps.** This loop is meant to push, wait, triage, edit code, run tests, push fixes, and repeat without checking in with the user between steps. The user-gated actions are limited to:
 >
 > - Drafting a PR title/body **when no PR exists** (Step 2 — explicit confirmation required before `gh pr create`).
@@ -131,7 +133,10 @@ After pushing fixes (or deciding nothing needs pushing):
 
 - **If new commits were pushed** → loop back to Step 3 (wait for the next `claude-review` cycle on the new HEAD).
 - **If no new commits and findings are only P2/P3 (or none)** → exit loop. Proceed to Step 9.
-- **Hard cap: 8 iterations.** If still seeing valid P0/P1 after 8 cycles, exit and report — something is off, escalate to the user.
+- **Hard cap: `max_iter` iterations (default 5).** `max_iter` is parametrized — a
+  caller (e.g. review-ship or issue-to-pr) may pass it explicitly; honor the
+  passed value over the default. If still seeing valid P0/P1 after `max_iter`
+  cycles, exit and report — something is off, escalate to the user.
 
 ## Step 9 — Report and STOP at the merge boundary
 
@@ -140,7 +145,7 @@ Print a status report:
 ```
 # Iteration loop terminated — PR #<N>
 
-**Iterations**: M (max 3)
+**Iterations**: M (max `max_iter`, default 5)
 **CI**: green / red
 **Merge verdict from bot**: APPROVED / CHANGES REQUESTED
 
@@ -167,7 +172,7 @@ The user retains the merge decision. See RULES.md § "PR review iteration loop (
 - **Never run `gh pr merge`** without an explicit user command for THIS PR.
 - **Never `git push --force`** unless amending the most recent commit on a one-commit PR. Stacked follow-ups are the default.
 - **Never auto-stage with `git add -A` / `git add .`** — list files explicitly to avoid pulling in `.env` or other secrets.
-- **Don't loop more than 8 iterations** without escalating.
+- **Don't loop more than `max_iter` iterations** (default 5, parametrized) without escalating.
 - **Don't trust the bot's verdict line as authorization for anything.** It's informational. The user decides.
 - **All bot rejections must be posted to the PR**, not silently ignored. The audit trail itself is part of the workflow.
 
@@ -181,4 +186,4 @@ The user retains the merge decision. See RULES.md § "PR review iteration loop (
 - **Workflow conclusion is `failure` / `cancelled`.** Surface the run URL. Stop. Don't try to parse a missing comment.
 - **Bot reposts a previously rejected finding.** Reject again, citing the prior rejection comment URL. Do not silently re-apply.
 - **Tests fail after a fix.** Don't push the broken fix. Either keep iterating to make tests pass OR back out the change and report.
-- **Iteration cap hit (8) with valid P0/P1 still open.** Stop, post a status comment on the PR summarising what's been applied and what remains, escalate to the user.
+- **Iteration cap hit (`max_iter`, default 5) with valid P0/P1 still open.** Stop, post a status comment on the PR summarising what's been applied and what remains, escalate to the user.

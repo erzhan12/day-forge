@@ -1,29 +1,12 @@
 import { ref, computed, onMounted, onUnmounted } from "vue"
 import type { TimeBlock, UndoAction } from "../types"
 import { useSchedule } from "./useSchedule"
+import { useScheduleRevision, type ScheduleRevisionState } from "./useScheduleRevision"
 import { clearAppliedResultForUndo } from "./useChat"
 import { type DateSource, readDate } from "../utils/dateSource"
 
-/**
- * Client-side undo stack for schedule edits.
- *
- * Important: undo state lives entirely in this tab's memory and is never
- * synchronised across browser tabs or devices. Concurrent edits in
- * multiple tabs can silently destroy work:
- *
- *   1. Tab A loads the schedule and snapshots its blocks into the stack.
- *   2. Tab B (same user) makes a separate edit and saves it.
- *   3. The user undoes in Tab A. The undo posts Tab A's snapshot to
- *      `POST /api/schedules/<date>/blocks/restore/`, which atomically
- *      replaces every block on the day — including Tab B's change.
- *      Tab B's edit is gone with no warning.
- *
- * This is acceptable for the single-user MVP. If multi-tab usage becomes
- * common, options to consider: (a) wire the BroadcastChannel API so each
- * tab clears or warns on its stack when another tab mutates the day;
- * (b) add an `If-Match`-style version check to `restore_blocks`; or
- * (c) move the undo stack server-side. None are wired up today.
- */
+// Each entry belongs to a confirmed revision. Only a successful contiguous
+// restore chain may move the next entry to the newly committed revision.
 
 const MAX_UNDO_STACK = 20
 const TOAST_DURATION_MS = 8_000
@@ -43,8 +26,10 @@ export function useUndo(
   getCurrentDate: DateSource,
   getCurrentBlocks: () => TimeBlock[],
   isDisabled?: () => boolean,
+  revision?: ScheduleRevisionState,
 ) {
-  const { restoreBlocks } = useSchedule(getCurrentDate)
+  const owner = useScheduleRevision(revision)
+  const { restoreBlocks } = useSchedule(getCurrentDate, owner)
 
   const undoStack = ref<UndoAction[]>([])
   const canUndo = computed(
@@ -55,6 +40,7 @@ export function useUndo(
 
   let toastTimer: ReturnType<typeof setTimeout> | null = null
   let undoInFlight = false
+  let scopeEpoch = 0
 
   function clearToastTimer() {
     if (toastTimer !== null) {
@@ -85,8 +71,26 @@ export function useUndo(
     return getCurrentBlocks().map((b) => ({ ...b }))
   }
 
+  function clearDate(date: string) {
+    undoStack.value = undoStack.value.filter((action) => action.scheduleDate !== date)
+    if (readDate(getCurrentDate) === date) dismissToast()
+  }
+  const unsubscribeInvalidation = owner?.subscribeInvalidation((date) => clearDate(date))
+  const unsubscribeScope = owner?.subscribeScopeReset((reason) => {
+    scopeEpoch += 1
+    dismissToast()
+    if (reason !== "date") undoStack.value = []
+  })
+
   function pushUndo(action: UndoAction) {
-    undoStack.value.push(action)
+    // Missing result metadata cannot safely be reconstructed from the latest
+    // GET. In particular, it may belong to a different user or late request.
+    if (!Number.isSafeInteger(action.expected_revision) || !Number.isSafeInteger(action.previous_revision)) return
+    if (owner && (action.scheduleDate !== readDate(getCurrentDate) || owner.revision.value !== action.expected_revision)) return
+    if (owner && action.generation !== undefined && owner.capture(action.scheduleDate)?.generation !== action.generation) return
+    const last = findLastIndexForDate(undoStack.value, action.scheduleDate)
+    if (last !== -1 && undoStack.value[last].expected_revision !== action.previous_revision) clearDate(action.scheduleDate)
+    undoStack.value.push({ ...action, previousBlocks: action.previousBlocks.map((block) => ({ ...block })) })
     if (undoStack.value.length > MAX_UNDO_STACK) {
       undoStack.value.shift()
     }
@@ -114,36 +118,53 @@ export function useUndo(
     }
 
     undoInFlight = true
+    const requestEpoch = scopeEpoch
     try {
       const action = undoStack.value[index]
       const blocksPayload = action.previousBlocks.map((b) => ({
+        id: b.id,
         title: b.title,
         start_time: b.start_time,
         end_time: b.end_time,
         category: b.category,
         is_completed: b.is_completed,
         sort_order: b.sort_order,
+        restore_proof: b.restore_proof,
       }))
 
-      const result = await restoreBlocks(action.scheduleDate, blocksPayload)
+      const result = await restoreBlocks(action.scheduleDate, blocksPayload, action.expected_revision)
       // Re-locate by object identity: `index` was captured before the await,
       // and pushUndo is not gated by undoInFlight — a new action arriving
       // mid-flight can shift() a full stack and stale the index.
       const postAsyncIndex = undoStack.value.indexOf(action)
+      const sameScope = requestEpoch === scopeEpoch && readDate(getCurrentDate) === currentDate
       if (result.ok) {
         // The restore succeeded, so the entry is spent — remove it whether
         // or not the user is still on this date. But only flash the "Undone"
         // toast when they're still viewing the day it applied to; if they
         // navigated away mid-flight, a toast on the new day is misleading.
         if (postAsyncIndex !== -1) undoStack.value.splice(postAsyncIndex, 1)
-        if (action.type === "ai") clearAppliedResultForUndo()
-        if (readDate(getCurrentDate) === currentDate) {
+        const priorIndex = findLastIndexForDate(undoStack.value, action.scheduleDate)
+        const newRevision = result.mutation?.expectedRevision
+        if (sameScope && priorIndex !== -1) {
+          const prior = undoStack.value[priorIndex]
+          if (newRevision !== undefined && prior.expected_revision === action.previous_revision) {
+            prior.expected_revision = newRevision
+          } else {
+            clearDate(action.scheduleDate)
+          }
+        }
+        if (sameScope && action.type === "ai") clearAppliedResultForUndo(owner)
+        if (sameScope) {
           showToast(`Undone: ${action.description}`, false)
         }
-      } else if (readDate(getCurrentDate) === currentDate) {
+      } else if (sameScope) {
+        if (result.code === "schedule_changed" || result.status === undefined || (result.status ?? 0) >= 500) clearDate(currentDate)
         // Same rule for the failure toast: don't surface it on a day the
         // user has since navigated to (the date watcher cleared any toast).
-        showToast("Undo failed. Please try again.", false)
+        showToast(result.code === "schedule_changed"
+          ? "Schedule changed. Review the refreshed schedule before undoing."
+          : "Undo failed. Please try again.", false)
       }
     } finally {
       undoInFlight = false
@@ -176,6 +197,8 @@ export function useUndo(
   onUnmounted(() => {
     document.removeEventListener("keydown", handleKeydown)
     clearToastTimer()
+    unsubscribeInvalidation?.()
+    unsubscribeScope?.()
   })
 
   return {

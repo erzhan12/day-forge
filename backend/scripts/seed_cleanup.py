@@ -2,16 +2,15 @@
 
 import json
 
-from schedules.models import Schedule
-
 from scripts import _required, _user
+from scripts.seed_schedule import _clear_schedules
 
 
 def main() -> None:
     user = _user()
     dates = json.loads(_required("SEED_DATES_JSON"))
-    deleted, _ = Schedule.objects.filter(user=user, date__in=dates).delete()
-    print("cleanup deleted rows:", deleted)
+    cleared = _clear_schedules(user, dates)
+    print("cleanup cleared schedules:", cleared)
 
 
 if __name__ == "__main__":

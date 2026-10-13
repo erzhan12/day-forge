@@ -6,16 +6,16 @@ from datetime import date
 import requests
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
-from django.utils import timezone as django_tz
+from schedules.window import user_local_date
 
 from habitica_sync.schemas import NormalizedHabiticaTask
 
 logger = logging.getLogger(__name__)
 
 
-def is_project_today(target_date: date) -> bool:
-    """Single source of truth for today-vs-exact cache/filter decisions."""
-    return target_date == django_tz.localdate()
+def is_user_today(target_date: date, *, local_today: date) -> bool:
+    """Compare against the request's saved-timezone date snapshot."""
+    return target_date == local_today
 
 
 class HabiticaError(Exception):
@@ -122,10 +122,10 @@ def _include_todo(
     task: NormalizedHabiticaTask,
     target_date: date,
     *,
-    include_overdue_carryover: bool,
+    local_today: date,
 ) -> bool:
     target = target_date.isoformat()
-    if is_project_today(target_date) or include_overdue_carryover:
+    if is_user_today(target_date, local_today=local_today):
         if task.due_date is None:
             return True
         if task.due_date == target:
@@ -151,9 +151,11 @@ def fetch_tasks_for_date(
     account,
     target_date: date,
     *,
-    include_overdue_carryover: bool = False,
+    local_today: date | None = None,
 ) -> list[NormalizedHabiticaTask]:
     """Fetch and normalise Habitica todos and due dailies for one date."""
+    if local_today is None:
+        local_today = user_local_date(account.user)
     token = account.get_token()
     try:
         normalized: list[NormalizedHabiticaTask] = []
@@ -163,7 +165,7 @@ def fetch_tasks_for_date(
                 if not task.completed and _include_todo(
                     task,
                     target_date,
-                    include_overdue_carryover=include_overdue_carryover,
+                    local_today=local_today,
                 ):
                     normalized.append(task)
             except (KeyError, ValueError, TypeError) as e:
@@ -173,7 +175,7 @@ def fetch_tasks_for_date(
                     e,
                 )
 
-        if is_project_today(target_date) or include_overdue_carryover:
+        if is_user_today(target_date, local_today=local_today):
             for idx, raw in enumerate(
                 _fetch_tasks(account.api_user_id, token, "dailys")
             ):

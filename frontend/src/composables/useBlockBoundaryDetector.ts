@@ -73,10 +73,8 @@ export function useBlockBoundaryDetector(
   // for the same block on the same day.
   const fired = new Set<string>()
 
-  // Reset on date change. The ONLY real reset trigger is explicit date
-  // navigation — useNowMinutes leaves-today on midnight rollover and does NOT
-  // re-arm its timer, so a tab open across midnight simply stops firing until
-  // the user navigates (documented limitation, 0019_PLAN.md).
+  // Reset on date change, including midnight in the saved timezone. The
+  // sampler keeps ticking off-today so a future viewed date can become today.
   watch(nowDate, () => {
     fired.clear()
     lastSeenMinute = null
@@ -129,9 +127,8 @@ export function useBlockBoundaryDetector(
       //  - suspension resume (now - prev > MAX_COALESCE_GAP_MINUTES): clamped
       //    half-open (now - MAX_COALESCE_GAP_MINUTES, now] — only last-N-
       //    minute boundaries fire; multi-hour burst suppressed (issue #112).
-      //    No visibilitychange listener: the clamp is sufficient for burst
-      //    suppression; resume sample still waits for the next useNowMinutes
-      //    tick (≤ one sampler period of delivery latency).
+      //    A visibility resync can deliver the fresh sample immediately; the
+      //    same gap clamp still limits the boundaries it can replay.
       const inWindow = (boundary: number): boolean => {
         if (effectivePrev === null) return boundary === now
         if (now <= effectivePrev) return false

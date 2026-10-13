@@ -2,6 +2,7 @@
 // error branch to be NON-suppressing (banners coexist with the list) and
 // added the account email chip + per-account error banners.
 
+import { ScheduleDisabledKey } from "../src/composables/scheduleContext"
 import { describe, expect, it } from "vitest"
 import { mount } from "@vue/test-utils"
 import { ref } from "vue"
@@ -115,6 +116,31 @@ describe("ExternalEventsPanel", () => {
     expect(wrapper.findAll('[data-testid="external-event"]')).toHaveLength(1)
   })
 
+  it("keeps same-provider calendar events visible with an error and Retry", async () => {
+    const wrapper = mount(ExternalEventsPanel, {
+      props: {
+        events: [APPLE_EVENT], loading: false, connected: true,
+        errorBanners: [{ provider: "apple", message: "Apple Calendar service unavailable." }],
+      },
+    })
+    expect(wrapper.findAll('[data-testid="external-event"]')).toHaveLength(1)
+    expect(wrapper.find(".ee-empty").exists()).toBe(false)
+    await wrapper.find(".ee-retry").trigger("click")
+    expect(wrapper.emitted("retry")).toEqual([["apple"]])
+  })
+
+  it("shows the calendar error without an empty-state message when there are no events", () => {
+    const wrapper = mount(ExternalEventsPanel, {
+      props: {
+        events: [], loading: false, connected: true,
+        errorBanners: [{ provider: "apple", message: "Apple Calendar service unavailable." }],
+      },
+    })
+    expect(wrapper.find('[data-testid="provider-error"]').exists()).toBe(true)
+    expect(wrapper.find(".ee-empty").exists()).toBe(false)
+    expect(wrapper.find('[data-testid="external-event"]').exists()).toBe(false)
+  })
+
   it("emits retry with the banner's provider", async () => {
     const wrapper = mount(ExternalEventsPanel, {
       props: {
@@ -175,13 +201,13 @@ describe("ExternalEventsPanel", () => {
     const today = todayString()
     const past = {
       ...APPLE_EVENT,
-      start: `${today}T14:00:00`,
-      end: `${today}T15:00:00`,
+      start: `${today}T14:00:00Z`,
+      end: `${today}T15:00:00Z`,
     }
     const upcoming = {
       ...GOOGLE_EVENT,
-      start: `${today}T17:00:00`,
-      end: `${today}T18:00:00`,
+      start: `${today}T17:00:00Z`,
+      end: `${today}T18:00:00Z`,
     }
     const wrapper = mount(ExternalEventsPanel, {
       props: {
@@ -242,7 +268,7 @@ describe("ExternalEventsPanel add-to-schedule button", () => {
   it("disables the button when scheduleDisabled is injected true", () => {
     const wrapper = mount(ExternalEventsPanel, {
       props: { events: [APPLE_EVENT], loading: false, connected: true },
-      global: { provide: { scheduleDisabled: ref(true) } },
+      global: { provide: { [ScheduleDisabledKey]: ref(true) } },
     })
     expect(
       wrapper.find('[data-testid="add-to-schedule"]').attributes("disabled"),
@@ -252,7 +278,7 @@ describe("ExternalEventsPanel add-to-schedule button", () => {
   it("leaves the button enabled when scheduleDisabled is false", () => {
     const wrapper = mount(ExternalEventsPanel, {
       props: { events: [APPLE_EVENT], loading: false, connected: true },
-      global: { provide: { scheduleDisabled: ref(false) } },
+      global: { provide: { [ScheduleDisabledKey]: ref(false) } },
     })
     expect(
       wrapper.find('[data-testid="add-to-schedule"]').attributes("disabled"),

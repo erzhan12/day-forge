@@ -205,7 +205,7 @@ class TestEvents:
         _make_account(user, google_account_id="s1", email="a@gmail.com")
         _make_account(user, google_account_id="s2", email="b@gmail.com")
 
-        async def fake_fetch(acc, td):
+        async def fake_fetch(acc, td, time_zone):
             return [_ev(f"Ev-{acc.email}", "2026-05-07T09:00:00+00:00")]
 
         with patch.object(views.service, "fetch_events_for_account", fake_fetch):
@@ -219,7 +219,7 @@ class TestEvents:
         _make_account(user, google_account_id="s1", email="good@gmail.com")
         _make_account(user, google_account_id="s2", email="bad@gmail.com")
 
-        async def fake_fetch(acc, td):
+        async def fake_fetch(acc, td, time_zone):
             if acc.email == "good@gmail.com":
                 return [_ev("Healthy", "2026-05-07T09:00:00+00:00")]
             raise views.service.GoogleCalAuthError("revoked")
@@ -236,7 +236,7 @@ class TestEvents:
     def test_provider_failure_is_unavailable(self, auth_client, user):
         _make_account(user, google_account_id="s1", email="a@gmail.com")
 
-        async def fake_fetch(acc, td):
+        async def fake_fetch(acc, td, time_zone):
             raise views.service.GoogleCalProviderError("boom")
 
         with patch.object(views.service, "fetch_events_for_account", fake_fetch):
@@ -248,7 +248,7 @@ class TestEvents:
     def test_timeout_failure_is_unavailable(self, auth_client, user):
         _make_account(user, google_account_id="s1", email="a@gmail.com")
 
-        async def fake_fetch(acc, td):
+        async def fake_fetch(acc, td, time_zone):
             raise views.service.GoogleCalTimeoutError("slow")
 
         with patch.object(views.service, "fetch_events_for_account", fake_fetch):
@@ -275,7 +275,7 @@ class TestEvents:
             gcal_cache.set_cached_events(acc_cached, datetime.date(2026, 5, 7), payload)
         )
 
-        async def fake_fetch(acc, td):
+        async def fake_fetch(acc, td, time_zone):
             # Only the uncached (bad) account reaches the service.
             raise views.service.GoogleCalAuthError("revoked")
 
@@ -293,7 +293,7 @@ class TestEvents:
     def test_improperly_configured_returns_500(self, auth_client, user):
         _make_account(user)
 
-        async def fake_fetch(acc, td):
+        async def fake_fetch(acc, td, time_zone):
             from django.core.exceptions import ImproperlyConfigured
 
             raise ImproperlyConfigured("key rotated")
@@ -326,6 +326,25 @@ class TestEvents:
         assert [e["title"] for e in data["events"]] == ["Cached"]
         mock.assert_not_called()  # served entirely from cache
 
+    def test_timezone_change_misses_old_cache(self, auth_client, user):
+        from schedules.models import UserScheduleSettings
+
+        _make_account(user)
+        row, _ = UserScheduleSettings.objects.get_or_create(user=user)
+        seen = []
+
+        async def fake_fetch(_account, _date, time_zone):
+            seen.append(time_zone)
+            return []
+
+        with patch.object(views.service, "fetch_events_for_account", fake_fetch):
+            auth_client.get("/api/calendar/google/events/2026-05-07/")
+            row.time_zone = "Asia/Qatar"
+            row.save()
+            auth_client.get("/api/calendar/google/events/2026-05-07/")
+
+        assert seen == ["UTC", "Asia/Qatar"]
+
     def test_refresh_bypasses_all_accounts_and_rewarms(self, auth_client, user):
         """``?refresh=1`` puts every connected account into the fetch path,
         even when one account has a pre-seeded cache entry, and re-warms."""
@@ -354,7 +373,7 @@ class TestEvents:
 
         fetched_ids: list[int] = []
 
-        async def fake_fetch(acc, td):
+        async def fake_fetch(acc, td, time_zone):
             fetched_ids.append(acc.id)
             return [_ev(f"Fresh-{acc.email}", "2026-05-07T09:00:00+00:00")]
 
@@ -413,7 +432,7 @@ class TestEvents:
 
         fetched_ids: list[int] = []
 
-        async def fake_fetch(acc, td):
+        async def fake_fetch(acc, td, time_zone):
             fetched_ids.append(acc.id)
             return [_ev("Live", "2026-05-07T11:00:00+00:00")]
 
@@ -459,7 +478,7 @@ class TestEvents:
 
         fetched_ids: list[int] = []
 
-        async def fake_fetch(acc, td):
+        async def fake_fetch(acc, td, time_zone):
             fetched_ids.append(acc.id)
             return [_ev("Live", "2026-05-07T11:00:00+00:00")]
 
@@ -476,7 +495,7 @@ class TestEvents:
         _make_account(user)
         captured = {}
 
-        async def fake_fetch(acc, td):
+        async def fake_fetch(acc, td, time_zone):
             captured["td"] = td
             return []
 

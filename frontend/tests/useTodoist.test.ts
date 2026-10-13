@@ -1,9 +1,5 @@
-// Tests for useTodoist.ts — per-date tasks fetch, dual commit guard
-// (cross-date and same-date / stale-seq), the deliberate CalDAV divergence
-// (non-503 task errors set connected=true so the error surfaces past the
-// `!connected` panel gate; statusKnown set on every non-abort, non-stale
-// terminal path), 503 -> connected=false, and AbortError swallow. Abort and
-// stale-commit paths leave connected/statusKnown untouched.
+// Per-date tasks, explicit account metadata, stale-response guards, and
+// optimistic completion. Ambiguous HTTP errors leave account state unchanged.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { nextTick } from "vue"
@@ -73,7 +69,7 @@ describe("useTodoist.fetchTasks", () => {
     expect(opts).toMatchObject({ signal: expect.any(AbortSignal) })
   })
 
-  it("appends carry_overdue=1 when fetching browser-local today", async () => {
+  it("leaves today and overdue scope to the server", async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date(2026, 5, 18, 12, 0, 0))
     requestJsonMock.mockResolvedValueOnce({
@@ -85,7 +81,7 @@ describe("useTodoist.fetchTasks", () => {
     await todoist.fetchTasks("2026-06-18")
 
     expect(requestJsonMock.mock.calls[0][0]).toBe(
-      "/api/todoist/tasks/2026-06-18/?carry_overdue=1",
+      "/api/todoist/tasks/2026-06-18/",
     )
     vi.useRealTimers()
   })
@@ -154,6 +150,7 @@ describe("useTodoist.fetchTasks", () => {
     requestJsonMock.mockResolvedValueOnce({
       ok: false,
       status: 503,
+      data: { meta: { account_state: "disconnected", resource_state: "unavailable" } },
       errors: { detail: "No Todoist account configured" },
     })
     const todoist = useTodoist()
@@ -168,11 +165,11 @@ describe("useTodoist.fetchTasks", () => {
     requestJsonMock.mockResolvedValueOnce({
       ok: false,
       status: 401,
+      data: { meta: { account_state: "connected", resource_state: "credentials_error" } },
       errors: { detail: "Todoist credentials invalid" },
     })
     const todoist = useTodoist()
-    // No prior fetchAccountStatus() call — the panel gate must surface the
-    // error purely from this fetchTasks() result (the CalDAV divergence).
+    // The resource response carries an explicit connected account verdict.
     await todoist.fetchTasks("2026-05-07")
     expect(todoist.state.connected).toBe(true)
     expect(todoist.state.statusKnown).toBe(true)
@@ -183,6 +180,7 @@ describe("useTodoist.fetchTasks", () => {
     requestJsonMock.mockResolvedValueOnce({
       ok: false,
       status: 500,
+      data: { meta: { account_state: "connected", resource_state: "provider_error" } },
       errors: {
         detail: "Todoist service is misconfigured. Contact the administrator.",
       },
@@ -200,6 +198,7 @@ describe("useTodoist.fetchTasks", () => {
     requestJsonMock.mockResolvedValueOnce({
       ok: false,
       status: 502,
+      data: { meta: { account_state: "connected", resource_state: "provider_error" } },
       errors: { detail: "bad gateway" },
     })
     const todoist = useTodoist()
@@ -213,6 +212,7 @@ describe("useTodoist.fetchTasks", () => {
     requestJsonMock.mockResolvedValueOnce({
       ok: false,
       status: 504,
+      data: { meta: { account_state: "connected", resource_state: "provider_error" } },
       errors: { detail: "timed out" },
     })
     const todoist = useTodoist()
@@ -223,11 +223,7 @@ describe("useTodoist.fetchTasks", () => {
   })
 
   it("first-load network failure (no status) leaves connected=false but surfaces the error", async () => {
-    // useHttp.requestJson returns {ok:false, errors} with NO `status` on a
-    // network/parse failure. A no-status failure proves nothing about
-    // account existence (only a real HTTP status does), so `connected` must
-    // NOT be elevated — otherwise the panel would render for a user who may
-    // not be connected. statusKnown + error still set.
+    // A network error has no account verdict.
     requestJsonMock.mockResolvedValueOnce({
       ok: false,
       errors: { detail: "Network error. Please check your connection." },
@@ -235,7 +231,7 @@ describe("useTodoist.fetchTasks", () => {
     const todoist = useTodoist()
     await todoist.fetchTasks("2026-05-07")
     expect(todoist.state.connected).toBe(false)
-    expect(todoist.state.statusKnown).toBe(true)
+    expect(todoist.state.statusKnown).toBe(false)
     expect(todoist.state.error).toBe(
       "Network error. Please check your connection.",
     )
@@ -260,10 +256,7 @@ describe("useTodoist.fetchTasks", () => {
   })
 
   it("first-load 400 (malformed date) does NOT elevate connected", async () => {
-    // A 400 is returned by the view *before* the account-existence check,
-    // so it does not prove the account row exists — connected must stay
-    // false on first load (only statuses >= 401 elevate it). statusKnown +
-    // error still set.
+    // An invalid date has no account verdict.
     requestJsonMock.mockResolvedValueOnce({
       ok: false,
       status: 400,
@@ -272,7 +265,7 @@ describe("useTodoist.fetchTasks", () => {
     const todoist = useTodoist()
     await todoist.fetchTasks("not-a-date")
     expect(todoist.state.connected).toBe(false)
-    expect(todoist.state.statusKnown).toBe(true)
+    expect(todoist.state.statusKnown).toBe(false)
     expect(todoist.state.error).toBe("Invalid date format.")
   })
 
@@ -332,6 +325,7 @@ describe("useTodoist.fetchTasks", () => {
     d1.resolve({
       ok: false,
       status: 503,
+      data: { meta: { account_state: "disconnected", resource_state: "unavailable" } },
       errors: { detail: "No Todoist account configured" },
     })
     await p1
@@ -415,6 +409,7 @@ describe("useTodoist.completeTask", () => {
       requestJsonMock.mockResolvedValueOnce({
         ok: false,
         status,
+        ...(status === 401 ? { code: "integration_credentials_error", data: { meta: { account_state: "connected", resource_state: "credentials_error" } } } : {}),
         errors: { detail: "boom" },
       })
       const todoist = useTodoist()
@@ -503,7 +498,7 @@ describe("useTodoist.refreshTasks", () => {
     vi.restoreAllMocks()
   })
 
-  it("appends refresh=1 and carry_overdue=1 for browser-local today", async () => {
+  it("appends only refresh=1 even for browser-local today", async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date(2026, 5, 18, 12, 0, 0))
     requestJsonMock.mockResolvedValueOnce({
@@ -515,7 +510,7 @@ describe("useTodoist.refreshTasks", () => {
     await todoist.refreshTasks("2026-06-18")
 
     expect(requestJsonMock.mock.calls[0][0]).toBe(
-      "/api/todoist/tasks/2026-06-18/?carry_overdue=1&refresh=1",
+      "/api/todoist/tasks/2026-06-18/?refresh=1",
     )
     vi.useRealTimers()
   })

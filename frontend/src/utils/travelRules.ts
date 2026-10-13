@@ -5,7 +5,7 @@
 import type { TravelRule } from "../types"
 import type { NormalizedEvent } from "../types/calendar"
 
-const DAY_MS = 86_400_000
+import { civilDayDelta, zonedDateTime } from "./date"
 const LAST_MINUTE = 23 * 60 + 59 // 23:59 clamp ceiling
 
 /**
@@ -54,68 +54,25 @@ function calendarNamesEqual(a: string, b: string): boolean {
   return a.trim().toLowerCase() === b.trim().toLowerCase()
 }
 
-/**
- * Map an external event ± travel minutes onto the VIEWED day's local
- * `HH:MM` range, clamped to `[00:00, 23:59]`.
- *
- * Everything anchors to the viewed date's local midnight, not the event's
- * start day: both providers return every event *overlapping* the fetch
- * window (a UTC day, per `settings.TIME_ZONE`), so the panel can show an
- * event that started the previous local day (e.g. 23:00(prev)→00:30) —
- * anchoring to the event's start day would create 23:00–23:59 on the
- * wrong schedule.
- *
- * Works in the minutes domain: read each value's local clock time, fold
- * in the whole-day delta to the viewed day, then apply travel. Shifting
- * the Date object and re-reading getHours() would let a large travel
- * value land on another calendar day, defeating the clamp.
- *
- * Returns `null` when the event ± travel does not intersect the viewed
- * local day at all (UTC-window artifact — e.g. a local 03:00 next-day
- * event listed on the viewed UTC day), or when the range is inverted
- * after clamping (`startMin > endMin`); callers disable Confirm on `null`.
- * A zero-length result (start_time === end_time, e.g. a DTEND-less CalDAV
- * event with 0/0 travel) is returned as-is so the dialog can show its
- * distinct zero-length hint.
+/** Map event wall-clock times and travel padding into the viewed day.
+ * Naive HH:MM blocks cannot distinguish the two occurrences of a DST hour.
+ * All-day events use calendar dates; their UTC serialization is not authority.
  */
 export function computeEventBlockTimes(
-  event: Pick<NormalizedEvent, "start" | "end">,
+  event: Pick<NormalizedEvent, "start" | "end"> & Partial<Pick<NormalizedEvent, "all_day" | "start_date" | "end_date">>,
   viewedDate: string,
   travelThere: number,
   travelBack: number,
+  timeZone = "UTC",
 ): { start_time: string; end_time: string } | null {
-  const startLocal = new Date(event.start)
-  const endLocal = new Date(event.end)
-  const [y, m, d] = viewedDate.split("-").map(Number)
-  const viewedDay = new Date(y, m - 1, d)
-
-  const startDay = new Date(
-    startLocal.getFullYear(),
-    startLocal.getMonth(),
-    startLocal.getDate(),
-  )
-  const endDay = new Date(
-    endLocal.getFullYear(),
-    endLocal.getMonth(),
-    endLocal.getDate(),
-  )
-  // Whole calendar days; Math.round absorbs the DST ±1h so the ratio
-  // still lands on an integer.
-  const startDelta = Math.round(
-    (startDay.getTime() - viewedDay.getTime()) / DAY_MS,
-  )
-  const endDelta = Math.round((endDay.getTime() - viewedDay.getTime()) / DAY_MS)
-
-  let startMin =
-    startLocal.getHours() * 60 +
-    startLocal.getMinutes() +
-    startDelta * 1440 -
-    travelThere
-  let endMin =
-    endLocal.getHours() * 60 +
-    endLocal.getMinutes() +
-    endDelta * 1440 +
-    travelBack
+  const start = event.all_day && event.start_date
+    ? { date: event.start_date, minutes: 0 }
+    : zonedDateTime(new Date(event.start), timeZone)
+  const end = event.all_day && event.end_date
+    ? { date: event.end_date, minutes: 0 }
+    : zonedDateTime(new Date(event.end), timeZone)
+  let startMin = start.minutes + civilDayDelta(viewedDate, start.date) * 1440 - travelThere
+  let endMin = end.minutes + civilDayDelta(viewedDate, end.date) * 1440 + travelBack
 
   // Out-of-day guard before the clamp: blindly clamping an event lying
   // entirely outside the viewed local day would produce a nonsense range.

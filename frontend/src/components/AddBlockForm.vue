@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import type { Ref } from "vue"
 import { computed, ref, watch, inject } from "vue"
-import type { TimeBlock, UndoAction, UserCategory } from "../types"
+import type { UserCategory } from "../types"
+import { ScheduleDisabledKey, ScheduleUndoKey } from "../composables/scheduleContext"
 import { useSchedule } from "../composables/useSchedule"
+import { registerMutationUndo } from "../composables/useMutationUndo"
 import { defaultCategory, orderedCategories } from "../utils/categories"
 
 const props = defineProps<{
@@ -14,18 +15,15 @@ const props = defineProps<{
 
 const { createBlock } = useSchedule(() => props.date)
 
-const undo = inject<{
-  pushUndo: (action: UndoAction) => void
-  snapshotBlocks: () => TimeBlock[]
-}>("undo")
+const undo = inject(ScheduleUndoKey, undefined)
 
-const scheduleDisabled = inject<Ref<boolean> | null>("scheduleDisabled", null)
+const scheduleDisabled = inject(ScheduleDisabledKey, null)
 const isDisabled = computed(() => Boolean(scheduleDisabled?.value))
 
 const title = ref("")
 const startTime = ref(props.initialStartTime ?? "09:00")
 const endTime = ref(props.initialEndTime ?? "10:00")
-const category = ref<string>(defaultCategory(props.categories ?? [])?.slug ?? "work")
+const category = ref<string>(defaultCategory(props.categories ?? [])?.slug ?? "")
 const showForm = ref(false)
 const submitting = ref(false)
 const errorMessage = ref("")
@@ -41,17 +39,15 @@ watch(
 watch(() => props.categories, (categories) => { if (categories?.length) category.value = defaultCategory(categories)?.slug ?? category.value }, { immediate: true })
 
 async function handleSubmit() {
-  if (isDisabled.value) return
+  if (isDisabled.value || submitting.value) return
   if (!title.value.trim()) return
+  if (!orderedCategories(props.categories).some((item) => item.slug === category.value)) {
+    errorMessage.value = "Category data could not be loaded. Reload the page and try again."
+    return
+  }
   submitting.value = true
   errorMessage.value = ""
-  const snapshot = undo?.snapshotBlocks()
   const blockTitle = title.value.trim()
-  // Bind undo to the date active when the mutation starts, not when the
-  // response resolves — if the user navigates dates while the request is
-  // in flight, ``props.date`` would shift and undo would restore this
-  // day's snapshot onto a different date. Issue #21.
-  const scheduleDate = props.date
   const result = await createBlock({
     title: blockTitle,
     start_time: startTime.value,
@@ -60,15 +56,11 @@ async function handleSubmit() {
   })
   submitting.value = false
   if (result.ok) {
-    if (undo && snapshot) {
-      undo.pushUndo({
-        description: `Added "${blockTitle}"`,
-        type: "add",
-        previousBlocks: snapshot,
-        scheduleDate,
-        silent: true,
-      })
-    }
+    registerMutationUndo(result, undo?.pushUndo, {
+      description: `Added "${blockTitle}"`,
+      type: "add",
+      silent: true,
+    })
     title.value = ""
     showForm.value = false
   } else if (result.code === "outside_window") {

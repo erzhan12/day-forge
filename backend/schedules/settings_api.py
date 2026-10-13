@@ -1,14 +1,13 @@
 """JSON endpoint for the coupled per-user schedule window."""
 
-import json
-
+from common.http import parse_json_object
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
-from schedules.http import reject_oversized_body
 from schedules.models import UserScheduleSettings
+from schedules.mutations import ScheduleChanged, run_user_maintenance, schedule_changed_response
 from schedules.window import get_schedule_settings, validate_time_zone, validate_window
 
 
@@ -22,7 +21,12 @@ def _settings_response(payload: dict, *, status: int = 200) -> JsonResponse:
 @require_http_methods(["GET", "PATCH"])
 def schedule_settings(request):
     if request.method == "GET":
-        user_settings = get_schedule_settings(request.user)
+        try:
+            user_settings = get_schedule_settings(request.user)
+        except ScheduleChanged as exc:
+            response = schedule_changed_response(exc)
+            response["Cache-Control"] = "private, no-store"
+            return response
         return _settings_response(
             {
                 "day_start": user_settings.window.start_str,
@@ -31,18 +35,9 @@ def schedule_settings(request):
             }
         )
 
-    oversized = reject_oversized_body(request)
-    if oversized is not None:
-        oversized["Cache-Control"] = "private, no-store"
-        return oversized
-    try:
-        data = json.loads(request.body)
-    except json.JSONDecodeError:
-        return _settings_response({"errors": {"body": "Invalid JSON."}}, status=400)
-    if not isinstance(data, dict):
-        return _settings_response(
-            {"errors": {"body": "Request body must be a JSON object."}}, status=400
-        )
+    data, err = parse_json_object(request, response_factory=_settings_response)
+    if err is not None:
+        return err
     has_start = "day_start" in data
     has_end = "day_end" in data
     has_time_zone = "time_zone" in data
@@ -75,19 +70,29 @@ def schedule_settings(request):
         defaults.update(day_start=window.day_start, day_end=window.day_end)
     if has_time_zone:
         defaults["time_zone"] = data["time_zone"]
-    settings, created = UserScheduleSettings.objects.get_or_create(
-        user=request.user, defaults=defaults
-    )
-    if not created:
-        update_fields = []
-        if window is not None:
-            settings.day_start = window.day_start
-            settings.day_end = window.day_end
-            update_fields.extend(["day_start", "day_end"])
-        if has_time_zone:
-            settings.time_zone = data["time_zone"]
-            update_fields.append("time_zone")
-        settings.save(update_fields=[*update_fields, "updated_at"])
+
+    def save_settings(locked_user):
+        settings, created = UserScheduleSettings.objects.get_or_create(
+            user=locked_user, defaults=defaults
+        )
+        if not created:
+            update_fields = []
+            if window is not None:
+                settings.day_start = window.day_start
+                settings.day_end = window.day_end
+                update_fields.extend(["day_start", "day_end"])
+            if has_time_zone:
+                settings.time_zone = data["time_zone"]
+                update_fields.append("time_zone")
+            settings.save(update_fields=[*update_fields, "updated_at"])
+        return settings
+
+    try:
+        settings = run_user_maintenance(request.user.pk, save_settings)
+    except ScheduleChanged as exc:
+        response = schedule_changed_response(exc)
+        response["Cache-Control"] = "private, no-store"
+        return response
     return _settings_response(
         {
             "day_start": settings.day_start.strftime("%H:%M"),

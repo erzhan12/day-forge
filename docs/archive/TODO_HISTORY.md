@@ -1,0 +1,1081 @@
+# Historical TODO snapshot
+
+This is the complete 1,075-line tasks/todo.md as it stood before the R12 cleanup on 11 October 2026. Its checkboxes and plans are historical records, not instructions for current work. See [the active list](../../tasks/todo.md).
+
+---
+
+# TODO
+
+<!-- Track current work items here as checkable items -->
+
+## Phase 4 — AI Command Bar
+
+- [x] Add `openai` dep + `LLM_*` settings
+- [x] `backend/ai/schemas.py` — action validators
+- [x] `backend/ai/prompts.py` — original one-shot prompt + user message builder
+- [x] `backend/ai/service.py` — original one-shot service + error taxonomy
+- [x] `backend/ai/views.py` — original one-shot view
+- [x] Register the original one-shot URL
+- [x] Backend tests (service + view)
+- [x] Original frontend AI composable
+- [x] `frontend/src/components/CommandBar.vue`
+- [x] Wire CommandBar into `Schedule.vue`; extend `UndoAction["type"]`
+- [x] Frontend tests (AI composable, `CommandBar`)
+- [x] Document endpoint in `docs/api.md` + env vars in `.claude/rules/project.md`
+- [x] Manual end-to-end test with a real `LLM_API_KEY` (English + Russian commands)
+  - The Phase-4 single-shot endpoint is no longer wired to the UI after the
+    feature-0007 chat rewrite; the equivalent behavior is covered by the chat surface.
+    Validated end-to-end with real LLM on 2026-05-15 via
+    `ai-chat-single-turn-apply.mjs` (EN: "add 30-minute focus block at 10:00" →
+    block created, status flipped to active) and `ai-chat-clarifying-question.mjs`
+    (RU: "запланируй встречу" → assistant `ask` in Russian → "в 14:00 на час, рабочая"
+    → block created).
+
+## Phase 5 — Templates, Rules & Drafts
+
+### Backend
+
+- [x] `templates_mgr.models`: add `user` FK to `Template` and `Rule`; unique `(user, type)` on `Template`
+- [x] `templates_mgr` migration `0002_user_fk` — wipes orphan rows; document in docstring
+- [x] `seed_templates --user <username>` required; no fallback
+- [x] `templates_mgr/admin.py`: list_filter user, list_display user
+- [x] `ai.models.AIInteraction.kind` choices=("command", "draft"), default "command"
+- [x] AI migration `0004_aiinteraction_kind`
+- [x] `LLM_DRAFT_MODEL`, `LLM_DRAFT_RATE_LIMIT_PER_HOUR`, `LLM_HISTORY_DAYS` settings
+- [x] `ai/prompts.py`: `SYSTEM_PROMPT_DRAFT`, `build_draft_user_message`, `_format_block_line` dict refactor + adapters
+- [x] `ai/schemas.py`: `validate_draft_response` (rejects non-`add`)
+- [x] `ai/service.py`: `run_draft`, `AIDraftResult`
+- [x] `ai/views.py`: `ai_generate_draft` view + `_rate_limit_drafts_per_user` decorator
+- [x] `_log_interaction(kind=...)`; new code paths log `kind="draft"`
+- [x] `Schedule.mark_active_if_draft()` + wire into `create_block`, `block_detail`, `reorder_blocks`, and AI apply (only when `len(parsed_actions) > 0`)
+- [x] `restore_blocks` does NOT flip status (verified by tests)
+- [x] `templates_mgr.api`: REST CRUD for templates + rules, per-user scoped
+- [x] `templates_mgr.views.settings_view` Inertia page
+- [x] URLs: `/settings/`, `/api/templates/`, `/api/rules/`, `/api/ai/schedules/<date>/generate-draft/`
+- [x] `schedule_view`: `auto_draft_pending` (one-shot) + `has_template_for_type` (ongoing) props
+
+### Frontend
+
+- [x] `frontend/src/types/index.ts`: `Template`, `TemplateBlock`, `Rule`, extend `Schedule.status`, add `"draft"` to `UndoAction["type"]`
+- [x] `frontend/src/pages/Settings.vue`
+- [x] `frontend/src/components/TemplateEditor.vue` (form-based, two slots; DnD deferred)
+- [x] `frontend/src/components/RulesList.vue` (priority arrows, inline edit, toggle, delete)
+- [x] `frontend/src/components/DraftBadge.vue`
+- [x] `frontend/src/components/RegenerateDraftButton.vue` (disabled state when `!hasTemplate`)
+- [x] `frontend/src/composables/useTemplates.ts`, `useRules.ts`, `useDraft.ts`
+- [x] AI/schedule/undo composables reload props → `["blocks", "schedule"]`
+- [x] `useDrag.startDrag`: honor `isDisabled` callback
+- [x] `GapSlot`: honor `disabled` prop
+- [x] `Schedule.vue`: auto-draft watcher, undo for `"draft"` type, spinner overlay, inline error
+- [x] `DateNavigator`: settings gear + slots for status/actions
+
+### Tests + docs
+
+- [x] Backend tests: prompts, schemas, service, views, status flow, templates API, schedule_view
+- [x] Updated existing test_models / test_seed_command for user-FK
+- [x] `docs/api.md`: templates + rules + draft endpoints
+- [x] `RULES.md`: status-flip rules, ownership, partial-reload props
+- [x] `docs/features/0005_MANUAL_TEST.md`
+- [x] Manual end-to-end test with a real `LLM_API_KEY`
+  - Validated 2026-05-15 via `regenerate-422-fallback.mjs` against real LLM
+    (Regenerate-button enable/disable contracts across template/no-template states all
+    hold). Prompt-content invariants (per-day completion suffix) were validated
+    separately on 2026-05-14 via `draft-prompt-history-suffix.mjs` with
+    `LLM_DRAFT_CAPTURE_PROMPT_PATH` opt-in capture.
+
+### Deploy notes
+
+- Run migrations after pulling: `uv run python backend/manage.py migrate` — `templates_mgr.0002_user_fk` wipes any existing global templates and rules. Re-seed per user with `seed_templates --user <name>`.
+
+## Phase 6 — Analytics & End-of-Day Review
+
+### Backend
+
+- [x] `analytics.models.DailyReview`: add `planned_minutes_by_category`, `completed_minutes_by_category` JSON fields, `updated_at`, `completion_rate` property
+- [x] `analytics/migrations/0002_review_aggregates.py`
+- [x] `Schedule.mark_active_on_edit()` (replaces `mark_active_if_draft`) — DB-conditional UPDATE, handles draft AND reviewed source
+- [x] `Schedule.mark_reviewed_if_active()`
+- [x] Update all call sites in `schedules/api.py`, `ai/views.py`
+- [x] `ANALYTICS_STREAK_THRESHOLD`, `ANALYTICS_STREAK_WINDOW_DAYS` settings (validated at import)
+- [x] `analytics/services.py`: `compute_review_stats`, `recompute_review_from_schedule`, `compute_streak`
+- [x] `analytics/views.py`: `analytics_view` (Inertia), `mark_reviewed`, `update_review_notes`
+- [x] URLs: `/analytics/<date>/`, `/api/analytics/schedules/<date>/mark-reviewed/`, `/api/analytics/reviews/<pk>/notes/`
+- [x] `analytics/admin.py`: extend list_display with completion %, notes excerpt, updated_at
+- [x] `ai/prompts.py`: append `(completed: X/Y)` per history line when DailyReview exists
+
+### Frontend
+
+- [x] `frontend/src/types/index.ts`: `CategoryMinutes`, `DailyReview`, `StreakInfo`
+- [x] `frontend/src/utils/categoryColors.ts` (extracted from TimeBlock.vue)
+- [x] `frontend/src/composables/useAnalytics.ts` (markReviewed + saveNotes)
+- [x] `frontend/src/components/{CompletionBar,CategoryBreakdown,StreakCounter,SkippedTasks}.vue`
+- [x] `frontend/src/pages/Analytics.vue`
+- [x] `frontend/src/pages/Schedule.vue`: "View analytics" link in actions slot
+- [x] `frontend/src/components/TimeBlock.vue`: import categoryColors from shared util
+
+### Tests + docs
+
+- [x] `test_analytics_models.py`, `test_analytics_services.py`, `test_analytics_views.py`
+- [x] `test_settings_validation.py` (env var validation)
+- [x] Extend `test_status_flow.py` with `mark_active_on_edit` (incl. stale-instance recovery), `mark_reviewed_if_active`, reviewed-unfreezes-on-edit
+- [x] Extend `test_ai_prompts_draft.py` with completion suffix case
+- [x] Frontend tests: `useAnalytics`, `CompletionBar`, `CategoryBreakdown`, `StreakCounter`, `SkippedTasks`, `Analytics.vue`
+- [x] `docs/api.md`: analytics endpoints
+- [x] `RULES.md`: status matrix, conditional UPDATE rationale, body-after-lock rationale, streak/skipped semantics, frozen-vs-recompute
+- [x] `docs/features/0006_MANUAL_TEST.md`
+- [x] Manual end-to-end test with a real `LLM_API_KEY`
+  - Validated 2026-05-15 via `analytics-unfreeze-on-edit.mjs` (steps A-F: unfreeze on
+    drag / inline-edit / delete / restore + status-flow invariants all hold; Step G
+    targeted the retired Phase-4 single-shot endpoint,
+    but `CommandBar.vue` now submits to `/chat/` after feature 0007 (PR #15) so the
+    response matcher never fired and the script timed out — superseded by
+    `ai-chat-single-turn-apply.mjs` which exercises the same `mark_active_on_edit`
+    invariant against the current chat surface) and `skipped-tasks-today-aware.mjs`
+    (today-aware skipped-task filter holds across past/today/future analytics pages).
+
+## Feature 0010 — Selectable Design Templates
+
+Plan: `docs/features/0010_design_templates_PLAN.md`. Review: `docs/features/0010_REVIEW.md`.
+
+### Phases
+
+- [x] **P1 — Backend preferences data.** `UserPreferences` model + `Theme` TextChoices, migration `0003_user_preferences.py`, admin (`UserPreferencesAdmin` + `UserPreferencesInline` on `User`), `preferences.py` helper (frozen DTO, read-side normalization).
+- [x] **P2 — Backend API + Inertia props + SSR.** `GET`/`PATCH /api/user/preferences/`, `_prefs_response` Cache-Control helper, `ui_preferences` prop + `template_data={"initial_theme": …}` on `schedule_view` / `settings_view` / `analytics_view`, `_render_login` helper for all three login render paths, `base.html` `data-theme="{{ initial_theme|default:'classic' }}"`.
+- [x] **P3 — Frontend theme registry + composable.** `theme.ts` (`isKnownTheme` / `normalizeTheme` / `applyTheme`), `themes.ts` (registry + preview tokens), `useThemeFromProps`, `@inertiajs/core` `PageProps` augmentation, wiring in Schedule/Settings/Analytics, `Login.vue` defensive `applyTheme('strategic')`, `RULES.md` checklist.
+- [x] **P4 — CSS token system.** `app.css` tokens for Classic, Strategic (radial gradient + inline-SVG turbulence), Light Premium. Token-name freeze observed.
+- [x] **P5 — Settings selector.** `DesignSelector.vue` with radio group, single-source-of-truth (`page.props.ui_preferences.theme`), PATCH → `router.reload({only,onSuccess,onError,onFinish})`, all-three-disabled during save, `onError` fallback `applyTheme(normalizeTheme(id))` + `aria-live` warning, full a11y (Arrow nav, Space/Enter activation, `aria-disabled` on keyboard guard).
+- [x] **P6 — Page/component theming pass.** 17 components + page shells migrated to `var(--…)` tokens via the shared P4/P6 checklist file list.
+- [x] **P7 — Tests.** Backend 26 tests (DTO, normalization, PATCH happy/error/healing, Cache-Control on success + 400 paths, page-prop contract, hard-load SSR data-theme for login + parametrized authenticated pages, concurrent first-visit `TransactionTestCase`). Frontend 32 tests (`theme.test.ts`, `useThemeFromProps.test.ts`, `themeWiring.test.ts` static-scan, `DesignSelector.test.ts`). Playwright `theme-switch-persistence.mjs` with fail-closed JS-blocked SSR check.
+
+### Cross-phase prerequisites
+
+- [x] `base.html` `data-theme` wiring with `template_data=` on every `inertia_render` call site (P2).
+- [x] `_render_login` helper enforces Strategic on all three login render paths (P2).
+- [x] Category color contrast audit + per-theme hex overrides (P4 exit gate). Audit table in `categoryColors.ts` source comment; `health` overridden to `#059669` on Classic + Light Premium to clear 3:1 against panel surfaces. All other (theme, category) cells pass the base palette.
+- [x] Unmounted-component guard in the Settings selector PATCH handler (`isMounted` flag set in `onBeforeUnmount`).
+- [x] Drift-check `RULES.md` snippet vs final composable signature (matches current `useThemeFromProps()` import path and prop shape).
+
+### 0010 follow-ups (post-merge)
+
+- [ ] **0010-followup: user_preferences PATCH rate limit (v1.1).** Plan §Phase 2 deferred. Prerequisites: (a) extract a shared `backend/common/rate_limit.py` with sync + async entry points wrapping the same cache key scheme, (b) extend the `ai.E001` Django system check (or add a sibling) to cover any newly-registered bucket name via a registry, (c) add `USER_PREFERENCES_RATE_LIMIT_PER_HOUR` env var and wire the PATCH handler. Reason for v1 deferral: endpoint is authenticated + CSRF-protected + low-volume; worst-case abuse is one user thrashing their own preference row.
+- [ ] **0010-followup: category contrast audit re-verification after Strategic font swap.** If/when a self-hosted variable serif lands for Strategic display headings (v1.1 path in plan §Phase 4), re-run the contrast audit — heavier serif strokes may shift effective contrast on small text adjacent to category swatches.
+- [ ] **0010-followup: split `templates_mgr` if a second preference field is added.** When a second non-template preference lands (notifications, locale, time format, etc.), promote `UserPreferences` to a dedicated `users` or `preferences` app to avoid the junk-drawer pattern. Plan §Phase 1 forward-pointing note.
+- [ ] **0010-followup: Strategic editorial serif (Fraunces / Playfair Display / Source Serif 4).** v1 ships Georgia stack which under-delivers the editorial feel that motivated the Strategic theme. Pre-approved path: self-hosted OFL variable serif, subset Latin + Cyrillic, woff2 ~50–80 KB, served from `frontend/public/fonts/` via Vite — no CDN dependency. Update `--font-family-display` under `html[data-theme="strategic"]` only.
+- [ ] **0010-followup: link `theme-switch-persistence.mjs` from the feature manual-test doc.** The persistence + fail-closed FOUC script is on disk but not yet referenced in any `docs/features/*_MANUAL_TEST.md`. When a `0010_MANUAL_TEST.md` is written (or 0008's gets re-flowed), add it to the script index alongside the `ai-*.mjs` entries.
+- [ ] **0010-followup: `BroadcastChannel("ui_preferences")` for cross-tab convergence (v1.1 if needed).** v1 accepts per-tab serialization + cross-tab last-write-wins (loser tab self-heals on next navigation). Plan §Phase 5 cross-tab scope statement. Don't ship without a demonstrated need — theme switching is a low-frequency action.
+- [ ] **0010-followup: Cache-Control on 405/302 from preferences endpoint.** Plan §Phase 2 literal bullet listed 405/302 in the no-store list. Implementation does not cover them — Django's `@require_http_methods` / `@login_required` decorators run before the view so the helper never sees those paths. Practical risk is nil (405 body is empty, 302 has no body, no per-user state leak surface) — retrofit would need middleware. Currently documented in `_prefs_response` docstring + `docs/api.md` + pinned by three tests as accepted-delta behavior. If a future requirement is strict compliance, flip the assertions in `test_unauthenticated_get_302_has_no_cache_control_header` / `..._patch_302_...` / `test_method_not_allowed_405_...` and add the middleware.
+
+- [ ] **0010-followup: extract a `useIsMounted()` composable.** `DesignSelector.vue` uses a `let isMounted = true` + `onBeforeUnmount(() => isMounted = false)` pattern in ~4 callback sites to guard against post-unmount mutations from `router.reload` callbacks. The pattern would also fit any future component that wires async navigation callbacks. Premature to extract for a single consumer — wait until a second consumer needs the same guard, then refactor to `frontend/src/composables/useIsMounted.ts` returning `() => boolean` so callers do `if (!isMounted()) return`. Don't preempt; the inline pattern is fine for v1.
+
+- [ ] **0013-followup: explicit `useNowMinutes` wiring assertion in `SkippedTasks.test.ts`.** Existing tests already exercise the composable via behaviour ("list grows when interval advances past block end") but never directly assert `SkippedTasks.vue` subscribes to `currentHHMM`. Adding a focused mock-and-verify test would harden against a future refactor that accidentally drops the `useNowMinutes` call. Deferred from claude-review on PR #36 — current coverage proven adequate by the existing suite passing across all the day-boundary scenarios in `useNowMinutes.test.ts`.
+
+- [x] **0014-followup: add `"false"` to the `test_non_dict_json_body` parametrize list.** Plan §Fix listed five non-dict literals (`[]`, `"x"`, `123`, `null`, `true`); `"false"` hits the same guard branch but was deliberately omitted to mirror the plan exactly and to match `test_ai_views_chat.py::test_non_object_json_root_returns_400`'s five-case list. Suggested by claude-review on PR #39 as a P3 polish; apply if/when the chat counterpart is also broadened so the two surfaces stay in lockstep. **Done (feature/0047):** added `"false"` to both `test_non_dict_json_body_rejected` (test_from_event.py) and `test_non_object_json_root_returns_400` (test_ai_views_chat.py) in lockstep + docstring update.
+
+- [x] **0014-followup: strengthen `test_invalid_json_body` to assert the exact `"Invalid JSON."` body.** Pre-existing gap surfaced by claude-review on PR #39 — the sibling test for malformed-but-non-empty JSON asserts only `status_code == 400`, not the error envelope. The new `test_non_dict_json_body` is stricter (asserts exact `errors.body` string); aligning the older test would match that pattern. Trivial single-line change; deferred to keep PR #39 minimal and scope-pure. **Done (feature/0047):** now asserts `resp.json() == {"errors": {"body": "Invalid JSON."}}`.
+
+## Follow-ups (discovered during manual testing)
+
+- [ ] **0076-followup: pre-merge (PR-time) enforcement of the SSH host-key pin invariant (PR #196, P2-optional).**
+  The `test` job's "Verify deploy SSH host-key pinning invariant" step only runs on
+  push-to-main / `workflow_dispatch` (the Deploy workflow has no `pull_request`
+  trigger), so a regression is caught on main, not before merge. Add a minimal
+  path-filtered `on: pull_request` guard workflow that runs only the grep assertion
+  (ideally sharing a single `deployment/verify-deploy-ssh-pinning.sh` so the invariant
+  lives in one place) for pre-merge protection. Deferred: the post-merge gate already
+  blocks the deploy chain; pre-merge is a defense-in-depth enhancement, not a fix.
+
+- [ ] **0072-followup: `useFocusIndicator.test.ts` listener hygiene (PR #190, P3).**
+  Several tests call `useFocusIndicator(...)` directly without `fi.dispose()`, so
+  each registers `beforeunload`/`pagehide`/`pageshow` listeners on the shared jsdom
+  `window` that accumulate across the file. Add an `afterEach(() => fi?.dispose())`
+  (or per-test dispose) to prevent listener buildup. Deferred: the full suite is
+  green today with no observed ordering interference; this is preventive hygiene,
+  not a correctness fix, and touches many test bodies.
+
+- [ ] **PiP `errorState` is dead (PR #166, P3).** `Schedule.vue` hardcodes
+  `errorState: false` into `useFocusIndicator`, so `FocusIndicatorView`'s
+  error prop, `.fi-retry`, and the matching `PIP_STYLES` rules are unreachable
+  in the live app. Either wire a real error signal or remove the prop/CSS/template
+  branch. Deferred: display-only PiP has no failure path today; cleanup is
+  cosmetic and spans view + styles + tests.
+
+- [ ] **0059-followup: Serializer-parity polish (PR #160 cycle-4, non-blocking).**
+  Two P3 nits from claude-review, deferred as convergence-tail polish (bot
+  APPROVED 4x; zero P0/P1 across all cycles): (1) add a docstring sentence on
+  `_prefs_to_dict` (`backend/templates_mgr/api.py`) explaining why it takes a
+  freshly-saved ORM row and cannot reuse `get_user_preferences` +
+  `ui_preferences_payload`, so its intentional normalization divergence reads
+  as deliberate; (2) tighten `chat_suggestions?: unknown` →
+  `chat_suggestions?: string[]` in `frontend/src/types/index.ts` (the runtime
+  guard in `resolveChatSuggestions` already handles stale/partial props, so the
+  `unknown` buys no runtime safety while suppressing compile-time checks).
+  The cycle-4 P2 (value-equality in `test_prefs_to_dict_matches_ui_preferences_payload_shape`)
+  was rejected as redundant — the NULL-row PATCH-response value path is already
+  covered by `test_theme_only_patch_with_null_suggestions_returns_defaults`.
+
+- [ ] **0056-followup: Readonly form props on Integrations panel.** claude-review
+  (PR #158 cycle 2, P2) asked to type `calendarForm` / `todoistForm` /
+  `habiticaForm` as `Readonly<…>` so the child cannot take ownership. Deferred:
+  `v-model` on nested fields may not type-check the way the bot claimed, and
+  the line number it cited (1046) is not in the file.
+
+- [ ] **0056-followup: loosen sticky-nav Playwright pixel band.** claude-review
+  (PR #158 cycle 2, P2) flagged `navTop < 18 || navTop > 32` in
+  `settings-topic-navigation.mjs` as zoom/scale-fragile. Deferred: needs a
+  real browser pass to pick a viewport-relative bound that still proves sticky.
+
+- [ ] **0056-followup: skip scrollIntoView on OAuth topic assignment.**
+  claude-review (PR #158 cycle 2, P2) wants a `shouldScroll` flag mirroring
+  `keyboardIntent`. Deferred: extra composable state for a one-shot landing
+  that is already at the top of the page.
+
+- [ ] **0056-followup: comment template-editor-layout card-width constants.**
+  claude-review (PR #158 cycle 2, P3) asked to tie `DESKTOP_CARD_MIN_PX` /
+  `MAX_PX` to `.settings-main { max-width: 760px }`.
+
+- [ ] **0055-followup: 4a drag-origin geometry tests.** Feature plan Cycle 3
+  (P1-B) wants `frozenTimelineOriginMinutes` drop-time coverage, a leading
+  compact-stub day, and `watch(layout)` → `cancelDrag`. claude-review PR #156
+  cycle 4 (P2). Deferred: not a cheap inline; needs a dedicated
+  `schedule4aGeometry.test.ts` that drives `useDrag` with a frozen origin.
+
+- [ ] **0055-followup: empty-day rail label.** `ExternalRail4a.progress()` shows
+  `"0 completed this session / 0"` when a committed load has `baseline === 0`.
+  claude-review (PR #156 cycle 3, P3) suggested `"No tasks scheduled"`. Deferred:
+  copy change, not a layout/correctness bug; needs a product call on empty-day
+  wording and a rail test for that branch.
+
+- [ ] **0053-followup: minimum useful day-window size.** `validate_window`
+  (`backend/schedules/window.py`) accepts any ordered, 5-min-aligned pair, so a
+  degenerate window like `06:00–06:05` passes but makes the scheduler unusable
+  (every block is immediately out-of-window). claude-review (PR #152 cycle 2, P3)
+  suggested a minimum span (e.g. ≥30 min). Deferred: the threshold is a product
+  decision and the rule should be mirrored in the `DayWindowEditor.vue`
+  client-side validation + covered by its own backend/frontend tests — its own
+  scope, not a cycle-2 inline fix.
+
+### 0051: async AI limiter expiry race
+
+- [x] **Completed in [R03](../docs/REFACTORING_PLAN.md).** AI draft/chat now call the shared `schedules.ratelimit.consume_rate_limit` through an async adapter. Removed unconditional `aset` reseeding. Tests cover expiry between add/incr, concurrent reseeding, preserved TTL and bounded retry exhaustion. Both AI 429 responses include `Retry-After`.
+- The separate Django Redis backend limitation described in `docs/features/0051_PLAN.md` remains: expiry between its internal EXISTS and INCR can leave a counter without TTL. R03 preserves the existing cache backend.
+
+### 0047 — extract shared `parse_swap_body` helper (PR #143 claude-review P3)
+
+- [x] **De-duplicate the swap-view request parsing.** `rules_swap`
+  (`templates_mgr/api.py`) and `travel_rules_swap` (`calendar_sync/travel_rules.py`)
+  repeat ~15 lines verbatim: `reject_oversized_body` → `json.loads` →
+  `isinstance(data, dict)` → `is_plain_int` → `a == b`. Extract
+  `parse_swap_body(request) -> tuple[int, int] | JsonResponse` into
+  `schedules/http.py` and point both views at it. No model coupling — the
+  two-thin-views design stays. Deferred: small, contained duplication;
+  non-blocking P3 from PR #143 round-3 review.
+  **Done (feature/0048):** `parse_swap_body(request, *, noun)` in
+  `schedules/http.py` (oversize gate → JSON → dict → distinct-plain-int-id);
+  both views collapsed to a 4-line call; `noun="rule"` / `"travel rule"`
+  preserves each endpoint's error wording verbatim (zero test-string churn).
+
+### 0047 — move `TestTravelRuleSwap` to a dedicated test module (PR #143 claude-review P3)
+
+- [x] **Relocate `TestTravelRuleSwap` out of `backend/tests/test_from_event.py`.**
+  The class is semantically unrelated to the "from event" subject of that file,
+  hurting discoverability. Move it to a dedicated `test_travel_rules.py` (or an
+  existing logical travel-rules test file) and update `docs/features/0047_REVIEW.md`
+  accordingly. Deferred as pure churn — the tests pass and are correct where they
+  are. Non-blocking P3 raised in PR #143 round-2 review.
+  **Done (feature/0048):** moved verbatim to `backend/tests/test_travel_rules.py`
+  (11 tests — the original 10 plus a malformed-JSON case for `parse_swap_body`);
+  `test_from_event.py` truncated to its CRUD subject; both
+  `0047_REVIEW.md` accepted-gap bullets annotated as resolved.
+
+### 0045 — collapse `AICommandResult` into `AIChatResult` (PR #138 claude-review P2)
+
+- [x] **Remove the now-vestigial `AICommandResult` dataclass.** After feature
+  0044 deleted `run_command`, `AICommandResult` (`backend/ai/service.py`) is no
+  longer produced by any code path — it survives only as a member of the
+  `_apply_actions_sync` `result: AICommandResult | AIChatResult` type union, as
+  the object the relocated `test_ai_apply.py::TestRollbackPropagation`
+  constructs, and in the `AIChatResult`/`AIDraftResult` docstrings that describe
+  themselves "relative to `AICommandResult`". claude-review (PR #138) suggests
+  narrowing the union to `AIChatResult`, switching the rollback test to build an
+  `AIChatResult(ask=None, …)` (same `parsed_actions` field `_apply_actions_sync`
+  reads), then deleting the dataclass + its imports in `service.py`/`views.py`
+  and scrubbing the two sibling docstrings. Deferred from the removal PR because
+  the 0044 plan explicitly KEPT `AICommandResult` and this is a multi-file design
+  cleanup better done as its own small change. Non-blocking (harmless dataclass).
+
+### 0039 — hoist `_required` to `scripts/__init__.py` (PR #132 claude-review P3)
+
+- [x] **Uniform missing-env-var diagnostics across seeders.** `seed_schedule.py`
+  uses a `_required(name)` helper that raises `RuntimeError(f"{name} is
+  required")`, but `seed_cleanup.py`, `seed_todoist.py`, and `seed_template.py`
+  read `os.environ["KEY"]` directly (bare `KeyError`). Move `_required` (and
+  likely `_json` / `_user`) into `backend/scripts/__init__.py` and import across
+  all four seeders so a missing `SEED_*` var is diagnosed identically. Deferred:
+  touches four files for a dev-tooling error-message consistency nit. Suggested
+  by `claude-review` on PR #132.
+
+### 0039 — `postWithCsrf` dual return-shape (PR #132 claude-review P2)
+
+- [x] **Make `postWithCsrf` fail consistently.** `postWithCsrf`
+  (`frontend/scripts/playwright/test-utils.mjs`) returns `{ error }` on the
+  missing-XSRF-cookie precondition but `{ status, body }` on success, while
+  every other helper in the file `throw`s on error. A caller that destructures
+  `const { status } = await postWithCsrf(...)` without checking `.error` would
+  read `status === undefined` with no exception. Deferred (not merge-blocking):
+  converting to `throw` is a contract change touching all four call sites
+  (`ai-command-add-block`, `ai-command-mass-move`, `ai-command-rollback-on-overlap`,
+  `ai-draft-409-on-non-empty` — two of which have `if (postResult.error)` guards
+  to remove) for a precondition that effectively never fires (login always sets
+  the cookie). Do it as its own small PR: switch the early return to
+  `throw new Error(...)`, drop the now-dead `.error` guards, and let each
+  script's existing `try/catch` set `exitCode = 2`. Suggested by `claude-review`
+  on PR #132.
+
+### 0037 — `extractErrorMessage` dedup: deferred P3 review nits (PR #128)
+
+- [x] **Characterization tests for `useAnalytics.ts`'s two distinct fallback
+  literals.** `useAnalytics` was deliberately exempted from the migration
+  guards (its call sites were not edited), but unlike every other composable
+  its two literals differ — `"Could not mark this day reviewed."` (`:45`) and
+  `"Could not save notes."` (`:64`) — so a future swap between them is caught
+  by neither a guard test nor the fallback-preservation grep. Add two minimal
+  guard tests to `frontend/tests/useAnalytics.test.ts` (mock
+  `{ ok: false, status: 500, errors: {} }` on the `markReviewed` and
+  `saveNotes` paths, assert each exact literal), mirroring the pattern used in
+  the other 11 composable test files. Raised by `claude-review` on PR #128
+  (P3/TESTING) — genuine small gap, deferred to keep the review loop from
+  chasing cosmetics.
+- [x] *(optional)* One-line comment above the `errors.detail` branch in
+  `frontend/src/utils/errorMessage.ts` documenting the empty-`detail`
+  short-circuit trade-off. Behaviour is already pinned by
+  `tests/errorMessage.test.ts`; skip unless a future reader trips on it.
+  Raised by `claude-review` on PR #128 (P3/QUALITY).
+
+### 0036 — `schedules.W002` system check for LocMem connect-rate-limit degradation
+
+- [x] **Added a Django `Warning` system check (`schedules.W002`) that fires
+  when `CACHES['default']` is an ineffective backend (LocMem/FileBased/Dummy)
+  with `DEBUG=False`**, surfacing that the `*_CONNECT_RATE_LIMIT_PER_HOUR`
+  budgets are not enforced correctly — with distinct failure modes:
+  LocMem is per-process (budget ≈ limit × worker_count), Dummy disables
+  the limiter entirely (stores nothing), and FileBased is shared-on-host
+  but increments non-atomically (concurrent attempts can undercount).
+  Landed in `backend/schedules/checks.py` (`schedules.W001` was already
+  taken by the SQLite check — used `W002`); `schedules/apps.py` already
+  imported `checks` in `ready()`, no wiring change. No DB access / no
+  account gate (the limit always applies). Tested in
+  `backend/tests/test_checks.py` (`TestConnectRateLimitCacheWarning`).
+  `Warning` not `Error`: AI may be disabled so no `ai.E001`-style boot
+  block applies.
+
+### 0036 — dedup the three `TestConnectRateLimit` classes
+
+- [x] **Extracted the three near-identical `TestConnectRateLimit` classes
+  into a shared `ConnectRateLimitContract` base** in
+  `backend/tests/_connect_rate_limit_contract.py` (underscore-prefixed so
+  pytest doesn't collect the base standalone). Each provider test file now
+  subclasses it, setting `URL / SLUG / SETTINGS_ATTR / MOCK_TARGET /
+  AUTH_ERROR / valid_body / oversized_body / EXPECTED_VERIFY_ARGS`.
+  Same assertions, same coverage; full suite green (896 passed).
+
+### 0103 hardening — sibling `block_detail` has the same category-type 500
+
+- [x] **`block_detail` PATCH 500s on non-string `category` (same bug class as issue #103).**
+  `backend/schedules/api.py` `block_detail` (~line 337) ran
+  `if data["category"] not in VALID_CATEGORIES:` with no prior `isinstance`
+  guard; `VALID_CATEGORIES` is a `set`, so `"category": []` raised
+  `TypeError: unhashable type: 'list'` → HTTP 500. Surfaced by claude-review
+  on PR #118 cycle-2 (P1); filed as issue #119.
+  **Fixed:** added `isinstance(data["category"], str)` guard before the enum
+  check (mirrors the `create_block` guard) + `test_non_string_category_returns_400_not_500`
+  in `TestBlockDetail`.
+
+### 0119 hardening — `restore_blocks` has the same category-type 500
+
+- [x] **`restore_blocks` 500s on non-string per-block `category` (same bug class as #103 / #119).**
+  Fixed in feature 0034 (`feature/0034-restore-blocks-category-guard`):
+  `isinstance(category, str)` guard before the enum check (per-block
+  `(block {i})` message) + deferred `get_or_create` past validation so a
+  400 on a new date orphans no empty `Schedule` +
+  `test_non_string_category_returns_400_not_500` in `TestRestoreBlocks`
+  (issue #121).
+
+### 0031 poll — deferred PR #116 style nits
+
+- [x] **Hoist `import asyncio` to module top in `backend/tests/test_gcal_sync_views.py`.**
+  Two feature-0031 cache tests (`test_without_refresh_cached_account_not_refetched`,
+  `test_non_one_refresh_value_does_not_bypass_cache`) import `asyncio` in-body,
+  matching the pre-existing companion they were copied from. claude-review PR #116
+  cycle-3 (#1, P2-style) suggested a top-level import for suite consistency —
+  low-value sweep, deferred to avoid another review cycle mid-approval.
+  **Done (feature/0047):** single module-top `import asyncio`; removed all 5 in-body imports.
+
+### External calendar
+
+- [x] **Overnight external events fade as "past" while still running
+  (pre-existing, surfaced during the feature 0026 review).**
+  `frontend/src/utils/externalEventPast.ts` compares only the *clock* minutes
+  of `ev.end` against `nowMinutes`, with no day-delta fold. An event running
+  `23:00 → 00:30 (+1 day)` has an end whose local wall-clock is `00:30` = 30
+  minutes, so from 00:30 onward on the viewed day the row renders faded even
+  though the event is ongoing or still upcoming.
+  **Fixed in feature 0035** (`feature/0035-overnight-external-past`): added a
+  DST-safe `localDayDelta` (local-midnight anchoring + `Math.round`) and folded
+  it into the today/timed branch (`dayDelta * 1440 + isoToLocalMinutes(ev.end)
+  <= nowMinutes`); 3 added tests in `externalEventPast.test.ts`.
+
+- [ ] **0036-followup (unassigned): `ExternalEventsPanel` `today` computed is
+  non-reactive — stale across a live midnight rollover.** `ExternalEventsPanel.vue` derives
+  `const today = computed(() => todayString())`; `todayString()` reads
+  `new Date()` and is not reactive, so the computed evaluates once at mount and
+  never recomputes. If the panel stays mounted across local midnight, `today`
+  remains yesterday until remount/navigation — so an event that genuinely ended
+  overnight can stay un-faded. **Pre-existing** (already drives the panel's
+  `viewedDate </>/=== today` comparisons); feature 0035's `dayDelta` fold merely
+  adds one more consumer of the same value and does not worsen it. Proper fix:
+  plumb the fresh `useNowMinutes().nowDate` (Schedule already tracks it, updates
+  at rollover, but does not pass it to the panel) into `ExternalEventsPanel` as a
+  prop and derive `today` reactively (`props.nowDate ?? todayString()`), plus a
+  rollover-coverage test. Surfaced by codex during ext-plan-review of 0035.
+
+- [ ] **0026-followup: Playwright smoke for the add-to-schedule flow.**
+  Script the add paths end-to-end in `frontend/scripts/playwright/`: add with
+  no rule (exact event times), add with a 30/30 rule (−30/+30), dialog
+  override wins over the matched rule, overlap returns the `errors.time`
+  message unchanged, re-add of the same event to a free slot. No LLM calls —
+  hits only calendar/schedule endpoints. Plus the off-grid lifecycle
+  (complete/rename/drag/undo on a `14:07–14:33` block) and reorder direction,
+  which are the highest-risk paths unit tests can't cover. Until this exists,
+  those paths are covered only by the manual smoke checklist. Raised by
+  claude-review on PR #99.
+
+- [ ] **0026-followup: atomic reorder swap for rule lists.**
+  `TravelRulesList.bumpOrder` (and the pre-existing `RulesList.bumpPriority`
+  it mirrors) reorders by two sequential `updateRule` PATCHes with no
+  atomicity — a first-succeeds / second-fails sequence leaves two rows with
+  the same `order`. Self-corrects on the next successful reorder and the
+  equal-order branch nudges by ∓1, so it is not user-blocking. Accepted gap
+  in `docs/features/0026_REVIEW.md`. If it becomes user-visible, add one
+  dedicated atomic swap endpoint and point both components at it (fixing them
+  together avoids re-diverging the two siblings). Raised by claude-review on
+  PR #99.
+
+### Static assets / icons
+
+- [ ] **0025-followup: decide the fate of the three unlinked icon assets.**
+  `icon-192.png`, `icon-512.png` and `logo-full.png` total 329 KB and ship with
+  no `<link>` tag, no web app manifest, and no UI reference — they only enlarge
+  the `collectstatic` corpus and the production image. Either land the PWA
+  manifest (which gives 192/512 a purpose) and the login-page header (which
+  gives `logo-full` one), or drop the files and re-add them with the PR that
+  uses them. Raised by claude-review on PR #98.
+
+- [ ] **0025-followup: record the icon set's provenance.** `RULES.md` says no
+  master is committed, but gives no pointer to the original Midjourney artwork
+  (prompt text, job ID, or account), so regenerating the icons is currently
+  blocked on whoever generated them. Needs the original author to supply the
+  details — then either commit the master under `docs/assets/` or note the job
+  reference in `RULES.md`. Raised by claude-review on PR #98.
+
+- [ ] **0025-followup: consider serving a real `favicon.ico` at the web root.**
+  Some crawlers, headless clients and link-checkers `GET /favicon.ico`
+  unconditionally regardless of `<link rel="icon">`, producing 404 log noise.
+  Only a genuine `.ico` at the root fixes this — adding
+  `rel="shortcut icon"` pointing at a PNG does not, since those clients never
+  parse the HTML. Zero user-visible impact on supported browsers, so this is
+  log hygiene only. Raised by claude-review on PR #98.
+
+### Drag / Undo
+
+- [ ] **useDrag abort feedback.** When `blocksExternallyMutated` detects a concurrent mutation during drag, `endDrag` aborts silently (no toast) — consistent with `cancelDrag()`. Adding user feedback requires wiring a toast callback into `useDrag` (see `UndoToast.vue` for the pattern). Defer until user-reported confusion surfaces. Tracked per comment at `frontend/src/composables/useDrag.ts:413-415`.
+
+### UX / Rules
+
+- [x] **Shorten oversized leading gap at top of timeline.** Done in feature
+  0017 (Approach A — origin-shift linear render): leading *and* trailing edge
+  gaps collapse to fixed `STUB_MINUTES` (30-min / ~60px) compact stubs while
+  the timeline stays linear in minutes. The stub remains a click-to-add
+  `GapSlot` emitting the full semantic range, preserving the early-morning add
+  affordance. See `docs/features/0017_compact_timeline_stubs_SPEC.md`. Original
+  note below for context. When the first
+  block starts well after `DAY_START` (06:00), `displayList` renders a
+  full-height leading `GapSlot` from 06:00 to the first block
+  (`frontend/src/pages/Schedule.vue:259-268`) at `PX_PER_MINUTE = 2`
+  (`frontend/src/utils/scheduleTime.ts:8`) — e.g. a 09:00 first block
+  yields 360px of empty space before any content. Shorten it. Design
+  under discussion (collapse to compact stub vs. derive timeline start
+  from earliest block vs. configurable day start). Constraint: the
+  leading gap is an interactive `GapSlot` (click-to-add), so any
+  collapse must preserve the early-morning add affordance.
+
+- [x] **Auto-bump default priority for new Rules.** Today every new rule
+  lands at `priority=0` (hardcoded in `RulesList.vue:44`'s `createRule({...,
+  priority: 0 })` call). Adding a second rule produces two rules at
+  priority 0 → the user has to click ▲ once just to see ordering change,
+  and the priority arrows look like a no-op on a single rule. Better:
+  default to `max(existing.priority) + 1` so each new rule lands on top
+  with a unique priority. Either compute on the frontend before POST, or
+  push the default into the backend (`templates_mgr.api._parse_rule_create_payload`)
+  so curl users get the same behaviour. Backend-side default is preferable
+  — single source of truth and consistent across clients. Discovered while
+  walking Test 3 of `docs/features/0005_MANUAL_TEST.md`.
+
+- [x] **Disabled-arrow tooltip on a single Rule.** Both ▲ and ▼ are
+  disabled when there's only one rule (`:disabled="idx === 0"` and
+  `:disabled="idx === localRules.length - 1"` both true). Currently
+  silent — the user sees greyed-out arrows with no explanation. Add a
+  `title` attribute like "Add another rule to reorder" so the affordance
+  is self-documenting. Pairs naturally with the auto-bump task above.
+
+- [x] **Compact Rule priorities on add/delete.** Combined with the
+  auto-bump task above, priorities will only grow monotonically over
+  time. Concretely: start with `[r1=0, r2=1]`, delete `r1`, add `r3` →
+  `[r2=1, r3=2]`. After many add/delete cycles the user sees badge values
+  like "Priority 47" on the only rule, and eventually hits the API-layer
+  upper bound (validated in `templates_mgr/api.py`). Compact to
+  `0..N-1` after every list-mutation so:
+  * default priority for the next new rule is always trivially `len(existing)`
+  * badge values stay small and meaningful
+  * no drift over the lifetime of an account
+
+  Backend-side compaction in the `delete` and `create` views (single
+  transaction with the actual mutation) is the natural place. Frontend
+  picks it up via the existing partial reload of the rules list.
+
+  Alternative: hide the numeric priority badge entirely — sort key is
+  internal, users only care about ▲/▼ ordering. Either approach
+  resolves the same root issue. Discovered while walking Test 3
+  (delete with `[r1=0, r2=1]` leaves the survivor at priority 1, not 0).
+
+### Playwright e2e tooling
+
+- [x] **Makefile target for the playwright scripts.** Right now each
+  is invoked via `cd frontend && node scripts/playwright/<name>.mjs`.
+  At ≥4 scripts the friction is real. Add a `make e2e` (or
+  `e2e:layout` / `e2e:race` / `e2e:isolation`) so scripts are
+  discoverable from `make help` and the invocation is one keystroke.
+  Suggested by `claude-review` on PR #13.
+
+- [x] **`frontend/scripts/playwright/README.md`.** The harness now has
+  21 e2e scripts; documentation was deferred earlier
+  as "premature for 2". Add a short README documenting: prereqs
+  (Django + Vite + ``playwright`` test user creation snippet), how to
+  run individual scripts, expected cost/duration per script (some make
+  real LLM calls, the 409 draft script short-circuits), and shared
+  assumptions (seed dates, idempotent setup, etc.). Pair with the
+  Makefile follow-up above. Suggested by `claude-review` on PR #11,
+  PR #13, and PR #27.
+
+- [x] **Extract magic numbers in playwright scripts.** `await page.waitForTimeout(1500)`,
+  the 30-iteration login wait loops, etc. Pull out as named
+  `WAIT_FOR_PATCH_MS` / `LOGIN_POLL_MAX_TRIES` / etc. Trivial
+  readability cleanup. Suggested by `claude-review` on PR #13 and
+  PR #27 (more urgent now that 21 scripts share inconsistent values).
+
+- [x] **N+1 regression test for draft history.** `ai-draft-on-empty-day.mjs`
+  has a `// TODO: N+1 sanity` comment because capturing Django SQL
+  during a request from a Playwright harness needs either DEBUG=True
+  + SQL log capture or a connection-instrumented harness. Cover this
+  with a backend pytest using `django.test.utils.CaptureQueriesContext`
+  on `/generate-draft/` with `LLM_HISTORY_DAYS=3`: assert the
+  `analytics_dailyreview` query count is 1, not N. The original
+  N+1 fix was PR #15 (`select_related("daily_review")` in the draft
+  history query). Suggested by `claude-review` on PR #27.
+
+- [x] **Cleanup test data in `finally` for playwright scripts.** Currently
+  scripts seed via `update_or_create` (idempotent across re-runs) and
+  leave the data in place. `claude-review` on PR #14 suggested deleting
+  the seeded schedules in the `finally` block to prevent state pollution.
+  Counter-argument: leaving the data in place lets a developer inspect
+  the DB after a failed run, which is genuinely useful. Resolution:
+  add cleanup but gate behind `--cleanup` flag, default off. Suggested
+  by `claude-review` on PR #14.
+
+- [x] **Pre-flight server-reachable check at the top of every playwright
+  script.** Currently a script with Django/Vite down fails late with a
+  cryptic ECONNREFUSED. A `fetch(BASE/accounts/login/, { method: 'GET' })`
+  + clear "start them with `make run` / `make frontend-dev`" message at
+  the top would shave debugging time for new contributors. Pairs with
+  the test-utils.mjs follow-up below — same one-shared-helper file.
+  Suggested by `claude-review` on PR #14.
+
+- [x] **`frontend/scripts/playwright/test-utils.mjs` shared helpers.**
+  `login()`, `fail()`, the seed `execSync` boilerplate, the server
+  pre-flight check are duplicated across 5+ scripts. Factor into one
+  helpers module so each script is just its scenario logic. Touches
+  every existing playwright script — defer to its own PR. Suggested
+  by `claude-review` on PR #13 and PR #14, plus my own
+  `/review-fix-loop-staged` review of PR #14.
+
+- [x] **Extract Django shell seeds to standalone scripts.** Each
+  playwright script currently embeds its seed via a multi-line
+  `execSync(... uv run python backend/manage.py shell -c "...")`
+  template literal. Pull these out into `backend/scripts/seed-*.py`
+  files (create the directory if needed) so seeds are auditable,
+  testable, and editable with proper Python tooling. Suggested by
+  `claude-review` on PR #14. Pairs naturally with the test-utils.mjs
+  follow-up — the test-utils module would expose a single `seed()`
+  helper that shells out to the new scripts.
+
+- [x] **Manual QA gate for feature 0007 chat dock before any production
+  use.** PR #15 ships PR A of the multi-turn chat panel. Items (1)–(3)
+  VERIFIED 2026-08-08 via the two Playwright chat scripts against the live
+  dev stack (real LLM calls): (1) ✅ ambiguous "запланируй встречу" returned
+  `ask` + `blocks:null` into the dock thread, follow-up resolved → block
+  created (`ai-chat-clarifying-question.mjs` PASS); (2) ✅ DateNavigator
+  next-day = same-document Inertia nav, day-B thread reset to 0 bubbles,
+  turn 2 posted only the new message (no day-A transcript, no cross-day
+  mutation) (`ai-chat-date-change-resets-thread.mjs` PASS). REMAINING
+  (real-device only, not automatable): the iOS Safari autogrow-textarea
+  check from `docs/features/0007_PLAN.md` open note 3 — see follow-up below.
+  Suggested by `claude-review` on PR #15.
+
+- [ ] **0007-followup: iOS Safari autogrow-textarea check (real device).**
+  The chat input autogrow could not be verified in the automated QA gate
+  (headless Chromium ≠ iOS Safari). Verify on a real iPhone that the chat
+  textarea grows/shrinks correctly and doesn't clip or trigger the mobile
+  zoom-on-focus. Per `docs/features/0007_PLAN.md` open note 3.
+
+- [x] **Type hints on internal helpers in `backend/ai/views.py`.** Done
+  2026-08-08 — annotated all ~22 helpers' missing param/return types from
+  their real call sites (scoped to `ai/views.py` only; no type checker
+  introduced). ruff clean, ai view tests green, no behaviour change.
+  `_consume_rate_limit`, `_log_interaction`, `_mark_success`,
+  `_validation_error_detail`, `_check_*`, `_apply_*`, etc. lack full
+  type annotations. Add them in a discrete refactor PR (or pair with
+  a broader backend typing pass — the `schedules.api` and
+  `templates_mgr.api` helpers have similar gaps). Out of scope for
+  feature 0007 because it touches files unrelated to the chat surface
+  and adds no behavioural change. Suggested by `claude-review` on PR #15.
+
+- [x] **`assertNumQueries` test for `select_related("daily_review")` in
+  `ai_generate_draft`.** PR #15 added the `select_related` as a
+  drive-by N+1 fix; the optimisation isn't covered by an explicit
+  query-count test. Done in feature 0039 as a **two-layer** test
+  (`backend/tests/test_ai_views_draft_nplus1.py`): the async-view layer
+  proves the endpoint stays at one `analytics_dailyreview` query (and
+  that removing `select_related` regresses via `SynchronousOnlyOperation`,
+  since `run_draft` dereferences `past.daily_review` synchronously — a
+  500, not a silent N+1), and a sync prompt-builder layer proves the
+  lazy=N vs eager=1 query counts directly. The originally-suggested
+  `run_draft`-stub approach was rejected because stubbing `run_draft`
+  bypasses the very N+1 access path. Suggested by `claude-review` on
+  PR #15 iter 6.
+
+- [ ] **PR #16 — defensive-runtime suggestions rejected as
+  false-positives.** Five P2/P3 findings from `claude-review` on PR #16
+  asked for runtime guards that contradict CLAUDE.md's "Don't add error
+  handling for scenarios that can't happen" rule and the
+  defensive-runtime entry in this file's false-positive catalogue:
+  (1) `TEXTAREA_LINES[props.variant] ?? TEXTAREA_LINES.dock` fallback —
+  TypeScript enforces the union, Vue's prop validator gates the
+  boundary; (2) `typeof sidebarOpen.value === 'boolean'` check in
+  `chatSidebarWidth` — the ref is typed `boolean` and initialised from
+  a `boolean`-returning helper; (3) `if (typeof window === 'undefined')
+  throw` in `useViewport` — the plan's Phase-1 design note explicitly
+  rejects an SSR guard because Inertia renders client-side; (4) JSDOM
+  unit tests for `autosize()` min/max clamps — `scrollHeight` is `0`
+  under JSDOM (no layout engine), so any clamp test would assert
+  against a degenerate value, not real browser behaviour; (5) `if
+  (!target) return` in `handleGlobalKeydown` — `target?.tagName?.…`
+  already optional-chains the null case and falls through to the
+  no-op branch. Rejected per the iteration loop's P0/P1-only-deep-
+  triage rule (skill docs § Step 6/7).
+
+- [x] **Remove the orphan one-shot AI endpoint and frontend composable.**
+  Completed in feature 0044 after migrating shared apply-path coverage to
+  the surviving chat and endpoint-independent suites.
+
+- [x] **Explicit regression test for `_Rollback` propagation across
+  `sync_to_async`.** PR #22 `claude-review` iter-2 P2 [TESTING] flagged
+  this. Currently the `_Rollback` exception path through
+  `await sync_to_async(_apply_actions_sync, thread_sensitive=True)(...)`
+  is covered *implicitly* by `test_mid_batch_failure_rolls_back` in
+  `test_ai_views_chat.py` (migrated from the deleted `test_ai_views.py` in
+  feature 0044) and the analogous draft / chat tests — each
+  asserts a 400 / 409 response after an action error mid-batch, which
+  can only land if the exception crossed the thread boundary cleanly.
+  An explicit test (e.g. unit-level: call `_apply_actions_sync` from
+  an `async def` test body via `sync_to_async`, raise `_Rollback`
+  inside, assert it surfaces with the stashed `JsonResponse` intact)
+  would document the asgiref re-raise contract directly. Low priority
+  — defense-in-depth; the implicit coverage already catches a
+  regression. Pin if the contract ever changes (e.g., asgiref version
+  bump that affects exception propagation) or if a future bug actually
+  shows the implicit tests missing something.
+  Backend coverage now lives in `test_rollback_propagates_across_sync_to_async`,
+  `test_add_rejected_when_overlapping_existing_block_rolls_back_and_preserves_status`,
+  and `test_chat_overlap_rolls_back_and_preserves_status`, unblocking the separate
+  retired endpoint, `.mjs` scripts, and composable removal task.
+
+- [ ] **CalDAV: drop-counter / metrics for malformed VEVENT skips.**
+  PR #30 `claude-review` iter-1 P1 [QUALITY] flagged
+  `backend/calendar_sync/service.py:_normalize_vevent`'s broad
+  `except Exception` — it logs each failure but provides no aggregate
+  visibility. The project has no metrics infra (no Prometheus / StatsD
+  sink), so a bare `counter += 1` would be dead code. Defer until
+  either a metrics surface lands or a real-world incident shows the
+  per-event logs are noisy enough to need aggregation. Cheap
+  alternative when it comes up: emit a single `logger.warning` summary
+  per-fetch with `(drops, total)` counts.
+
+- [ ] **CalDAV: concurrent `POST /api/calendar/account/` regression
+  test for the same user.** PR #30 `claude-review` iter-1 P2 [TESTING]
+  asked for a threaded test that two simultaneous POSTs serialize
+  cleanly via the `select_for_update` + `get_or_create` flow in
+  `calendar_sync/views.py:account`. SQLite (Day Forge's dev DB) only
+  weakly honours `SELECT ... FOR UPDATE` — `schedules.W001` already
+  warns about this — so a threaded test would be flaky on SQLite and
+  meaningful only against Postgres. Pin to whichever PR moves
+  `schedules` to a real concurrency-supporting DB (probably the same
+  PR that satisfies `schedules.W001`); add the test alongside any
+  other deferred concurrency coverage.
+
+- [ ] **CalDAV admin: at-a-glance "connected" column.**
+  PR #30 `claude-review` iter-1 P3 [DOCS] suggested adding a
+  `connected_status` field to `CalDAVAccountAdmin.list_display` that
+  renders "✓ Connected" or empty. Cosmetic; the existing columns
+  (`user`, `apple_id`, `base_url`, `last_verified_at`) already convey
+  the same info. Pin when an ops person actually reports needing it.
+
+- [ ] **CalDAV: debug-only `?nocache=1` query param on
+  `GET /api/calendar/events/<date>/`.** PR #30 `claude-review` iter-1
+  P3 [QUALITY] suggested a dev-only escape hatch that bypasses
+  `get_cached_events`. Useful for the rare "events not updating"
+  debug session, but adds API surface and a `DEBUG` branch in a path
+  with no current production user-complaints. Pin when a real
+  debugging incident calls for it.
+
+- [ ] **CalDAV: `LLM_*`-style per-user rate limit on `/api/calendar/*`.**
+  PR #30 `claude-review` iter-2 P1 [SECURITY] flagged the absence of a
+  `CALDAV_RATE_LIMIT_PER_HOUR` bucket on `calendar_sync/views.py`. The
+  server-side per-(user, date, account.updated_at) cache absorbs the
+  common-case abuse (repeat fetches of the same day), and cache-miss
+  spam is bounded by the number of distinct dates a single user can
+  enumerate. No measured iCloud throttling complaint exists today, so
+  the work is deferred rather than scope-crept into the V1 PR. Pin if
+  iCloud starts rate-limiting Day Forge, or if a real abuse pattern
+  surfaces in the audit log. Implementation reference: mirror
+  `ai/views.py:_consume_rate_limit` with a fresh `caldav_rl` bucket
+  and update `ai.E001` (or split into `calendar_sync.E002`) to cover
+  the new bucket under the same LocMemCache prod guard.
+
+- [ ] **CalDAV: cache the `Fernet(key)` instance.** PR #30
+  `claude-review` iter-2 P2 [PERFORMANCE] suggested an
+  `@lru_cache(maxsize=1)` on `_fernet()` in
+  `backend/calendar_sync/crypto.py`. The constructor cost is
+  microseconds (base64 decode + key length check); no measured hot
+  path. Naive `lru_cache` would also leak across `override_settings`
+  test contexts unless the cache is keyed on the settings value. Pin
+  when a measured-hot-path complaint surfaces or when the encrypt /
+  decrypt call rate climbs (e.g., bulk re-key migration).
+
+- [ ] **CalDAV: edge-case regression tests for iCalendar surface.**
+  PR #30 `claude-review` iter-4 P3 [TESTING] asked for three explicit
+  test cases: (a) VEVENT with DURATION but no DTEND, (b) recurring
+  events with EXDATE exclusions, (c) events spanning DST transitions.
+  The broad `_normalize_vevent` + `_expand_events` catch lists already
+  protect against malformed inputs from these paths, but explicit
+  regression tests would lock in the parse contract for the
+  recurring-ical-events lib. Defer because: (a) requires constructing
+  a DURATION-only VEVENT, exercising the existing fallback path in
+  `_normalize_vevent`; (b) requires a real EXDATE fixture that
+  recurring_ical_events knows how to exclude; (c) requires a tz like
+  America/New_York and a date around 2026-03-08. Cheap individually
+  but they're test scaffolding work; pin if/when the upstream lib
+  ships a breaking change to the expansion API.
+
+- [ ] **CalDAV: ERROR-level escalation for repeated malformed-event
+  drops within one fetch.** PR #30 `claude-review` iter-4 P2 [QUALITY]
+  suggested escalating from `logger.warning` to `logger.error` when
+  > 5 events fail to normalize in a single fetch, on the theory that
+  isolated corruption is noise but systemic corruption is signal.
+  Requires a per-fetch counter passed into `_normalize_vevent` /
+  `_expand_events`. Defer until either iCloud throws a known
+  corruption pattern at us in the audit log, or the project gains a
+  metrics-emission infra (see also: iter-1 P1 [QUALITY] deferral
+  above for the drop-counter / metrics work).
+
+- [ ] **Export `PLACEHOLDER_ROTATION_MS` from CommandBar.vue so tests don't hardcode it.**
+  Currently `frontend/tests/CommandBar.test.ts` hardcodes `6_000` independently of the
+  component constant. In Vue SFCs with `<script setup>` a named export requires a
+  separate `<script>` block — structural change, low priority since the value is stable.
+  Suggested by `claude-review` on PR #55 (P3 [QUALITY]).
+
+### Todoist (feature 0020) — PR #63 review deferrals
+
+- [ ] **Rate-limit the account-connect endpoints (CalDAV + Todoist).**
+  `claude-review` on PR #63 flagged `POST /api/todoist/account/` as having
+  no rate limit (token brute-force). Deferred, not blocking: the endpoint
+  is `@login_required`, the brute-force target is Todoist (which rate-limits
+  itself), and `POST /api/calendar/account/` has the same absence — so this
+  is a pre-existing pattern, not introduced by 0020. If added, do it
+  symmetrically for both providers (a shared `connect_rl:<user_id>` fixed
+  window using a dedicated `connect_rl` key, env `*_CONNECT_RATE_LIMIT_PER_HOUR`,
+  documented in `.claude/rules/project.md`, returning 429).
+
+- [x] **De-duplicate `extractErrorMessage` across composables.** Identical
+  helper in `useTodoist.ts` and `useTodoistAccount.ts` (and the CalDAV
+  analogs). Extract to a shared `frontend/src/composables/useHttp.ts` export
+  or `utils/errors.ts`. Multi-file refactor that should also fold in the
+  CalDAV copies — its own small PR. (`claude-review` PR #63, P2 [QUALITY].)
+  > CLOSED 2026-08-11: already resolved by commit `58e9f15` — single canonical
+  > `frontend/src/utils/errorMessage.ts`, all 11 composables import it, 9-case
+  > test suite green, `vue-tsc` clean, zero local defs remain. Only remnant was
+  > the behaviorally-distinct inline helper in `DesignSelector.vue` (different
+  > key-priority + `||` semantics), left as-is to preserve behavior.
+
+  > Explicitly NOT doing (rejected on PR #63 with rationale): a pagination
+  > truncation cap (contradicts the plan's "fetch all, never truncate"),
+  > caching the `Fernet` instance (breaks runtime key rotation), and
+  > "zeroing" the decrypted token string (CPython strings are immutable —
+  > the rebind is ineffective security theater).
+
+- [ ] **Integration test for displayList's frozen-now wiring in
+  Schedule.vue.** `Schedule.test.ts` mocks `useDrag` entirely, so the
+  feature-0023 geometry-freeze expression in the `displayList` computed
+  (`frozenBounds ? frozenNowMinutes.value : todayNowMinutes.value`) has no
+  component-level coverage — a regression to live `todayNowMinutes` would
+  make the idle/tail split boundary jump on each 60s tick mid-drag. Needs a
+  mount harness that drives real drag state (un-mock `useDrag` or expose the
+  computed), which is its own design decision — deferred as its own task.
+  The pure-function halves are unit-covered (`frozenNowMinutes` lifecycle in
+  `useDrag.test.ts`; split-boundary maths in `scheduleTime.test.ts`).
+  (`claude-review` PR #94, P2 [TESTING].)
+
+- [ ] **Manual smoke pending (feature 0023):** click-to-add on the new
+  full-scale idle gap on today — verify the add-dialog pre-fills with
+  `[lastEnd, now)` per `docs/features/0023_PLAN.md` § "Manual smoke".
+
+- [x] **App logo / favicon (feature 0025):** icon-only crop of the
+  Midjourney logo added to `frontend/public/` as favicons (16/32/48),
+  apple-touch-icon (180), and PWA-ready icons (192/512 — shipped but
+  *not* linked, no webmanifest exists yet). Only the four favicon /
+  apple-touch assets get `<link>` tags, added to both dev/prod branches
+  of `base.html` and pinned by `backend/tests/
+  test_base_template_icons.py`. Dev serving + prod build verified.
+- [ ] **Manual smoke pending (feature 0025):** load
+  http://localhost:5173/ with the dev stack up — browser tab shows the
+  anvil icon; optionally decide whether `logo-full.png` should appear on
+  the Login page.
+
+- [ ] **Section nesting nit (feature 0028, PR #108 P3):** `DesktopNotificationToggle.vue`
+  renders a `<section class="desktop-section">` root that `Settings.vue` wraps
+  in `<section class="section">`, producing `section > section`. Deferred, not
+  fixed: this mirrors the pre-existing `SoundNotificationToggle.vue` structure
+  the plan mandated mirroring — changing desktop-only would diverge from the
+  sibling. If reworked, do BOTH toggles together (root → fragment/div, keep
+  `aria-labelledby` on the inner `<h2>`) so the pair stays consistent.
+
+- [ ] **Dismissed-vs-denied hint copy (feature 0028, PR #108 P3):** the
+  `"default"` permission result (user dismissed the prompt without deciding)
+  currently shows the same "Browser blocked… allow in site settings" hint as an
+  explicit `"denied"`. Plan-mandated for MVP (`denied/default ⇒ permissionDenied`),
+  so deferred. Future copy/i18n pass: add a `permissionDefault` flag →
+  "Click again to re-request notification permission."
+
+### 0049 — surface a PiP open() failure to the user (PR #145 claude-review P3)
+
+- [x] **`useFocusIndicator.open()` swallows a `DOMException` rejection with no user
+  feedback.** The common expected failure (no transient user activation) is caught,
+  logged for non-`DOMException`, and `pendingOpen` reset — but the user sees nothing
+  explaining why the indicator didn't open. Suggested: add an `openError` ref
+  (`ref<string | null>(null)`) cleared at the top of `open()` and set to a generic
+  `"Could not open indicator"` on `DOMException`, include it in the return, and have
+  `ShowIndicatorButton` / `Schedule.vue` surface it briefly (tooltip or transient
+  status). Deferred: multi-file + a small UX/design decision, its own change.
+  Non-blocking P3 from PR #145 round-2 review.
+  **Done:** `useFocusIndicator` now exposes a generic, block-agnostic
+  `openError`; `ShowIndicatorButton` renders it as a retryable `role="alert"`
+  for five seconds and Schedule wires the state through. Composable, component,
+  and page integration tests cover rejection, timed dismissal, and successful
+  retry.
+
+### 0063 categories — PR #172 claude-review deferrals
+- **P2 [TESTING] Playwright smoke for Settings → Categories.** No E2E script exercises
+  the categories CRUD + delete-remap write path (the feature's highest-risk surface).
+  Add `frontend/scripts/playwright/settings-categories.mjs` following the existing
+  script pattern: log in, open Settings → Categories, add a category, rename it, pick a
+  color, reorder, delete (assert remap-to-sink), asserting state after each step.
+  Deferred: E2E tooling needs the full dev stack + seeding harness — its own change,
+  not a unit-test edit. Backend + component unit coverage for these paths is already
+  thorough (`test_categories.py`, `SettingsCategoriesPanel.test.ts`).
+- **P3 [DOCS] Expand category endpoints in `docs/api.md`.** The `PATCH` / `DELETE` /
+  swap category-catalog endpoints are documented as one prose paragraph alongside the
+  `POST`. Give each its own method+path header, field table, and success/error examples
+  to match the per-endpoint style used elsewhere in the file (e.g.
+  `POST /api/schedules/{date}/blocks/`). Non-blocking documentation formatting.
+
+### 0063 categories — PR #172 cycle-2 deferrals
+- **P2 [SECURITY] Rate-limit category mutation endpoints.** Add per-user per-hour
+  fixed-window counters (POST/PATCH/DELETE on `/api/user/categories/*`) mirroring
+  `CALDAV_CONNECT_RATE_LIMIT_PER_HOUR` / `TODOIST_CONNECT_RATE_LIMIT_PER_HOUR`
+  (`connect_rl:category:<user_id>` in `CACHES['default']`) plus a `schedules.W002`-style
+  ineffective-cache-backend check. Its own change (new env var + system check + tests),
+  analogous to how the connect limiters shipped as separate features. Auth-gated per-user
+  CRUD, so not a correctness blocker.
+- **P2 [QUALITY] `validate_template_blocks(categories=None)` skips membership.** The
+  `categories is not None and category not in {...}` short-circuit lets any slug pass when
+  `categories` is None. Audit all call sites (esp. seed_templates) to confirm the live
+  catalog is always passed, then either drop the `is not None` guard or raise on None.
+- **P2 [PERFORMANCE] Double `ordered_categories` on `create_block`/`block_detail`.**
+  Pre-transaction validation and the in-transaction TOCTOU re-fetch each query the catalog.
+  The in-transaction read must stay fresh (it's the authoritative re-check), but the
+  pre-transaction 400 could reuse a passed-in snapshot. Minor (≤8 rows, one query); optimize
+  only if it shows on a profile.
+
+### 0066 focus-indicator gap — PR #177 deferral
+- **P3 [DOCS] Remove stale PiP-completion references from `RULES.md`.** The
+  "Just-completed suppression" paragraph and the `justCompletedId` /
+  `handleIndicatorComplete` / `focusCompletion` symbols documented in `RULES.md`
+  do not exist anywhere in `frontend/src` (grep-verified during the 0066 external
+  review, finding F; only an unrelated `setCompleted` lives in `useBlockCompletion.ts`).
+  The staleness predates feature 0066 and was rejected as out-of-scope for PR #177.
+  Do a focused doc-cleanup pass to delete/correct these references so the PiP is
+  documented as display-only. See `docs/features/0066_REVIEW.md` § Iteration 1, finding F.
+
+- **P2 [QUALITY] Refactor `_build_resolution_ask` to a single prioritized dispatch.**
+  PR #178 claude-review (cycle 3, finding #1): the function now has ~7 sequential
+  `for outcome in skipped` scans whose relative order is enforced only by a comment.
+  A `no_slot` create is correctly branched, but a **pre-existing** gap remains — an
+  `out_of_window` **create** outcome (`task_id=None`, `reason_code="out_of_window"`)
+  falls into the generic `task_id is None` branch and gets the wrong "give it a
+  concrete free start/end" copy. Refactor the scans into one `(predicate, message_fn)`
+  dispatch list iterated once, making ordering mechanically explicit, and give
+  out-of-window creates a window-specific message. Deferred here: the underlying gap
+  predates 0067 and the refactor touches pre-existing branches — own small PR.
+
+  (Resolved in PR #178: the duplicate `find_slot` local import was deduped to a
+  single function-local import at the top of `plan_mutations`'s body — kept
+  function-local to preserve the `free_slot` ↔ `mutation_planner` cycle avoidance.)
+
+- **P3 [QUALITY] Consider an upper bound on `duration_minutes` at the schema.**
+  PR #178 claude-review (cycle 2, finding #2) suggested rejecting `duration_minutes
+  > 1440` at `schemas.validate_action_shape` so an over-large value fails with a
+  clear API error instead of silently becoming a `no_slot` outcome in the planner.
+  Deferred: feature 0067 **deliberately** treats an oversized duration as a safe
+  `no_slot` (plan § Edge cases — "very large but otherwise valid duration") and a
+  planner test pins that behavior; adding a hard cap is a contract change worth its
+  own small PR, and any bound should be window-relative rather than a flat 24h.
+
+- **P2 [QUALITY] Interpolate `DEFAULT_AUTO_DURATION_MINUTES`/`AUTO_PLACEMENT_GAP_MINUTES` into the chat prompt.**
+  PR #178 claude-review (cycle 4, finding #1): `backend/ai/prompts.py` hardcodes
+  "25-minute default duration, 10-minute" (one occurrence, line ~65) rather than
+  interpolating the planner constants, so a constant change silently drifts the
+  prompt. Deferred: the surrounding prompt is a brace-heavy triple-quoted literal
+  (JSON action examples) — converting to an f-string risks mangling those braces
+  for a single, rarely-changed number. Do it via a targeted concatenation/format
+  in a focused pass with a test asserting the numbers match the constants.
+
+### 0068 duration-resize: deferred edge tests (PR #179 claude-review P2/P3)
+
+Author chose to ship feature 0068 without the full plan-mandated test matrix
+(implementation is traced-correct; 236 tests pass). PR #179 (APPROVED, no P0/P1)
+re-raised these as P2/P3 hardening. Add in a focused follow-up pass:
+
+- **Planner edge tests** (`test_ai_mutation_planner.py::TestDurationResize`):
+  `test_plan_duration_resize_crossing_midnight_never_wraps` (22:00 +120 →
+  out_of_window, no ValueError), `test_plan_very_large_duration_never_wraps`
+  (10:00 +1500 → out_of_window, not 10:00–11:00),
+  `test_plan_extreme_negative_delta_rejected_interval_no_valueerror`
+  (12:00–12:30 δ−40 and 00:05–00:35 δ−40 → interval),
+  `test_plan_out_of_range_duration_then_chained_action` (poison ≥1440/≤0 ×
+  delta/bare-move/metadata → all out_of_window),
+  `test_plan_duration_resize_overlap_reverts_target` (unchanged neighbour →
+  overlap + direction_required sentinel),
+  `test_plan_duration_resize_overlap_with_changed_neighbour_unresolved`.
+  Full mandated list in `docs/features/0068_PLAN.md` Phase 2 RED.
+- **View e2e** (`test_ai_views_chat.py::TestChatDurationResize`): extend
+  `test_chat_applies_duration_resize_end_to_end` to all four intents
+  (abs 20, abs 60, rel +30, rel −15), currently only abs 20.
+- **P3 dedup** (`schemas.py`): hoist `has_start`/`has_end` to the top of
+  `validate_action_shape` (defined twice: add-branch + outer resize logic).
+- PR #179 finding #5 (comment on the `compute_move_resize_times` duration
+  bypass) is already satisfied at `mutation_planner.py:523-525` — no action.
+
+### 0078 public legal pages — follow-ups
+
+Shipped: `/privacy/` and `/terms/` as unauthenticated Django-template pages
+(`backend/templates/legal/`), wired into `urls.py` and linked from the Login
+footer. Plan: `docs/features/0078_PLAN.md`.
+
+- [ ] Set the `LEGAL_CONTACT_EMAIL` GitHub secret (the workflow already passes it
+      through) if the deployment should print a contact address instead of
+      pointing readers at the consent-screen support address.
+- [ ] Decide whether the Terms need a governing-law / jurisdiction clause. Left
+      out deliberately — naming a jurisdiction is the operator's legal choice.
+- [ ] Bump `LEGAL_LAST_UPDATED` in `backend/schedules/legal_views.py` in the same
+      commit as any future wording change; nothing derives it from git.
+
+## Refactoring R06: saved user timezone
+
+- [x] Unified saved-zone civil clock, navigation, notifications, PiP, analytics, and export date handling.
+- [x] Calendar local-day UTC bounds, all-day dates, timezone-aware cache keys.
+- [x] Todoist/Habitica today and overdue scope; removed browser carry-overdue compensation.
+- [x] Timezone changes invalidate external loads, AI context, and historical snapshots.
+- [x] Full suites: 1869 backend tests and 1223 frontend tests; build, lint, Django checks.
+- [x] Browser smoke with real AI requests, timezone race, UTC/Los Angeles/Kathmandu/Kiritimati, Undo, review/export, desktop/mobile Logout.
+- [x] Report: `docs/REFACTORING_R06.md`.
+
+## Refactoring R07: shared schedule rules
+
+- [x] Shared commands, snapshots, source policies, final-state validation and diff.
+- [x] Manual API, AI chat and draft use shared planning and persistence under R04.
+- [x] Removed sequential draft validation and per-row full_clean query loops.
+- [x] Read-only audit of 335 existing blocks; applied additive interval constraint migration.
+- [x] Contracts for swaps, inherited off-grid edges, narrowed windows, partial results, no-op and rollback.
+- [x] Full suites: 1903 backend tests, 1223 frontend tests; build, lint and Django checks.
+- [x] Browser: manual edits and drag, overlap rejection, Cancel/Delete/Undo, real AI add/swap/draft, review/export and desktop/mobile Logout.
+- [x] Report: `docs/REFACTORING_R07.md`.
+
+## Refactoring R08: shared integration infrastructure
+
+- [x] Shared Fernet helpers, versioned cache primitives and safe Django check predicates; keys/ciphertext unchanged.
+- [x] Explicit account/resource metadata, provider credentials 401 separate from session expiry.
+- [x] Dated resource, account operation and task completion controllers; four providers migrated.
+- [x] Stale responses, cancellation, context changes, disconnect and late rollback covered.
+- [x] Retained task rows stay visible alongside background refresh errors.
+- [x] Full suites: 1926 backend tests, 1306 frontend tests; build, lint and Django checks.
+- [x] Browser: real AI chat/draft, Undo, review/export, desktop/mobile Logout; integration fixture connections, Google partial success, import, completion, provider/network failure and disconnect.
+- [x] Fixture accounts and blocks cleaned; normal backend restored. Report: `docs/REFACTORING_R08.md`.
+
+## Refactoring R09: Schedule composition
+
+- [x] Extract page mutation/AI lifecycle, external sources, event import and shared timeline presentation.
+- [x] Typed context keys; chat/draft state scoped to the canonical page owner.
+- [x] Lazy connection/rule bootstrap; startup integration requests reduced from 9 to 0 disconnected, 9 to 4 connected.
+- [x] Frozen Classic/4a drag geometry, context/resize cancellation and unmount cleanup.
+- [x] Full suites: 1928 backend tests, 1334 frontend tests; build, lint and Django checks.
+- [x] Browser: both layouts and widths, manual edits/drag/Undo, fixture import and task completion, Settings disconnect/reconnect return, review/export and mobile/desktop Logout.
+- [x] Successful chat/draft/apply/Undo browser paths verified with fixed SDK completions, audit 310–311.
+- [x] Real chat/draft requests attempted; 307–309 failed with OpenRouter connection reset. Error recovery verified; successful live AI remains unconfirmed.
+- [x] Test data cleaned; normal backend restored. Report: `docs/REFACTORING_R09.md`.
+
+
+## Refactoring R10: current statistics and reviewed snapshots
+
+- [x] Read-only analytics GET; coherent schedule, blocks, review and streak capture.
+- [x] Shared status/revision freshness predicate for analytics, streak and AI history.
+- [x] Additive reviewed_revision migration, copied database check and local migration.
+- [x] Date-addressed lazy notes storage; legacy ID route retained under shared write lock.
+- [x] Serialized notes/review writes, explicit empty notes, date/account/session guards and regressions.
+- [x] Seeders freeze final accepted revision; old recompute writer removed.
+- [x] Full suites: 1938 backend tests, 1346 frontend tests; build, lint, Django and migration checks.
+- [x] Browser: notes autosave/reload/clear, review/edit/Undo/re-review, export, Settings and mobile/desktop Logout.
+- [x] Real chat/draft attempted: audit 314–315, OpenRouter connection failure. Fixed SDK success/apply/Undo: 316–317.
+- [x] Temporary blocks/review cleaned, original blocks/review fields verified against backup, normal backend restored.
+- [x] Report: `docs/REFACTORING_R10.md`.
+
+## Refactoring R11: AI heuristic research
+
+- [x] Synthetic corpus: 18 dialogues, 31 turns, real SDK/view/planner seams, explicit desired metrics and known-gap characterization.
+- [x] Baseline and diagnostic replay/category/implicit-add ablations; no production bypass flags.
+- [x] Fixed multi-ask error retry while preserving older handled turns, applied siblings, explicit repeats and guard-ask protection.
+- [x] Counterfactual old guard comparison confirms one fewer excess ask and missed apply, with no increase in false additions in this corpus.
+- [x] Keep major heuristics; design server-owned pending_intent and durable request_id separately, neither implemented.
+- [x] Full suites: 1946 backend, 1346 frontend; build, lint, Django and migration checks.
+- [x] Desktop browser: manual add/completion, review/notes/export, DOM Cancel/Delete, Undo, Settings and Logout/Login; fixed SDK multi-ask/error/retry, replay, partial apply, EN/RU categories, draft and Undo.
+- [x] Real chat/draft attempted (318–319), OpenRouter connection failures. Fixed SDK audits 320–334; transcript-loss limitation documented separately.
+- [ ] Live model quality comparison deferred; mobile R11 smoke unverified because viewport override had no effect.
+- [x] Temporary data cleaned under write locks, original blocks/reviews/preferences match backup; ordinary backend restored.
+- [x] Reports: `docs/REFACTORING_R11.md`, `docs/REFACTORING_R11_DESIGN.md`. R12 not started.

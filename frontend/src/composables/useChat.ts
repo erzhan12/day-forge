@@ -1,28 +1,17 @@
-// Multi-turn AI chat composable (feature 0007).
-//
-// Module-level state — there is one chat thread per tab; the bottom dock
-// (PR A) and the future sidebar (PR B) share state through this single
-// instance. Tests reset state in `beforeEach` to avoid cross-test leakage.
-//
-// **Staleness guard:** every event that should invalidate an in-flight
-// turn (a fresh `submitTurn`, an explicit `clearThread`, or a date
-// navigation via `setActiveDate`) bumps `latestRequestId`. Each
-// `submitTurn` captures its own `myId` and only writes back to state if
-// `myId === latestRequestId` at resolution time — for both the spinner
-// and the UI updates. This is the single source of truth for "is this
-// resolver still relevant?", and it covers every cancellation cause
-// (newer submit, manual Clear, date change) without overlapping checks.
+// Shared chat state belongs to the current schedule owner. Replacing the
+// owner or ending its session clears the transcript, input, and request tokens.
+// UI cancellation drops a reply; the mutation owner still settles its write.
 
-import { router } from "@inertiajs/vue3"
-import { ref } from "vue"
+import { ref, type Ref } from "vue"
 import type { TimeBlock, UndoAction } from "../types"
 import {
   isScheduleChangedConflict,
   SCHEDULE_CHANGED_RETRY_MESSAGE,
 } from "../utils/aiScheduleConflict"
-import { scheduleChanged } from "../utils/scheduleDiff"
 import { type ApiResult, requestJson } from "./useHttp"
+import { registerMutationUndo } from "./useMutationUndo"
 import { extractErrorMessage } from "../utils/errorMessage"
+import { useScheduleRevision, runScheduleMutation, type ScheduleRevisionState } from "./useScheduleRevision"
 
 export interface ChatMessage {
   role: "user" | "assistant"
@@ -49,29 +38,73 @@ export interface AppliedBlockResult {
   change: "added" | "changed" | "removed"
 }
 
-const activeDate = ref<string | null>(null)
-const messages = ref<ChatMessage[]>([])
-const isProcessing = ref(false)
-const lastError = ref<string | null>(null)
-const pendingAsk = ref<string | null>(null)
-const apiHealthy = ref(true)
-const draftInput = ref("")
+interface ChatState {
+  activeDate: Ref<string | null>
+  messages: Ref<ChatMessage[]>
+  isProcessing: Ref<boolean>
+  lastError: Ref<string | null>
+  pendingAsk: Ref<string | null>
+  apiHealthy: Ref<boolean>
+  draftInput: Ref<string>
+  latestRequestId: number
+  unsubscribe?: () => void
+}
 
-// Module-level counter, intentionally NOT a ref — it never participates
-// in rendering. Every `submitTurn` bumps it; `clearThread` (and via it,
-// `setActiveDate`) bumps it. `submitTurn` resolvers compare their own
-// captured `myId` against this to decide whether they may write to state.
-//
-// ⚠️  Tests MUST call `_resetChatStateForTests()` in a `beforeEach` to
-// reset this counter (and the rest of the module-level refs). Without
-// it, a previous test's bumped counter leaks into the next test and a
-// fresh `submitTurn` may hit `myId === latestRequestId` only by luck —
-// race-condition findings will look intermittent rather than
-// deterministic. See `frontend/tests/useChat.test.ts` for the pattern.
-let latestRequestId = 0
+function createChatState(): ChatState {
+  return {
+    activeDate: ref<string | null>(null), messages: ref<ChatMessage[]>([]),
+    isProcessing: ref(false), lastError: ref<string | null>(null),
+    pendingAsk: ref<string | null>(null), apiHealthy: ref(true),
+    draftInput: ref(""), latestRequestId: 0,
+  }
+}
+
+let ownerStates = new WeakMap<ScheduleRevisionState, ChatState>()
+let standaloneState = createChatState()
+let lastAccessedState = standaloneState
+
+function stateFor(owner?: ScheduleRevisionState): ChatState {
+  if (!owner) return standaloneState
+  let state = ownerStates.get(owner)
+  if (!state) {
+    state = createChatState()
+    ownerStates.set(owner, state)
+    state.unsubscribe = owner.subscribeScopeReset((reason) => {
+      if (reason === "date") clearThreadState(state!)
+      else clearSessionState(state!)
+      if (reason === "dispose") {
+        state!.unsubscribe?.()
+        state!.unsubscribe = undefined
+        ownerStates.delete(owner)
+        if (lastAccessedState === state) lastAccessedState = standaloneState
+      }
+    })
+  }
+  return state
+}
+
+function clearThreadState(state: ChatState): void {
+  state.latestRequestId += 1
+  state.isProcessing.value = false
+  state.messages.value = []
+  state.pendingAsk.value = null
+  state.lastError.value = null
+}
+
+function clearSessionState(state: ChatState): void {
+  clearThreadState(state)
+  state.activeDate.value = null
+  state.apiHealthy.value = true
+  state.draftInput.value = ""
+}
+
+/** Remove this owner's chat values and invalidate outstanding UI responses. */
+export function clearChatSession(owner?: ScheduleRevisionState): void {
+  clearSessionState(stateFor(owner))
+}
 
 interface ChatApiResult extends ApiResult {
-  data?: {
+  data?: Record<string, unknown> & {
     blocks?: unknown
     explanation?: string | null
     ask?: string | null
@@ -115,37 +148,12 @@ function addedBlockIdsFromDiff(snapshot: TimeBlock[], blocks: unknown): number[]
     .map((block) => block.id)
 }
 
-/**
- * Returns the multi-turn AI chat composable for feature 0007.
- *
- * State (`activeDate`, `messages`, `isProcessing`, `lastError`,
- * `pendingAsk`, `apiHealthy`) lives at module scope — every call to
- * `useChat()` returns refs that point at the SAME singleton. The bottom
- * dock and the future sidebar (PR B) share one thread per tab; tests
- * reset state via `_resetChatStateForTests()` in a `beforeEach`.
- *
- * **Pre-condition:** the consumer (currently `Schedule.vue` via a
- * `watch(() => props.date, …, { immediate: true })`) MUST call
- * `setActiveDate(date)` before any `submitTurn(...)`. `submitTurn`
- * throws synchronously when `activeDate` is null — that catches a
- * future regression where the watcher is removed.
- *
- * **Staleness guard:** every event that should invalidate an in-flight
- * turn (a fresh `submitTurn`, a `clearThread`, or a date change via
- * `setActiveDate`) bumps the module-level `latestRequestId` counter.
- * Each `submitTurn` captures its own `myId` and only writes back to
- * `isProcessing` or the message list if `myId === latestRequestId` at
- * resolution time. This single check covers every cancellation cause
- * (newer submit, manual Clear, date navigation) without overlapping
- * date / spinner / message guards. See `docs/features/0007_PLAN.md`
- * §2.1 for the full design rationale.
- *
- * `clearThread()` is a logical cancel: it bumps the token, clears the
- * spinner directly (safe because the bump invalidates any in-flight
- * resolver), and resets the message list / pendingAsk / lastError —
- * but preserves `activeDate` and the unsent draft input.
- */
-export function useChat() {
+/** Share one owner's thread between the page, dock, and regenerate button. */
+export function useChat(explicitRevision?: ScheduleRevisionState) {
+  const revision = useScheduleRevision(explicitRevision)
+  const state = stateFor(revision)
+  lastAccessedState = state
+  const { activeDate, messages, isProcessing, lastError, pendingAsk, apiHealthy, draftInput } = state
   function setActiveDate(date: string): void {
     if (activeDate.value === date) return
     clearThread()
@@ -157,16 +165,12 @@ export function useChat() {
     // `myId !== latestRequestId` and skips its writes; then clear UI
     // state directly. After this returns there is no in-flight request
     // that owns the spinner, so resetting it here cannot race.
-    latestRequestId += 1
-    isProcessing.value = false
-    messages.value = []
-    pendingAsk.value = null
-    lastError.value = null
+    clearThreadState(state)
   }
 
   async function submitTurn(
     text: string,
-    snapshotBlocks: () => TimeBlock[],
+    _snapshotBlocks: () => TimeBlock[],
     pushUndo: (a: UndoAction) => void,
   ): Promise<void> {
     if (activeDate.value === null) {
@@ -183,15 +187,17 @@ export function useChat() {
     const trimmed = text.trim()
     if (!trimmed) return
 
-    // Token + date capture. `requestDate` is used only for URL building
-    // (and as a record on the optimistic user message). Staleness is
-    // decided exclusively by the token.
-    const myId = ++latestRequestId
+    // The UI token controls transcript updates; the owner controls writes.
     const requestDate = activeDate.value
 
+    // The mutation owner captures canonical blocks and revision together.
+    // A second request must not replace the first request's UI token.
+    if (!revision || revision.busy.value) {
+      return
+    }
+    const myId = ++state.latestRequestId
     isProcessing.value = true
     lastError.value = null
-    const snapshot = snapshotBlocks()
 
     messages.value = [
       ...messages.value,
@@ -206,16 +212,11 @@ export function useChat() {
 
     let result: ChatApiResult
     try {
-      result = (await requestJson(
+      result = await runScheduleMutation(revision, requestDate, (capture) => requestJson(
         `/api/ai/schedules/${requestDate}/chat/`,
         "POST",
         {
-          // Feature 0083: mark assistant turns that carried a non-null
-          // `ask` (`is_ask`) or were a synthetic failure bubble
-          // (`is_error`) — correctness/UX hints for the server's replay
-          // guard, not a security control (see RULES.md and docs/api.md).
-          // Omitted entirely on every other turn so the wire shape stays
-          // unchanged for ordinary user/explanation turns.
+          expected_revision: capture.revision,
           messages: messages.value.map(({ role, content, ask, isError, appliedAddBlockIds }) => ({
             role,
             content,
@@ -226,20 +227,20 @@ export function useChat() {
               : {}),
           })),
         },
+        { expectedUserId: capture.userId },
       )) as ChatApiResult
     } finally {
       // Only the most-recent owner of the latest-request slot may clear
       // the spinner. If `clearThread` (manual or via date change) or a
       // newer `submitTurn` ran while we were awaiting, leave the spinner
       // alone — those callers either cleared it directly or own it now.
-      if (myId === latestRequestId) {
+      if (myId === state.latestRequestId) {
         isProcessing.value = false
       }
     }
 
-    // Single staleness check covers every cancellation path: newer
-    // submit, manual Clear, or date change.
-    if (myId !== latestRequestId) return
+    // A cancelled turn can still commit, but cannot update a newer thread.
+    if (myId !== state.latestRequestId) return
 
     if (result.ok) {
       apiHealthy.value = true
@@ -249,14 +250,15 @@ export function useChat() {
         typeof data.explanation === "string" ? data.explanation : null
       const applied = data.applied === true
       const partial = data.partial === true
-      const appliedResult = applied && !partial
+      const snapshot = result.mutation?.previousBlocks ?? []
+      const appliedResult = applied && !partial && result.mutation
         ? appliedResultFromDiff(snapshot, data.blocks)
         : undefined
       const appliedAddBlockIds = ask === null
         ? undefined
-        : applied
+        : applied && result.mutation
           ? addedBlockIdsFromDiff(snapshot, data.blocks)
-          : []
+          : applied ? undefined : []
 
       // Prefer ask over explanation in the assistant message's `content`
       // so the next turn's transcript carries the actual question the
@@ -276,18 +278,12 @@ export function useChat() {
       ]
       pendingAsk.value = ask
 
-      if (applied) {
-        if (scheduleChanged(snapshot, data.blocks)) {
-          pushUndo({
-            description: explanation || "AI chat",
-            type: "ai",
-            previousBlocks: snapshot,
-            scheduleDate: requestDate,
-            silent: true,
-          })
-        }
-        router.reload({ only: ["blocks", "schedule"] })
-      }
+      if (applied) registerMutationUndo(result, pushUndo, {
+        description: explanation || "AI chat",
+        type: "ai",
+        silent: true,
+      })
+      if (result.code === "schedule_sync_failed") lastError.value = "Changes were saved, but the display could not refresh. Reload the page."
       return
     }
 
@@ -308,7 +304,6 @@ export function useChat() {
           isError: true,
         },
       ]
-      router.reload({ only: ["blocks", "schedule"] })
       return
     }
     if (
@@ -351,32 +346,28 @@ export function useChat() {
   }
 }
 
-// Test-only escape hatch so unit tests can reset module-level state in
-// `beforeEach` without relying on import ordering tricks. Not exported
-// from the public surface; tests import it explicitly.
+// Test-only reset for direct composable tests that construct many owners.
 export function _resetChatStateForTests(): void {
-  activeDate.value = null
-  messages.value = []
-  isProcessing.value = false
-  lastError.value = null
-  pendingAsk.value = null
-  apiHealthy.value = true
-  draftInput.value = ""
-  latestRequestId = 0
+  clearSessionState(lastAccessedState)
+  lastAccessedState.unsubscribe?.()
+  ownerStates = new WeakMap()
+  standaloneState = createChatState()
+  lastAccessedState = standaloneState
 }
 
 export function _peekLatestRequestId(): number {
-  return latestRequestId
+  return lastAccessedState.latestRequestId
 }
 
 /** Clear the current applied-turn chip after a successful AI undo. */
-export function clearAppliedResultForUndo(): void {
-  const next = [...messages.value]
+export function clearAppliedResultForUndo(owner?: ScheduleRevisionState): void {
+  const state = owner ? stateFor(owner) : lastAccessedState
+  const next = [...state.messages.value]
   for (let i = next.length - 1; i >= 0; i--) {
     if (next[i].appliedResult) {
       next[i] = { ...next[i], appliedResult: undefined }
       break
     }
   }
-  messages.value = next
+  state.messages.value = next
 }

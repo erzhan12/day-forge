@@ -10,6 +10,7 @@ from django.test import Client
 from habitica_sync import service
 from habitica_sync.models import HabiticaAccount
 from habitica_sync.schemas import NormalizedHabiticaTask
+from schedules.window import get_schedule_settings
 
 from tests._connect_rate_limit_contract import ConnectRateLimitContract
 
@@ -147,6 +148,96 @@ def test_tasks_cache_hit_miss_and_refresh(auth_client, account):
             "completed": False,
         }
     ]
+
+
+@pytest.mark.parametrize(
+    "instant, expected_today",
+    [
+        (
+            datetime.datetime(2026, 3, 9, 3, 30, tzinfo=datetime.UTC),
+            datetime.date(2026, 3, 8),
+        ),
+        (
+            datetime.datetime(2026, 3, 9, 4, 30, tzinfo=datetime.UTC),
+            datetime.date(2026, 3, 9),
+        ),
+    ],
+)
+def test_dst_local_midnight_selects_habitica_scope(
+    auth_client, user, account, instant, expected_today
+):
+    get_schedule_settings(user)
+    user.schedule_settings.time_zone = "America/New_York"
+    user.schedule_settings.save()
+    with patch("habitica_sync.views.timezone.now", return_value=instant), patch(
+        "habitica_sync.service.fetch_tasks_for_date", return_value=[]
+    ) as fetch:
+        response = auth_client.get("/api/habitica/tasks/2026-03-08/")
+    assert response.status_code == 200
+    assert fetch.call_args.kwargs["local_today"] == expected_today
+
+
+def test_timezone_change_during_fetch_rekeys_habitica_cache(auth_client, user, account):
+    get_schedule_settings(user)
+    observed_dates = []
+
+    def provider(_account, _target_date, *, local_today):
+        observed_dates.append(local_today)
+        if len(observed_dates) == 1:
+            user.schedule_settings.time_zone = "Asia/Qatar"
+            user.schedule_settings.save()
+        return [
+            NormalizedHabiticaTask(
+                id=f"task-{len(observed_dates)}",
+                title="Task",
+                type="todo",
+                due_date="2026-05-08",
+                completed=False,
+            )
+        ]
+
+    with patch(
+        "habitica_sync.views.timezone.now",
+        return_value=datetime.datetime(2026, 5, 7, 22, tzinfo=datetime.UTC),
+    ), patch("habitica_sync.service.fetch_tasks_for_date", side_effect=provider):
+        first = auth_client.get("/api/habitica/tasks/2026-05-08/")
+        second = auth_client.get("/api/habitica/tasks/2026-05-08/")
+
+    assert [first.json()["tasks"][0]["id"], second.json()["tasks"][0]["id"]] == [
+        "task-1", "task-2"
+    ]
+    assert observed_dates == [datetime.date(2026, 5, 7), datetime.date(2026, 5, 8)]
+
+
+def test_habitica_midnight_rekeys_today_scope(auth_client, user, account):
+    get_schedule_settings(user)
+    clock = {"now": datetime.datetime(2026, 5, 8, 23, 59, tzinfo=datetime.UTC)}
+    with patch(
+        "habitica_sync.views.timezone.now", side_effect=lambda: clock["now"]
+    ), patch("habitica_sync.service.fetch_tasks_for_date", return_value=[]) as fetch:
+        first = auth_client.get("/api/habitica/tasks/2026-05-09/")
+        clock["now"] = datetime.datetime(2026, 5, 9, 0, 1, tzinfo=datetime.UTC)
+        second = auth_client.get("/api/habitica/tasks/2026-05-09/")
+
+    assert first.status_code == second.status_code == 200
+    assert [call.kwargs["local_today"] for call in fetch.call_args_list] == [
+        datetime.date(2026, 5, 8), datetime.date(2026, 5, 9)
+    ]
+
+
+def test_habitica_failed_refresh_preserves_cached_tasks(auth_client, account):
+    task = NormalizedHabiticaTask(
+        id="cached", title="Cached", type="todo", due_date=None, completed=False
+    )
+    with patch("habitica_sync.service.fetch_tasks_for_date") as fetch:
+        fetch.side_effect = [[task], service.HabiticaProviderError("upstream")]
+        first = auth_client.get("/api/habitica/tasks/2026-05-07/")
+        failed = auth_client.get("/api/habitica/tasks/2026-05-07/?refresh=1")
+        cached = auth_client.get("/api/habitica/tasks/2026-05-07/")
+    assert first.status_code == 200
+    assert failed.status_code == 502
+    assert cached.json() == first.json()
+    assert fetch.call_count == 2
 
 
 def test_complete_invalidates_cache(auth_client, account):

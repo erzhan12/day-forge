@@ -10,9 +10,8 @@ Public surface:
 * ``compute_review_stats(schedule, *, now=None) -> dict`` — pure
   aggregator over a single schedule's blocks. Returns the writable
   ``DailyReview`` field set; safe to call without DB writes.
-* ``recompute_review_from_schedule(schedule, *, now=None) -> DailyReview``
-  — ``update_or_create`` wrapper that preserves ``notes`` across
-  recomputes.
+* ``freeze_review_snapshot(schedule, *, revision, now=None) -> DailyReview``
+  — persist a review snapshot tagged with the accepted schedule revision.
 * ``compute_streak(user, *, today=None) -> int`` — calendar-walk
   backward from yesterday. Gap day = break, zero-block schedule = skip.
 """
@@ -20,9 +19,9 @@ Public surface:
 import datetime
 
 from django.conf import settings
-from django.utils import timezone
 from schedules.categories import ordered_categories, sink_category
 from schedules.models import Schedule
+from schedules.window import user_local_date, user_local_now
 
 from analytics.models import DailyReview
 
@@ -42,7 +41,7 @@ def compute_review_stats(
     fields.
 
     ``now`` is an optional ``datetime`` injected for deterministic tests;
-    when omitted, ``timezone.localtime()`` is read inside the call (NOT
+    when omitted, the saved user timezone is read inside the call (NOT
     at module import) so a freezegun-style override on the caller side
     works.
 
@@ -58,7 +57,7 @@ def compute_review_stats(
     ``planned_minutes_by_category``, ``completed_minutes_by_category``.
     """
     if now is None:
-        now = timezone.localtime()
+        now = user_local_now(schedule.user)
     today = now.date() if isinstance(now, datetime.datetime) else now
 
     planned_count = 0
@@ -114,18 +113,23 @@ def compute_review_stats(
     }
 
 
-def recompute_review_from_schedule(schedule: Schedule, *, now=None, categories=None) -> DailyReview:
-    """Refresh (or create) the ``DailyReview`` row from current blocks.
-
-    ``notes`` is intentionally NOT in ``defaults`` so a recompute
-    preserves any user-entered notes from a prior review. ``updated_at``
-    advances on every call (``auto_now``) so the view layer can pin
-    "frozen-vs-fresh" idempotency in tests.
-    """
-    stats = compute_review_stats(
-        schedule, now=now, categories=categories or ordered_categories(schedule.user)
+def is_review_snapshot_current(schedule: Schedule, review: DailyReview | None) -> bool:
+    """Only a reviewed row captured at the schedule's current revision is frozen."""
+    return (
+        schedule.status == Schedule.Status.REVIEWED
+        and review is not None
+        and review.reviewed_revision is not None
+        and review.reviewed_revision == schedule.revision
     )
-    review, _ = DailyReview.objects.update_or_create(schedule=schedule, defaults=stats)
+
+
+def freeze_review_snapshot(schedule: Schedule, *, revision: int, now=None) -> DailyReview:
+    """Persist aggregates at an accepted review revision while preserving notes."""
+    stats = compute_review_stats(schedule, now=now)
+    review, _ = DailyReview.objects.update_or_create(
+        schedule=schedule,
+        defaults={**stats, "reviewed_revision": revision},
+    )
     return review
 
 
@@ -138,10 +142,11 @@ def compute_streak(user, *, today=None) -> int:
         didn't plan that day, so the streak ends).
       - **Zero-block schedule** → skip (rest day; doesn't count, doesn't
         break).
-      - **Day with blocks** → use ``DailyReview.completion_rate`` if a
-        row exists (cheap read), otherwise compute on the fly via
-        ``compute_review_stats`` (no DB write — keeps the streak
-        accurate for users who plan well but rarely open analytics).
+      - **Reviewed day with blocks** → use the frozen
+        ``DailyReview.completion_rate`` only for a matching revision.
+      - **Active or draft day**, or reviewed day with no valid snapshot →
+        compute from current blocks via ``compute_review_stats`` without
+        persisting a review.
       - ``rate is None`` (defensive: zero-planned that somehow has a
         review row) → skip rather than break.
 
@@ -156,7 +161,7 @@ def compute_streak(user, *, today=None) -> int:
     regardless of streak length.
     """
     if today is None:
-        today = timezone.localdate()
+        today = user_local_date(user)
 
     threshold = settings.ANALYTICS_STREAK_THRESHOLD
     window = settings.ANALYTICS_STREAK_WINDOW_DAYS
@@ -181,10 +186,10 @@ def compute_streak(user, *, today=None) -> int:
             continue  # zero-block "rest day" — skip without breaking
 
         review = getattr(schedule, "daily_review", None)
-        if review is not None:
+        if is_review_snapshot_current(schedule, review):
             rate = review.completion_rate
         else:
-            stats = compute_review_stats(schedule, ratio_only=True)
+            stats = compute_review_stats(schedule, now=today, ratio_only=True)
             rate = (
                 stats["completed_count"] / stats["planned_count"]
                 if stats["planned_count"]

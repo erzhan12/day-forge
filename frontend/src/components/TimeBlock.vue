@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, inject, watch } from "vue"
-import type { Ref } from "vue"
-import type { TimeBlock, UndoAction, UserCategory } from "../types"
+import type { TimeBlock, UserCategory } from "../types"
+import { ScheduleContainerKey, ScheduleDisabledKey, ScheduleDragKey, ScheduleUndoKey } from "../composables/scheduleContext"
 import { useSchedule } from "../composables/useSchedule"
+import { registerMutationUndo } from "../composables/useMutationUndo"
 import { useBlockCompletion } from "../composables/useBlockCompletion"
 import { getCategoryColor } from "../utils/categoryColors"
 import { useActiveTheme } from "../composables/useActiveTheme"
+import DeleteBlockDialog from "./DeleteBlockDialog.vue"
 import {
   formatDurationMinutes,
   formatRemainingMinutes,
@@ -26,28 +28,20 @@ const props = withDefaults(
   },
 )
 
-const { updateBlock, deleteBlock } = useSchedule(props.date)
+const { updateBlock, deleteBlock } = useSchedule(() => props.date)
 // Tracks the active theme reactively so the left-border color updates
 // when the user switches themes while this block is mounted (without
 // it, `getCategoryColor()` reads dataset.theme at call time only, with
 // no Vue-tracked dep).
 const activeTheme = useActiveTheme()
 
-const undo = inject<{
-  pushUndo: (action: UndoAction) => void
-  snapshotBlocks: () => TimeBlock[]
-}>("undo")
+const undo = inject(ScheduleUndoKey, undefined)
 
-const drag = inject<{
-  startDrag: (event: PointerEvent, block: TimeBlock, container: HTMLElement) => void
-  isDragging: Ref<boolean>
-  dragBlockId: Ref<number | null>
-  shiftedBlockIds: Ref<Set<number>>
-}>("drag")
+const drag = inject(ScheduleDragKey, undefined)
 
-const scheduleContainer = inject<Ref<HTMLElement | null>>("scheduleContainer")
+const scheduleContainer = inject(ScheduleContainerKey, undefined)
 
-const scheduleDisabled = inject<Ref<boolean> | null>("scheduleDisabled", null)
+const scheduleDisabled = inject(ScheduleDisabledKey, null)
 
 function isDisabled(): boolean {
   return Boolean(scheduleDisabled?.value)
@@ -64,39 +58,38 @@ const editing = ref(false)
 const editTitle = ref("")
 const errorMessage = ref("")
 const titleInput = ref<HTMLInputElement | null>(null)
+const confirmingDelete = ref(false)
 
 // Local override for the checkbox: native <input type="checkbox"> flips on
 // click before Vue re-applies :checked, so binding the prop alone desyncs on
 // failure. displayedCompleted is the single source of truth for the UI.
 const displayedCompleted = ref(props.block.is_completed)
-// Completion network/retry/undo/abort logic is owned by the shared controller
-// so the timeline checkbox and the PiP focus indicator cannot diverge. This
-// instance is private to this row (per-call-site factory, not a singleton).
+// The shared schedule controller owns writes and reconciliation.
 const completion = useBlockCompletion({ updateBlock, undo, isDisabled })
 const { saving } = completion
 const disabled = computed(() => isDisabled())
+// A confirmation belongs to the block and day shown when it was opened.
+// Dismiss it if navigation, reconciliation, or another write changes context.
+watch([() => props.date, () => props.block, disabled], () => {
+  confirmingDelete.value = false
+})
 // External updates to this block's completion (an AI mutation, a concurrent
 // tab, this chain's own success reload) re-align the checkbox — but only while
 // no local toggle is in flight. During a local chain `saving` is true and the
 // optimistic value must win, or an *older* chain's late reload would clobber a
-// *newer* click for the duration of the retry window.
+// *newer* click while queued writes settle.
 watch(
   () => props.block.is_completed,
   (v) => {
     if (!saving.value) displayedCompleted.value = v
   },
 )
-// Schedule.vue keys rows by index, so this instance can be reused for a
-// different block mid-flight. When the block identity changes, abort the
-// in-flight chain (its generation guard then bails without touching state) and
-// re-align all local UI state to the new block — otherwise the old chain's
-// optimistic checked / saving spinner / error would stick on the wrong row.
+// A changed identity resets the row UI without canceling an accepted write.
 watch(
-  () => props.block.id,
+  [() => props.date, () => props.block.id],
   () => {
-    // reset() aborts the in-flight chain AND clears the controller's
-    // saving/errorState; re-align this row's local UI to the new block.
     completion.reset()
+    editing.value = false
     displayedCompleted.value = props.block.is_completed
     errorMessage.value = ""
   },
@@ -132,7 +125,7 @@ async function saveTitle() {
   // the second call short-circuits here. (A flag reset in a ``finally``
   // wouldn't work — by the time blur fires sequentially the flag is
   // already cleared. The ``editing`` ref is the right state to gate on.)
-  if (!editing.value) return
+  if (!editing.value || isDisabled()) return
 
   const trimmed = editTitle.value.trim()
   if (!trimmed || trimmed === props.block.title) {
@@ -145,21 +138,17 @@ async function saveTitle() {
   // hit the ``!editing.value`` early-return above.
   editing.value = false
 
-  const snapshot = undo?.snapshotBlocks()
-  // Bind undo to the date active when the mutation starts (see issue #21).
-  const scheduleDate = props.date
-  const result = await updateBlock(props.block.id, { title: trimmed })
+  const originalId = props.block.id
+  const originalDate = props.date
+  const originalTitle = props.block.title
+  const result = await updateBlock(originalId, { title: trimmed })
   if (result.ok) {
-    if (undo && snapshot) {
-      undo.pushUndo({
-        description: `Renamed "${props.block.title}" to "${trimmed}"`,
-        type: "edit",
-        previousBlocks: snapshot,
-        scheduleDate,
-        silent: true,
-      })
-    }
-  } else {
+    registerMutationUndo(result, undo?.pushUndo, {
+      description: `Renamed "${originalTitle}" to "${trimmed}"`,
+      type: "edit",
+      silent: true,
+    })
+  } else if (props.block.id === originalId && props.date === originalDate) {
     // Re-open the input so the user can retry; clearing it would
     // discard their typed value.
     errorMessage.value = "Failed to update title"
@@ -172,44 +161,39 @@ function cancelEditing() {
 }
 
 async function toggleCompleted() {
-  if (isDisabled()) return
+  if (isDisabled() && !saving.value) return
   const desired = !displayedCompleted.value
-  // Optimistic flip (local single-source-of-truth for the checkbox) — the
-  // controller owns the network/retry/undo/abort chain.
+  // Keep the latest intent visible while completion writes are serialized.
   displayedCompleted.value = desired
   errorMessage.value = ""
   const outcome = await completion.setCompleted(props.block, props.date, desired)
   if (outcome === "failure") {
-    // Retries exhausted while this chain is still newest: revert the optimistic
-    // flip to the LIVE reloaded prop (not a value captured at start) and surface
-    // the copy the timeline test pins.
+    // Failure reconciles against the current canonical block.
     displayedCompleted.value = props.block.is_completed
     errorMessage.value = "Failed to update"
   } else if (outcome === "success") {
     errorMessage.value = ""
+  } else if (!saving.value) {
+    // A conflict can cancel an unsent rapid toggle after reconciliation.
+    displayedCompleted.value = props.block.is_completed
   }
-  // "superseded": a newer chain (or reset/dispose) owns reconciliation — touch
-  // nothing.
 }
 
 async function handleDelete() {
-  if (isDisabled()) return
-  if (!window.confirm("Delete this block?")) return
+  if (isDisabled() || !confirmingDelete.value) return
+  confirmingDelete.value = false
   errorMessage.value = ""
-  const snapshot = undo?.snapshotBlocks()
+  const blockId = props.block.id
   const scheduleDate = props.date
-  const result = await deleteBlock(props.block.id)
+  const blockTitle = props.block.title
+  const result = await deleteBlock(blockId)
   if (result.ok) {
-    if (undo && snapshot) {
-      undo.pushUndo({
-        description: `Deleted "${props.block.title}"`,
-        type: "delete",
-        previousBlocks: snapshot,
-        scheduleDate,
-        silent: true,
-      })
-    }
-  } else {
+    registerMutationUndo(result, undo?.pushUndo, {
+      description: `Deleted "${blockTitle}"`,
+      type: "delete",
+      silent: true,
+    })
+  } else if (props.block.id === blockId && props.date === scheduleDate) {
     errorMessage.value = "Failed to delete"
   }
 }
@@ -261,7 +245,12 @@ async function handleDelete() {
         >
           {{ block.title }}
         </span>
-        <button class="delete-btn" @click="handleDelete">&times;</button>
+        <button
+          class="delete-btn"
+          :aria-label="`Delete ${block.title}`"
+          :disabled="disabled"
+          @click="confirmingDelete = true"
+        >&times;</button>
       </div>
     </template>
     <template v-else>
@@ -269,7 +258,12 @@ async function handleDelete() {
         <span class="time-badge">{{ block.start_time }} – {{ block.end_time }}</span>
         <span class="duration">{{ duration }}</span>
         <span v-if="remainingLabel" class="remaining-badge">{{ remainingLabel }}</span>
-        <button class="delete-btn" @click="handleDelete">&times;</button>
+        <button
+          class="delete-btn"
+          :aria-label="`Delete ${block.title}`"
+          :disabled="disabled"
+          @click="confirmingDelete = true"
+        >&times;</button>
       </div>
       <div class="block-body">
         <input
@@ -300,6 +294,12 @@ async function handleDelete() {
       </div>
     </template>
     <div v-if="errorMessage" class="block-error">{{ errorMessage }}</div>
+    <DeleteBlockDialog
+      v-if="confirmingDelete"
+      :title="block.title"
+      @cancel="confirmingDelete = false"
+      @confirm="handleDelete"
+    />
   </div>
 </template>
 

@@ -6,7 +6,7 @@ body stays focused on the happy path.
 """
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 
 from django.core.exceptions import ValidationError
 from django.core.validators import URLValidator, validate_email
@@ -18,9 +18,9 @@ class NormalizedEvent:
 
     Fields match the response shape documented in the plan:
     ``title``, ``start``, ``end``, ``calendar_name``, ``all_day``,
-    ``external_uid``. ``start`` / ``end`` are timezone-aware datetimes
-    in UTC after service normalisation; the cache layer stores them as
-    ISO8601 strings (see ``service.normalized_event_to_dict``).
+    ``external_uid``. ``start`` / ``end`` are UTC datetimes. All-day events
+    also carry their original ``start_date`` / exclusive ``end_date`` because
+    converting local midnight to UTC can cross a calendar-day boundary.
 
     ``account_label`` (feature 0022) identifies the connecting account in
     the merged Apple+Google panel. It is the **canonical** shared field —
@@ -38,6 +38,10 @@ class NormalizedEvent:
     all_day: bool
     external_uid: str
     account_label: str = ""
+    # RFC 5545 and Google date-only values keep their calendar dates. These
+    # are exclusive-end dates, independent of UTC offsets and DST changes.
+    start_date: date | None = None
+    end_date: date | None = None
 
 
 def normalized_event_to_dict(event: NormalizedEvent) -> dict:
@@ -49,6 +53,8 @@ def normalized_event_to_dict(event: NormalizedEvent) -> dict:
         "all_day": event.all_day,
         "external_uid": event.external_uid,
         "account_label": event.account_label,
+        "start_date": event.start_date.isoformat() if event.start_date else None,
+        "end_date": event.end_date.isoformat() if event.end_date else None,
     }
 
 

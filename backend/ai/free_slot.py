@@ -6,13 +6,13 @@ import datetime
 from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
-from schedules.http import times_overlap
+from schedules.time_validation import times_overlap
 from schedules.window import ScheduleWindow
 
 if TYPE_CHECKING:
     from ai.mutation_planner import SlotSuggestion
 
-# Keep aligned with schedules.validators.validate_five_minute_granularity.
+# Keep aligned with schedules.time_validation.validate_five_minute_granularity.
 GRID_MINUTES = 5
 
 

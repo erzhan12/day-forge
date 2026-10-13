@@ -7,6 +7,7 @@ from cryptography.fernet import Fernet
 from django.contrib.auth.models import User
 from habitica_sync import service
 from habitica_sync.models import HabiticaAccount
+from schedules.window import get_schedule_settings
 
 FERNET_KEY = Fernet.generate_key().decode()
 
@@ -58,10 +59,10 @@ def test_fetch_filters_todos_and_due_dailies_for_client_today(account):
         {"id": "daily-later", "text": "Not due", "isDue": False, "completed": False},
     ]
 
-    with patch("habitica_sync.service.django_tz.localdate", return_value=target):
+    with patch("habitica_sync.service.user_local_date", return_value=target):
         with patch("habitica_sync.service.requests.get") as get:
             get.side_effect = [_response(data=todos), _response(data=dailies)]
-            tasks = service.fetch_tasks_for_date(account, target)
+            tasks = service.fetch_tasks_for_date(account, target, local_today=target)
 
     assert [(t.id, t.type) for t in tasks] == [
         ("daily-due", "daily"),
@@ -90,10 +91,10 @@ def test_fetch_preserves_api_array_order_within_type(account):
         {"id": "daily-a", "text": "Alpha", "isDue": True, "completed": False},
     ]
 
-    with patch("habitica_sync.service.django_tz.localdate", return_value=target):
+    with patch("habitica_sync.service.user_local_date", return_value=target):
         with patch("habitica_sync.service.requests.get") as get:
             get.side_effect = [_response(data=todos), _response(data=dailies)]
-            tasks = service.fetch_tasks_for_date(account, target)
+            tasks = service.fetch_tasks_for_date(account, target, local_today=target)
 
     assert [(t.id, t.type) for t in tasks] == [
         ("daily-b", "daily"),
@@ -116,10 +117,10 @@ def test_fetch_filtered_subset_preserves_relative_api_order(account):
         {"id": "keep-second", "text": "Keep 2", "date": "2026-07-21", "completed": False},
     ]
 
-    with patch("habitica_sync.service.django_tz.localdate", return_value=target):
+    with patch("habitica_sync.service.user_local_date", return_value=target):
         with patch("habitica_sync.service.requests.get") as get:
             get.side_effect = [_response(data=todos), _response(data=[])]
-            tasks = service.fetch_tasks_for_date(account, target)
+            tasks = service.fetch_tasks_for_date(account, target, local_today=target)
 
     assert [t.id for t in tasks] == ["keep-first", "keep-second"]
     assert get.call_args_list[0].kwargs["params"] == {"type": "todos"}
@@ -134,19 +135,20 @@ def test_future_exact_date_skips_dailies_and_undated_overdue(account):
         {"id": "undated", "text": "Undated", "date": None, "completed": False},
     ]
 
-    with patch("habitica_sync.service.django_tz.localdate", return_value=project_today):
+    with patch("habitica_sync.service.user_local_date", return_value=project_today):
         with patch("habitica_sync.service.requests.get") as get:
             get.return_value = _response(data=todos)
-            tasks = service.fetch_tasks_for_date(account, target)
+            tasks = service.fetch_tasks_for_date(
+                account, target, local_today=project_today
+            )
 
     assert [t.id for t in tasks] == ["target"]
     assert get.call_count == 1
     assert get.call_args.kwargs["params"] == {"type": "todos"}
 
 
-def test_client_today_carryover_uses_target_date_boundary_for_todos_and_dailies(account):
-    project_today = datetime.date(2026, 7, 22)
-    browser_today = datetime.date(2026, 7, 23)
+def test_user_today_uses_target_date_boundary_for_todos_and_dailies(account):
+    user_today = datetime.date(2026, 7, 23)
     todos = [
         {
             "id": "server-day-overdue",
@@ -159,16 +161,28 @@ def test_client_today_carryover_uses_target_date_boundary_for_todos_and_dailies(
         {"id": "daily-due", "text": "Due daily", "isDue": True, "completed": False}
     ]
 
-    with patch("habitica_sync.service.django_tz.localdate", return_value=project_today):
-        with patch("habitica_sync.service.requests.get") as get:
-            get.side_effect = [_response(data=todos), _response(data=dailies)]
-            tasks = service.fetch_tasks_for_date(
-                account,
-                browser_today,
-                include_overdue_carryover=True,
-            )
+    with patch("habitica_sync.service.requests.get") as get:
+        get.side_effect = [_response(data=todos), _response(data=dailies)]
+        tasks = service.fetch_tasks_for_date(
+            account, user_today, local_today=user_today
+        )
 
     assert [t.id for t in tasks] == ["daily-due", "server-day-overdue"]
+
+
+def test_direct_account_fetch_uses_saved_timezone(account):
+    get_schedule_settings(account.user)
+    account.user.schedule_settings.time_zone = "Asia/Qatar"
+    account.user.schedule_settings.save()
+    with patch(
+        "schedules.window.timezone.now",
+        return_value=datetime.datetime(2026, 5, 7, 22, tzinfo=datetime.UTC),
+    ), patch("habitica_sync.service.requests.get") as get:
+        get.side_effect = [_response(data=[]), _response(data=[])]
+        service.fetch_tasks_for_date(account, datetime.date(2026, 5, 8))
+    assert [call.kwargs["params"] for call in get.call_args_list] == [
+        {"type": "todos"}, {"type": "dailys"}
+    ]
 
 
 def test_success_false_or_non_list_data_raises_provider(account):

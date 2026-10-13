@@ -1,6 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { ref, nextTick } from "vue"
-import { mount } from "@vue/test-utils"
+import { enableAutoUnmount, mount } from "@vue/test-utils"
+import { makeScheduleProvides } from "./helpers/schedule"
+
+enableAutoUnmount(afterEach)
 
 // Reactive page-props ref so each test can mutate the theme and observe
 // the rendered color update.
@@ -49,6 +52,7 @@ describe("TimeBlock theme reactivity (health override)", () => {
     }
     const wrapper = mount(TimeBlock, {
       props: { block, date: "2026-04-07" },
+      global: { provide: makeScheduleProvides() },
     })
     // Find the block container with the inline border style. Most
     // shapes of TimeBlock render the colored border on the root element.

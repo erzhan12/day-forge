@@ -1,89 +1,49 @@
 import { onUnmounted, ref, watch } from "vue"
 import type { Ref } from "vue"
-import { todayString } from "../utils/date"
+import { zonedDateTime } from "../utils/date"
 
 const NOW_UPDATE_INTERVAL_MS = 60_000
-// Hidden-tab timer throttling and device-sleep suspension gaps are handled
-// downstream by useBlockBoundaryDetector's MAX_COALESCE_GAP_MINUTES clamp
-// (feature 0033 / issue #112) — no visibilitychange listener here.
-
-function sampleNow(): { minutes: number; hhmm: string } {
-  const now = new Date()
-  const hours = now.getHours()
-  const minutes = now.getMinutes()
-  return {
-    minutes: hours * 60 + minutes,
-    hhmm: `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`,
-  }
-}
+// Hidden-tab gaps still pass through useBlockBoundaryDetector's bounded
+// crossing logic. A visibility sample updates the displayed date promptly.
 
 /**
  * Centralised 60s current-time sampler for schedule UI.
  *
- * - On-today (`viewedDate === todayString()`): `nowMinutes` / `nowDate` /
- *   `currentHHMM` track wall-clock; the interval re-evaluates `today` on
- *   every tick so a tab left open across midnight auto-leaves today.
- * - Off-today: `nowMinutes` / `nowDate` are `null`, `currentHHMM` is `""`,
- *   and no interval runs.
- * - Same-instance navigation into today refreshes immediately (no remount
- *   needed).
+ * `todayDate` always tracks the saved zone. Clock refs are populated only
+ * while the viewed date is today in that zone. The timer stays armed while
+ * off-today, allowing a future date to become today at midnight.
  */
-export function useNowMinutes(viewedDate: Ref<string>) {
+export function useNowMinutes(viewedDate: Ref<string>, timeZone: Ref<string>) {
   const nowMinutes = ref<number | null>(null)
   const nowDate = ref<string | null>(null)
   const currentHHMM = ref("")
-  let interval: ReturnType<typeof setInterval> | null = null
-
-  function clearTimer() {
-    if (interval !== null) {
-      clearInterval(interval)
-      interval = null
-    }
-  }
-
-  function leaveToday() {
-    clearTimer()
-    nowMinutes.value = null
-    nowDate.value = null
-    currentHHMM.value = ""
-  }
-
-  function enterToday(today: string) {
-    clearTimer()
-    const sample = sampleNow()
-    nowMinutes.value = sample.minutes
-    nowDate.value = today
-    currentHHMM.value = sample.hhmm
-    interval = setInterval(tick, NOW_UPDATE_INTERVAL_MS)
-  }
-
-  function syncToViewedDate() {
-    const today = todayString()
-    if (viewedDate.value === today) {
-      enterToday(today)
-    } else {
-      leaveToday()
-    }
-  }
+  const todayDate = ref("")
 
   function tick() {
-    const today = todayString()
-    if (viewedDate.value !== today) {
-      leaveToday()
+    const sample = zonedDateTime(new Date(), timeZone.value)
+    todayDate.value = sample.date
+    if (viewedDate.value !== sample.date) {
+      nowMinutes.value = null
+      nowDate.value = null
+      currentHHMM.value = ""
       return
     }
-
-    const sample = sampleNow()
     nowMinutes.value = sample.minutes
-    nowDate.value = today
+    nowDate.value = sample.date
     currentHHMM.value = sample.hhmm
   }
 
-  watch(viewedDate, syncToViewedDate, { immediate: true })
+  watch([viewedDate, timeZone], tick, { immediate: true, flush: "sync" })
+  const interval = setInterval(tick, NOW_UPDATE_INTERVAL_MS)
+  const onVisible = () => {
+    if (document.visibilityState === "visible") tick()
+  }
+  document.addEventListener("visibilitychange", onVisible)
 
   onUnmounted(() => {
-    clearTimer()
+    clearInterval(interval)
+    document.removeEventListener("visibilitychange", onVisible)
   })
 
-  return { nowMinutes, nowDate, currentHHMM }
+  return { nowMinutes, nowDate, currentHHMM, todayDate }
 }

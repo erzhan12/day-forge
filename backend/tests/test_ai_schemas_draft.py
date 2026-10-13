@@ -1,5 +1,6 @@
 """Unit tests for ``validate_draft_response``."""
 
+import pytest
 from ai.schemas import ALLOWED_ACTION_TYPES, validate_action_shape, validate_draft_response
 
 ALLOWED = {"work", "personal", "health", "other"}
@@ -18,6 +19,19 @@ def _good_action():
 def test_valid_payload_passes():
     parsed = {"actions": [_good_action()], "explanation": "ok"}
     assert validate_draft_response(parsed, ALLOWED) == []
+
+
+@pytest.mark.parametrize(
+    "action_type",
+    [[], {}, None, 42, "unknown"],
+    ids=["array", "object", "null", "number", "unknown-string"],
+)
+def test_invalid_action_type_returns_validation_errors(action_type):
+    errors = validate_action_shape({"type": action_type}, ALLOWED)
+
+    assert errors == [
+        f"type must be one of {sorted(ALLOWED_ACTION_TYPES)}, got {action_type!r}"
+    ]
 
 
 def test_rejects_move():
@@ -210,11 +224,26 @@ def test_update_changes_is_required_nonempty_object_and_validates_nested_times()
             {"type": "update", "task_id": 5, "changes": changes}, ALLOWED
         )
         assert errors
-    for field, value in (("start_time", "9:00"), ("end_time", "09:03")):
-        errors = validate_action_shape(
-            {"type": "update", "task_id": 5, "changes": {field: value}}, ALLOWED
-        )
-        assert any(field in e for e in errors)
+    errors = validate_action_shape(
+        {"type": "update", "task_id": 5, "changes": {"start_time": "9:00"}}, ALLOWED
+    )
+    assert any("start_time" in error for error in errors)
+    assert validate_action_shape(
+        {"type": "update", "task_id": 5, "changes": {"end_time": "09:03"}}, ALLOWED
+    ) == []
+
+
+def test_schema_leaves_interval_and_grid_rules_to_schedule_planner():
+    assert validate_action_shape(
+        {
+            "type": "add", "title": "X", "category": "work",
+            "start_time": "10:00", "end_time": "09:00",
+        },
+        ALLOWED,
+    ) == []
+    assert validate_action_shape(
+        {"type": "update", "task_id": 5, "changes": {"end_time": "09:03"}}, ALLOWED
+    ) == []
 
 
 def test_non_update_actions_reject_unknown_keys():

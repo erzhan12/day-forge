@@ -252,6 +252,96 @@ class TestIsErrorRetryWidening:
         ]
         assert find_replayed_actions([_add("Momentum")], messages) == ()
 
+    def test_two_pending_asks_survive_failed_answer_retry(self):
+        messages = [
+            _u("add Stretch"),
+            _a("Added Stretch"),
+            _u("add Gym"),
+            _a("How long should Gym be?", is_ask=True, applied_add_block_ids=[]),
+            _u("30 minutes"),
+            _a("Past or from now forward?", is_ask=True, applied_add_block_ids=[]),
+            _u("past"),
+            _a("AI chat failed", is_error=True),
+            _u("try again"),
+        ]
+        assert find_replayed_actions([_add("Gym")], messages, existing_blocks={1: "Stretch"}) == ()
+        assert find_replayed_actions(
+            [_add("Stretch[2]")], messages, existing_blocks={1: "Stretch"}
+        ) == (0,)
+
+    def test_two_pending_asks_survive_repeated_error_chain(self):
+        messages = [
+            _u("add Gym"),
+            _a("How long should Gym be?", is_ask=True, applied_add_block_ids=[]),
+            _u("30 minutes"),
+            _a("Past or from now forward?", is_ask=True, applied_add_block_ids=[]),
+            _u("past"),
+            _a("AI chat failed", is_error=True),
+            _u("try again"),
+            _a("AI chat failed", is_error=True),
+            _u("try again"),
+        ]
+        assert find_replayed_actions([_add("Gym")], messages) == ()
+
+    def test_older_block_mentioned_in_first_ask_stays_replay_evidence(self):
+        messages = [
+            _u("add Stretch"),
+            _a("Added Stretch"),
+            _u("add Gym after Stretch"),
+            _a(
+                "When should Gym start after Stretch?",
+                is_ask=True,
+                applied_add_block_ids=[],
+            ),
+            _u("14:00"),
+            _a("Past or from now forward?", is_ask=True, applied_add_block_ids=[]),
+            _u("past"),
+            _a("AI chat failed", is_error=True),
+            _u("try again"),
+        ]
+        assert find_replayed_actions(
+            [_add("Stretch[2]")], messages, existing_blocks={1: "Stretch"}
+        ) == (0,)
+        assert find_replayed_actions([_add("Gym")], messages, existing_blocks={1: "Stretch"}) == ()
+
+    def test_failed_answer_keeps_partially_applied_sibling_as_evidence(self):
+        messages = [
+            _u("add Momentum and Gym"),
+            _a(
+                "Added Momentum. What time should Gym start?",
+                is_ask=True,
+                applied_add_block_ids=[1],
+            ),
+            _u("14:00"),
+            _a("AI chat failed", is_error=True),
+            _u("try again"),
+        ]
+        assert find_replayed_actions(
+            [_add("Momentum[2]"), _add("Gym")], messages, existing_blocks={1: "Momentum"}
+        ) == (0,)
+
+    def test_failed_answer_does_not_treat_preexisting_title_as_applied_sibling(self):
+        messages = [
+            _u("add Gym"),
+            _a("What time should Gym start?", is_ask=True, applied_add_block_ids=[]),
+            _u("14:00"),
+            _a("AI chat failed", is_error=True),
+            _u("try again"),
+        ]
+        assert find_replayed_actions([_add("Gym")], messages, existing_blocks={1: "Gym"}) == ()
+
+    def test_older_client_failed_answer_fails_closed_for_same_title(self):
+        messages = [
+            _u("add Gym"),
+            _a("What time should Gym start?", is_ask=True),
+            _u("14:00"),
+            _a("AI chat failed", is_error=True),
+            _u("try again"),
+        ]
+        assert find_replayed_actions([_add("Gym[2]")], messages, existing_blocks={1: "Gym"}) == (
+            0,
+        )
+
     def test_sibling_applied_in_ask_triggering_turn_still_flagged(self):
         messages = [
             _u("add Momentum, Gym 09:00"),
@@ -264,7 +354,9 @@ class TestIsErrorRetryWidening:
             _a("AI chat failed", is_error=True),
             _u("Notes"),
         ]
-        assert find_replayed_actions([_add("Momentum[2]")], messages) == (0,)
+        assert find_replayed_actions(
+            [_add("Momentum[2]")], messages, existing_blocks={1: "Momentum"}
+        ) == (0,)
 
     def test_failure_after_ask_answer_does_not_whitelist_older_adds(self):
         messages = [
@@ -292,6 +384,27 @@ class TestIsErrorRetryWidening:
             _u("add TCO"),
             _a("AI chat failed", is_error=True),
             _u("Notes"),
+        ]
+        assert find_replayed_actions([_add("Momentum[2]")], messages) == (0,)
+
+    def test_earliest_guard_ask_cannot_whitelist_rejected_title_after_two_asks(self):
+        messages = [
+            _u("add Momentum"),
+            _a("Added Momentum"),
+            _u("Notes"),
+            _a(
+                'I did not change the schedule: "Momentum[2]" is not something '
+                "you asked for in your last message. What would you like to add?",
+                is_ask=True,
+                applied_add_block_ids=[],
+            ),
+            _u("Notes"),
+            _a("Which category should Momentum use?", is_ask=True, applied_add_block_ids=[]),
+            _u("personal"),
+            _a("AI chat failed", is_error=True),
+            _u("try again"),
+            _a("AI chat failed", is_error=True),
+            _u("try again"),
         ]
         assert find_replayed_actions([_add("Momentum[2]")], messages) == (0,)
 

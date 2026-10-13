@@ -10,7 +10,8 @@ from analytics.models import DailyReview
 from analytics.services import (
     compute_review_stats,
     compute_streak,
-    recompute_review_from_schedule,
+    freeze_review_snapshot,
+    is_review_snapshot_current,
 )
 from schedules.models import Schedule, TimeBlock
 
@@ -127,22 +128,39 @@ class TestComputeReviewStats:
 
 
 @pytest.mark.django_db
-class TestRecomputeReviewFromSchedule:
+class TestFreezeReviewSnapshot:
     def test_idempotent_preserves_notes(self, past_schedule):
         _make_block(past_schedule, "09:00", "10:00", completed=True)
         _make_block(past_schedule, "10:00", "11:00")
 
-        review = recompute_review_from_schedule(past_schedule, now=NOON)
-        # User adds notes; recompute must NOT clobber them.
+        past_schedule.status = Schedule.Status.REVIEWED
+        past_schedule.save(update_fields=["status"])
+        review = freeze_review_snapshot(past_schedule, revision=0, now=NOON)
+        # A repeated capture must preserve user notes.
         review.notes = "Felt focused"
         review.save(update_fields=["notes"])
         first_updated_at = review.updated_at
 
-        second = recompute_review_from_schedule(past_schedule, now=NOON)
+        second = freeze_review_snapshot(past_schedule, revision=0, now=NOON)
         assert second.pk == review.pk
         assert second.notes == "Felt focused"
         # auto_now advances on every save, so updated_at strictly increases.
         assert second.updated_at > first_updated_at
+
+
+@pytest.mark.django_db
+def test_review_snapshot_current_requires_status_and_revision(past_schedule):
+    review = DailyReview.objects.create(
+        schedule=past_schedule, reviewed_revision=past_schedule.revision
+    )
+    assert not is_review_snapshot_current(past_schedule, review)
+    past_schedule.status = Schedule.Status.REVIEWED
+    assert is_review_snapshot_current(past_schedule, review)
+    past_schedule.revision += 1
+    assert not is_review_snapshot_current(past_schedule, review)
+    review.reviewed_revision = None
+    assert not is_review_snapshot_current(past_schedule, review)
+    assert not is_review_snapshot_current(past_schedule, None)
 
 
 @pytest.fixture
@@ -168,6 +186,124 @@ class TestComputeStreak:
 
     def test_cold_start_no_schedules(self, user, streak_settings):
         assert compute_streak(user, today=self.TODAY) == 0
+
+    def test_uncompleting_reviewed_day_uses_current_blocks(self, user, streak_settings):
+        schedule = self._make_day(
+            user,
+            self.TODAY - datetime.timedelta(days=1),
+            blocks=[("09:00", "10:00", True)],
+        )
+        review = freeze_review_snapshot(schedule, revision=schedule.revision, now=self.TODAY)
+        assert schedule.mark_reviewed_if_active()
+        assert review.completion_rate == 1.0
+        assert compute_streak(user, today=self.TODAY) == 1
+
+        block = schedule.time_blocks.get()
+        block.is_completed = False
+        block.save(update_fields=["is_completed"])
+        assert schedule.mark_active_on_edit()
+
+        assert compute_streak(user, today=self.TODAY) == 0
+        review.refresh_from_db()
+        assert review.completion_rate == 1.0
+
+    @pytest.mark.parametrize("status", [Schedule.Status.ACTIVE, Schedule.Status.DRAFT])
+    @pytest.mark.parametrize(
+        "completed_count, snapshot_planned, snapshot_completed, expected",
+        [(4, 5, 0, 1), (3, 5, 5, 0), (5, 0, 0, 1)],
+    )
+    def test_unreviewed_day_ignores_persisted_review(
+        self, user, streak_settings, status, completed_count,
+        snapshot_planned, snapshot_completed, expected,
+    ):
+        schedule = self._make_day(
+            user,
+            self.TODAY - datetime.timedelta(days=1),
+            blocks=[
+                (f"{9 + index:02d}:00", f"{10 + index:02d}:00", index < completed_count)
+                for index in range(5)
+            ],
+        )
+        schedule.status = status
+        schedule.save(update_fields=["status"])
+        review = DailyReview.objects.create(
+            schedule=schedule,
+            planned_count=snapshot_planned,
+            completed_count=snapshot_completed,
+            notes="Keep these notes",
+        )
+        snapshot = (review.planned_count, review.completed_count, review.notes, review.updated_at)
+
+        assert compute_streak(user, today=self.TODAY) == expected
+        review.refresh_from_db()
+        assert (
+            review.planned_count, review.completed_count, review.notes, review.updated_at
+        ) == snapshot
+
+    @pytest.mark.parametrize(
+        "snapshot_planned, snapshot_completed, block_completed, expected",
+        [(5, 4, False, 2), (5, 3, True, 0), (0, 0, True, 1)],
+    )
+    def test_reviewed_day_uses_frozen_snapshot(
+        self, user, streak_settings,
+        snapshot_planned, snapshot_completed, block_completed, expected,
+    ):
+        schedule = self._make_day(
+            user,
+            self.TODAY - datetime.timedelta(days=1),
+            blocks=[("09:00", "10:00", block_completed)],
+        )
+        review = DailyReview.objects.create(
+            schedule=schedule,
+            planned_count=snapshot_planned,
+            completed_count=snapshot_completed,
+            reviewed_revision=schedule.revision,
+        )
+        assert schedule.mark_reviewed_if_active()
+        self._make_day(
+            user,
+            self.TODAY - datetime.timedelta(days=2),
+            blocks=[("09:00", "10:00", True)],
+        )
+
+        # Deliberately different block counts prove that the frozen snapshot is used.
+        assert compute_streak(user, today=self.TODAY) == expected
+        review.refresh_from_db()
+        assert review.planned_count == snapshot_planned
+        assert review.completed_count == snapshot_completed
+
+    def test_stale_reviewed_day_uses_current_blocks(self, user, streak_settings):
+        schedule = self._make_day(
+            user,
+            self.TODAY - datetime.timedelta(days=1),
+            blocks=[("09:00", "10:00", False)],
+        )
+        schedule.mark_reviewed_if_active()
+        review = DailyReview.objects.create(
+            schedule=schedule,
+            planned_count=1,
+            completed_count=1,
+            reviewed_revision=schedule.revision + 1,
+        )
+        assert compute_streak(user, today=self.TODAY) == 0
+        review.refresh_from_db()
+        assert review.completed_count == 1
+
+    @pytest.mark.parametrize("status", Schedule.Status.values)
+    def test_empty_day_with_review_skips_without_breaking(self, user, streak_settings, status):
+        schedule = Schedule.objects.create(
+            user=user,
+            date=self.TODAY - datetime.timedelta(days=1),
+            status=status,
+        )
+        DailyReview.objects.create(schedule=schedule, planned_count=1, completed_count=0)
+        self._make_day(
+            user,
+            self.TODAY - datetime.timedelta(days=2),
+            blocks=[("09:00", "10:00", True)],
+        )
+
+        assert compute_streak(user, today=self.TODAY) == 1
 
     def test_five_consecutive_above_threshold(self, user, streak_settings):
         for offset in range(1, 6):
@@ -253,11 +389,18 @@ class TestComputeStreak:
         round-trip for ``time_blocks`` is the budget — independent of
         how many days are in the streak. Without the bulk query, this
         test fails with ~30 SELECTs on a long streak."""
-        for offset in range(1, 11):  # 10 perfect days
-            self._make_day(
+        for offset in range(1, 11):  # 10 perfect days, with mixed schedule statuses.
+            schedule = self._make_day(
                 user,
                 self.TODAY - datetime.timedelta(days=offset),
                 blocks=[("09:00", "10:00", True)],
+            )
+            schedule.status = Schedule.Status.values[offset % 3]
+            schedule.save(update_fields=["status"])
+            DailyReview.objects.create(
+                schedule=schedule,
+                planned_count=1,
+                completed_count=int(schedule.status == Schedule.Status.REVIEWED),
             )
         # Budget: exactly 2 queries —
         #   1) SELECT on Schedule with LEFT OUTER JOIN daily_review
@@ -268,7 +411,8 @@ class TestComputeStreak:
         with django_assert_num_queries(2):
             assert compute_streak(user, today=self.TODAY) == 10
 
-    def test_on_the_fly_recompute_when_no_review_row(self, user, streak_settings):
+    @pytest.mark.parametrize("status", Schedule.Status.values)
+    def test_on_the_fly_recompute_when_no_review_row(self, user, streak_settings, status):
         """A day with blocks but no DailyReview row should still count
         toward the streak (streak reflects behaviour, not page-visit
         habits). The on-the-fly recompute does NOT persist."""
@@ -277,6 +421,8 @@ class TestComputeStreak:
             self.TODAY - datetime.timedelta(days=1),
             blocks=[("09:00", "10:00", True)],
         )
+        s.status = status
+        s.save(update_fields=["status"])
         assert not DailyReview.objects.filter(schedule=s).exists()
         assert compute_streak(user, today=self.TODAY) == 1
         # Confirm no DB write happened.

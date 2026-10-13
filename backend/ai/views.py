@@ -4,32 +4,35 @@ import datetime
 import hashlib
 import json
 import logging
-from typing import Any
+from dataclasses import replace
 
 from asgiref.sync import sync_to_async
+from common.http import parse_json_object, reject_oversized_body
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
-from django.core.cache import cache
 from django.core.exceptions import ValidationError
-from django.db import transaction
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
-from schedules.categories import ordered_categories
-from schedules.http import (
-    block_to_dict,
-    parse_time,
-    reject_oversized_body,
-    times_overlap,
-)
+from schedules.categories import ordered_categories, serialize_category
+from schedules.commands import CreateCommand, MutationDiff
 from schedules.models import Category, Schedule, TimeBlock
-from schedules.validators import validate_five_minute_granularity
+from schedules.mutations import (
+    MutationRejected,
+    ScheduleChanged,
+    execute_schedule_mutation,
+    parse_expected_revision,
+    run_user_maintenance,
+    schedule_changed_response,
+)
+from schedules.persistence import PersistenceError, persist_command_diff
+from schedules.planning import DRAFT, CommandError, plan_commands, snapshot_from_blocks
+from schedules.ratelimit import consume_rate_limit, rate_limited_response
+from schedules.time_validation import parse_time
 from schedules.window import (
-    DEFAULT_WINDOW,
     ScheduleWindow,
     get_schedule_settings,
-    get_schedule_window,
     resolve_time_zone,
 )
 from templates_mgr.models import Rule, Template
@@ -39,17 +42,10 @@ from ai.free_slot import GRID_MINUTES
 from ai.models import AIInteraction
 from ai.mutation_planner import (
     ActionOutcome,
-    MutationDiff,
-    PartialPlan,
     PlanError,
     action_outcome_to_dict,
     compute_apply_context_fingerprint,
     plan_mutations,
-    snapshot_apply_context,
-    snapshot_from_blocks,
-)
-from ai.mutation_planner import (
-    compute_move_resize_times as _compute_move_resize_times,
 )
 from ai.relative_add_guard import relative_add_guard_ask
 from ai.replay_guard import (
@@ -75,6 +71,10 @@ from ai.service import (
 
 logger = logging.getLogger(__name__)
 
+
+def _safe_block_title(block) -> str:
+    return block.title if block.origin == TimeBlock.Origin.MANUAL else "[private block]"
+
 _AI_ERROR_STATUS = {
     AIUnavailableError: 503,
     AIInvalidInputError: 400,
@@ -84,13 +84,10 @@ _AI_ERROR_STATUS = {
 }
 
 _MAX_AI_RESPONSE_LOG_LEN = 10_000
-# Cap logged user commands so a mis-sized request (over the 1 MB body cap in
-# ``reject_oversized_body`` but still within it) can't bloat the audit
-# table. Kept strictly larger than ``LLM_MAX_COMMAND_CHARS`` so the log
+# Cap logged user commands so a request within the 100 KB body cap cannot
+# bloat the audit table. Kept larger than ``LLM_MAX_COMMAND_CHARS`` so the log
 # preserves evidence that the user *exceeded* the per-request cap.
 _MAX_COMMAND_LOG_LEN = 2_000
-
-_RATE_LIMIT_WINDOW_SECONDS = 3600
 
 # Feature 0084 (issue #209): a generic, user-facing 502 message for every
 # ``AIParseError`` — the real validation string (which can echo raw
@@ -129,62 +126,9 @@ async def _load_active_rules(user: User) -> list[Rule]:
 
 
 async def _consume_rate_limit(user_id: int, key_prefix: str, limit: int) -> bool:
-    """Increment the per-user fixed-window counter under ``key_prefix``.
-
-    Returns True when the call is within budget (caller proceeds), False
-    when exceeded (caller returns 429). ``cache.aadd`` anchors the window
-    TTL to the first call (``SET key 1 EX 3600 NX`` on Redis) so it
-    doesn't slide forward on every request; falls back to ``cache.aset``
-    if a backend evicts the key mid-window.
-
-    The increment goes through the **sync** ``cache.incr`` via
-    ``sync_to_async`` rather than the async ``cache.aincr``. Django's
-    ``RedisCache`` overrides only the sync ``incr`` (atomic Redis
-    ``INCR``); the async ``aincr`` it inherits from ``BaseCache`` is a
-    non-atomic ``aget``→``aset`` read-modify-write that *also* rewrites
-    the key TTL to ``default_timeout`` (300s), collapsing the 3600s
-    window. Bridging to the sync path — mirroring how ``BaseCache.aadd``
-    itself bridges to the sync ``add`` — gives a cross-worker-atomic
-    ``INCR`` that leaves the TTL anchored by ``aadd`` intact.
-    ``RedisCache.incr`` raises ``ValueError`` on a missing key, so the
-    ``except ValueError`` reseed branch is preserved.
-
-    Backend note: ``CACHES['default']`` is Redis in production-shaped
-    deploys (set ``REDIS_URL``). The ``ai.E001`` system check blocks
-    startup whenever ``LLM_API_KEY`` is set and the backend is ineffective
-    for rate limiting (LocMem / Dummy are per-worker; FileBased has no
-    atomic cross-worker ``incr``), so a multi-worker AI deploy can't ship
-    the ``limit × workers`` footgun.
-    """
+    """Consume an AI bucket token through the shared synchronous limiter."""
     key = f"{key_prefix}:{user_id}"
-    if await cache.aadd(key, 1, _RATE_LIMIT_WINDOW_SECONDS):
-        count = 1
-    else:
-        try:
-            # Sync ``incr`` (atomic Redis INCR; TTL-preserving) bridged to
-            # async — NOT ``cache.aincr``, which is a non-atomic RMW that
-            # resets the window TTL. See docstring.
-            count = await sync_to_async(cache.incr, thread_sensitive=True)(key)
-        except ValueError:
-            await cache.aset(key, 1, _RATE_LIMIT_WINDOW_SECONDS)
-            count = 1
-    if count > limit:
-        logger.warning(
-            "AI rate limit exceeded for user %s (key=%s, count=%s, limit=%s)",
-            user_id,
-            key_prefix,
-            count,
-            limit,
-        )
-        return False
-    return True
-
-
-def _rate_limited_response() -> JsonResponse:
-    return JsonResponse(
-        {"errors": {"detail": "Rate limit exceeded. Try again later."}},
-        status=429,
-    )
+    return await sync_to_async(consume_rate_limit, thread_sensitive=True)(key, limit)
 
 
 async def _log_interaction(
@@ -377,6 +321,7 @@ async def _replay_guard_response(
     *,
     user_id: int,
     schedule_id: int,
+    snapshot: dict,
 ) -> JsonResponse:
     """Build the 200 response for a tripped replay guard (feature 0083).
 
@@ -409,6 +354,7 @@ async def _replay_guard_response(
     first_title = parsed_actions[offending[0]].get("title", "")
     return JsonResponse(
         {
+            **snapshot,
             "blocks": None,
             "explanation": GUARD_EXPLANATION,
             "ask": build_guard_ask(first_title),
@@ -478,359 +424,100 @@ def _validation_error_detail(e: ValidationError) -> dict:
     return getattr(e, "message_dict", None) or {"detail": str(e)}
 
 
-def _check_day_window(
-    action_index: int,
-    start: datetime.time | None = None,
-    end: datetime.time | None = None,
-    window: ScheduleWindow = DEFAULT_WINDOW,
-) -> JsonResponse | None:
-    """Reject times outside the caller's per-user ``ScheduleWindow`` (feature 0053).
-
-    Mirrors the frontend guard in ``useDrag.ts`` and the constraint the
-    system prompt asks the model to respect — enforced here so a
-    hallucinating response can't insert off-window blocks.
-
-    Pass ``None`` to skip a boundary: move/resize check only values the
-    action supplied (or derived from supplied ones) — a value inherited
-    from the stored block was already persisted, and clamp-to-day
-    from-event blocks (feature 0026, e.g. 00:00–00:30) legitimately sit
-    outside the window.
-    """
-    if start is not None and not window.day_start <= start <= window.day_end:
-        return _action_error(
-            action_index, f"start_time must fall within {window.start_str}-{window.end_str}"
-        )
-    if end is not None and not window.day_start <= end <= window.day_end:
-        return _action_error(
-            action_index, f"end_time must fall within {window.start_str}-{window.end_str}"
-        )
-    return None
-
-
-def _check_granularity(action_index: int, *times: datetime.time) -> JsonResponse | None:
-    """Run the 5-minute granularity validator and map ``ValidationError`` to
-    the action-index error envelope."""
-    try:
-        for t in times:
-            validate_five_minute_granularity(t)
-    except ValidationError as e:
-        return _action_error(action_index, str(e.message))
-    return None
-
-
-def _check_no_overlap(
-    blocks_by_id: dict[int, TimeBlock],
-    start: datetime.time,
-    end: datetime.time,
-    exclude_id: int | None,
-    action_index: int,
-) -> JsonResponse | None:
-    """Reject the action if its ``[start, end)`` window overlaps any block
-    in ``blocks_by_id`` other than ``exclude_id`` (pass ``None`` to scan
-    everything)."""
-    for other_id, other in blocks_by_id.items():
-        if other_id == exclude_id:
-            continue
-        if times_overlap(other.start_time, other.end_time, start, end):
-            return _action_error(action_index, "block would overlap existing block")
-    return None
-
-
-def _apply_add(
-    schedule: Schedule,
-    blocks_by_id: dict[int, TimeBlock],
-    action: dict[str, Any],
-    action_index: int,
-    window: ScheduleWindow = DEFAULT_WINDOW,
-    categories=None,
-) -> JsonResponse | None:
-    title = action["title"].strip()
-    # ``category`` is required by ``schemas.validate_action_shape``; the
-    # ``get(..., "other")`` fallback is defence-in-depth if the schema check
-    # is ever relaxed or bypassed.
-    category = action.get("category")
-    if (
-        categories is None
-        or not isinstance(category, str)
-        or category not in {c.slug for c in categories}
-    ):
-        return _action_error(action_index, f"invalid category {category!r}")
-    start = parse_time(action["start_time"])
-    end = parse_time(action["end_time"])
-
-    err = _check_day_window(action_index, start, end, window)
-    if err is not None:
-        return err
-    err = _check_granularity(action_index, start, end)
-    if err is not None:
-        return err
-    if start >= end:
-        return _action_error(action_index, "start_time must be < end_time")
-    err = _check_no_overlap(blocks_by_id, start, end, None, action_index)
-    if err is not None:
-        return err
-
-    max_sort = max((b.sort_order for b in blocks_by_id.values()), default=-1)
-    block = TimeBlock(
-        schedule=schedule,
-        title=title,
-        start_time=start,
-        end_time=end,
-        category=category,
-        sort_order=max_sort + 1,
-    )
-    try:
-        block.full_clean()
-    except ValidationError as e:
-        return _action_error(action_index, _validation_error_detail(e))
-    block.save()
-    blocks_by_id[block.id] = block
-    return None
-
-
-def _apply_remove(
-    schedule: Schedule,
-    blocks_by_id: dict[int, TimeBlock],
-    action: dict[str, Any],
-    action_index: int,
-    block: TimeBlock,
-) -> JsonResponse | None:
-    block.delete()
-    blocks_by_id.pop(block.id, None)
-    return None
-
-
-def _apply_move_or_resize(
-    schedule: Schedule,
-    blocks_by_id: dict[int, TimeBlock],
-    action: dict[str, Any],
-    action_index: int,
-    block: TimeBlock,
-    window: ScheduleWindow = DEFAULT_WINDOW,
-) -> JsonResponse | None:
-    new_start, new_end, wrapped = _compute_move_resize_times(action, block)
-    if wrapped:
-        return _action_error(action_index, "moved block would extend past midnight")
-
-    # Enforce day-window and granularity only on times the action supplied
-    # (or, for a bare move, derived from the supplied start): a value
-    # inherited from the stored block was already persisted, and off-grid
-    # / clamp-to-day from-event blocks (feature 0026) must stay movable.
-    # The AI still can't introduce *new* off-grid or off-window times.
-    start_supplied = "start_time" in action
-    end_supplied = "end_time" in action
-    bare_move = action["type"] == "move" and not end_supplied
-
-    err = _check_day_window(
-        action_index,
-        start=new_start if start_supplied else None,
-        end=new_end if (end_supplied or bare_move) else None,
-        window=window,
-    )
-    if err is not None:
-        return err
-    supplied_times = []
-    if start_supplied:
-        supplied_times.append(new_start)
-    if end_supplied:
-        supplied_times.append(new_end)
-    # bare-move ``new_end`` needs no granularity check: on-grid start +
-    # rounded duration is on-grid by construction.
-    err = _check_granularity(action_index, *supplied_times)
-    if err is not None:
-        return err
-    if new_start >= new_end:
-        return _action_error(action_index, "start_time must be < end_time")
-    err = _check_no_overlap(blocks_by_id, new_start, new_end, block.id, action_index)
-    if err is not None:
-        return err
-
-    block.start_time = new_start
-    block.end_time = new_end
-    try:
-        # ``exclude`` skips the field-level five-minute validators, which
-        # would re-fail an inherited off-grid time even after the
-        # selective ``_check_granularity`` above. Range and overlap were
-        # checked explicitly; model ``clean()`` still runs.
-        block.full_clean(exclude=["start_time", "end_time"])
-    except ValidationError as e:
-        return _action_error(action_index, _validation_error_detail(e))
-    block.save()
-    return None
-
-
-def _apply_existing_block_action(
-    schedule: Schedule,
-    blocks_by_id: dict[int, TimeBlock],
-    action: dict[str, Any],
-    action_index: int,
-    window: ScheduleWindow = DEFAULT_WINDOW,
-) -> JsonResponse | None:
-    """Dispatcher for move / remove / resize — all need an existing block."""
-    task_id = action["task_id"]
-    block = blocks_by_id.get(task_id)
-    if block is None:
-        # 400 (not 404) to avoid id enumeration across users / schedules.
-        # ``blocks_by_id`` is built from the select_for_update re-fetch, so a
-        # miss here means the LLM referenced an id that either never existed
-        # on this schedule or was deleted between the LLM call and the apply
-        # step — surface both as the same "no longer exists" message.
-        return _action_error(
-            action_index,
-            "Referenced block no longer exists; it may have been deleted. Please retry.",
-        )
-    if action["type"] == "remove":
-        return _apply_remove(schedule, blocks_by_id, action, action_index, block)
-    return _apply_move_or_resize(schedule, blocks_by_id, action, action_index, block, window)
-
-
-_ACTION_DISPATCH = {
-    "add": _apply_add,
-    "move": _apply_existing_block_action,
-    "remove": _apply_existing_block_action,
-    "resize": _apply_existing_block_action,
-}
-
-
-def _apply_action(
-    schedule: Schedule,
-    blocks_by_id: dict[int, TimeBlock],
-    action: dict[str, Any],
-    action_index: int,
-) -> JsonResponse | None:
-    """Apply one AI action; return ``None`` on success or a 400 response.
-
-    Called sequentially under the schedule's row lock. Overlap checks use
-    the in-memory ``blocks_by_id`` so a batch like ``[remove X, add Y at
-    same slot]`` works without a spurious overlap error.
-    """
-    handler = _ACTION_DISPATCH[action["type"]]
-    return handler(schedule, blocks_by_id, action, action_index)
-
-
-# ---------------------------------------------------------------------------
-# Sync helpers for the mutation atomic blocks. Lifted verbatim out of the
-# (now async) views so the ``with transaction.atomic():`` boundary stays
-# synchronous — Django 5.2.12 has no ``transaction.aatomic``. The async
-# views call these via ``await sync_to_async(_apply_*_sync,
-# thread_sensitive=True)(...)``.
-#
-# The ``_Rollback`` exception-as-control-flow is preserved: a normal
-# return from inside ``transaction.atomic()`` commits the partial writes,
-# so the only correct way to abort + return is to raise. ``asgiref``'s
-# ``SyncToAsync`` re-raises across the thread boundary, so the calling
-# async view catches ``_Rollback`` and returns ``rb.response`` unchanged.
-# ---------------------------------------------------------------------------
-
 
 def _persist_mutation_diff(
     schedule: Schedule, locked_blocks: list[TimeBlock], diff: MutationDiff
 ) -> None:
-    """Apply a planner ``MutationDiff`` under the existing row lock.
+    """Persist a validated diff and map row failures to the source action."""
+    try:
+        persist_command_diff(schedule, locked_blocks, diff)
+    except PersistenceError as error:
+        if not isinstance(error.cause, ValidationError):
+            raise error.cause from error
+        raise _Rollback(
+            _action_error(error.action_index or 0, _validation_error_detail(error.cause))
+        ) from error
 
-    Deletes → updates → creates, each group sorted deterministically.
-    Creates receive consecutive ``sort_order`` values starting at
-    ``max(surviving sort_order) + 1``. Defense-in-depth ``full_clean``
-    failures map back to the originating diff entry's ``action_index``.
-    """
-    blocks_by_id = {b.id: b for b in locked_blocks}
 
-    for entry in sorted(diff.deletes, key=lambda e: e.block_id):
-        block = blocks_by_id.pop(entry.block_id, None)
-        if block is not None:
-            block.delete()
+def _ai_context_fingerprint(schedule, blocks, rules, schedule_settings, categories, template=None):
+    """Include every mutable prompt policy in the stale-intent guard."""
+    payload = {
+        "schedule": compute_apply_context_fingerprint(
+            schedule=schedule, blocks=blocks, rules=rules
+        ),
+        "window": [schedule_settings.window.start_str, schedule_settings.window.end_str],
+        "time_zone": schedule_settings.time_zone,
+        "categories": [serialize_category(category) for category in categories],
+    }
+    if template is not None:
+        payload["template"] = {
+            "id": template.id,
+            "name": template.name,
+            "type": template.type,
+            "blocks": template.blocks,
+        }
+    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
 
-    for entry in sorted(diff.updates, key=lambda e: e.block_id):
-        block = blocks_by_id.get(entry.block_id)
-        if block is None:
-            continue
-        if entry.title is not None:
-            block.title = entry.title
-        if entry.category is not None:
-            block.category = entry.category
-        if entry.start_changed:
-            block.start_time = entry.start_time
-        if entry.end_changed:
-            block.end_time = entry.end_time
-        try:
-            excluded = []
-            if not entry.start_changed:
-                excluded.append("start_time")
-            if not entry.end_changed:
-                excluded.append("end_time")
-            block.full_clean(exclude=excluded)
-        except ValidationError as e:
-            raise _Rollback(_action_error(entry.action_index, _validation_error_detail(e)))
-        block.save()
 
-    max_sort = max((b.sort_order for b in blocks_by_id.values()), default=-1)
-    for entry in sorted(diff.creates, key=lambda e: e.action_index):
-        max_sort += 1
-        block = TimeBlock(
-            schedule=schedule,
-            title=entry.title.strip(),
-            start_time=entry.start_time,
-            end_time=entry.end_time,
-            category=entry.category,
-            sort_order=max_sort,
+def _load_ai_context_sync(user, parsed_date, expected_revision, *, draft=False):
+    """Capture one prompt context while policy and schedule writers are excluded."""
+
+    def capture(locked_user):
+        schedule, _ = Schedule.objects.get_or_create(user=locked_user, date=parsed_date)
+        if schedule.revision != expected_revision:
+            raise ScheduleChanged()
+        blocks = list(schedule.time_blocks.order_by("start_time", "sort_order", "id"))
+        rules = list(Rule.objects.filter(user=user, is_active=True).order_by("-priority", "id"))
+        schedule_settings = get_schedule_settings(user)
+        categories = ordered_categories(user)
+        template = (
+            Template.objects.filter(
+                user=user, type=Template.slot_type_for_date(parsed_date)
+            ).first()
+            if draft
+            else None
         )
-        try:
-            block.full_clean()
-        except ValidationError as e:
-            raise _Rollback(_action_error(entry.action_index, _validation_error_detail(e)))
-        block.save()
-        blocks_by_id[block.id] = block
+        fingerprint = _ai_context_fingerprint(
+            schedule, blocks, rules, schedule_settings, categories, template
+        )
+        schedule._schedule_window = schedule_settings.window
+        schedule._categories = categories
+        return schedule, blocks, rules, schedule_settings, template, fingerprint
+
+    return run_user_maintenance(user.pk, capture)
 
 
 def _apply_actions_sync(
     schedule: Schedule,
     result: AIChatResult,
     *,
+    expected_revision: int,
     expected_fingerprint: str,
     interaction_id: int | None = None,
-) -> PartialPlan:
-    """Apply parsed actions under one atomic+select_for_update lock.
+):
+    """Validate intent and persist a plan through the shared day executor."""
 
-    Used by ``ai_chat``. ``_apply_draft_sync`` stays separate because the draft path
-    locks the parent ``Schedule`` row and re-checks emptiness — different
-    semantics that don't merge cleanly.
-    """
-    if not result.parsed_actions:
-        return PartialPlan(MutationDiff((), (), ()), (), "applied")
-
-    with transaction.atomic():
-        User.objects.select_for_update().get(pk=schedule.user_id)
-        locked_schedule = (
-            Schedule.objects.select_for_update().select_related("user").get(pk=schedule.pk)
-        )
-        locked_blocks = list(TimeBlock.objects.filter(schedule=locked_schedule).select_for_update())
+    def mutate(ctx):
+        locked_schedule, locked_blocks = ctx.schedule, ctx.blocks
         locked_rules = list(
             Rule.objects.filter(user_id=schedule.user_id, is_active=True)
             .only("id", "text", "priority")
             .order_by("-priority", "id")
         )
-        schedule_snapshot = snapshot_from_blocks(locked_schedule, locked_blocks)
-        locked_context = snapshot_apply_context(schedule_snapshot, locked_rules)
-        if locked_context.fingerprint != expected_fingerprint:
+        categories = ordered_categories(locked_schedule.user)
+        schedule_settings = get_schedule_settings(locked_schedule.user)
+        fingerprint = _ai_context_fingerprint(
+            locked_schedule, locked_blocks, locked_rules, schedule_settings, categories
+        )
+        if fingerprint != expected_fingerprint:
             logger.warning(
                 "schedule_changed during AI apply (user=%s, schedule=%s, interaction=%s)",
                 schedule.user_id,
                 schedule.id,
                 interaction_id,
             )
-            raise _Rollback(
-                JsonResponse(
-                    {"errors": {"detail": "schedule_changed"}},
-                    status=409,
-                )
-            )
-
-        categories = ordered_categories(locked_schedule.user)
+            raise ScheduleChanged()
         allowed_categories = {category.slug for category in categories}
-        # Revalidate ONLY the category against the live catalog before
-        # persistence — the full action shape was already validated upstream;
-        # this pass exists solely to catch a slug deleted mid-request, so it
-        # must not mis-report a non-category failure as "invalid category".
         for index, action in enumerate(result.parsed_actions):
             category = (
                 action["changes"].get("category")
@@ -838,72 +525,101 @@ def _apply_actions_sync(
                 else action.get("category")
             )
             if isinstance(category, str) and category not in allowed_categories:
-                raise _Rollback(_action_error(index, "invalid category"))
-        schedule_settings = get_schedule_settings(locked_schedule.user)
+                return _action_error(index, "invalid category")
         window = schedule_settings.window
-        # Sample a FRESH instant under the lock (not the pre-LLM prompt timestamp)
-        # using the timezone persisted for this user.
-        # so an untimed add is placed forward from apply-time, never in the past.
-        # ``_earliest_start`` returns ``None`` for a non-today schedule (planner
-        # then searches from the window start).
         now_local = timezone.localtime(
             timezone.now(), resolve_time_zone(schedule_settings.time_zone)
         )
-        earliest_start = _earliest_start(locked_schedule.date, window, now_local)
         plan_result = plan_mutations(
-            locked_context.schedule,
+            snapshot_from_blocks(locked_schedule, locked_blocks),
             result.parsed_actions,
             day_start=window.start_str,
             day_end=window.end_str,
-            earliest_start=earliest_start,
+            earliest_start=_earliest_start(locked_schedule.date, window, now_local),
         )
         if isinstance(plan_result, PlanError):
-            raise _Rollback(_action_error(plan_result.action_index, plan_result.detail))
-
+            return _action_error(plan_result.action_index, plan_result.detail)
         _persist_mutation_diff(locked_schedule, locked_blocks, plan_result.diff)
         if plan_result.diff.deletes or plan_result.diff.updates or plan_result.diff.creates:
             locked_schedule.mark_active_on_edit()
         return plan_result
 
+    try:
+        return execute_schedule_mutation(schedule.user_id, schedule.pk, expected_revision, mutate)
+    except ScheduleChanged as exc:
+        raise _Rollback(schedule_changed_response(exc)) from exc
+    except MutationRejected as exc:
+        raise _Rollback(exc.response) from exc
 
-def _apply_draft_sync(schedule: Schedule, result: AIDraftResult) -> None:
-    """Apply the AIDraftResult; re-check schedule emptiness under the lock."""
-    with transaction.atomic():
-        # Lock the SCHEDULE row, not the empty ``TimeBlock`` queryset —
-        # see the comment in the original ai_generate_draft for the
-        # full rationale.
-        locked_schedule = (
-            Schedule.objects.select_for_update().select_related("user").get(pk=schedule.pk)
+
+def _apply_draft_sync(
+    schedule: Schedule, result: AIDraftResult, *, expected_revision: int, expected_fingerprint: str
+):
+    """Check revision, policy context and emptiness in the same write transaction."""
+
+    def mutate(ctx):
+        locked_schedule = ctx.schedule
+        if ctx.blocks:
+            return JsonResponse(
+                {
+                    "errors": {
+                        "detail": "Schedule already has blocks; delete them before regenerating."
+                    }
+                },
+                status=409,
+            )
+        categories = ordered_categories(locked_schedule.user)
+        schedule_settings = get_schedule_settings(locked_schedule.user)
+        rules = list(
+            Rule.objects.filter(user_id=schedule.user_id, is_active=True).order_by(
+                "-priority", "id"
+            )
         )
-        locked_blocks = list(TimeBlock.objects.filter(schedule=locked_schedule))
-        if locked_blocks:
-            raise _Rollback(
-                JsonResponse(
-                    {
-                        "errors": {
-                            "detail": (
-                                "Schedule already has blocks; delete them before regenerating."
-                            )
-                        }
-                    },
-                    status=409,
+        template = Template.objects.filter(
+            user_id=schedule.user_id, type=Template.slot_type_for_date(schedule.date)
+        ).first()
+        fingerprint = _ai_context_fingerprint(
+            locked_schedule, ctx.blocks, rules, schedule_settings, categories, template
+        )
+        if fingerprint != expected_fingerprint:
+            logger.warning(
+                "schedule_changed during AI draft apply (user=%s, schedule=%s)",
+                schedule.user_id,
+                schedule.id,
+            )
+            raise ScheduleChanged()
+        allowed_categories = {category.slug for category in categories}
+        commands = []
+        for idx, action in enumerate(result.parsed_actions):
+            if action["category"] not in allowed_categories:
+                return _action_error(idx, "invalid category")
+            commands.append(
+                CreateCommand(
+                    title=action["title"].strip(),
+                    category=action["category"],
+                    start_time=parse_time(action["start_time"]),
+                    end_time=parse_time(action["end_time"]),
+                    sort_order=idx,
+                    action_index=idx,
                 )
             )
-        blocks_by_id: dict = {}
-        categories = ordered_categories(locked_schedule.user)
-        # Resolve the window once under the lock — not per action (N+1).
-        window = get_schedule_window(locked_schedule.user)
-        for idx, action in enumerate(result.parsed_actions):
-            err = _apply_add(
-                locked_schedule,
-                blocks_by_id,
-                action,
-                idx,
-                window,
-                categories,
+        try:
+            plan = plan_commands(
+                snapshot_from_blocks(locked_schedule, ctx.blocks),
+                commands,
+                policy=DRAFT,
+                window=schedule_settings.window,
             )
-            if err is not None:
-                raise _Rollback(err)
+        except CommandError as error:
+            return _action_error(error.action_index or 0, error.message)
+        _persist_mutation_diff(locked_schedule, ctx.blocks, plan.diff)
+
+    try:
+        return execute_schedule_mutation(schedule.user_id, schedule.pk, expected_revision, mutate)
+    except ScheduleChanged as exc:
+        raise _Rollback(schedule_changed_response(exc)) from exc
+    except MutationRejected as exc:
+        raise _Rollback(exc.response) from exc
 
 
 @login_required
@@ -936,10 +652,29 @@ async def ai_generate_draft(request, date):
     except ValueError:
         return JsonResponse({"errors": {"date": "Invalid date format."}}, status=400)
 
+    data, err = parse_json_object(request, allow_empty=True, max_bytes=None)
+    if err is not None:
+        return err
+    try:
+        expected_revision = parse_expected_revision(data)
+    except ScheduleChanged as exc:
+        return schedule_changed_response(exc)
     user = await request.auser()
-    schedule, _ = await Schedule.objects.aget_or_create(user=user, date=parsed_date)
+    try:
+        (
+            schedule,
+            current_blocks,
+            rules,
+            schedule_settings,
+            template,
+            expected_fingerprint,
+        ) = await sync_to_async(_load_ai_context_sync, thread_sensitive=True)(
+            user, parsed_date, expected_revision, draft=True
+        )
+    except ScheduleChanged as exc:
+        return schedule_changed_response(exc)
 
-    if await TimeBlock.objects.filter(schedule=schedule).aexists():
+    if current_blocks:
         return JsonResponse(
             {
                 "errors": {
@@ -949,8 +684,6 @@ async def ai_generate_draft(request, date):
             status=409,
         )
 
-    slot_type = Template.slot_type_for_date(parsed_date)
-    template = await Template.objects.filter(user=user, type=slot_type).afirst()
     if template is None:
         return JsonResponse(
             {"errors": {"detail": ("No template configured for this day type. Open Settings.")}},
@@ -965,7 +698,7 @@ async def ai_generate_draft(request, date):
         "ai_draft_rl",
         settings.LLM_DRAFT_RATE_LIMIT_PER_HOUR,
     ):
-        return _rate_limited_response()
+        return rate_limited_response()
 
     history_start = parsed_date - datetime.timedelta(days=settings.LLM_HISTORY_DAYS)
     history = [
@@ -985,13 +718,8 @@ async def ai_generate_draft(request, date):
         .select_related("daily_review")
         .prefetch_related("time_blocks")
     ]
-    rules = await _load_active_rules(user)
-
     try:
-        schedule_settings = await sync_to_async(get_schedule_settings)(user)
-        schedule._schedule_window = schedule_settings.window
         now = timezone.localtime(timezone.now(), resolve_time_zone(schedule_settings.time_zone))
-        schedule._categories = await sync_to_async(ordered_categories, thread_sensitive=True)(user)
         result = await run_draft(schedule, template, history, rules, now)
     except AIError as e:
         raw = getattr(e, "raw_response_text", "") or str(e)
@@ -1027,7 +755,12 @@ async def ai_generate_draft(request, date):
     )
 
     try:
-        await sync_to_async(_apply_draft_sync, thread_sensitive=True)(schedule, result)
+        applied_result = await sync_to_async(_apply_draft_sync, thread_sensitive=True)(
+            schedule,
+            result,
+            expected_revision=expected_revision,
+            expected_fingerprint=expected_fingerprint,
+        )
     except _Rollback as rb:
         logger.warning(
             "AI draft apply failed (user=%s, schedule=%s, actions=%s)",
@@ -1042,12 +775,6 @@ async def ai_generate_draft(request, date):
     # Drafts intentionally do NOT flip ``schedule.status``. The badge
     # stays "draft" until the user makes a real edit (which happens
     # through one of the forward-mutating endpoints in schedules.api).
-    result_blocks = [
-        b
-        async for b in TimeBlock.objects.filter(schedule=schedule).order_by(
-            "start_time", "sort_order"
-        )
-    ]
     logger.info(
         "AI draft applied (user=%s, schedule=%s, actions=%s)",
         user.id,
@@ -1056,7 +783,7 @@ async def ai_generate_draft(request, date):
     )
     return JsonResponse(
         {
-            "blocks": [block_to_dict(b) for b in result_blocks],
+            **applied_result.snapshot,
             "explanation": result.explanation,
         }
     )
@@ -1112,8 +839,8 @@ def _validate_chat_messages(messages: object) -> str | None:
         content = msg.get("content")
         if not isinstance(content, str):
             return f"messages[{idx}].content must be a string"
-        if len(content) < 1:
-            return f"messages[{idx}].content cannot be empty"
+        if not content.strip():
+            return f"messages[{idx}].content cannot be blank"
         if len(content) > settings.LLM_MAX_COMMAND_CHARS:
             return f"messages[{idx}].content too long (max {settings.LLM_MAX_COMMAND_CHARS} chars)"
         total_chars += len(content)
@@ -1240,49 +967,40 @@ async def ai_chat(request, date):
     except ValueError:
         return JsonResponse({"errors": {"date": "Invalid date format."}}, status=400)
 
-    try:
-        data = json.loads(request.body)
-    except json.JSONDecodeError:
-        return JsonResponse({"errors": {"body": "Invalid JSON."}}, status=400)
-    # Non-object JSON roots (``[]``, ``"x"``, ``123``, ``null``) parse
-    # fine but break ``data.get(...)`` with AttributeError → 500. Reject
-    # them as 400 here so the contract from the planning doc holds:
-    # any malformed body returns 4xx, never 5xx.
-    if not isinstance(data, dict):
-        return JsonResponse(
-            {"errors": {"body": "Request body must be a JSON object."}},
-            status=400,
-        )
+    data, err = parse_json_object(request, max_bytes=None)
+    if err is not None:
+        return err
 
     messages = data.get("messages")
     err = _validate_chat_messages(messages)
     if err is not None:
         return JsonResponse({"errors": {"messages": err}}, status=400)
+    try:
+        expected_revision = parse_expected_revision(data)
+    except ScheduleChanged as exc:
+        return schedule_changed_response(exc)
     user = await request.auser()
-    schedule, _ = await Schedule.objects.aget_or_create(user=user, date=parsed_date)
+    try:
+        (
+            schedule,
+            current_blocks,
+            rules,
+            schedule_settings,
+            _,
+            expected_fingerprint,
+        ) = await sync_to_async(_load_ai_context_sync, thread_sensitive=True)(
+            user, parsed_date, expected_revision
+        )
+    except ScheduleChanged as exc:
+        return schedule_changed_response(exc)
 
     if not await _consume_rate_limit(user.id, "ai_chat_rl", settings.LLM_CHAT_RATE_LIMIT_PER_HOUR):
-        return _rate_limited_response()
+        return rate_limited_response()
 
     last_user_msg = messages[-1]["content"]
 
-    current_blocks = [
-        b
-        async for b in TimeBlock.objects.filter(schedule=schedule).order_by(
-            "start_time", "sort_order"
-        )
-    ]
-    rules = await _load_active_rules(user)
-    expected_fingerprint = compute_apply_context_fingerprint(
-        schedule=schedule,
-        blocks=current_blocks,
-        rules=rules,
-    )
     try:
-        schedule_settings = await sync_to_async(get_schedule_settings)(user)
-        schedule._schedule_window = schedule_settings.window
         now = timezone.localtime(timezone.now(), resolve_time_zone(schedule_settings.time_zone))
-        schedule._categories = await sync_to_async(ordered_categories, thread_sensitive=True)(user)
         result = await run_chat(messages, schedule, current_blocks, rules, now)
     except AIError as e:
         await _log_chat_failure(schedule, last_user_msg, messages, e)
@@ -1320,11 +1038,28 @@ async def ai_chat(request, date):
         kind=AIInteraction.Kind.CHAT,
     )
 
+    async def unchanged_snapshot():
+        confirmed = await sync_to_async(_apply_actions_sync, thread_sensitive=True)(
+            schedule,
+            replace(result, parsed_actions=[]),
+            expected_revision=expected_revision,
+            expected_fingerprint=expected_fingerprint,
+            interaction_id=interaction.id if interaction else None,
+        )
+        return confirmed.snapshot
+
+    if result.ask is not None or not result.parsed_actions:
+        try:
+            snapshot = await unchanged_snapshot()
+        except _Rollback as rb:
+            return rb.response
+
     # Clarifying-question turn — no mutations, no schedule status flip.
     if result.ask is not None:
         await _mark_success(interaction)
         return JsonResponse(
             {
+                **snapshot,
                 "blocks": None,
                 "explanation": result.explanation,
                 "ask": result.ask,
@@ -1344,9 +1079,10 @@ async def ai_chat(request, date):
     # change that never happened.
     if not result.parsed_actions and result.unresolved_categories:
         await _mark_success(interaction)
-        block_titles = {block.id: block.title for block in current_blocks}
+        block_titles = {block.id: _safe_block_title(block) for block in current_blocks}
         return JsonResponse(
             {
+                **snapshot,
                 "blocks": None,
                 "explanation": GUARD_EXPLANATION,
                 "ask": _build_category_ask(
@@ -1363,6 +1099,7 @@ async def ai_chat(request, date):
         await _mark_success(interaction)
         return JsonResponse(
             {
+                **snapshot,
                 "blocks": None,
                 "explanation": result.explanation,
                 "ask": None,
@@ -1372,24 +1109,26 @@ async def ai_chat(request, date):
             }
         )
 
-    # Replay guard (feature 0083, issue #219): a deterministic backstop for
-    # Hard rule 11 (``prompts.py``) — catches an ``add`` the model replayed
-    # from an earlier, already-handled turn instead of reading the latest
-    # one. Runs BEFORE the apply lock/fingerprint round-trip: a stale
-    # snapshot plus a replayed add should surface the guard's own ask, not
-    # a 409, and the user needs a conversational recovery, not an error.
+    # The replay guard skips the whole turn when an add was copied from a
+    # previous message. Its response still checks revision and prompt context
+    # under the write lock before returning schedule metadata.
     offending = find_replayed_actions(
         result.parsed_actions,
         messages,
         existing_blocks={block.id: block.title for block in current_blocks},
     )
     if offending:
+        try:
+            snapshot = await unchanged_snapshot()
+        except _Rollback as rb:
+            return rb.response
         return await _replay_guard_response(
             interaction,
             result.parsed_actions,
             offending,
             user_id=user.id,
             schedule_id=schedule.id,
+            snapshot=snapshot,
         )
 
     # A relative add must not fall through to ordinary automatic placement.
@@ -1397,9 +1136,14 @@ async def ai_chat(request, date):
     # otherwise put Vocal in the first free slot, possibly before Gym.
     relative_ask = relative_add_guard_ask(messages, result.parsed_actions, current_blocks)
     if relative_ask is not None:
+        try:
+            snapshot = await unchanged_snapshot()
+        except _Rollback as rb:
+            return rb.response
         await _mark_success(interaction)
         return JsonResponse(
             {
+                **snapshot,
                 "blocks": None,
                 "explanation": GUARD_EXPLANATION,
                 "ask": relative_ask,
@@ -1409,14 +1153,14 @@ async def ai_chat(request, date):
             }
         )
 
-    # Apply path uses the shared select_for_update + per-action dispatcher.
-    # It re-fetches under the lock so a concurrent edit between
-    # the LLM call and the apply surfaces as a clean per-action error.
+    # The apply path re-fetches under the write lock and validates the final
+    # candidate schedule before persisting its accepted diff.
     try:
-        plan = await sync_to_async(_apply_actions_sync, thread_sensitive=True)(
+        applied_result = await sync_to_async(_apply_actions_sync, thread_sensitive=True)(
             schedule,
             result,
             expected_fingerprint=expected_fingerprint,
+            expected_revision=expected_revision,
             interaction_id=interaction.id if interaction else None,
         )
     except _Rollback as rb:
@@ -1428,16 +1172,17 @@ async def ai_chat(request, date):
         )
         return rb.response
 
+    plan = applied_result.value
     outcome_payload = [action_outcome_to_dict(outcome) for outcome in plan.outcomes]
     await _mark_success(interaction, outcome_payload)
 
-    result_blocks = [
-        b
-        async for b in TimeBlock.objects.filter(schedule=schedule).order_by(
-            "start_time", "sort_order"
-        )
-    ]
-    block_titles = {block.id: block.title for block in result_blocks}
+    protected_ids = {
+        block.id for block in current_blocks if block.origin != TimeBlock.Origin.MANUAL
+    }
+    block_titles = {
+        block["id"]: "[private block]" if block["id"] in protected_ids else block["title"]
+        for block in applied_result.snapshot["blocks"]
+    }
     create_titles = {
         index: action.get("title", "New block")
         for index, action in enumerate(result.parsed_actions)
@@ -1462,7 +1207,7 @@ async def ai_chat(request, date):
     )
     return JsonResponse(
         {
-            "blocks": [block_to_dict(b) for b in result_blocks],
+            **applied_result.snapshot,
             "explanation": result.explanation,
             "ask": ask,
             "applied": applied,

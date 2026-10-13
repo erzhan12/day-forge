@@ -71,6 +71,7 @@ vi.mock("../src/composables/useHabiticaAccount", () => ({
 }))
 
 import Settings from "../src/pages/Settings.vue"
+import { makeCategories } from "./helpers/schedule"
 
 function stubMatchMedia(matches: boolean): void {
   vi.stubGlobal(
@@ -84,18 +85,18 @@ function stubMatchMedia(matches: boolean): void {
   )
 }
 
-function mountSettings(): VueWrapper {
+function mountSettings(categories = makeCategories()): VueWrapper {
   return mount(Settings, {
     attachTo: document.body,
     props: {
       templates: [],
       rules: [],
       travel_rules: [],
+      categories,
       schedule_window: { start: "06:00", end: "23:00", time_zone: "Asia/Almaty" },
     },
     global: {
       stubs: {
-        DesignSelector: { template: '<div data-testid="design-selector" />' },
         SoundNotificationToggle: true,
         DesktopNotificationToggle: true,
         TemplateEditor: true,
@@ -122,6 +123,11 @@ afterEach(() => {
 })
 
 describe("Settings topic shell", () => {
+  it("shows a reload error instead of category controls for an empty catalog", () => {
+    wrapper = mountSettings([])
+    expect(wrapper.get('[role="alert"]').text()).toContain("Category data could not be loaded")
+    expect(wrapper.find('[data-settings-topic="categories"]').exists()).toBe(false)
+  })
   it("passes the persisted schedule timezone to the page-level mismatch prompt", () => {
     stubMatchMedia(true)
     wrapper = mountSettings()
@@ -139,7 +145,7 @@ describe("Settings topic shell", () => {
       .toHaveLength(3)
   })
 
-  it("renders desktop hash navigation and only the selected panel", () => {
+  it("renders desktop hash navigation and the selected appearance controls", () => {
     stubMatchMedia(true)
     wrapper = mountSettings()
 
@@ -152,6 +158,15 @@ describe("Settings topic shell", () => {
       .toBeUndefined()
     expect(wrapper.get('[data-settings-topic="integrations"]').attributes())
       .toHaveProperty("hidden")
+
+    const appearance = wrapper.get('[data-settings-topic="appearance"]')
+    const themes = appearance.get('[role="radiogroup"]')
+    expect(themes.findAll('[role="radio"]').map((option) =>
+      option.get(".design-card__title").text(),
+    )).toEqual(["Classic", "Strategic", "Light Premium", "Dark 4a"])
+    expect(themes.get('[data-theme-option="classic"]').attributes("aria-checked"))
+      .toBe("true")
+    expect(themes.findAll('[aria-checked="true"]')).toHaveLength(1)
   })
 
   it("marks topic headings for scroll-margin under the sticky mobile select", () => {
