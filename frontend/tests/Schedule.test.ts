@@ -64,14 +64,16 @@ vi.mock("../src/composables/useSchedule", () => ({
 const pushUndo = vi.fn()
 const snapshotBlocks = vi.fn(() => [])
 const dismissToast = vi.fn()
+const canUndo = ref(false)
+const performUndo = vi.fn()
 
 vi.mock("../src/composables/useUndo", () => ({
   useUndo: () => ({
     undoStack: ref([]),
-    canUndo: ref(false),
+    canUndo,
     currentToast: ref(null),
     pushUndo,
-    performUndo: vi.fn(),
+    performUndo,
     snapshotBlocks,
     dismissToast,
   }),
@@ -344,6 +346,7 @@ function mountPage(props: {
 
 describe("Schedule.vue auto-draft watcher", () => {
   beforeEach(() => {
+    canUndo.value = false
     dragIsDragging.value = false
     cancelDrag.mockClear()
     stubLocalStorage()
@@ -369,6 +372,46 @@ describe("Schedule.vue auto-draft watcher", () => {
       date: "2026-05-04",
     })
     expect(page.findComponent({ name: "TimeZoneMismatchPrompt" }).props("timeZone")).toBe("Asia/Almaty")
+  })
+
+  it("offers button Undo for silent mutations without requiring a keyboard", async () => {
+    const page = mountPage({
+      schedule: makeSchedule("2026-05-04"), blocks: [], date: "2026-05-04",
+    })
+    const button = page.get('[aria-label="Undo last change"]')
+    expect(button.attributes("disabled")).toBeDefined()
+    canUndo.value = true
+    await nextTick()
+    expect(button.attributes("disabled")).toBeUndefined()
+    await button.trigger("click")
+    expect(performUndo).toHaveBeenCalledOnce()
+    canUndo.value = false
+    await nextTick()
+    expect(button.attributes("disabled")).toBeDefined()
+  })
+
+  it("disables button Undo while another schedule write is in flight", async () => {
+    const date = "2026-05-04"
+    const page = mountPage({ schedule: makeSchedule(date), blocks: [], date })
+    canUndo.value = true
+    await nextTick()
+    let finish!: () => void
+    const waiting = new Promise<void>((resolve) => { finish = resolve })
+    const pending = runScheduleMutation(revisionOwner, date, async () => {
+      await waiting
+      return { ok: true, data: {
+        revision: 1, schedule: { ...makeSchedule(date), revision: 1 }, blocks: [],
+      } }
+    })
+    await nextTick()
+    const button = page.get('[aria-label="Undo last change"]')
+    expect(button.attributes("disabled")).toBeDefined()
+    await button.trigger("click")
+    expect(performUndo).not.toHaveBeenCalled()
+    finish()
+    await pending
+    await nextTick()
+    expect(button.attributes("disabled")).toBeUndefined()
   })
 
   it("shows a reload error instead of schedule controls for an empty catalog", () => {

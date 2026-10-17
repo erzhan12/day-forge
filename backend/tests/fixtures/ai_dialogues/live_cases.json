@@ -1,0 +1,401 @@
+[
+  {
+    "id": "fresh_bare_en",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Reading emails 30 min"
+      }
+    ],
+    "expected": {
+      "add": [
+        {
+          "title": [
+            "Reading emails",
+            "Reading emails 30 min"
+          ],
+          "duration_minutes": 30
+        }
+      ]
+    }
+  },
+  {
+    "id": "fresh_bare_ru",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Обед"
+      }
+    ],
+    "expected": {
+      "add": [
+        {
+          "title": "Обед",
+          "duration_minutes": 25
+        }
+      ]
+    }
+  },
+  {
+    "id": "fresh_automatic_add",
+    "messages": [
+      {
+        "role": "user",
+        "content": "add Gym"
+      }
+    ],
+    "expected": {
+      "add": [
+        {
+          "title": "Gym",
+          "duration_minutes": 25
+        }
+      ]
+    }
+  },
+  {
+    "id": "explicit_add",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Add Focus in the work category from 10:00 to 10:30."
+      }
+    ],
+    "expected": {
+      "add": [
+        {
+          "title": "Focus",
+          "category": "work",
+          "start_time": "10:00",
+          "end_time": "10:30"
+        }
+      ]
+    }
+  },
+  {
+    "id": "canonical_time_answer",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Add Gym for 30 minutes in health. Ask me which time."
+      },
+      {
+        "role": "assistant",
+        "content": "What time should Gym start?",
+        "is_ask": true,
+        "applied_add_block_ids": []
+      },
+      {
+        "role": "user",
+        "content": "18:00"
+      }
+    ],
+    "expected": {
+      "add": [
+        {
+          "title": "Gym",
+          "category": "health",
+          "start_time": "18:00",
+          "end_time": "18:30"
+        }
+      ]
+    }
+  },
+  {
+    "id": "cancel_pending",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Add Gym for 30 minutes in health. Ask me which time."
+      },
+      {
+        "role": "assistant",
+        "content": "What time should Gym start?",
+        "is_ask": true,
+        "applied_add_block_ids": []
+      },
+      {
+        "role": "user",
+        "content": "cancel that"
+      }
+    ],
+    "expected": {}
+  },
+  {
+    "id": "refuse_pending",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Add Gym for 30 minutes in health. Ask me which time."
+      },
+      {
+        "role": "assistant",
+        "content": "What time should Gym start?",
+        "is_ask": true,
+        "applied_add_block_ids": []
+      },
+      {
+        "role": "user",
+        "content": "No, don't add Gym."
+      }
+    ],
+    "expected": {}
+  },
+  {
+    "id": "explicit_repeat",
+    "blocks": [
+      {
+        "ref": "gym",
+        "title": "Gym",
+        "start_time": "12:00",
+        "end_time": "12:30",
+        "category": "health"
+      }
+    ],
+    "rules": [
+      "Use [N] when a requested name repeats."
+    ],
+    "messages": [
+      {
+        "role": "user",
+        "content": "Add Gym in health from 12:00 to 12:30."
+      },
+      {
+        "role": "assistant",
+        "content": "Added Gym from 12:00 to 12:30."
+      },
+      {
+        "role": "user",
+        "content": "Add another Gym in health from 13:00 to 13:30."
+      }
+    ],
+    "expected": {
+      "add": [
+        {
+          "title": [
+            "Gym[2]",
+            "Gym [2]"
+          ],
+          "category": "health",
+          "start_time": "13:00",
+          "end_time": "13:30"
+        }
+      ]
+    }
+  },
+  {
+    "id": "new_title_after_success",
+    "blocks": [
+      {
+        "ref": "momentum",
+        "title": "Momentum",
+        "start_time": "12:00",
+        "end_time": "12:30",
+        "category": "personal"
+      }
+    ],
+    "messages": [
+      {
+        "role": "user",
+        "content": "add Momentum"
+      },
+      {
+        "role": "assistant",
+        "content": "Added Momentum from 12:00 to 12:30."
+      },
+      {
+        "role": "user",
+        "content": "Notes"
+      }
+    ],
+    "expected": {
+      "add": [
+        {
+          "title": "Notes",
+          "duration_minutes": 25
+        }
+      ]
+    }
+  },
+  {
+    "id": "retry_after_provider_error",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Add Focus in work from 14:00 to 14:30."
+      },
+      {
+        "role": "assistant",
+        "content": "AI chat failed",
+        "is_error": true
+      },
+      {
+        "role": "user",
+        "content": "try again"
+      }
+    ],
+    "expected": {
+      "add": [
+        {
+          "title": "Focus",
+          "category": "work",
+          "start_time": "14:00",
+          "end_time": "14:30"
+        }
+      ]
+    }
+  },
+  {
+    "id": "canonical_partial_followup",
+    "blocks": [
+      {
+        "ref": "reading",
+        "title": "Reading",
+        "start_time": "10:00",
+        "end_time": "10:30",
+        "category": "personal"
+      },
+      {
+        "ref": "meeting",
+        "title": "Meeting",
+        "start_time": "12:00",
+        "end_time": "13:00",
+        "category": "work"
+      }
+    ],
+    "messages": [
+      {
+        "role": "user",
+        "content": "Add Reading from 10:00 to 10:30 and Lunch from 12:00 to 12:30, both personal."
+      },
+      {
+        "role": "assistant",
+        "content": "Added Reading. Lunch overlaps Meeting. What start time should Lunch have?",
+        "is_ask": true,
+        "applied_add_block_ids": [
+          "$reading"
+        ]
+      },
+      {
+        "role": "user",
+        "content": "13:30, for 30 minutes in personal."
+      }
+    ],
+    "expected": {
+      "add": [
+        {
+          "title": "Lunch",
+          "category": "personal",
+          "start_time": "13:30",
+          "end_time": "14:00"
+        }
+      ]
+    }
+  },
+  {
+    "id": "category_label_ru",
+    "categories": {
+      "work": "Рабочая"
+    },
+    "messages": [
+      {
+        "role": "user",
+        "content": "Добавь Отчёт с 12:00 до 12:30, категория Рабочая."
+      }
+    ],
+    "expected": {
+      "add": [
+        {
+          "title": "Отчёт",
+          "category": "work",
+          "start_time": "12:00",
+          "end_time": "12:30"
+        }
+      ]
+    }
+  },
+  {
+    "id": "category_label_en",
+    "categories": {
+      "work": "Business"
+    },
+    "messages": [
+      {
+        "role": "user",
+        "content": "Add Report from 12:00 to 12:30 in the Business category."
+      }
+    ],
+    "expected": {
+      "add": [
+        {
+          "title": "Report",
+          "category": "work",
+          "start_time": "12:00",
+          "end_time": "12:30"
+        }
+      ]
+    }
+  },
+  {
+    "id": "uncertain_outcome_retry",
+    "blocks": [
+      {
+        "ref": "gym",
+        "title": "Gym",
+        "start_time": "12:00",
+        "end_time": "12:30",
+        "category": "health"
+      }
+    ],
+    "messages": [
+      {
+        "role": "user",
+        "content": "Add Gym in health from 12:00 to 12:30."
+      },
+      {
+        "role": "assistant",
+        "content": "AI chat failed",
+        "is_error": true
+      },
+      {
+        "role": "user",
+        "content": "try again"
+      }
+    ],
+    "expected": {},
+    "limitation": "Semantic retry snapshot only; no transport failure or durable request recovery is exercised."
+  },
+  {
+    "id": "targeted_category_update",
+    "blocks": [
+      {
+        "ref": "report",
+        "title": "Report",
+        "start_time": "12:00",
+        "end_time": "12:30",
+        "category": "work"
+      },
+      {
+        "ref": "lunch",
+        "title": "Lunch",
+        "start_time": "13:00",
+        "end_time": "13:30",
+        "category": "personal"
+      }
+    ],
+    "messages": [
+      {
+        "role": "user",
+        "content": "Change only Report's category to personal. Keep its title and times."
+      }
+    ],
+    "expected": {
+      "update": [
+        {
+          "id": "$report",
+          "category": "personal"
+        }
+      ]
+    }
+  }
+]

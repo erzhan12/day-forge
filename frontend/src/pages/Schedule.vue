@@ -77,7 +77,7 @@ const scheduleTimeZone = computed(() => props.schedule_window.time_zone)
 const {
   scheduleRevision, canonicalBlocks, canonicalSchedule, getBlocks, reorderBlocks,
   isGeneratingDraft, lastDraftError, scheduleDisabled,
-  currentToast, pushUndo, performUndo, snapshotBlocks, dismissToast,
+  canUndo, currentToast, pushUndo, performUndo, snapshotBlocks, dismissToast,
   handleRegenerateClick, resetSession,
 } = useSchedulePageController({
   getDate: () => props.date,
@@ -230,6 +230,14 @@ defineExpose({
         />
       </template>
       <template #actions>
+        <button
+          type="button"
+          class="undo-btn"
+          aria-label="Undo last change"
+          title="Undo last change (⌘Z / Ctrl+Z)"
+          :disabled="!canUndo || scheduleDisabled"
+          @click="performUndo"
+        >Undo</button>
         <RegenerateDraftButton
           v-if="canonicalSchedule?.status === 'draft' && canonicalBlocks.length === 0"
           :has-template="has_template_for_type"
@@ -567,6 +575,26 @@ defineExpose({
   margin-right: 0;
   padding-left: 0;
   padding-right: 0;
+}
+
+.undo-btn {
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.undo-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.undo-btn:hover:not(:disabled) {
+  background: var(--bg-schedule-gap);
 }
 
 .schedule-body {

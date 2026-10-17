@@ -1,0 +1,438 @@
+{
+  "scope": "Synthetic local browser smoke account only",
+  "test_user": "browser-smoke-20261017",
+  "user_is_superuser": false,
+  "desktop_viewport": {
+    "width": 1440,
+    "height": 900
+  },
+  "mobile_viewports": [
+    {
+      "width": 390,
+      "height": 844
+    },
+    {
+      "width": 320,
+      "height": 740
+    }
+  ],
+  "configured_chat_model": "x-ai/grok-4.3",
+  "configured_draft_model": "gpt-4o",
+  "configured_provider": "https://openrouter.ai/api/v1",
+  "ai_interactions": [
+    {
+      "id": 338,
+      "date": "2027-04-19",
+      "kind": "chat",
+      "success": false,
+      "command": "Add Desktop AI focus in work from 10:00 to 10:30.",
+      "response": {
+        "transcript_sha256": "df7385bfd9d9a5e85e219e51e6e517f7c525839abb3da1333076af8109d6adc5",
+        "turn_count": 1,
+        "raw": "{\"actions\":[{\"type\":\"add\",\"title\":\"Desktop AI focus\",\"category\":\"work\",\"start_time\":\"10:00\",\"end_time\":\"10:30\"}],\"explanation\":\"Added Desktop AI focus from 10:00 to 10:30.\",\"ask\":null}"
+      },
+      "actions": [
+        {
+          "type": "add",
+          "title": "Desktop AI focus",
+          "category": "work",
+          "start_time": "10:00",
+          "end_time": "10:30"
+        }
+      ],
+      "outcomes": null
+    },
+    {
+      "id": 339,
+      "date": "2027-04-19",
+      "kind": "chat",
+      "success": true,
+      "command": "Add Desktop AI focus in work from 10:00 to 10:30.",
+      "response": {
+        "transcript_sha256": "df7385bfd9d9a5e85e219e51e6e517f7c525839abb3da1333076af8109d6adc5",
+        "turn_count": 1,
+        "raw": "{\n  \"actions\": [\n    {\n      \"type\": \"add\",\n      \"title\": \"Desktop AI focus\",\n      \"category\": \"work\",\n      \"start_time\": \"10:00\",\n      \"end_time\": \"10:30\"\n    }\n  ],\n  \"explanation\": \"Added Desktop AI focus as a work block from 10:00 to 10:30.\",\n  \"ask\": null\n}"
+      },
+      "actions": [
+        {
+          "type": "add",
+          "title": "Desktop AI focus",
+          "category": "work",
+          "start_time": "10:00",
+          "end_time": "10:30"
+        }
+      ],
+      "outcomes": [
+        {
+          "action_index": 0,
+          "task_id": null,
+          "status": "applied",
+          "applied_fields": [
+            "title",
+            "category",
+            "start_time",
+            "end_time"
+          ],
+          "skipped_fields": [],
+          "reason_code": null,
+          "conflicting_task_ids": [],
+          "attempted_direction": null,
+          "suggestion": null
+        }
+      ]
+    },
+    {
+      "id": 340,
+      "date": "2027-04-19",
+      "kind": "chat",
+      "success": true,
+      "command": "Add Desktop live AI in work from 11:00 to 11:30.",
+      "response": {
+        "transcript_sha256": "0f7af18c9696ba008f45a37f289b7a3437bc75ab4eb0bd7e3c6f4cb79e3ce6ac",
+        "turn_count": 1,
+        "raw": "{\n  \"actions\": [\n    {\n      \"type\": \"add\",\n      \"title\": \"Desktop live AI\",\n      \"category\": \"work\",\n      \"start_time\": \"11:00\",\n      \"end_time\": \"11:30\"\n    }\n  ],\n  \"explanation\": \"Added Desktop live AI from 11:00 to 11:30 as work.\",\n  \"ask\": null\n}"
+      },
+      "actions": [
+        {
+          "type": "add",
+          "title": "Desktop live AI",
+          "category": "work",
+          "start_time": "11:00",
+          "end_time": "11:30"
+        }
+      ],
+      "outcomes": [
+        {
+          "action_index": 0,
+          "task_id": null,
+          "status": "applied",
+          "applied_fields": [
+            "title",
+            "category",
+            "start_time",
+            "end_time"
+          ],
+          "skipped_fields": [],
+          "reason_code": null,
+          "conflicting_task_ids": [],
+          "attempted_direction": null,
+          "suggestion": null
+        }
+      ]
+    },
+    {
+      "id": 341,
+      "date": "2027-04-21",
+      "kind": "draft",
+      "success": true,
+      "command": "[DRAFT]",
+      "response": {
+        "actions": [
+          {
+            "type": "add",
+            "title": "Smoke preparation",
+            "start_time": "09:00",
+            "end_time": "09:25",
+            "category": "work"
+          },
+          {
+            "type": "add",
+            "title": "Smoke focus",
+            "start_time": "10:00",
+            "end_time": "10:30",
+            "category": "work"
+          },
+          {
+            "type": "add",
+            "title": "Smoke lunch",
+            "start_time": "12:00",
+            "end_time": "12:30",
+            "category": "personal"
+          }
+        ],
+        "explanation": "No changes from the template."
+      },
+      "actions": [
+        {
+          "type": "add",
+          "title": "Smoke preparation",
+          "start_time": "09:00",
+          "end_time": "09:25",
+          "category": "work"
+        },
+        {
+          "type": "add",
+          "title": "Smoke focus",
+          "start_time": "10:00",
+          "end_time": "10:30",
+          "category": "work"
+        },
+        {
+          "type": "add",
+          "title": "Smoke lunch",
+          "start_time": "12:00",
+          "end_time": "12:30",
+          "category": "personal"
+        }
+      ],
+      "outcomes": null
+    },
+    {
+      "id": 342,
+      "date": "2027-04-26",
+      "kind": "chat",
+      "success": true,
+      "command": "Добавь Mobile AI фокус с 10:00 до 10:30 в категории work.",
+      "response": {
+        "transcript_sha256": "d159eba53b1a49eab5181b271de3cc48b968ee4938fbadef738d0de80dfb66d7",
+        "turn_count": 1,
+        "raw": "{\n  \"actions\": [\n    {\n      \"type\": \"add\",\n      \"title\": \"Mobile AI фокус\",\n      \"category\": \"work\",\n      \"start_time\": \"10:00\",\n      \"end_time\": \"10:30\"\n    }\n  ],\n  \"explanation\": \"Добавил блок Mobile AI фокус с 10:00 до 10:30 в категории work.\",\n  \"ask\": null\n}"
+      },
+      "actions": [
+        {
+          "type": "add",
+          "title": "Mobile AI фокус",
+          "category": "work",
+          "start_time": "10:00",
+          "end_time": "10:30"
+        }
+      ],
+      "outcomes": [
+        {
+          "action_index": 0,
+          "task_id": null,
+          "status": "applied",
+          "applied_fields": [
+            "title",
+            "category",
+            "start_time",
+            "end_time"
+          ],
+          "skipped_fields": [],
+          "reason_code": null,
+          "conflicting_task_ids": [],
+          "attempted_direction": null,
+          "suggestion": null
+        }
+      ]
+    },
+    {
+      "id": 343,
+      "date": "2027-04-28",
+      "kind": "draft",
+      "success": true,
+      "command": "[DRAFT]",
+      "response": {
+        "actions": [
+          {
+            "type": "add",
+            "title": "Smoke preparation",
+            "start_time": "09:00",
+            "end_time": "09:25",
+            "category": "work"
+          },
+          {
+            "type": "add",
+            "title": "Smoke focus",
+            "start_time": "10:00",
+            "end_time": "10:30",
+            "category": "work"
+          },
+          {
+            "type": "add",
+            "title": "Smoke lunch",
+            "start_time": "12:00",
+            "end_time": "12:30",
+            "category": "personal"
+          }
+        ],
+        "explanation": "No changes from the template as there are no active rules or consistent history shifts."
+      },
+      "actions": [
+        {
+          "type": "add",
+          "title": "Smoke preparation",
+          "start_time": "09:00",
+          "end_time": "09:25",
+          "category": "work"
+        },
+        {
+          "type": "add",
+          "title": "Smoke focus",
+          "start_time": "10:00",
+          "end_time": "10:30",
+          "category": "work"
+        },
+        {
+          "type": "add",
+          "title": "Smoke lunch",
+          "start_time": "12:00",
+          "end_time": "12:30",
+          "category": "personal"
+        }
+      ],
+      "outcomes": null
+    },
+    {
+      "id": 344,
+      "date": "2027-04-26",
+      "kind": "chat",
+      "success": true,
+      "command": "Move Mobile manual.",
+      "response": {
+        "transcript_sha256": "b5e92d8d824403b7e74b7d2dd79895503e624fa38c1d0f00de7c429a0b2639ac",
+        "turn_count": 1,
+        "raw": "{\n  \"actions\": [],\n  \"explanation\": \"You want to move the Mobile manual block.\",\n  \"ask\": \"What time should Mobile manual start?\"\n}"
+      },
+      "actions": [],
+      "outcomes": null
+    },
+    {
+      "id": 345,
+      "date": "2027-04-26",
+      "kind": "chat",
+      "success": true,
+      "command": "11:00",
+      "response": {
+        "transcript_sha256": "e59b95862359d0dcdceddd229a936ade6f3dc4779bb8c8244e976ef6e9ec5c02",
+        "turn_count": 3,
+        "raw": "{\"actions\":[{\"type\":\"move\",\"task_id\":680,\"start_time\":\"11:00\"}],\"explanation\":\"Moving Mobile manual to start at 11:00.\",\"ask\":null}"
+      },
+      "actions": [
+        {
+          "type": "move",
+          "task_id": 680,
+          "start_time": "11:00"
+        }
+      ],
+      "outcomes": [
+        {
+          "action_index": 0,
+          "task_id": 680,
+          "status": "applied",
+          "applied_fields": [
+            "start_time",
+            "end_time"
+          ],
+          "skipped_fields": [],
+          "reason_code": null,
+          "conflicting_task_ids": [],
+          "attempted_direction": null,
+          "suggestion": null
+        }
+      ]
+    }
+  ],
+  "final_schedules": [
+    {
+      "date": "2026-10-15",
+      "status": "reviewed",
+      "revision": 1,
+      "blocks": [
+        {
+          "title": "Desktop review fixture",
+          "start_time": "09:00",
+          "end_time": "09:30",
+          "category": "work",
+          "is_completed": true
+        }
+      ]
+    },
+    {
+      "date": "2026-10-16",
+      "status": "reviewed",
+      "revision": 1,
+      "blocks": [
+        {
+          "title": "Mobile review fixture",
+          "start_time": "09:00",
+          "end_time": "09:30",
+          "category": "work",
+          "is_completed": true
+        }
+      ]
+    },
+    {
+      "date": "2026-10-17",
+      "status": "draft",
+      "revision": 0,
+      "blocks": []
+    },
+    {
+      "date": "2027-04-19",
+      "status": "active",
+      "revision": 9,
+      "blocks": [
+        {
+          "title": "Desktop manual restored",
+          "start_time": "09:00",
+          "end_time": "09:30",
+          "category": "work",
+          "is_completed": false
+        }
+      ]
+    },
+    {
+      "date": "2027-04-20",
+      "status": "draft",
+      "revision": 0,
+      "blocks": []
+    },
+    {
+      "date": "2027-04-21",
+      "status": "draft",
+      "revision": 2,
+      "blocks": []
+    },
+    {
+      "date": "2027-04-26",
+      "status": "active",
+      "revision": 7,
+      "blocks": [
+        {
+          "title": "Mobile manual",
+          "start_time": "09:00",
+          "end_time": "09:30",
+          "category": "work",
+          "is_completed": false
+        }
+      ]
+    },
+    {
+      "date": "2027-04-27",
+      "status": "draft",
+      "revision": 0,
+      "blocks": []
+    },
+    {
+      "date": "2027-04-28",
+      "status": "draft",
+      "revision": 2,
+      "blocks": []
+    }
+  ],
+  "reviews": [
+    {
+      "date": "2026-10-15",
+      "status": "reviewed",
+      "schedule_revision": 1,
+      "reviewed_revision": 1,
+      "notes": "Desktop browser review verified.",
+      "completed_count": 1,
+      "planned_count": 1
+    },
+    {
+      "date": "2026-10-16",
+      "status": "reviewed",
+      "schedule_revision": 1,
+      "reviewed_revision": 1,
+      "notes": "Mobile browser review verified.",
+      "completed_count": 1,
+      "planned_count": 1
+    }
+  ],
+  "initial_http_500": {
+    "audit_id": 338,
+    "note": "Observed before restarting the six-day-old --noreload development process. Subsequent requests passed on current code."
+  }
+}

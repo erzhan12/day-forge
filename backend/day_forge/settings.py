@@ -99,6 +99,8 @@ STATIC_ROOT = PROJECT_ROOT / "staticfiles"
 # Inertia
 INERTIA_LAYOUT = "base.html"
 INERTIA_SSR_ENABLED = False
+# Login rotates the key so Back cannot restore authenticated page snapshots.
+INERTIA_ENCRYPT_HISTORY = True
 
 # CSRF for Inertia (X-XSRF-TOKEN header)
 CSRF_COOKIE_NAME = "XSRF-TOKEN"

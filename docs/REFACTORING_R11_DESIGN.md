@@ -47,6 +47,12 @@ This design needs its own migration, API contract, and concurrency tests. It sho
 
 ## Comparison before a deletion
 
+The follow-up [live comparison report](R11_LIVE_COMPARISON.md) documents the revised
+method and a saved opt-in runner. Its canonical single-turn states separate current
+user intent from the expected result of a recorded completion. The earlier chained
+live run and its false-add counts are withdrawn; the deterministic recorded-response
+corpus below remains a separate server regression test.
+
 Build a small anonymized fixture set from existing tests and deliberately chosen examples. Do not export the full user history. Each case records initial blocks with IDs and times, rules, categories, local clock and timezone, transcript, expected actions or ask, and forbidden changes. Include bare English and Russian activities, a bare answer to an ask, retry after provider failure, `No, don't add Gym`, explicit repeat, duplicate titles, partial apply, category wording, a lost response after commit, and a schedule or policy change between turns. Keep a clear expected result for each turn rather than only the final schedule.
 
 The current synthetic corpus has 18 dialogues and 31 turns (`backend/tests/fixtures/ai_dialogues/dialogues.json`; `backend/tests/test_ai_dialogue_corpus.py`). Fixed completions pass through the SDK, view, and planner seams. The baseline report records two false additions in known gaps: a refusal with a wrong model add and a retry after a committed request whose response was lost. It also records two excess asks on model replays. Disabling the replay guard raises false additions from two to four by applying those two replays. Disabling category resolution adds two missed applies: English and Russian category labels return 502. Disabling `implicit_add` changes the provider-bound text but leaves these fixed-output counts unchanged. That last result says nothing about how a live model would respond to the changed prompt. The reports are `/tmp/day-forge-r11/corpus-*.json` and can be regenerated from the corpus test.
