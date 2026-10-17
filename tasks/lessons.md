@@ -2,6 +2,15 @@
 
 Patterns and corrections discovered during development. Review at session start.
 
+## Rejected duration and effective chaining have different responsibilities
+
+An invalid duration stays out of `chain_effective` so a later move does not inherit
+its unusable interval. A metadata follow-up must still retain the previous
+attempted end together with duration provenance. Otherwise validation compares
+the old effective interval, misses the conflict, and falsely reports the resize
+as applied. Test both the planner outcome and HTTP persistence: metadata succeeds,
+time stays unchanged, the result is partial, and the server asks about the conflict.
+
 ## Category confirmation and narrow settings layouts need browser checks
 
 Block deletion already used a DOM dialog, but category deletion still called

@@ -15,7 +15,7 @@ from zoneinfo import ZoneInfo
 import pytest
 from ai.category_resolution import UnresolvedCategory
 from ai.models import AIInteraction
-from ai.mutation_planner import ActionOutcome
+from ai.mutation_planner import ActionOutcome, SlotSuggestion
 from ai.service import (
     AIChatResult,
     AIInvalidInputError,
@@ -90,8 +90,14 @@ def _error_turn(text):
 
 @pytest.mark.django_db
 class TestChatDurationResize:
+    @pytest.mark.parametrize(("message", "operand", "expected_end"), [
+        ("make lunch 20 minutes", {"duration_minutes": 20}, "12:20"),
+        ("make lunch one hour", {"duration_minutes": 60}, "13:00"),
+        ("make lunch 30 minutes longer", {"duration_delta_minutes": 30}, "13:30"),
+        ("make lunch 15 minutes shorter", {"duration_delta_minutes": -15}, "12:45"),
+    ])
     def test_chat_applies_duration_resize_end_to_end(
-        self, auth_client, today_schedule, monkeypatch
+        self, auth_client, today_schedule, monkeypatch, message, operand, expected_end
     ):
         block = TimeBlock.objects.create(
             schedule=today_schedule,
@@ -100,21 +106,21 @@ class TestChatDurationResize:
             end_time="13:00",
             category="personal",
         )
-        _patch_run_chat(
-            monkeypatch,
-            AIChatResult(
+        async def resize(messages, *args, **kwargs):
+            assert messages[-1]["content"] == message
+            return AIChatResult(
                 raw_response_text="{}",
-                parsed_actions=[{"type": "resize", "task_id": block.id, "duration_minutes": 20}],
-                explanation="Shortened lunch.",
+                parsed_actions=[{"type": "resize", "task_id": block.id, **operand}],
+                explanation="Resized lunch.",
                 ask=None,
-            ),
-        )
-        response = _post(auth_client, {"messages": [_user_turn("make lunch 20 minutes")]})
+            )
+        monkeypatch.setattr("ai.views.run_chat", resize)
+        response = _post(auth_client, {"messages": [_user_turn(message)]})
         assert response.status_code == 200
         block.refresh_from_db()
         assert (block.start_time.strftime("%H:%M"), block.end_time.strftime("%H:%M")) == (
             "12:00",
-            "12:20",
+            expected_end,
         )
         assert response.json()["outcomes"][0]["applied_fields"] == ["end_time"]
 
@@ -145,6 +151,109 @@ class TestChatDurationResize:
         outcome = response.json()["outcomes"][0]
         assert outcome["reason_code"] == "out_of_window"
         assert outcome["skipped_fields"] == ["end_time"]
+        assert response.json()["ask"] == (
+            "That time is outside your schedule window. Please give a time within your day."
+        )
+        assert outcome["suggestion"] is None
+        today_schedule.refresh_from_db()
+        assert (today_schedule.revision, today_schedule.status) == (0, "draft")
+
+    @pytest.mark.parametrize(("start", "end", "operand", "reason"), [
+        ("22:00", "22:30", {"duration_delta_minutes": 180}, "out_of_window"),
+        ("12:00", "13:00", {"duration_minutes": 1500}, "out_of_window"),
+        ("12:00", "13:00", {"duration_delta_minutes": -1000}, "interval"),
+        ("12:00", "12:33", {"duration_delta_minutes": 30}, "granularity"),
+    ])
+    def test_rejected_duration_does_not_change_persisted_schedule(
+        self, auth_client, today_schedule, monkeypatch, start, end, operand, reason
+    ):
+        target = TimeBlock.objects.create(
+            schedule=today_schedule, title="Focus", start_time=start, end_time=end,
+            category="work",
+        )
+        before = list(today_schedule.time_blocks.values())
+        _patch_run_chat(monkeypatch, AIChatResult(
+            "{}", [{"type": "resize", "task_id": target.id, **operand}], "Resized.", None,
+        ))
+        response = _post(auth_client, {"messages": [_user_turn("resize Focus")]})
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["applied"] is False and payload["ask"]
+        outcome = payload["outcomes"][0]
+        assert outcome["reason_code"] == reason
+        assert outcome["skipped_fields"] == ["end_time"]
+        assert outcome["suggestion"] is None
+        assert list(today_schedule.time_blocks.values()) == before
+        today_schedule.refresh_from_db()
+        assert (today_schedule.revision, today_schedule.status) == (0, "draft")
+
+    @pytest.mark.parametrize("rename", [False, True])
+    def test_chat_duration_overlap_preserves_both_intervals(
+        self, auth_client, today_schedule, monkeypatch, rename
+    ):
+        target = TimeBlock.objects.create(
+            schedule=today_schedule, title="Lunch", start_time="12:00", end_time="13:00",
+            category="personal",
+        )
+        neighbour = TimeBlock.objects.create(
+            schedule=today_schedule, title="Meeting", start_time="13:00", end_time="14:00",
+            category="work",
+        )
+        before = list(today_schedule.time_blocks.order_by("id").values())
+        actions = [{"type": "resize", "task_id": target.id, "duration_minutes": 90}]
+        if rename:
+            actions.append({"type": "update", "task_id": target.id,
+                            "changes": {"title": "Renamed lunch"}})
+        _patch_run_chat(monkeypatch, AIChatResult(
+            "{}", actions,
+            "Extended lunch.", None,
+        ))
+        response = _post(auth_client, {"messages": [_user_turn("make lunch 90 minutes")]})
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["applied"] is rename
+        assert payload["ask"] == "That time conflicts. Should I look for an earlier or later slot?"
+        outcome = payload["outcomes"][0]
+        assert outcome["reason_code"] == "overlap"
+        assert outcome["conflicting_task_ids"] == [neighbour.id]
+        assert outcome["status"] == ("partial" if rename else "skipped")
+        assert outcome["skipped_fields"] == ["end_time"]
+        after = list(today_schedule.time_blocks.order_by("id").values())
+        for old, new in zip(before, after, strict=True):
+            assert (new["start_time"], new["end_time"]) == (old["start_time"], old["end_time"])
+            assert new["title"] == ("Renamed lunch" if rename and old["id"] == target.id
+                                    else old["title"])
+        today_schedule.refresh_from_db()
+        assert today_schedule.revision == int(rename)
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(("start", "end"), [("06:30", "07:00"), ("20:05", "20:35")])
+def test_chat_create_outside_custom_window_asks_for_time_in_day(
+    auth_client, today_schedule, user, monkeypatch, start, end
+):
+    _set_window(user, "08:00", "20:00")
+    TimeBlock.objects.create(
+        schedule=today_schedule, title="Existing", start_time="12:00", end_time="13:00",
+        category="work",
+    )
+    before = list(today_schedule.time_blocks.values())
+    _patch_run_chat(monkeypatch, AIChatResult(
+        "{}", [{"type": "add", "title": "Meeting", "category": "work",
+                 "start_time": start, "end_time": end}], "Added meeting.", None,
+    ))
+    response = _post(auth_client, {"messages": [_user_turn(f"add Meeting at {start}")]})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ask"] == (
+        "That time is outside your schedule window. Please give a time within your day."
+    )
+    assert payload["applied"] is False
+    assert payload["outcomes"][0]["reason_code"] == "out_of_window"
+    assert payload["outcomes"][0]["suggestion"] is None
+    assert list(today_schedule.time_blocks.values()) == before
+    today_schedule.refresh_from_db()
+    assert (today_schedule.status, today_schedule.revision) == ("draft", 0)
 
 
 class TestValidation:
@@ -2172,6 +2281,53 @@ class TestResolutionAskPrecedence:
         ask = _build_resolution_ask((out_of_window,), block_titles, {})
         assert ask == (
             "That time is outside your schedule window. Please give a time within your day."
+        )
+
+    def test_out_of_window_create_yields_window_specific_ask(self):
+        assert _build_resolution_ask((self._skipped_add(0),), {}, {0: "Late meeting"}) == (
+            "That time is outside your schedule window. Please give a time within your day."
+        )
+
+    @pytest.mark.parametrize(("reason", "suggestion", "direction", "expected"), [
+        ("overlap", SlotSuggestion(datetime.time(14), datetime.time(15), "later"), None,
+         "Focus conflicts at that time. Move it to 14:00–15:00?"),
+        ("overlap", SlotSuggestion(direction_required=True), None,
+         "That time conflicts. Should I look for an earlier or later slot?"),
+        ("unresolved_conflict", None, None,
+         "'Focus' and 'Standup' can't both move to that time. Which should move?"),
+        ("overlap", None, "later",
+         "No free later slot fits Focus within your day window. Please choose another time."),
+        ("no_slot", None, None,
+         "No free slot with the required gaps fits Focus in your day window. "
+         "Try a shorter duration or a specific free time."),
+    ])
+    def test_specific_resolution_still_precedes_out_of_window_create(
+        self, reason, suggestion, direction, expected
+    ):
+        other = ActionOutcome(
+            action_index=1, task_id=10 if reason != "no_slot" else None, status="skipped",
+            skipped_fields=("start_time", "end_time"), reason_code=reason,
+            suggestion=suggestion, attempted_direction=direction,
+            conflicting_task_ids=(20,) if reason == "unresolved_conflict" else (),
+        )
+        add = self._skipped_add(0)
+        for outcomes in ((other, add), (add, other)):
+            assert _build_resolution_ask(
+                outcomes, {10: "Focus", 20: "Standup"}, {0: "Late meeting", 1: "Focus"},
+            ) == expected
+
+    def test_window_question_precedes_generic_invalid_create_in_either_order(self):
+        generic = ActionOutcome(
+            action_index=1, task_id=None, status="skipped",
+            skipped_fields=("start_time", "end_time"), reason_code="interval",
+        )
+        window = self._skipped_add(0)
+        for outcomes in ((generic, window), (window, generic)):
+            assert _build_resolution_ask(outcomes, {}, {0: "Late meeting", 1: "Invalid"}) == (
+                "That time is outside your schedule window. Please give a time within your day."
+            )
+        assert _build_resolution_ask((generic,), {}, {1: "Invalid"}) == (
+            "Invalid does not fit at that time. Please give it a concrete free start and end time."
         )
 
 

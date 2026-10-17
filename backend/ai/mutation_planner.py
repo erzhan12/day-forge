@@ -537,6 +537,10 @@ def _normalize_actions(
             if prev.duration_derived_end:
                 duration_derived_end = True
                 derived_end_minutes = prev.derived_end_minutes
+                # Invalid durations stay out of chain_effective for later moves,
+                # but a metadata follow-up must retain the attempted boundary so
+                # validation can still report its rejection instead of a no-op.
+                new_end = prev.new_end
 
         new_title = (
             changes["title"].strip()
