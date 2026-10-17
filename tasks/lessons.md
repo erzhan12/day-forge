@@ -2,6 +2,21 @@
 
 Patterns and corrections discovered during development. Review at session start.
 
+## Live AI comparisons need intent-based expectations and independent state
+
+Recorded completions test how the server handles a particular model reply. Their
+expected questions are not gold answers for a live model: `add Gym` permits an
+automatic add under the current contract. Replaying `18:00` after the live model
+has already added Gym creates a different conversation from the recorded fixture.
+
+Use independent canonical states when comparing one heuristic. Freeze existing
+blocks, IDs, clock, and prior transcript for each arm and repetition. Score actual
+schedule changes against authorized titles, explicitly requested fields, and
+preserved neighbours. Accept declared cosmetic naming variants. Keep parse failures,
+wrong fields, missed actions, and unauthorized additions as separate measurements.
+Retain the runner and raw evidence; a passing evaluation runner means the experiment
+completed, not that every live response met its expectation.
+
 ## Preserving data in a controller also requires preserving it in the panel
 
 R08 kept the last successful Todoist/Habitica rows during a failed background refresh, but the panel's `v-if="error"` / `v-else` hid the list. Render the error banner independently of retained rows. Empty failures still show only the error. Test this at both controller and component boundaries.
