@@ -65,6 +65,7 @@ describe("useSchedulePageController", () => {
       description: "Added block", type: "add", previousBlocks: [],
       scheduleDate: fixture.date.value, expected_revision: 0, previous_revision: 0,
     })
+    expect(controller.canUndo.value).toBe(true)
     fixture.mutationsDisabled.value = true
     await nextTick()
     expect(controller.scheduleDisabled.value).toBe(true)

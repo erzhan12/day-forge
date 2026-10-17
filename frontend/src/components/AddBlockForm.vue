@@ -181,16 +181,24 @@ function cancel() {
 
 .time-row {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
 }
 
 .time-row label {
   display: flex;
+  flex: 1 1 90px;
+  min-width: 0;
   flex-direction: column;
   gap: 4px;
   font-size: 12px;
   color: var(--text-muted);
   font-weight: 500;
+}
+
+.time-row .input {
+  width: 100%;
+  min-width: 0;
 }
 
 .form-actions {

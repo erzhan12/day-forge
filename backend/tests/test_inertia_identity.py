@@ -6,6 +6,36 @@ from schedules.models import Schedule, TimeBlock
 
 
 @pytest.mark.django_db
+@pytest.mark.parametrize("path", ["/schedule/{date}/", "/settings/", "/analytics/{date}/"])
+def test_authenticated_pages_encrypt_browser_history(client, user, schedule, path):
+    client.force_login(user)
+    response = client.get(path.format(date=schedule.date), HTTP_X_INERTIA="true")
+    assert response.status_code == 200
+    assert response.json()["encryptHistory"] is True
+
+
+@pytest.mark.django_db
+def test_logout_login_response_invalidates_private_history(client, user, schedule):
+    client.force_login(user)
+    client.get(f"/schedule/{schedule.date}/", HTTP_X_INERTIA="true")
+    response = client.post("/accounts/logout/", follow=True, HTTP_X_INERTIA="true")
+    page = response.json()
+    assert page["component"] == "Login"
+    assert page["props"]["auth_user_id"] is None
+    assert page["encryptHistory"] is True
+    assert page["clearHistory"] is True
+    denied = client.get(f"/schedule/{schedule.date}/")
+    assert denied.status_code == 302
+    assert "/accounts/login/" in denied.url
+
+
+@pytest.mark.django_db
+def test_login_after_session_expiry_also_clears_history(client):
+    response = client.get("/accounts/login/", HTTP_X_INERTIA="true")
+    assert response.json()["clearHistory"] is True
+
+
+@pytest.mark.django_db
 def test_page_identity_changes_with_session(client, user, schedule):
     headers = {"HTTP_X_INERTIA": "true"}
     login = client.get("/accounts/login/", **headers)

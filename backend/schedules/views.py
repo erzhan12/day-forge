@@ -15,6 +15,7 @@ from django.views.decorators.http import require_http_methods
 from gcal_sync.models import GoogleCalendarAccount
 from habitica_sync.models import HabiticaAccount
 from inertia import render as inertia_render
+from inertia.http import clear_history
 from templates_mgr.models import Template, UserPreferences
 from templates_mgr.preferences import (
     UserPreferencesDTO,
@@ -43,6 +44,9 @@ _LOGIN_TEMPLATE_DATA = {"initial_theme": "strategic"}
 
 
 def _render_login(request, props: dict):
+    # Covers logout redirects and expired sessions. The Inertia client discards
+    # its history key before rendering Login, invalidating earlier private pages.
+    clear_history(request)
     return inertia_render(request, "Login", props, template_data=_LOGIN_TEMPLATE_DATA)
 
 

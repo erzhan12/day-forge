@@ -2,6 +2,24 @@
 
 Patterns and corrections discovered during development. Review at session start.
 
+## Silent Undo needs a visible control on touch screens
+
+Suppressing mutation toasts left every Undo entry available only through a keyboard
+shortcut. Expose the existing date-scoped `canUndo` and `performUndo` through the
+page controller and render a persistent toolbar button. Gate it on the same mutation
+state as keyboard Undo. Browser verification must include clicking it after an AI
+write, deletion, and draft generation at a mobile viewport.
+
+## Logout must invalidate Inertia history as well as client state
+
+Clearing the session and page composables did not stop Back from rendering cached
+private props. Enable Inertia history encryption and clear its key when rendering
+Login, including after session expiry. Verify Back in a fresh tab after enabling
+encryption; older plaintext history entries cannot be retroactively encrypted.
+Restart a development server launched with `--noreload` before validating a changed
+checkout. A six-day-old process produced a chat apply error that disappeared on
+the current code after restart.
+
 ## Live AI comparisons need intent-based expectations and independent state
 
 Recorded completions test how the server handles a particular model reply. Their

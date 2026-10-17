@@ -38,7 +38,7 @@ export function useSchedulePageController(options: SchedulePageControllerOptions
   provide(ScheduleDisabledKey, scheduleDisabled)
 
   const {
-    currentToast, pushUndo, performUndo, snapshotBlocks, dismissToast,
+    canUndo, currentToast, pushUndo, performUndo, snapshotBlocks, dismissToast,
   } = useUndo(getDate, getBlocks, () => scheduleDisabled.value, scheduleRevision)
   provide(ScheduleUndoKey, { pushUndo, snapshotBlocks })
 
@@ -78,7 +78,7 @@ export function useSchedulePageController(options: SchedulePageControllerOptions
     reorderBlocks, updateBlock,
     isGeneratingDraft, lastDraftError, generateDraft, abandonInFlight,
     isChatProcessing, scheduleDisabled,
-    currentToast, pushUndo, performUndo, snapshotBlocks, dismissToast,
+    canUndo, currentToast, pushUndo, performUndo, snapshotBlocks, dismissToast,
     runDraft, handleRegenerateClick, resetSession,
   }
 }
