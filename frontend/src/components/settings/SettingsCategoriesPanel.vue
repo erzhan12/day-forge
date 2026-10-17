@@ -4,6 +4,7 @@ import type { UserCategory } from "../../types"
 import { categoryPalette } from "../../utils/categoryPalette"
 import { orderedCategories } from "../../utils/categories"
 import { useCategories } from "../../composables/useCategories"
+import DeleteConfirmationDialog from "../DeleteConfirmationDialog.vue"
 
 const props = withDefaults(defineProps<{ categories?: UserCategory[] }>(), {
   categories: () => [],
@@ -13,9 +14,14 @@ const api = useCategories()
 const label = ref("")
 const newColor = ref("blue")
 const error = ref("")
+const pendingDelete = ref<UserCategory | null>(null)
+const deleting = ref(false)
 const drafts = reactive<Record<number, { label: string; color_id: string }>>({})
 
 watch(() => props.categories, (categories) => {
+  if (pendingDelete.value && !categories.some((category) =>
+    category.id === pendingDelete.value?.id && category.label === pendingDelete.value?.label && !category.is_sink,
+  )) pendingDelete.value = null
   for (const category of categories) {
     drafts[category.id] = { label: category.label, color_id: category.color_id }
   }
@@ -58,9 +64,18 @@ async function update(id: number, data: Record<string, unknown>) {
   }
 }
 
-async function remove(category: UserCategory) {
-  if (category.is_sink || !confirm(`Delete ${category.label}?`)) return
-  const result = await api.remove(category.id)
+function remove(category: UserCategory) {
+  if (category.is_sink || deleting.value) return
+  pendingDelete.value = { ...category }
+}
+
+async function confirmRemove() {
+  if (!pendingDelete.value || deleting.value) return
+  const id = pendingDelete.value.id
+  pendingDelete.value = null
+  deleting.value = true
+  const result = await api.remove(id)
+  deleting.value = false
   if (result.ok) {
     error.value = ""
     api.refresh(true)
@@ -119,7 +134,7 @@ async function reorder(id: number, otherId: number) {
       >
         ↓
       </button>
-      <button v-if="!category.is_sink" @click="remove(category)">Delete</button>
+      <button v-if="!category.is_sink" :disabled="deleting" @click="remove(category)">Delete</button>
       <span v-else>Sink</span>
     </div>
 
@@ -130,20 +145,44 @@ async function reorder(id: number, otherId: number) {
       </select>
       <button :disabled="props.categories.length >= 8">Add</button>
     </form>
+    <DeleteConfirmationDialog
+      v-if="pendingDelete"
+      heading="Delete category?"
+      :message="`Delete “${pendingDelete.label}”? Its blocks and saved references will move to the sink category. This cannot be undone.`"
+      @cancel="pendingDelete = null"
+      @confirm="confirmRemove"
+    />
   </section>
 </template>
 
 <style scoped>
 .category-row {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   align-items: center;
   margin: 8px 0;
 }
 .swatch {
+  flex: 0 0 18px;
   width: 18px;
   height: 18px;
   border-radius: 4px;
+}
+.category-row input {
+  flex: 1 1 140px;
+  min-width: 0;
+  max-width: 100%;
+}
+form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+form input {
+  flex: 1 1 150px;
+  min-width: 0;
+  max-width: 100%;
 }
 .error-text {
   color: var(--danger, #b91c1c);

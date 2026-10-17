@@ -21,7 +21,7 @@ vi.mock("@inertiajs/vue3", () => ({
   usePage: () => ({ props: { ui_preferences: { theme: "classic" } } }),
 }))
 
-import DeleteBlockDialog from "../src/components/DeleteBlockDialog.vue"
+import DeleteBlockDialog from "../src/components/DeleteConfirmationDialog.vue"
 import TimeBlock from "../src/components/TimeBlock.vue"
 import type { TimeBlock as TimeBlockType } from "../src/types"
 
@@ -467,7 +467,7 @@ describe("TimeBlock", () => {
   })
 
   it("keeps dialog keyboard input out of the page shortcut handler", async () => {
-    const wrapper = mount(DeleteBlockDialog, { props: { title: "Test Block" } })
+    const wrapper = mount(DeleteBlockDialog, { props: { heading: "Delete block?", message: "Delete Test Block?" } })
     const pageShortcut = vi.fn()
     document.addEventListener("keydown", pageShortcut)
     try {
