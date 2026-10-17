@@ -2,6 +2,22 @@
 
 Patterns and corrections discovered during development. Review at session start.
 
+## Category confirmation and narrow settings layouts need browser checks
+
+Block deletion already used a DOM dialog, but category deletion still called
+native confirm. In CUA the click timed out and the dialog API returned no handle;
+the category was later found deleted. Do not retry a destructive click without
+checking its outcome. Share the DOM confirmation component and cover Cancel,
+focus restoration, changed targets, and duplicate confirms. Category rows must
+wrap: their original layout reached 459 px inside a 390 px viewport.
+
+## Distinguish an advertised browser API from a completed native feature test
+
+The in-app browser exposes Document PiP, but Show indicator did not produce an
+open window even on a fresh visible page with native input. A Login transition
+and passing cleanup unit tests cannot prove that an existing PiP window closed.
+Keep that browser case open and record the concrete limitation.
+
 ## Silent Undo needs a visible control on touch screens
 
 Suppressing mutation toasts left every Undo entry available only through a keyboard

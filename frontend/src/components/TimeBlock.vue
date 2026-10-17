@@ -7,7 +7,7 @@ import { registerMutationUndo } from "../composables/useMutationUndo"
 import { useBlockCompletion } from "../composables/useBlockCompletion"
 import { getCategoryColor } from "../utils/categoryColors"
 import { useActiveTheme } from "../composables/useActiveTheme"
-import DeleteBlockDialog from "./DeleteBlockDialog.vue"
+import DeleteConfirmationDialog from "./DeleteConfirmationDialog.vue"
 import {
   formatDurationMinutes,
   formatRemainingMinutes,
@@ -294,9 +294,10 @@ async function handleDelete() {
       </div>
     </template>
     <div v-if="errorMessage" class="block-error">{{ errorMessage }}</div>
-    <DeleteBlockDialog
+    <DeleteConfirmationDialog
       v-if="confirmingDelete"
-      :title="block.title"
+      heading="Delete block?"
+      :message="`Delete “${block.title}”? You can restore it with Undo.`"
       @cancel="confirmingDelete = false"
       @confirm="handleDelete"
     />

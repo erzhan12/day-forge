@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from "vitest"
-import { mount, flushPromises } from "@vue/test-utils"
+import { describe, it, expect, vi, beforeEach, beforeAll, afterAll, afterEach } from "vitest"
+import { mount, flushPromises, enableAutoUnmount } from "@vue/test-utils"
 
 // The panel's API composable talks to fetch + Inertia's router; mock it so the
 // test drives the component's own logic (ordering, sink/default markers, cap,
@@ -14,6 +14,7 @@ const api = {
 vi.mock("../src/composables/useCategories", () => ({ useCategories: () => api }))
 
 import SettingsCategoriesPanel from "../src/components/settings/SettingsCategoriesPanel.vue"
+import DeleteConfirmationDialog from "../src/components/DeleteConfirmationDialog.vue"
 import type { UserCategory } from "../src/types"
 
 function cat(over: Partial<UserCategory>): UserCategory {
@@ -30,9 +31,17 @@ const SEED: UserCategory[] = [
   cat({ id: 4, slug: "other", label: "Other", color_id: "gray", sort_order: 3, is_sink: true }),
 ]
 
+enableAutoUnmount(afterEach)
+beforeAll(() => {
+  HTMLDialogElement.prototype.showModal = function () { this.open = true }
+  HTMLDialogElement.prototype.close = function () { this.open = false }
+})
+afterAll(() => {
+  Reflect.deleteProperty(HTMLDialogElement.prototype, "showModal")
+  Reflect.deleteProperty(HTMLDialogElement.prototype, "close")
+})
 beforeEach(() => {
   vi.clearAllMocks()
-  vi.stubGlobal("confirm", vi.fn(() => true))
 })
 
 describe("SettingsCategoriesPanel", () => {
@@ -83,6 +92,9 @@ describe("SettingsCategoriesPanel", () => {
     const deleteBtn = wrapper.findAll(".category-row")[1].findAll("button")
       .find((b) => b.text() === "Delete")!
     await deleteBtn.trigger("click")
+    expect(api.remove).not.toHaveBeenCalled()
+    wrapper.findComponent(DeleteConfirmationDialog).vm.$emit("confirm")
+    await flushPromises()
     expect(api.remove).toHaveBeenCalledWith(2)
     expect(api.refresh).toHaveBeenCalledWith(true)
   })
@@ -155,8 +167,46 @@ describe("SettingsCategoriesPanel", () => {
     const deleteBtn = wrapper.findAll(".category-row")[1].findAll("button")
       .find((b) => b.text() === "Delete")!
     await deleteBtn.trigger("click")
-    await Promise.resolve()
+    wrapper.findComponent(DeleteConfirmationDialog).vm.$emit("confirm")
+    await flushPromises()
     expect(wrapper.find(".error-text").text()).toBe("Delete failed")
+  })
+
+  it("cancels category deletion without a request", async () => {
+    const wrapper = mount(SettingsCategoriesPanel, { props: { categories: SEED } })
+    await wrapper.findAll(".category-row")[1].findAll("button")
+      .find((button) => button.text() === "Delete")!.trigger("click")
+    wrapper.findComponent(DeleteConfirmationDialog).vm.$emit("cancel")
+    await flushPromises()
+    expect(api.remove).not.toHaveBeenCalled()
+    expect(wrapper.findComponent(DeleteConfirmationDialog).exists()).toBe(false)
+  })
+
+  it("dismisses confirmation if the category changes before confirmation", async () => {
+    const wrapper = mount(SettingsCategoriesPanel, { props: { categories: SEED } })
+    await wrapper.findAll(".category-row")[1].findAll("button")
+      .find((button) => button.text() === "Delete")!.trigger("click")
+    await wrapper.setProps({ categories: SEED.map((category) =>
+      category.id === 2 ? { ...category, label: "Changed elsewhere" } : category,
+    ) })
+    expect(wrapper.findComponent(DeleteConfirmationDialog).exists()).toBe(false)
+    expect(api.remove).not.toHaveBeenCalled()
+  })
+
+  it("submits a confirmed deletion only once while its request is pending", async () => {
+    let finish!: (result: { ok: boolean }) => void
+    api.remove.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve }))
+    const wrapper = mount(SettingsCategoriesPanel, { props: { categories: SEED } })
+    await wrapper.findAll(".category-row")[1].findAll("button")
+      .find((button) => button.text() === "Delete")!.trigger("click")
+    const dialog = wrapper.findComponent(DeleteConfirmationDialog)
+    dialog.vm.$emit("confirm")
+    dialog.vm.$emit("confirm")
+    await flushPromises()
+    expect(api.remove).toHaveBeenCalledTimes(1)
+    finish({ ok: true })
+    await flushPromises()
+    expect(api.refresh).toHaveBeenCalledWith(true)
   })
 
   it("surfaces an inline error when the API rejects a swap", async () => {

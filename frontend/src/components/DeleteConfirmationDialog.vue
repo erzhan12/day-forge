@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, useId } from "vue"
 
-defineProps<{ title: string }>()
+defineProps<{ heading: string; message: string }>()
 const emit = defineEmits<{ confirm: []; cancel: [] }>()
 const dialog = ref<HTMLDialogElement | null>(null)
 const headingId = useId()
@@ -23,8 +23,8 @@ onBeforeUnmount(() => dialog.value?.close())
       @cancel.prevent="emit('cancel')"
       @keydown.stop
     >
-      <h3 :id="headingId">Delete block?</h3>
-      <p :id="descriptionId">Delete “{{ title }}”? You can restore it with Undo.</p>
+      <h3 :id="headingId">{{ heading }}</h3>
+      <p :id="descriptionId">{{ message }}</p>
       <div class="dialog-actions">
         <button type="button" class="cancel-delete" autofocus @click="emit('cancel')">Cancel</button>
         <button type="button" class="confirm-delete" @click="emit('confirm')">Delete</button>
