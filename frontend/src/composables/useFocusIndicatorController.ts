@@ -1,4 +1,4 @@
-import { computed, inject, provide, ref, watch, type ComputedRef, type InjectionKey } from "vue"
+import { computed, provide, ref, watch, type ComputedRef, type InjectionKey } from "vue"
 import { usePage } from "@inertiajs/vue3"
 import FocusIndicatorView from "../components/FocusIndicatorView.vue"
 import type { TimeBlock, UserCategory } from "../types"
@@ -193,8 +193,4 @@ export function provideFocusIndicatorController(): FocusIndicatorController {
   const controller = useFocusIndicatorController()
   provide(FocusIndicatorControllerKey, controller)
   return controller
-}
-
-export function useProvidedFocusIndicatorController(): FocusIndicatorController | null {
-  return inject(FocusIndicatorControllerKey, null)
 }

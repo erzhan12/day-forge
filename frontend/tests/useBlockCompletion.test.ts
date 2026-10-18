@@ -11,7 +11,7 @@ function makeBlock(overrides: Partial<TimeBlock> = {}): TimeBlock {
 function makeDeps() {
   return {
     updateBlock: vi.fn().mockResolvedValue(acceptedMutation([makeBlock()], "2026-08-12")),
-    undo: { pushUndo: vi.fn(), snapshotBlocks: vi.fn(() => [] as TimeBlock[]) },
+    undo: { pushUndo: vi.fn() },
     isDisabled: vi.fn(() => false),
   }
 }
@@ -31,7 +31,6 @@ describe("useBlockCompletion", () => {
       type: "toggle", silent: true, description: 'Checked "Deep work"', previousBlocks: [makeBlock()],
       previous_revision: 3, expected_revision: 4, scheduleDate: "2026-08-12",
     }))
-    expect(deps.undo.snapshotBlocks).not.toHaveBeenCalled()
     expect(completion.saving.value).toBe(false)
   })
 

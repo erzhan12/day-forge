@@ -15,14 +15,13 @@ vi.mock("../src/composables/useSchedule", () => ({
 import AddBlockForm from "../src/components/AddBlockForm.vue"
 
 const mockPushUndo = vi.fn()
-const mockSnapshotBlocks = vi.fn(() => [])
 
 function mountForm(props: { date: string; initialStartTime?: string; initialEndTime?: string }, categories = makeCategories()) {
   return mount(AddBlockForm, {
     props: { ...props, categories },
     global: {
       provide: {
-        [ScheduleUndoKey]: { pushUndo: mockPushUndo, snapshotBlocks: mockSnapshotBlocks },
+        [ScheduleUndoKey]: { pushUndo: mockPushUndo },
       },
     },
   })

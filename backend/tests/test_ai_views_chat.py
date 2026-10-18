@@ -1126,6 +1126,8 @@ class TestAuditEnvelope:
         # Chat audit rows must be labeled kind="chat", not the old default
         # "command" (feature 0044: /command/ removed, AIInteraction.Kind.CHAT added).
         assert row.kind == AIInteraction.Kind.CHAT
+        assert row.success is True
+        assert row.actions_json == []
         payload = json.loads(row.ai_response)
         expected = hashlib.sha256(
             json.dumps(messages, sort_keys=True, ensure_ascii=False).encode("utf-8")

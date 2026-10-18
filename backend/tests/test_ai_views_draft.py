@@ -508,10 +508,9 @@ class TestActiveRulesWiring:
     """Feature 0012: ``ai_generate_draft`` must pass only the
     authenticated user's ACTIVE rules to ``run_draft``, ordered by
     ``-priority``. Same shape as the chat view assertion so the two
-    endpoints can't drift on the rule-loading contract — the
-    refactor moved the inline query into the shared
-    ``_load_active_rules`` helper, and this test pins the invariant for
-    the draft side.
+    endpoints agree on the rule-loading contract.
+    ``_load_ai_context_sync`` captures rules with the schedule context;
+    this test pins the invariant for the draft side.
     """
 
     @pytest.mark.django_db

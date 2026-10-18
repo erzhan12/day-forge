@@ -21,7 +21,7 @@
 
 import { computed, inject, onMounted, onUnmounted, ref, watch } from "vue"
 import { ScheduleDisabledKey } from "../composables/scheduleContext"
-import type { TimeBlock, UndoAction } from "../types"
+import type { UndoAction } from "../types"
 import { useChat } from "../composables/useChat"
 import { useActiveTheme } from "../composables/useActiveTheme"
 import { useChatSuggestions } from "../composables/useChatSuggestions"
@@ -32,7 +32,6 @@ type Variant = "dock" | "sidebar"
 
 const props = defineProps<{
   date: string
-  snapshotBlocks: () => TimeBlock[]
   pushUndo: (action: UndoAction) => void
   variant: Variant
 }>()
@@ -154,7 +153,7 @@ async function handleSubmit(): Promise<void> {
   await Promise.resolve()
   autosize()
   try {
-    await submitTurn(text, props.snapshotBlocks, props.pushUndo)
+    await submitTurn(text, props.pushUndo)
   } catch (err) {
     // Errors land inside the thread as a synthetic assistant message —
     // the catch here only matters if `submitTurn` rejects synchronously

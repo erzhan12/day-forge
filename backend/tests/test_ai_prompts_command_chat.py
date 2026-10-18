@@ -5,7 +5,7 @@ The chat prompt builder renders an
 defaults from rules instead of asking for clarification.
 
 Active/user-owned filtering is the view layer's responsibility (see
-``ai.views._load_active_rules``); the builders render whatever rules
+``ai.views._load_ai_context_sync``); the builders render whatever rules
 they are handed, in iteration order. These tests pin both invariants
 so a refactor that moves filtering into the prompt layer (or drops the
 section entirely) fails here.
@@ -64,7 +64,7 @@ class TestFormatRulesSection:
         that rule text gets the same JSON-encoding defense and doesn't
         accidentally introduce a NEW injection surface). Cross-user
         injection is blocked at the view layer by ``user=user`` scoping
-        in ``_load_active_rules``.
+        in ``_load_ai_context_sync``.
         """
         # 1. Embedded newline must NOT split the rule into two prompt lines.
         section = _format_rules_section([_rule("line one\nline two")])

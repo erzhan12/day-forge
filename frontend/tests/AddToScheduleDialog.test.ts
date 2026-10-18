@@ -157,15 +157,13 @@ describe("AddToScheduleDialog", () => {
     const pushUndo = vi.fn()
     const previousBlocks = [{ id: 1 }] as TimeBlock[]
     createBlockFromEvent.mockResolvedValue(acceptedMutation(previousBlocks, DATE))
-    const snapshotBlocks = vi.fn().mockReturnValue([{ id: 99 }])
     const wrapper = mount(AddToScheduleDialog, {
       props: { event: localEvent("14:07", "14:33"), matchedRule: null, date: DATE, categories: makeCategories() },
-      global: { provide: { [ScheduleUndoKey]: { pushUndo, snapshotBlocks } } },
+      global: { provide: { [ScheduleUndoKey]: { pushUndo } } },
     })
     await confirmBtn(wrapper).trigger("click")
     await Promise.resolve()
 
-    expect(snapshotBlocks).not.toHaveBeenCalled()
     expect(pushUndo).toHaveBeenCalledWith(
       expect.objectContaining({
         type: "add",
@@ -182,7 +180,7 @@ describe("AddToScheduleDialog", () => {
     const pushUndo = vi.fn()
     const wrapper = mount(AddToScheduleDialog, {
       props: { event: localEvent("14:07", "14:33"), matchedRule: null, date: DATE, categories: makeCategories() },
-      global: { provide: { [ScheduleUndoKey]: { pushUndo, snapshotBlocks: () => [] } } },
+      global: { provide: { [ScheduleUndoKey]: { pushUndo } } },
     })
     await confirmBtn(wrapper).trigger("click")
     await Promise.resolve()
@@ -198,7 +196,7 @@ describe("AddToScheduleDialog", () => {
     const wrapper = mount(AddToScheduleDialog, {
       props: { event: localEvent("14:07", "14:33"), matchedRule: null, date: DATE, categories: makeCategories() },
       global: {
-        provide: { [ScheduleUndoKey]: { pushUndo, snapshotBlocks: () => [] } },
+        provide: { [ScheduleUndoKey]: { pushUndo } },
       },
     })
     await confirmBtn(wrapper).trigger("click")
@@ -274,7 +272,7 @@ describe("AddToScheduleDialog", () => {
           window: NARROW,
         },
         global: {
-          provide: { [ScheduleUndoKey]: { pushUndo, snapshotBlocks: () => [] } },
+          provide: { [ScheduleUndoKey]: { pushUndo } },
         },
       })
       await confirmBtn(wrapper).trigger("click")

@@ -65,7 +65,6 @@ function mountSidebar(open: boolean) {
   return mount(ChatSidebar, {
     props: {
       date: "2026-04-18",
-      snapshotBlocks: () => [],
       pushUndo: vi.fn(),
       open,
       "onUpdate:open": (v: boolean) => {

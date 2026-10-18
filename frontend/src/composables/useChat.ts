@@ -98,11 +98,6 @@ function clearSessionState(state: ChatState): void {
   state.draftInput.value = ""
 }
 
-/** Remove this owner's chat values and invalidate outstanding UI responses. */
-export function clearChatSession(owner?: ScheduleRevisionState): void {
-  clearSessionState(stateFor(owner))
-}
-
 interface ChatApiResult extends ApiResult {
   data?: Record<string, unknown> & {
     blocks?: unknown
@@ -170,7 +165,6 @@ export function useChat(explicitRevision?: ScheduleRevisionState) {
 
   async function submitTurn(
     text: string,
-    _snapshotBlocks: () => TimeBlock[],
     pushUndo: (a: UndoAction) => void,
   ): Promise<void> {
     if (activeDate.value === null) {

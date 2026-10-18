@@ -1,74 +1,15 @@
-# Development Workflows
+# Development workflows
 
-## Run (two terminals needed)
-```bash
-uv run python backend/manage.py runserver 8006      # Terminal 1: Django on :8006
-cd frontend && npm run dev                          # Terminal 2: Vite on :5173
-```
-Visit http://localhost:5173/ — Vite proxies to Django, serves frontend with HMR.
+Use [AGENTS.md](../../AGENTS.md) and [README.md](../../README.md#development) for current commands. The [Makefile](../../Makefile) defines the shared targets.
 
-## Lint
-```bash
-uv run ruff check backend/                         # Python lint
-uv run ruff check backend/ --fix                   # Auto-fix
-cd frontend && npx vue-tsc --noEmit                # TypeScript type check
-```
+Run Django with `make run` and Vite with `make frontend-dev` in separate terminals. Use `make run-manual` when browser testing requires a backend without automatic restarts.
 
-## Frontend
-```bash
-cd frontend && npm install                         # Install deps
-cd frontend && npm run dev                         # Vite dev server
-cd frontend && npm run build                       # Production build
-```
+Run `make check` and `make frontend-build` before completing a code change. README lists the production dependency audit and the other CI checks. For a focused test, use `uv run pytest backend/tests/test_file.py` or run Vitest from `frontend/`.
 
-## Test
-```bash
-uv run pytest backend/tests/ -v                    # All tests
-uv run pytest backend/tests/test_file.py -v        # Specific file
-```
+Seed templates with `make seed SEED_USER=username` after creating the target user. Use `make migrate` to apply existing migrations; create new migrations only for model changes. Follow [the deployment runbook](../../deployment/README.md) for production operations.
 
-## Manual Testing (browser smoke)
-End-to-end browser smoke testing requires the **full dev stack** running
-(Django on :8006 and Vite on :5173 — see § Run). Visit
-http://localhost:5173/, log in (`createsuperuser` first if no account),
-and exercise the feature in the actual browser.
+## Browser smoke
 
-The 18 Playwright scripts at `frontend/scripts/playwright/*.mjs` cover AI chat,
-draft, analytics, timeline, templates, themes, and Todoist flows.
-See that directory's `README.md` for prerequisites and the per-script provider
-call table. Several AI scenarios make real LLM calls and burn provider tokens;
-the `ai-draft-409-on-non-empty.mjs` endpoint short-circuits before the LLM.
-After a schedule-mutation refactor, run the relevant scripts instead of doing
-an ad hoc browser smoke pass.
+Read [frontend/scripts/playwright/README.md](../../frontend/scripts/playwright/README.md) for prerequisites, provider calls and cleanup options. The application requires both development servers and a test account.
 
-Run the scripts **serially**, not in parallel — they share
-the `playwright` user's chat / draft rate-limit
-counters, and concurrent runs would race the counter and produce a
-false failure in `ai-draft-409-on-non-empty.mjs`'s "no consumption"
-assertion.
-
-From the repository root, use `make e2e` for all scenarios or
-`make e2e-chat` and `make e2e-draft` for focused groups.
-Pass `--cleanup` to an individual Node script only when its seeded schedules
-should be deleted after the run; cleanup defaults off for post-mortem debugging.
-
-For the no-autoreload variant of the Django server (useful when stepping
-through with a debugger or doing manual smoke testing where you don't
-want code edits to restart the backend mid-session):
-```bash
-uv run python backend/manage.py runserver 8006 --noreload
-```
-
-## Database
-```bash
-uv run python backend/manage.py makemigrations     # Create migrations
-uv run python backend/manage.py migrate            # Apply migrations
-uv run python backend/manage.py seed_templates     # Seed default data
-uv run python backend/manage.py createsuperuser    # Create admin user
-```
-
-## Docker
-```bash
-docker compose up                                  # Start dev server
-docker compose run web uv run python manage.py migrate   # Run migrations in container
-```
+Run scripts serially because they share the test user's AI rate-limit counters. `make e2e` runs all scenarios; `make e2e-chat` and `make e2e-draft` select AI groups. Pass `--cleanup` to an individual script when its seeded schedules should be deleted after the run. Cleanup defaults off to preserve debugging evidence.

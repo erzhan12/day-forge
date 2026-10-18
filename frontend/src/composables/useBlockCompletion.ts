@@ -1,6 +1,7 @@
 import { getCurrentInstance, onUnmounted, ref } from "vue"
-import type { TimeBlock, UndoAction } from "../types"
+import type { TimeBlock } from "../types"
 import type { ApiResult, ScheduleRequestOptions } from "./useSchedule"
+import type { ScheduleUndoContext } from "./scheduleContext"
 import { registerMutationUndo } from "./useMutationUndo"
 
 export type CompletionOutcome = "success" | "failure" | "superseded"
@@ -11,10 +12,7 @@ interface BlockCompletionDeps {
     data: Record<string, unknown>,
     options?: ScheduleRequestOptions,
   ) => Promise<ApiResult>
-  undo?: {
-    pushUndo: (action: UndoAction) => void
-    snapshotBlocks: () => TimeBlock[]
-  }
+  undo?: ScheduleUndoContext
   isDisabled: () => boolean
 }
 
