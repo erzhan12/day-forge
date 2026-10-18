@@ -14,6 +14,19 @@ version on the subsequent GET. Early stale-GET handling must still run after
 MessageMiddleware because inertia-django preserves flash messages on refresh.
 Test the complete middleware stack as well as the isolated guard.
 
+## Rehearse image rollback independently of database migration reversal
+
+Use SQLite's backup API for an active source, and test only on a private copy.
+Keep the same database, secrets and staticfiles across image changes so the test
+can expose lost writes or stale release metadata. A normal image rollback does
+not reverse migrations. Exercise a pending migration on a second copy and check
+both preserved fields and idempotent startup. Isolate copied integrations with
+dummy configuration and an internal web network; publish only a loopback proxy.
+Docker Desktop needs a separate edge network on that proxy for host access.
+Use the sandbox's 127.0.0.1 URL to avoid sharing localhost development cookies.
+Keep public production probes, authenticated sandbox checks, and authenticated
+production smoke distinct in reports.
+
 ## Rejected duration and effective chaining have different responsibilities
 
 An invalid duration stays out of `chain_effective` so a later move does not inherit

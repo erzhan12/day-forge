@@ -215,6 +215,76 @@ An old tab refreshes on its next Inertia navigation. A stale JSON request return
 On the droplet, pin the previous image tag in `.env` (`DOCKER_IMAGE=...`) and run
 `docker compose pull && docker compose up -d`.
 
+Check schema compatibility before returning an older image. An image rollback
+does not reverse migrations or undo writes made after deployment. Do not run a
+backward migration on the working database merely to match an older tag. If a
+release needs database restoration, plan for writes made since the backup.
+
+PR #245 adds no migration. Rollback to PR #244 retains saved writes, but that old
+backend has no frontend-version API guard. Refresh open tabs before continuing
+to write after returning to a pre-245 image. Two releases with the new guard
+negotiate stale tabs in both directions.
+
+### Container rehearsal on a database copy
+
+Start Docker and build the images before running the rehearsal. GHCR images may
+require separate package-read credentials; local builds use the same production
+Dockerfile. These commands use PR #244, PR #245, and a second release identity
+of the PR #245 source:
+
+```sh
+mkdir /tmp/day-forge-pr244-source
+git archive a0fed3845f1bf01b6f50f9f0100f4355faaeec64 | tar -x -C /tmp/day-forge-pr244-source
+mkdir /tmp/day-forge-pr245-source
+git archive afc94f658f4f09e293bfd922fdc6aca271da8ffb | tar -x -C /tmp/day-forge-pr245-source
+docker build -f /tmp/day-forge-pr244-source/deployment/docker/Dockerfile \
+  -t day-forge-rehearsal:pr244 /tmp/day-forge-pr244-source
+docker build -f /tmp/day-forge-pr245-source/deployment/docker/Dockerfile \
+  --build-arg RELEASE_VERSION=afc94f658f4f09e293bfd922fdc6aca271da8ffb \
+  -t day-forge-rehearsal:pr245 /tmp/day-forge-pr245-source
+docker build -f /tmp/day-forge-pr245-source/deployment/docker/Dockerfile \
+  --build-arg RELEASE_VERSION=rehearsal-compatible \
+  -t day-forge-rehearsal:compatible /tmp/day-forge-pr245-source
+docker pull redis:7-alpine
+docker pull caddy:2-alpine
+uv run python deployment/scripts/rehearse_release.py \
+  --source-db db/day_forge.db --output-dir /tmp/day-forge-rehearsal-example \
+  --old-image day-forge-rehearsal:pr244 \
+  --new-image day-forge-rehearsal:pr245 \
+  --new-version afc94f658f4f09e293bfd922fdc6aca271da8ffb \
+  --compatible-image day-forge-rehearsal:compatible \
+  --compatible-version rehearsal-compatible
+```
+
+Build PR #245 from its exact source when reproducing the recorded release. Do
+not label later application code with that SHA. Use a new output directory under
+`/tmp`; the runner refuses to overwrite one. It reads the source through SQLite's
+backup API and writes only inside the private output directory. The source can
+be a local database or an already-downloaded backup; it is never a production
+connection.
+
+The runner starts uvicorn with the image entrypoint, real Redis, a shared
+staticfiles directory, and the production 250 MiB web memory limit. Only the
+proxy is published on `127.0.0.1:8009`. The web and Redis containers use an
+internal network, AI and polling are disabled, and integration keys are dummy
+values. The localhost HTTP proxy supplies the HTTPS-forwarding header so the
+application keeps its production cookie and redirect settings. This does not
+test TLS termination; the public deployment probe covers actual HTTPS.
+
+The checks cover legacy upgrade, compatible rollback, explicit legacy-image
+rollback, authenticated writes, stale/headerless write rejection, session
+continuity, Logout, asset availability, and preservation of original rows. A
+separate database copy rehearses migration 0009 → 0010 and idempotent startup.
+That migration exercise is independent of the image rollback.
+
+Add `--keep-running` to inspect the sandbox in a browser. It prints the local
+test login and the exact Compose cleanup command. Open its `127.0.0.1` URL to
+keep browser cookies separate from a development app on `localhost`.
+Without that flag, or after a failure, the runner stops its containers.
+The output directory retains a
+database copy and private logs: remove it when finished. Only the sanitized
+`evidence.json` belongs in a report. See [the recorded rehearsal](../docs/DEPLOYMENT_REHEARSAL_PR245.md).
+
 ## Backups (manual)
 
 Copying SQLite while the app is writing can corrupt the file. Prefer stopping
