@@ -14,6 +14,7 @@
 // the options object — `requestJson(url, "GET", { signal })` would serialise
 // the options as the JSON body.
 
+import { frontendVersionHeader, markFrontendOutdated } from "./useFrontendRelease"
 import type { TimeBlock } from "../types"
 
 export function getCsrfToken(): string {
@@ -68,6 +69,7 @@ export async function requestJson(
       headers: {
         "Content-Type": "application/json",
         "X-XSRF-TOKEN": getCsrfToken(),
+        ...frontendVersionHeader(),
         ...(options?.expectedUserId !== undefined ? { "X-Schedule-User": String(options.expectedUserId) } : {}),
       },
       body: body ? JSON.stringify(body) : undefined,
@@ -138,6 +140,8 @@ export async function requestJson(
     }
     return { ok: true, status: resp.status, data }
   }
+
+  if (resp.status === 409 && data?.code === "frontend_outdated") markFrontendOutdated()
 
   // Non-OK: surface the server's structured ``errors`` if present; otherwise
   // fall back to a generic "Server error (N)" so the user sees the status.

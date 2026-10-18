@@ -196,6 +196,20 @@ left alone. Cleanup errors are logged without failing the deploy; the next
 deploy retries. GHCR tags are unaffected. Check host usage with `df -h /` and
 `docker system df` after deployment.
 
+## Frontend release identity
+
+The frontend build receives `RELEASE_VERSION` from the workflow's full Git SHA. Vite embeds it in the JS bundle and writes `.vite/release.json`; Django uses that packaged identity for Inertia and API compatibility checks. Production startup refuses missing or incomplete build assets. Runtime `.env` does not select the release identity.
+
+For a manual image build from a clean checkout matching the chosen commit:
+
+```sh
+docker build -f deployment/docker/Dockerfile --build-arg RELEASE_VERSION=<commit-sha> -t day-forge:<commit-sha> .
+```
+
+Use the same image for backend and frontend. Keep the baked metadata directory with the image; it is read from `frontend/dist`, not the staticfiles bind mount. Content-hashed files receive immutable cache headers. Returning to an earlier image restores its identity and asset references, even while newer hashed files remain in staticfiles.
+
+An old tab refreshes on its next Inertia navigation. A stale JSON request returns `409 frontend_outdated` before its view executes; the new UI offers Reload and warns about unsent text. The action is not repeated automatically. Legacy headerless writes are also refused. See [the local release rehearsal](../docs/FRONTEND_RELEASE_VERIFICATION.md).
+
 ## Rollback
 
 On the droplet, pin the previous image tag in `.env` (`DOCKER_IMAGE=...`) and run

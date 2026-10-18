@@ -3,6 +3,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from day_forge.frontend_release import DEVELOPMENT_VERSION, load_frontend_release
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 PROJECT_ROOT = BASE_DIR.parent
 
@@ -44,12 +46,13 @@ MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
-    "inertia.middleware.InertiaMiddleware",
+    "common.middleware.ReleaseInertiaMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "common.middleware.InertiaIdentityMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
+    "common.middleware.FrontendVersionMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
@@ -93,10 +96,15 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = "static/"
-STATICFILES_DIRS = [PROJECT_ROOT / "frontend" / "dist"]
+FRONTEND_BUILD_DIR = Path(os.environ.get("FRONTEND_BUILD_DIR", PROJECT_ROOT / "frontend" / "dist"))
+STATICFILES_DIRS = [FRONTEND_BUILD_DIR]
 STATIC_ROOT = PROJECT_ROOT / "staticfiles"
+# Vite content hashes use URL-safe base64 rather than Django's hex convention.
+WHITENOISE_IMMUTABLE_FILE_TEST = r"/assets/[^/]+-[A-Za-z0-9_-]{8,}\.(?:js|css)$"
 
 # Inertia
+FRONTEND_RELEASE = None if DEBUG else load_frontend_release(FRONTEND_BUILD_DIR)
+INERTIA_VERSION = FRONTEND_RELEASE.version if FRONTEND_RELEASE else DEVELOPMENT_VERSION
 INERTIA_LAYOUT = "base.html"
 INERTIA_SSR_ENABLED = False
 # Login rotates the key so Back cannot restore authenticated page snapshots.

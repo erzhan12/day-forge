@@ -1,9 +1,25 @@
 import { defineConfig } from "vite"
 import vue from "@vitejs/plugin-vue"
 import { resolve } from "path"
+import { createHash } from "node:crypto"
+import { readFile, writeFile } from "node:fs/promises"
 
 export default defineConfig({
-  plugins: [vue()],
+  define: { __FRONTEND_RELEASE__: JSON.stringify(process.env.RELEASE_VERSION || null) },
+  plugins: [vue(), {
+    name: "day-forge-release",
+    async writeBundle(options) {
+      const directory = resolve(options.dir!)
+      const manifest = await readFile(resolve(directory, ".vite/manifest.json"), "utf8")
+      const entry = JSON.parse(manifest)["src/app.ts"]
+      const digest = createHash("sha256").update(manifest).digest("hex").slice(0, 20)
+      await writeFile(resolve(directory, ".vite/release.json"), JSON.stringify({
+        version: process.env.RELEASE_VERSION || `build:${digest}`,
+        script: entry.file,
+        styles: entry.css ?? [],
+      }))
+    },
+  }],
   root: resolve(__dirname),
   test: {
     environment: "jsdom",
@@ -17,9 +33,9 @@ export default defineConfig({
     rollupOptions: {
       input: resolve(__dirname, "src/app.ts"),
       output: {
-        entryFileNames: "assets/app.js",
-        chunkFileNames: "assets/[name].js",
-        assetFileNames: "assets/[name][extname]",
+        entryFileNames: "assets/[name]-[hash].js",
+        chunkFileNames: "assets/[name]-[hash].js",
+        assetFileNames: "assets/[name]-[hash][extname]",
       },
     },
   },

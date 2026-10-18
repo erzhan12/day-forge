@@ -15,7 +15,7 @@ def test_fixture_user_uses_fast_hasher(user):
     assert not user.check_password("wrong")
 
 
-def test_production_settings_keep_django_password_hashers():
+def test_production_settings_keep_django_password_hashers(frontend_build):
     # A fresh interpreter does not load pytest's session overrides.
     result = subprocess.run(
         [
@@ -32,6 +32,7 @@ def test_production_settings_keep_django_password_hashers():
             **os.environ,
             "DJANGO_SETTINGS_MODULE": "day_forge.settings",
             "DEBUG": "0",
+            "FRONTEND_BUILD_DIR": str(frontend_build),
             "DJANGO_SECRET_KEY": "test-production-settings-only",
         },
         capture_output=True,

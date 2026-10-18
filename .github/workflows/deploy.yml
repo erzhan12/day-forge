@@ -57,6 +57,8 @@ jobs:
           context: .
           file: deployment/docker/Dockerfile
           push: true
+          build-args: |
+            RELEASE_VERSION=${{ github.sha }}
           tags: |
             ${{ env.IMAGE }}:latest
             ${{ env.IMAGE }}:${{ steps.meta.outputs.tag }}

@@ -1,5 +1,7 @@
 /// <reference types="vite/client" />
 
+declare const __FRONTEND_RELEASE__: string | null
+
 declare module "*.vue" {
   import type { DefineComponent } from "vue"
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

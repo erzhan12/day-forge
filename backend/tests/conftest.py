@@ -30,8 +30,14 @@ def production_password_hashers():
 
 @pytest.fixture(scope="session", autouse=True)
 def _test_static_root(tmp_path_factory):
-    """Keep WhiteNoise enabled with an existing root, without collectstatic."""
-    with override_settings(STATIC_ROOT=tmp_path_factory.mktemp("staticfiles")):
+    """Use an explicit asset fixture, independent of a developer's dist build."""
+    from day_forge.frontend_release import FrontendRelease
+
+    with override_settings(
+        STATIC_ROOT=tmp_path_factory.mktemp("staticfiles"),
+        FRONTEND_RELEASE=FrontendRelease("development", "assets/app-test1234.js", ()),
+        INERTIA_VERSION="development",
+    ):
         yield
 
 
@@ -137,3 +143,24 @@ def csrf_auth_client(user):
 @pytest.fixture
 def schedule(user):
     return Schedule.objects.create(date="2026-04-07", user=user)
+
+
+@pytest.fixture
+def frontend_build(tmp_path):
+    """A complete immutable asset fixture for production settings imports."""
+    import json
+
+    build = tmp_path / "build"
+    (build / ".vite").mkdir(parents=True)
+    (build / "assets").mkdir()
+    (build / "assets/app-test1234.js").write_text("// settings fixture")
+    (build / ".vite/release.json").write_text(
+        json.dumps(
+            {
+                "version": "test-release",
+                "script": "assets/app-test1234.js",
+                "styles": [],
+            }
+        )
+    )
+    return build

@@ -58,6 +58,8 @@ The root Docker stack runs the development server with `DEBUG=1`. The production
 
 The deployment configuration targets `dayforge.habitreward.org` on the shared habitreward droplet behind Caddy. The Deploy workflow calls the same validation workflow used by pull requests, then builds and pushes a container image, deploys it over pinned SSH, and probes the HTTPS login page. The [deployment runbook](deployment/README.md) covers host setup, secrets, rollback, and backups. [Feature 0016](docs/features/0016_deploy_PLAN.md) records the original deployment design.
 
+Production assets use content-hashed filenames and a release ID baked into the image. Deploy passes the Git SHA as the frontend build argument. Manual image builds must provide `--build-arg RELEASE_VERSION=<commit-sha>`. A standalone `DEBUG=0` run needs `make frontend-build` first; use `RELEASE_VERSION=<commit-sha> make frontend-build` to identify backend-only changes as a new release. See [the release verification report](docs/FRONTEND_RELEASE_VERIFICATION.md) for old-tab and rollback behavior.
+
 ## Configuration
 
 Day Forge reads configuration from environment variables. The most common ones:
