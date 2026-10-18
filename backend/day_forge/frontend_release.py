@@ -7,6 +7,8 @@ from pathlib import Path
 
 from django.core.exceptions import ImproperlyConfigured
 
+DEVELOPMENT_VERSION = "development"
+
 
 @dataclass(frozen=True)
 class FrontendRelease:
@@ -21,7 +23,7 @@ def load_frontend_release(directory: Path) -> FrontendRelease:
         version, script, styles = data["version"], data["script"], data["styles"]
         if (
             not isinstance(version, str)
-            or version == "development"
+            or version == DEVELOPMENT_VERSION
             or not re.fullmatch(r"[\w.:-]{1,160}", version)
         ):
             raise ValueError("Invalid release identity")

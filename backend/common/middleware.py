@@ -1,7 +1,9 @@
 """Bind frontend requests to their session owner and application release."""
 
+from day_forge.frontend_release import DEVELOPMENT_VERSION
+from django.conf import settings
 from django.http import JsonResponse
-from inertia import share
+from inertia import location, share
 from inertia.middleware import InertiaMiddleware
 
 
@@ -48,11 +50,8 @@ class FrontendVersionMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
-        from django.conf import settings
-        from inertia import location
-
         version = settings.INERTIA_VERSION
-        if version != "development":
+        if version != DEVELOPMENT_VERSION:
             if request.headers.get("X-Inertia") and request.method in {"GET", "HEAD"}:
                 if request.headers.get("X-Inertia-Version") != version:
                     return location(request.build_absolute_uri())

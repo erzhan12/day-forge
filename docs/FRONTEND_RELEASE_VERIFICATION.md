@@ -47,7 +47,9 @@ Django загружает metadata и проверяет наличие assets �
 
 ## Проверки
 
-`make check`: Ruff прошёл, backend **2115 passed, 1 skipped**, frontend **1395 passed, 103 файла**, type check прошёл. Пропущен opt-in платный R11 comparison; реальные chat/draft выполнены отдельно через UI. `make frontend-build` прошёл. Production npm audit: **0 vulnerabilities**. Image-retention tests и SSH host-key pinning проверены без ослабления правил.
+`make check`: Ruff прошёл, backend **2118 passed, 1 skipped**, frontend **1395 passed, 103 файла**, type check прошёл. Пропущен opt-in платный R11 comparison; реальные chat/draft выполнены отдельно через UI. `make frontend-build` прошёл. Production npm audit: **0 vulnerabilities**. Image-retention tests и SSH host-key pinning проверены без ослабления правил.
+
+После PR review общий `DEVELOPMENT_VERSION` используется загрузчиком, settings и guard. Добавлен отдельный тест dev-режима с отсутствующим, старым и совпадающим заголовком версии. Импорты middleware перенесены на уровень модуля. Рекомендация использовать DaisyUI tokens не применялась: зависимости и CSS variables DaisyUI в проекте отсутствуют, уведомление сохраняет проверенную контрастную палитру.
 
 ## Воспроизведение
 

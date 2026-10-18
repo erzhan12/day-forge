@@ -4,7 +4,7 @@ import json
 
 import pytest
 from common.middleware import FrontendVersionMiddleware
-from day_forge.frontend_release import load_frontend_release
+from day_forge.frontend_release import DEVELOPMENT_VERSION, load_frontend_release
 from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpResponse
 from django.test import RequestFactory, override_settings
@@ -154,3 +154,12 @@ def test_html_assets_and_inertia_page_share_the_packaged_identity(client):
         )
     assert page.status_code == 200
     assert page.json()["version"] == release.version
+
+
+@pytest.mark.parametrize("supplied", [None, "previous-release", DEVELOPMENT_VERSION])
+def test_development_allows_api_writes_without_a_release_handshake(supplied):
+    headers = {} if supplied is None else {"HTTP_X_FRONTEND_VERSION": supplied}
+    request = RequestFactory().post("/api/rules/", **headers)
+    with override_settings(INERTIA_VERSION=DEVELOPMENT_VERSION):
+        response = FrontendVersionMiddleware(lambda request: HttpResponse())(request)
+    assert response.status_code == 200

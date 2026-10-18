@@ -3,7 +3,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from day_forge.frontend_release import load_frontend_release
+from day_forge.frontend_release import DEVELOPMENT_VERSION, load_frontend_release
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 PROJECT_ROOT = BASE_DIR.parent
@@ -104,7 +104,7 @@ WHITENOISE_IMMUTABLE_FILE_TEST = r"/assets/[^/]+-[A-Za-z0-9_-]{8,}\.(?:js|css)$"
 
 # Inertia
 FRONTEND_RELEASE = None if DEBUG else load_frontend_release(FRONTEND_BUILD_DIR)
-INERTIA_VERSION = FRONTEND_RELEASE.version if FRONTEND_RELEASE else "development"
+INERTIA_VERSION = FRONTEND_RELEASE.version if FRONTEND_RELEASE else DEVELOPMENT_VERSION
 INERTIA_LAYOUT = "base.html"
 INERTIA_SSR_ENABLED = False
 # Login rotates the key so Back cannot restore authenticated page snapshots.
