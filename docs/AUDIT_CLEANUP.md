@@ -39,6 +39,8 @@
 - Deployment SSH pinning: все 7 команд SSH/SCP используют strict host checking и pinned known_hosts.
 - `git diff --check`: без ошибок.
 
+Первый PR CI обнаружил различие с локальным checkout: после удаления последнего tracked файла корневой `scripts/` исчезает в свежем клоне. Ruff переставал считать импорт frontend seed helpers локальным. В `pyproject.toml` добавлена явная isort-классификация `scripts`; ошибка воспроизведена через `git archive`, lint проверен после исправления в том же чистом дереве.
+
 В frozen-drag тесте родитель теперь пересчитывает presentation при изменении часов и масштаба. Проверяются неизменные высота canvas и положение блока, а также обновление подписи текущего времени внутри видимой оси. Новое время в fixture остаётся в пределах замороженной оси, где NowLine должна быть видна.
 
 Новые браузерные сценарии и реальные provider calls в этом cleanup не запускались. Результаты предыдущих browser/live прогонов сохранены в [основном отчёте](BROWSER_VERIFICATION_DESKTOP_MOBILE.md), [A00–A07](BROWSER_VERIFICATION_A00_A07.md) и [R11 comparison](R11_LIVE_COMPARISON.md).
