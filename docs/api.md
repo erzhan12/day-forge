@@ -213,6 +213,14 @@ apply some work (`applied: true`), report that a block only partially landed
 (`partial: true`), **and** carry a server-owned follow-up question about the
 skipped time work (`ask` non-null) — the partial-apply case.
 
+An explicit add rejected as `out_of_window` asks for a time within the user's
+day window before the generic skipped-create fallback. Concrete suggestions,
+direction/conflict questions, and `no_slot` advice retain higher priority.
+If a duration resize conflicts and is followed by a title/category update on the
+same block, metadata may apply while `end_time` remains skipped. The response
+retains the conflict and follow-up question; it must not report timing as applied
+just because the later action changed only metadata.
+
 **Success — clarifying question — `200 OK`**
 
 ```json

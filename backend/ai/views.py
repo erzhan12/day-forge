@@ -234,8 +234,8 @@ def _build_resolution_ask(
     # outcome happened to appear first). Precedence:
     #   concrete suggestion > direction_required > unresolved_conflict
     #   > attempted_direction(no free later/earlier slot for a move)
-    #   > no_slot(auto-placement has no forward slot) > skipped-add(task_id None)
-    #   > generic-invalid.
+    #   > no_slot(auto-placement has no forward slot) > out_of_window
+    #   > skipped-add(task_id None) > generic-invalid.
     for outcome in skipped:
         suggestion = outcome.suggestion
         if (
@@ -276,14 +276,14 @@ def _build_resolution_ask(
                 "day window. Try a shorter duration or a specific free time."
             )
     for outcome in skipped:
+        if outcome.reason_code == "out_of_window":
+            return "That time is outside your schedule window. Please give a time within your day."
+    for outcome in skipped:
         if outcome.task_id is None:
             return (
                 f"{title(outcome)} does not fit at that time. Please give it a "
                 "concrete free start and end time."
             )
-    for outcome in skipped:
-        if outcome.reason_code == "out_of_window":
-            return "That time is outside your schedule window. Please give a time within your day."
     # ``skipped`` is guaranteed non-empty (the early ``if not skipped`` guard),
     # so fall back to the first outcome's generic message.
     return (

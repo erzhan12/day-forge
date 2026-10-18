@@ -1451,3 +1451,183 @@ class TestDurationResize:
         assert outcome.action_index == 1
         assert outcome.reason_code == "out_of_window"
         assert outcome.status == "skipped"
+
+
+class TestDurationResizeEdges:
+    @pytest.mark.parametrize(("start", "end", "operand", "reason", "new_end"), [
+        pytest.param("12:00", "13:00", {"duration_minutes": 5}, None, "12:05", id="floor"),
+        pytest.param("12:00", "13:00", {"duration_delta_minutes": -55}, None, "12:05",
+                     id="relative-floor"),
+        pytest.param("12:00", "13:00", {"duration_minutes": 660}, None, "23:00",
+                     id="exact-day-end"),
+        pytest.param("12:00", "13:00", {"duration_minutes": 665}, "out_of_window", None,
+                     id="past-day-end"),
+        pytest.param("12:00", "13:00", {"duration_minutes": 720}, "out_of_window", None,
+                     id="exact-midnight"),
+        pytest.param("10:00", "11:00", {"duration_minutes": 1500}, "out_of_window", None,
+                     id="over-24-hours"),
+        pytest.param("22:00", "22:30", {"duration_delta_minutes": 180}, "out_of_window", None,
+                     id="relative-crossing-midnight"),
+        pytest.param("12:00", "13:00", {"duration_minutes": 10**9}, "out_of_window", None,
+                     id="extreme-positive"),
+        pytest.param("12:00", "13:00", {"duration_delta_minutes": 10**9}, "out_of_window", None,
+                     id="extreme-positive-delta"),
+        pytest.param("12:00", "13:00", {"duration_delta_minutes": -(10**9)}, "interval", None,
+                     id="extreme-negative"),
+        pytest.param("00:05", "00:35", {"duration_delta_minutes": -35}, "interval", None,
+                     id="end-zero"),
+        pytest.param("00:05", "00:35", {"duration_delta_minutes": -40}, "interval", None,
+                     id="end-negative"),
+        pytest.param("12:00", "12:33", {"duration_delta_minutes": -30}, "interval", None,
+                     id="floor-before-grid"),
+        pytest.param("12:00", "12:33", {"duration_delta_minutes": 30}, "granularity", None,
+                     id="off-grid-derived-end"),
+        pytest.param("22:30", "22:58", {"duration_delta_minutes": 5}, "out_of_window", None,
+                     id="window-before-grid"),
+        pytest.param("05:00", "05:40", {"duration_minutes": 20}, "out_of_window", None,
+                     id="end-before-window"),
+        pytest.param("05:30", "07:00", {"duration_minutes": 30}, None, "06:00",
+                     id="unchanged-legacy-start"),
+        pytest.param("12:03", "13:00", {"duration_delta_minutes": 30}, None, "13:30",
+                     id="unchanged-off-grid-start"),
+    ])
+    def test_duration_boundary_matrix(self, start, end, operand, reason, new_end):
+        snapshot = _schedule([_block(1, start, end)])
+        result = plan_mutations(
+            snapshot, [_duration_resize(1, **operand)],
+            day_start="00:00" if start.startswith("00:") else DAY_START, day_end=DAY_END,
+        )
+        assert isinstance(result, MutationPlan)
+        assert result.diff.creates == () and result.diff.deletes == ()
+        outcome = result.outcomes[0]
+        assert outcome.reason_code == reason
+        if reason:
+            assert result.diff.updates == ()
+            assert outcome.status == "skipped"
+            assert outcome.skipped_fields == ("end_time",)
+            assert outcome.suggestion is None
+        else:
+            assert outcome.status == "applied"
+            update, = result.diff.updates
+            assert (update.start_time, update.end_time) == (_t(start), _t(new_end))
+            assert update.start_changed is False
+            assert update.end_changed is True
+
+    @pytest.mark.parametrize(("actions", "expected", "reason"), [
+        ([_move(1, "14:00"), _duration_resize(1, duration_minutes=20)],
+         ("14:00", "14:20"), None),
+        ([_move(1, "22:30"), _duration_resize(1, duration_minutes=20)],
+         ("22:30", "22:50"), None),
+        ([_resize(1, end="23:30"), _duration_resize(1, duration_minutes=665)],
+         None, "out_of_window"),
+        ([_move(1, "05:00"), _duration_resize(1, duration_minutes=120)],
+         None, "out_of_window"),
+        ([_move(1, "09:03", "10:00"), _duration_resize(1, duration_delta_minutes=30)],
+         None, "granularity"),
+    ])
+    def test_boundary_then_duration_chain(self, actions, expected, reason):
+        result = plan_mutations(
+            _schedule([_block(1, "12:00", "13:00")]), actions,
+            day_start=DAY_START, day_end=DAY_END,
+        )
+        assert isinstance(result, MutationPlan)
+        outcome, = result.outcomes
+        assert outcome.action_index == 1
+        assert outcome.reason_code == reason
+        if expected:
+            update, = result.diff.updates
+            assert (update.start_time, update.end_time) == tuple(map(_t, expected))
+            assert update.start_changed and update.end_changed
+        else:
+            assert result.diff.updates == ()
+            assert outcome.status == "skipped"
+
+    @pytest.mark.parametrize("first", [
+        {"duration_minutes": 1500}, {"duration_delta_minutes": -1000},
+    ], ids=["above-midnight", "negative-end"])
+    @pytest.mark.parametrize("followup", [
+        _duration_resize(1, duration_delta_minutes=10),
+        _move(1, "14:00"),
+        _update(1, {"title": "Renamed"}),
+    ], ids=["relative-duration", "bare-move", "metadata"])
+    def test_unrepresentable_duration_cannot_be_rescued_by_chained_action(self, first, followup):
+        result = plan_mutations(
+            _schedule([_block(1, "12:00", "13:00")]),
+            [_duration_resize(1, **first), followup], day_start=DAY_START, day_end=DAY_END,
+        )
+        assert isinstance(result, MutationPlan)
+        outcome, = result.outcomes
+        assert outcome.action_index == 1
+        assert outcome.reason_code == "out_of_window"
+        assert "end_time" in outcome.skipped_fields
+        assert outcome.suggestion is None
+        if followup["type"] == "update":
+            # Rejected time does not discard independently authorized metadata.
+            update, = result.diff.updates
+            assert update.title == "Renamed"
+            assert not update.start_changed and not update.end_changed
+            assert (update.start_time, update.end_time) == (_t("12:00"), _t("13:00"))
+            assert outcome.status == "partial"
+        else:
+            assert result.diff.updates == ()
+            assert outcome.status == "skipped"
+
+    @pytest.mark.parametrize("neighbours", ["unchanged", "changed", "mixed"])
+    def test_duration_overlap_matrix_preserves_original_intervals(self, neighbours):
+        blocks = [_block(1, "12:00", "13:00"), _block(2, "14:00", "15:00")]
+        actions = [_duration_resize(1, duration_minutes=90)]
+        if neighbours == "unchanged":
+            blocks[1] = _block(2, "13:00", "14:00")
+        else:
+            actions.append(_move(2, "13:00"))
+        if neighbours == "mixed":
+            blocks.append(_block(3, "13:15", "13:45"))
+        result = plan_mutations(_schedule(blocks), actions, day_start=DAY_START, day_end=DAY_END)
+        assert isinstance(result, MutationPlan)
+        assert result.diff.updates == ()
+        outcome = next(item for item in result.outcomes if item.task_id == 1)
+        expected_reason = "unresolved_conflict" if neighbours == "changed" else "overlap"
+        assert outcome.reason_code == expected_reason
+        assert outcome.conflicting_task_ids == ((3,) if neighbours == "mixed" else (2,))
+        if neighbours == "changed":
+            assert outcome.suggestion is None
+        else:
+            assert outcome.suggestion is not None and outcome.suggestion.direction_required
+
+    @pytest.mark.parametrize(("direction", "slot"), [
+        ("later", ("14:00", "15:30")), ("earlier", ("11:30", "13:00")),
+    ])
+    def test_duration_overlap_suggestion_preserves_requested_width(self, direction, slot):
+        result = plan_mutations(
+            _schedule([_block(1, "12:00", "13:00"), _block(2, "13:00", "14:00")]),
+            [_update(1, {"start_time": "12:00"}, direction),
+             _duration_resize(1, duration_minutes=90)], day_start=DAY_START, day_end=DAY_END,
+        )
+        assert isinstance(result, MutationPlan)
+        assert result.diff.updates == ()
+        outcome, = result.outcomes
+        assert outcome.reason_code == "overlap"
+        suggestion = outcome.suggestion
+        assert suggestion is not None
+        assert (suggestion.start_time, suggestion.end_time) == tuple(map(_t, slot))
+
+    @pytest.mark.parametrize("overlap", [False, True])
+    def test_duration_then_metadata_preserves_time_verdict(self, overlap):
+        blocks = [_block(1, "12:00", "13:00")]
+        if overlap:
+            blocks.append(_block(2, "13:00", "14:00"))
+        result = plan_mutations(
+            _schedule(blocks),
+            [_duration_resize(1, duration_minutes=90), _update(1, {"title": "Renamed"})],
+            day_start=DAY_START, day_end=DAY_END,
+        )
+        assert isinstance(result, MutationPlan)
+        update, = result.diff.updates
+        assert update.title == "Renamed"
+        assert update.start_changed is False
+        assert update.end_changed is not overlap
+        assert update.end_time == _t("13:00" if overlap else "13:30")
+        outcome, = result.outcomes
+        assert outcome.action_index == 1
+        assert outcome.status == ("partial" if overlap else "applied")
+        assert outcome.reason_code == ("overlap" if overlap else None)
