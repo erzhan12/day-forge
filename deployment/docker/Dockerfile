@@ -7,7 +7,8 @@ COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY frontend/ ./
 # Vite outputs to ./dist (outDir in vite.config.ts) with base "/static/" in prod.
-RUN NODE_ENV=production npm run build
+ARG RELEASE_VERSION
+RUN test -n "$RELEASE_VERSION" && RELEASE_VERSION="$RELEASE_VERSION" NODE_ENV=production npm run build
 
 # --- Stage 2: resolve Python deps with uv ----------------------------------
 FROM python:3.14-slim AS deps

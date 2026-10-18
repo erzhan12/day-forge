@@ -3,6 +3,7 @@
 <html lang="en" data-theme="{{ initial_theme|default:'classic' }}">
 <head>
     <meta charset="UTF-8">
+    <meta name="frontend-version" content="{{ frontend_version }}">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Day Forge</title>
     {% if vite_dev_mode %}
@@ -17,8 +18,10 @@
         <link rel="icon" type="image/png" sizes="32x32" href="{% static 'favicon-32.png' %}">
         <link rel="icon" type="image/png" sizes="16x16" href="{% static 'favicon-16.png' %}">
         <link rel="apple-touch-icon" type="image/png" sizes="180x180" href="{% static 'apple-touch-icon.png' %}">
-        <link rel="stylesheet" href="{% static 'assets/app.css' %}">
-        <script type="module" src="{% static 'assets/app.js' %}"></script>
+        {% for asset in frontend_release.styles %}
+        <link rel="stylesheet" href="{% static asset %}">
+        {% endfor %}
+        <script type="module" src="{% static frontend_release.script %}"></script>
     {% endif %}
 </head>
 <body>

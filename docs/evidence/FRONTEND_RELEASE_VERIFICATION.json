@@ -1,0 +1,258 @@
+{
+  "base_commit": "a0fed3845f1bf01b6f50f9f0100f4355faaeec64",
+  "environment": "isolated SQLite; DEBUG=0; Django runserver :8008; real production frontend builds",
+  "builds": {
+    "a": {
+      "version": "release-a",
+      "script": "assets/app-9IQ6AypX.js",
+      "styles": [
+        "assets/app-COtgMyyv.css"
+      ]
+    },
+    "b": {
+      "version": "release-b",
+      "script": "assets/app-Cl3n5Htw.js",
+      "styles": [
+        "assets/app-COtgMyyv.css"
+      ]
+    },
+    "legacy": {
+      "version": "1.0",
+      "script": "assets/app.js",
+      "styles": [
+        "assets/app.css"
+      ]
+    }
+  },
+  "asset_headers": [
+    {
+      "release": "a",
+      "asset": "assets/app-9IQ6AypX.js",
+      "status": 200,
+      "cache": "max-age=315360000, public, immutable"
+    },
+    {
+      "release": "b",
+      "asset": "assets/app-Cl3n5Htw.js",
+      "status": 200,
+      "cache": "max-age=315360000, public, immutable"
+    }
+  ],
+  "version_handshakes": [
+    {
+      "release": "release-b",
+      "method": "POST",
+      "path": "/api/schedules/2027-07-11/blocks/",
+      "frontend": "release-a",
+      "inertia": null,
+      "status": 409,
+      "location": null
+    },
+    {
+      "release": "release-a",
+      "method": "POST",
+      "path": "/api/schedules/2027-07-11/blocks/",
+      "frontend": "release-b",
+      "inertia": null,
+      "status": 409,
+      "location": null
+    },
+    {
+      "release": "release-b",
+      "method": "POST",
+      "path": "/api/schedules/2027-07-12/blocks/",
+      "frontend": "release-a",
+      "inertia": null,
+      "status": 409,
+      "location": null
+    },
+    {
+      "release": "release-b",
+      "method": "GET",
+      "path": "/settings/",
+      "frontend": null,
+      "inertia": "release-a",
+      "status": 409,
+      "location": "http://localhost:8008/settings/"
+    },
+    {
+      "release": "release-a",
+      "method": "GET",
+      "path": "/schedule/2026-10-18/",
+      "frontend": null,
+      "inertia": "release-b",
+      "status": 409,
+      "location": "http://localhost:8008/schedule/2026-10-18/"
+    },
+    {
+      "release": "release-a",
+      "method": "GET",
+      "path": "/accounts/login/",
+      "frontend": null,
+      "inertia": "release-b",
+      "status": 409,
+      "location": "http://localhost:8008/accounts/login/"
+    },
+    {
+      "release": "release-b",
+      "method": "POST",
+      "path": "/api/schedules/2027-07-11/blocks/",
+      "frontend": null,
+      "inertia": null,
+      "status": 409,
+      "location": null
+    },
+    {
+      "release": "release-b",
+      "method": "GET",
+      "path": "/settings/",
+      "frontend": null,
+      "inertia": "1.0",
+      "status": 409,
+      "location": "http://localhost:8008/settings/"
+    }
+  ],
+  "initial_failure_fixed_before_final_checks": [
+    {
+      "release": "release-a",
+      "method": "GET",
+      "path": "/settings/",
+      "frontend": null,
+      "inertia": "release-b",
+      "status": 500,
+      "location": null
+    }
+  ],
+  "logout_requests": [
+    {
+      "release": "release-a",
+      "method": "POST",
+      "path": "/accounts/logout/",
+      "frontend": null,
+      "inertia": "release-b",
+      "status": 302,
+      "location": null
+    },
+    {
+      "release": "release-b",
+      "method": "POST",
+      "path": "/accounts/logout/",
+      "frontend": null,
+      "inertia": "release-b",
+      "status": 302,
+      "location": null
+    },
+    {
+      "release": "release-b",
+      "method": "POST",
+      "path": "/accounts/logout/",
+      "frontend": null,
+      "inertia": "release-b",
+      "status": 302,
+      "location": null
+    }
+  ],
+  "real_ai_requests": [
+    {
+      "release": "release-b",
+      "method": "POST",
+      "path": "/api/ai/schedules/2027-07-11/chat/",
+      "frontend": "release-b",
+      "inertia": null,
+      "status": 200,
+      "location": null
+    },
+    {
+      "release": "release-a",
+      "method": "POST",
+      "path": "/api/ai/schedules/2027-07-12/generate-draft/",
+      "frontend": "release-a",
+      "inertia": null,
+      "status": 200,
+      "location": null
+    }
+  ],
+  "ai_interactions": [
+    [
+      "chat",
+      1,
+      1
+    ],
+    [
+      "draft",
+      1,
+      1
+    ]
+  ],
+  "legacy_database_before": {
+    "schedule": [
+      [
+        2,
+        8,
+        "active"
+      ]
+    ],
+    "blocks": [
+      [
+        12,
+        "Baseline block",
+        "09:00:00",
+        "10:00:00"
+      ],
+      [
+        13,
+        "Release A saved block",
+        "11:00:00",
+        "11:30:00"
+      ],
+      [
+        14,
+        "Release B saved block",
+        "12:00:00",
+        "12:30:00"
+      ]
+    ]
+  },
+  "legacy_database_after": {
+    "schedule": [
+      [
+        2,
+        8,
+        "active"
+      ]
+    ],
+    "blocks": [
+      [
+        12,
+        "Baseline block",
+        "09:00:00",
+        "10:00:00"
+      ],
+      [
+        13,
+        "Release A saved block",
+        "11:00:00",
+        "11:30:00"
+      ],
+      [
+        14,
+        "Release B saved block",
+        "12:00:00",
+        "12:30:00"
+      ]
+    ]
+  },
+  "unexpected_stale_marker_blocks": [],
+  "responsive": {
+    "desktop": [
+      1440,
+      900
+    ],
+    "mobile": [
+      390,
+      844
+    ],
+    "mobile_notice_width": 390,
+    "horizontal_overflow": 0
+  }
+}

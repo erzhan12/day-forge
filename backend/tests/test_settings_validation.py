@@ -16,11 +16,17 @@ Covers two things, both pinned by re-executing
    pin), so a dropped ``.strip()`` or a ``KEY_PREFIX`` typo would
    otherwise pass the whole suite.
 """
+
 from pathlib import Path
 
 import pytest
 
 SETTINGS_PATH = Path(__file__).resolve().parent.parent / "day_forge" / "settings.py"
+
+
+@pytest.fixture(autouse=True)
+def _production_build(monkeypatch, frontend_build):
+    monkeypatch.setenv("FRONTEND_BUILD_DIR", str(frontend_build))
 
 
 def _exec_settings(monkeypatch, **env):
@@ -100,9 +106,7 @@ def test_connect_rate_limit_default_is_twenty(monkeypatch, name, env_name):
         ("HABITICA_CONNECT_RATE_LIMIT_PER_HOUR", "HABITICA_CONNECT_RATE_LIMIT_PER_HOUR"),
     ],
 )
-def test_non_positive_connect_rate_limit_raises_at_import(
-    monkeypatch, name, env_name, value
-):
+def test_non_positive_connect_rate_limit_raises_at_import(monkeypatch, name, env_name, value):
     # Both "0" and "-1" must raise: the guard is `<= 0`, so the "-1" case
     # pins the boundary against a mistyped `< 0` that would silently
     # allow a permanently-429 limit of 0.

@@ -2,6 +2,18 @@
 
 Patterns and corrections discovered during development. Review at session start.
 
+## Release handshakes must cover API writes and preserve auth redirects
+
+Inertia version checks alone miss custom fetch mutations and legacy bundles without
+new headers. Reject stale writes before the view, preserve user input, and never
+replay them automatically. Keep the immutable release identity in the image with
+its hashed assets so runtime environment changes cannot misidentify a rollback.
+The installed inertia-django also checks stale POST responses: refreshing a
+POST-only Logout URL as GET produces 405. Preserve its redirect and negotiate the
+version on the subsequent GET. Early stale-GET handling must still run after
+MessageMiddleware because inertia-django preserves flash messages on refresh.
+Test the complete middleware stack as well as the isolated guard.
+
 ## Rejected duration and effective chaining have different responsibilities
 
 An invalid duration stays out of `chain_effective` so a later move does not inherit

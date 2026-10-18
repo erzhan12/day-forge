@@ -69,3 +69,10 @@ CalDAV, Google Calendar, Todoist и Habitica сохраняют собствен
 Google all-account failure сохраняет HTTP 200 с `account_errors` и failure metadata. Узкий hook adapter в `useDatedResource` сохраняет last-good события текущего контекста и показывает ошибку. Успешный пустой ответ очищает их; partial success принимает новый список вместе с per-account ошибками. Панель отображает banners независимо от строк. Смена даты, account/session context или saved zone не переносит прежний список в новый контекст.
 
 Backend tests используют pytest, frontend tests используют Vitest. Общая локальная команда `make check` выполняет lint, type-check и оба suites; `make frontend-build` проверяет production assets. GitHub PR и deployment используют один reusable CI workflow с production dependency audit и SSH pinning check. Реальный запуск workflow в GitHub отдельно от локальных проверок ещё требует подтверждения. Browser smoke выполняется на тестовом пользователе и очищаемых данных; подключение к живым providers проверяется отдельно от fixtures.
+
+
+## Версия frontend при deployment
+
+Vite создаёт hashed assets и `.vite/release.json`. Workflow передаёт Git SHA через Docker build argument `RELEASE_VERSION`. `day_forge/frontend_release.py` проверяет metadata и файлы; settings использует версию для Inertia, а context processor передаёт entry/CSS в base.html. Metadata и backend поставляются в одном образе.
+
+`common.middleware.FrontendVersionMiddleware` отклоняет старые JSON API запросы до view и обновляет старую Inertia-навигацию до bootstrap. `ReleaseInertiaMiddleware` сохраняет redirect после auth POST. `useHttp` отправляет версию bundle, `useFrontendRelease` и `FrontendReleaseNotice` предлагают ручной Reload без повторения записей. Проверки обновления, rollback и legacy клиента описаны в [отчёте](FRONTEND_RELEASE_VERIFICATION.md).
