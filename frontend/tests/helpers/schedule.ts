@@ -17,7 +17,7 @@ export function makeCategories(): UserCategory[] {
 // Supply the page context when mounting a real block outside Schedule.vue.
 export function makeScheduleProvides() {
   return {
-    [ScheduleUndoKey]: { pushUndo: vi.fn(), snapshotBlocks: vi.fn(() => []) },
+    [ScheduleUndoKey]: { pushUndo: vi.fn() },
     [ScheduleDragKey]: {
       startDrag: vi.fn(),
       isDragging: ref(false),

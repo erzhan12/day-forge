@@ -25,10 +25,7 @@ from schedules.categories import ordered_categories, sink_category
 from schedules.http import (
     is_plain_int,
     parse_swap_body,
-    parse_time_or_error,
     swap_ordering_field,
-    validate_five_minute_or_error,
-    validate_time_range,
 )
 from schedules.mutations import ScheduleChanged, run_user_maintenance, schedule_changed_response
 from schedules.window import DEFAULT_WINDOW, ScheduleWindow, get_schedule_window
@@ -605,11 +602,6 @@ def user_preferences(request):
     return _prefs_response(_prefs_to_dict(prefs))
 
 
-# Imports kept at end so unused-import lint doesn't trip on
-# ``parse_time_or_error`` / ``validate_five_minute_or_error`` /
-# ``validate_time_range`` — they are intentionally re-exported for tests
-# and consistency with ``schedules.api`` even when not directly called
-# above (the validation is inlined here for richer per-block errors).
 __all__ = [
     "templates_collection",
     "template_detail",
@@ -618,7 +610,4 @@ __all__ = [
     "rule_detail",
     "user_preferences",
     "validate_template_blocks",
-    "parse_time_or_error",
-    "validate_five_minute_or_error",
-    "validate_time_range",
 ]

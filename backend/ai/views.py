@@ -10,7 +10,6 @@ from asgiref.sync import sync_to_async
 from common.http import parse_json_object, reject_oversized_body
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.http import JsonResponse
 from django.utils import timezone
@@ -104,27 +103,6 @@ AI_PARSE_ERROR_DETAIL = "The assistant's reply couldn't be applied. Try rephrasi
 _MAX_ERROR_DETAIL_LEN = 2_000
 
 
-async def _load_active_rules(user: User) -> list[Rule]:
-    """Load the user's active rules, ordered by ``-priority``.
-
-    Shared by ``ai_chat`` and ``ai_generate_draft`` so both AI endpoints
-    inject the same rule set into their prompt
-    context. Active/user-owned filtering lives here; the prompt builders
-    just render whatever they're handed.
-
-    ``.only("id", "text", "priority")`` eagerly selects the columns needed
-    for prompt rendering and the apply-context fingerprint. Ordered by
-    ``(-priority, id)`` so equal-priority rules are deterministic in both
-    the prompt and the stale-intent guard.
-    """
-    return [
-        r
-        async for r in Rule.objects.filter(user=user, is_active=True)
-        .only("id", "text", "priority")
-        .order_by("-priority", "id")
-    ]
-
-
 async def _consume_rate_limit(user_id: int, key_prefix: str, limit: int) -> bool:
     """Consume an AI bucket token through the shared synchronous limiter."""
     key = f"{key_prefix}:{user_id}"
@@ -204,10 +182,10 @@ class _Rollback(Exception):
         self.response = response
 
 
-def _action_error(action_index: int, detail: str | dict, status: int = 400) -> JsonResponse:
+def _action_error(action_index: int, detail: str | dict) -> JsonResponse:
     return JsonResponse(
         {"errors": {"action_index": action_index, "detail": detail}},
-        status=status,
+        status=400,
     )
 
 

@@ -36,6 +36,9 @@ extend-exclude = ["*/migrations/*"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]
 
+[tool.ruff.lint.isort]
+known-first-party = ["scripts"] # backend/scripts seed helpers imported by backend/tests/test_seed_scripts.py
+
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "day_forge.settings"
 pythonpath = ["backend"]

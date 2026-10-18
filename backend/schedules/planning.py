@@ -46,7 +46,6 @@ AI = SchedulePolicy("ai", True, "clamp")
 DRAFT = SchedulePolicy("draft", True, "reject")
 UNDO = SchedulePolicy("undo", False, "ignore")
 
-POLICIES = {policy.name: policy for policy in (MANUAL, IMPORT, AI, DRAFT, UNDO)}
 
 
 class CommandError(ValueError):

@@ -3,14 +3,13 @@
 // responsibilities are positioning, the header/rail toggle UI, and
 // emitting open/close changes. Persistence lives in the parent
 // (Schedule.vue + chatSidebarStorage helper); thread state lives in
-// `useChat` (module-level singleton), shared with the dock variant.
+// the page-owned `useChat` state, shared with the dock variant.
 
-import type { TimeBlock, UndoAction } from "../types"
+import type { UndoAction } from "../types"
 import CommandBar from "./CommandBar.vue"
 
 defineProps<{
   date: string
-  snapshotBlocks: () => TimeBlock[]
   pushUndo: (action: UndoAction) => void
 }>()
 
@@ -45,7 +44,6 @@ function toggle(): void {
     <div v-if="open" id="chat-sidebar-body" class="chat-sidebar-body">
       <CommandBar
         :date="date"
-        :snapshot-blocks="snapshotBlocks"
         :push-undo="pushUndo"
         variant="sidebar"
       />

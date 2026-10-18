@@ -1,6 +1,6 @@
 # Итоговый аудит Day Forge после R00–R12
 
-Текущий статус после исправлений: A00–A07 реализованы, основные desktop/mobile сценарии и live R11 закрыты в PR #241. Последующий [браузерный прогон A00–A06](BROWSER_VERIFICATION_A00_A07.md) проверил управляемые ошибки и гонки и исправил category confirmation/mobile overflow. Для A07 остаётся browser case с действительно открытым PiP: встроенный браузер не открыл окно. Ниже сохранены исходные находки аудита; открытые задачи находятся в [todo](../tasks/todo.md).
+Текущий статус после исправлений: A00–A07 реализованы, основные desktop/mobile сценарии и live R11 закрыты в PR #241. Последующий [браузерный прогон A00–A06](BROWSER_VERIFICATION_A00_A07.md) проверил управляемые ошибки и гонки и исправил category confirmation/mobile overflow. Для A07 остаётся browser case с действительно открытым PiP: встроенный браузер не открыл окно. Подтверждённый cleanup выполнен после PR #243; удаления, сокращение инструкций Claude и проверки описаны в [cleanup-отчёте](AUDIT_CLEANUP.md). Ниже сохранены исходные находки аудита; открытые задачи находятся в [todo](../tasks/todo.md).
 
 Дата: 11 октября 2026 года. Проверено локальное рабочее дерево поверх `c62963d26e1582f86515d08963837c71408eb105`. Изменения R00–R12 ещё не оформлены отдельными коммитами. Аудит сохраняет отчёт; исправления найденных дефектов в исходники не вносились.
 
@@ -193,7 +193,7 @@ R11 gaps остаются: действия модели вопреки отка
 
 ## Что можно сократить или удалить
 
-Кандидаты ниже подтверждены поиском мест использования в приложении и тестах. Это предложения, удаление в ходе аудита не выполнялось. Перед будущим удалением нужно ещё раз проверить references и прогнать затронутые наборы тестов.
+Таблица сохраняет кандидатов на момент первоначального аудита. 18 октября 2026 года они выполнены после повторного поиска потребителей. Дополнительно удалён неиспользуемый `scheduleDiff.ts`. Результаты и проверки приведены в [cleanup-отчёте](AUDIT_CLEANUP.md).
 
 | Кандидат | Основание и эффект | Необходимая проверка |
 |---|---|---|
@@ -207,7 +207,7 @@ R11 gaps остаются: действия модели вопреки отка
 | Неиспользуемые exports и return members | У `clearChatSession`, `clearDraftSession`, `useProvidedFocusIndicatorController` нет consumers. Page controller возвращает значения, которые Schedule не читает | Lifecycle tests; внутренние reset helpers оставить, если они используются |
 | Fallback presentation в [Timeline4a.vue:31](/Users/erzhan/DATA/PROJ/day-forge/frontend/src/components/Timeline4a.vue:31) | Единственный production caller всегда передаёт готовую `presentation`; leaf tests поддерживают лишний альтернативный вход | Сделать presentation обязательной, убрать redundant geometry props; обновить leaf fixtures и frozen-drag tests |
 | `main.py` | Только starter `Hello from day-forge!`, references в командах приложения не найдены | Проверить внешние scripts/IDE launch settings; удалить пустой entry point |
-| [scripts/test10_audit_envelope.py](/Users/erzhan/DATA/PROJ/day-forge/scripts/test10_audit_envelope.py) | Старый standalone script не передаёт revision, ожидает старую структуру audit и не превращает returned failure в ненулевой exit. Может менять `.env` и перезапускать все dev servers | Перенести нужные проверки в существующие deterministic tests; retire script либо явно пометить историческим. Скрипт в аудите не запускался |
+| `scripts/test10_audit_envelope.py` (удалён) | Старый standalone script не передаёт revision, ожидает старую структуру audit и не превращает returned failure в ненулевой exit. Может менять `.env` и перезапускать все dev servers | Перенести нужные проверки в существующие deterministic tests; retire script либо явно пометить историческим. Скрипт в аудите не запускался |
 | Дублирование [CLAUDE.md:23](/Users/erzhan/DATA/PROJ/day-forge/CLAUDE.md:23) и AGENTS/README | Seed всё ещё указан без обязательного `--user`. Review workflows читают CLAUDE.md, поэтому это действующий источник путаницы | Короткая текущая инструкция со ссылкой на общий command reference; сохранить Claude-specific workflow rules |
 
 `CommandPlan.candidates` и `.restore` имеют только тестовых consumers, runtime использует `.diff`. Их сокращение ниже по приоритету: сначала определить минимальный контракт planner и сохранить тесты поведения. Удаление полей ради уменьшения DTO без ясного потребителя не является самостоятельной целью.

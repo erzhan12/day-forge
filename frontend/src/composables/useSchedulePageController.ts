@@ -31,16 +31,16 @@ export function useSchedulePageController(options: SchedulePageControllerOptions
   const canonicalBlocks = computed(() => scheduleRevision.blocks.value)
   const canonicalSchedule = computed(() => scheduleRevision.schedule.value)
   const getBlocks = () => canonicalBlocks.value
-  const { reorderBlocks, updateBlock } = useSchedule(getDate, scheduleRevision)
+  const { reorderBlocks } = useSchedule(getDate, scheduleRevision)
   const { isGeneratingDraft, lastDraftError, generateDraft, abandonInFlight } = useDraft(scheduleRevision)
-  const { setActiveDate: setChatActiveDate, isProcessing: isChatProcessing } = useChat(scheduleRevision)
+  const { setActiveDate: setChatActiveDate } = useChat(scheduleRevision)
   const scheduleDisabled = computed(() => scheduleRevision.busy.value || Boolean(getMutationsDisabled?.()))
   provide(ScheduleDisabledKey, scheduleDisabled)
 
   const {
     canUndo, currentToast, pushUndo, performUndo, snapshotBlocks, dismissToast,
   } = useUndo(getDate, getBlocks, () => scheduleDisabled.value, scheduleRevision)
-  provide(ScheduleUndoKey, { pushUndo, snapshotBlocks })
+  provide(ScheduleUndoKey, { pushUndo })
 
   const attemptedAutoDraftDates = new Set<string>()
   let lastUserId = getUserId()
@@ -75,10 +75,8 @@ export function useSchedulePageController(options: SchedulePageControllerOptions
 
   return {
     scheduleRevision, canonicalBlocks, canonicalSchedule, getBlocks,
-    reorderBlocks, updateBlock,
-    isGeneratingDraft, lastDraftError, generateDraft, abandonInFlight,
-    isChatProcessing, scheduleDisabled,
+    reorderBlocks, isGeneratingDraft, lastDraftError, scheduleDisabled,
     canUndo, currentToast, pushUndo, performUndo, snapshotBlocks, dismissToast,
-    runDraft, handleRegenerateClick, resetSession,
+    handleRegenerateClick, resetSession,
   }
 }

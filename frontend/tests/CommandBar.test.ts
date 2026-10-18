@@ -62,27 +62,12 @@ import CommandBar from "../src/components/CommandBar.vue"
 import ChatResultChip from "../src/components/ChatResultChip.vue"
 import { DEFAULT_CHAT_SUGGESTIONS } from "../src/utils/chatSuggestions"
 
-const BLOCK_A = {
-  id: 1,
-  title: "A",
-  start_time: "09:00",
-  end_time: "10:00",
-  category: "work" as const,
-  is_completed: false,
-  sort_order: 0,
-}
-
-function makeSnapshot() {
-  return [{ ...BLOCK_A }]
-}
-
 let wrapper: VueWrapper | null = null
 
 function mountBar(overrides: Record<string, unknown> = {}) {
   wrapper = mount(CommandBar, {
     props: {
       date: "2026-04-18",
-      snapshotBlocks: makeSnapshot,
       pushUndo: vi.fn(),
       variant: "dock" as const,
       ...overrides,
@@ -194,7 +179,6 @@ describe("CommandBar (chat dock)", () => {
         expect(submitTurn).toHaveBeenCalledTimes(1)
         expect(submitTurn).toHaveBeenCalledWith(
           "Protect focus time",
-          makeSnapshot,
           pushUndo,
         )
         expect(
@@ -215,7 +199,6 @@ describe("CommandBar (chat dock)", () => {
         expect(submitTurn).toHaveBeenCalledTimes(1)
         expect(submitTurn).toHaveBeenCalledWith(
           "Move lunch later",
-          makeSnapshot,
           expect.any(Function),
         )
         expect(draftInput.value).toBe("")
@@ -245,7 +228,6 @@ describe("CommandBar (chat dock)", () => {
         const w = mount(CommandBar, {
           props: {
             date: "2026-04-18",
-            snapshotBlocks: makeSnapshot,
             pushUndo: vi.fn(),
             variant,
           },
@@ -270,7 +252,6 @@ describe("CommandBar (chat dock)", () => {
         const w = mount(CommandBar, {
           props: {
             date: "2026-04-18",
-            snapshotBlocks: makeSnapshot,
             pushUndo: vi.fn(),
             variant,
           },
@@ -489,10 +470,7 @@ describe("CommandBar (chat dock)", () => {
     await nextTick()
 
     expect(submitTurn).toHaveBeenCalledTimes(1)
-    const [text, snap, undo] = submitTurn.mock.calls[0]
-    expect(text).toBe("add gym")
-    expect(typeof snap).toBe("function")
-    expect(undo).toBe(pushUndo)
+    expect(submitTurn).toHaveBeenCalledWith("add gym", pushUndo)
   })
 
   it("inserts a newline on Shift+Enter without submitting", async () => {
@@ -616,7 +594,6 @@ describe("CommandBar (chat dock)", () => {
     const w = mount(CommandBar, {
       props: {
         date: "2026-04-18",
-        snapshotBlocks: makeSnapshot,
         pushUndo: vi.fn(),
         variant: "dock" as const,
       },
@@ -739,7 +716,6 @@ describe("CommandBar (chat dock)", () => {
     const w = mount(CommandBar, {
       props: {
         date: "2026-04-18",
-        snapshotBlocks: makeSnapshot,
         pushUndo: vi.fn(),
         variant: "dock" as const,
       },
@@ -765,7 +741,6 @@ describe("CommandBar (chat dock)", () => {
     const w = mount(CommandBar, {
       props: {
         date: "2026-04-18",
-        snapshotBlocks: makeSnapshot,
         pushUndo: vi.fn(),
         variant: "dock" as const,
       },

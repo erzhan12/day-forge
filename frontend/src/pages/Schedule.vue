@@ -94,7 +94,7 @@ const { nowMinutes, nowDate, todayDate, currentHHMM } = useNowMinutes(toRef(prop
 const todayNowMinutes = computed(() => nowDate.value === null ? null : nowMinutes.value)
 let drag: ReturnType<typeof useDrag> | undefined
 const {
-  renderBounds, timelineOriginMinutes, timelineEndMinutes, effectiveBlocks,
+  renderBounds, timelineOriginMinutes, effectiveBlocks,
   currentBlock, currentBlockRemaining, displayList, ghostHeight, ghostIsCompact,
   itemHeight, nowOffsetPercent, presentation,
 } = useTimelinePresentation({
@@ -324,18 +324,9 @@ defineExpose({
 
       <Timeline4a
         v-if="layout === '4a'"
-        :blocks="effectiveBlocks"
         :presentation="presentation"
         :date="date"
-        :schedule-window="schedule_window"
-        :now-minutes="nowMinutes"
-        :now-date="nowDate"
         :current-h-h-m-m="currentHHMM"
-        :px-per-minute="pxPerMinute"
-        :timeline-origin-minutes="timelineOriginMinutes"
-        :timeline-end-minutes="timelineEndMinutes"
-        :current-block-id="currentBlock?.id ?? null"
-        :current-block-remaining="currentBlockRemaining"
         :disabled="scheduleDisabled"
         :categories="categories"
         @add-here="handleAddHere"
@@ -514,13 +505,11 @@ defineExpose({
       v-if="isWide"
       v-model:open="sidebarOpen"
       :date="date"
-      :snapshot-blocks="snapshotBlocks"
       :push-undo="pushUndo"
     />
     <CommandBar
       v-else
       :date="date"
-      :snapshot-blocks="snapshotBlocks"
       :push-undo="pushUndo"
       variant="dock"
       @height-change="chatDockHeight = $event"

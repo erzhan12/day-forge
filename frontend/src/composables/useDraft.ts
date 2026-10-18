@@ -49,10 +49,6 @@ function clearDraftState(state: DraftState): void {
   state.lastDraftError.value = null
 }
 
-export function clearDraftSession(owner?: ScheduleRevisionState): void {
-  clearDraftState(stateFor(owner))
-}
-
 function statusToMessage(status: number | undefined): string | null {
   switch (status) {
     case 409:

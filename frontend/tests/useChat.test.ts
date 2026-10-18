@@ -118,7 +118,7 @@ describe("useChat", () => {
     const chat = actualUseChat(owner)
     chat.setActiveDate("2026-05-07")
     requestJsonMock.mockResolvedValue({ ok: true, data: { applied: false, explanation: "Done" } })
-    await chat.submitTurn("hello", snapshotBlocks, vi.fn())
+    await chat.submitTurn("hello", vi.fn())
     expect(requestJsonMock.mock.calls[0][3]).toEqual({ expectedUserId: 7 })
   })
 
@@ -129,8 +129,8 @@ describe("useChat", () => {
       .mockResolvedValueOnce({ ok: true, data: { applied: true, blocks: [{ ...BLOCK, title: "First" }] } })
       .mockResolvedValueOnce({ ok: true, data: { applied: true, blocks: [{ ...BLOCK, title: "Second" }] } })
     const pushUndo = vi.fn()
-    await chat.submitTurn("first", snapshotBlocks, pushUndo)
-    await chat.submitTurn("second", snapshotBlocks, pushUndo)
+    await chat.submitTurn("first", pushUndo)
+    await chat.submitTurn("second", pushUndo)
     expect(requestJsonMock.mock.calls.map((call) => call[2].expected_revision)).toEqual([0, 1])
     expect(pushUndo.mock.calls[0][0]).toMatchObject({ expected_revision: 1, previous_revision: 0, previousBlocks: [BLOCK] })
     expect(pushUndo.mock.calls[1][0]).toMatchObject({ expected_revision: 2, previous_revision: 1, previousBlocks: [{ ...BLOCK, title: "First" }] })
@@ -142,8 +142,8 @@ describe("useChat", () => {
     chat.setActiveDate("2026-05-07")
     const deferred = makeDeferred()
     requestJsonMock.mockReturnValueOnce(deferred.promise)
-    const first = chat.submitTurn("first", snapshotBlocks, vi.fn())
-    await chat.submitTurn("second", snapshotBlocks, vi.fn())
+    const first = chat.submitTurn("first", vi.fn())
+    await chat.submitTurn("second", vi.fn())
     expect(requestJsonMock).toHaveBeenCalledTimes(1)
     expect(chat.isProcessing.value).toBe(true)
     expect(chat.messages.value.map((message) => message.content)).toEqual(["first"])
@@ -160,7 +160,7 @@ describe("useChat", () => {
     const deferred = makeDeferred()
     requestJsonMock.mockReturnValueOnce(deferred.promise)
     const pushUndo = vi.fn()
-    const pending = first.submitTurn("Private prompt", snapshotBlocks, pushUndo)
+    const pending = first.submitTurn("Private prompt", pushUndo)
     const newOwner = createScheduleRevision("2026-05-07", () => ({ id: 2, date: "2026-05-07", status: "active", revision: 0 }), { getBlocks: () => [] })
     const second = actualUseChat(newOwner)
     second.setActiveDate("2026-05-07")
@@ -202,11 +202,11 @@ describe("useChat", () => {
     let finish!: () => void
     routerReload.mockImplementationOnce((options) => { finish = () => { options.onSuccess(); options.onFinish() } })
     const pushUndo = vi.fn()
-    const pending = chat.submitTurn("unknown", snapshotBlocks, pushUndo)
+    const pending = chat.submitTurn("unknown", pushUndo)
     await Promise.resolve()
     await Promise.resolve()
     expect(fixtureState!.busy.value).toBe(true)
-    await chat.submitTurn("retry before reconciliation", snapshotBlocks, pushUndo)
+    await chat.submitTurn("retry before reconciliation", pushUndo)
     expect(requestJsonMock).toHaveBeenCalledTimes(1)
     finish()
     await pending
@@ -219,7 +219,7 @@ describe("useChat", () => {
   it("submitTurn refuses when activeDate is null", async () => {
     const chat = useChat()
     await expect(
-      chat.submitTurn("hi", snapshotBlocks, vi.fn()),
+      chat.submitTurn("hi", vi.fn()),
     ).rejects.toThrow(/before setActiveDate/)
     expect(requestJsonMock).not.toHaveBeenCalled()
   })
@@ -246,7 +246,7 @@ describe("useChat", () => {
     })
     const pushUndo = vi.fn()
 
-    await chat.submitTurn("add standup", snapshotBlocks, pushUndo)
+    await chat.submitTurn("add standup", pushUndo)
 
     expect(chat.messages.value.length).toBe(2)
     expect(chat.messages.value[0]).toMatchObject({
@@ -281,7 +281,7 @@ describe("useChat", () => {
       },
     })
 
-    await chat.submitTurn("update", snapshotBlocks, vi.fn())
+    await chat.submitTurn("update", vi.fn())
 
     expect(chat.messages.value.at(-1)?.appliedResult).toEqual([
       expect.objectContaining({ title: "Renamed", change: "changed" }),
@@ -301,7 +301,7 @@ describe("useChat", () => {
       },
     })
 
-    await chat.submitTurn("reorder", snapshotBlocks, vi.fn())
+    await chat.submitTurn("reorder", vi.fn())
 
     expect(chat.messages.value.at(-1)?.appliedResult).toEqual([])
   })
@@ -327,8 +327,8 @@ describe("useChat", () => {
         },
       })
 
-    await chat.submitTurn("first", snapshotBlocks, vi.fn())
-    await chat.submitTurn("second", snapshotBlocks, vi.fn())
+    await chat.submitTurn("first", vi.fn())
+    await chat.submitTurn("second", vi.fn())
 
     const applied = chat.messages.value.filter((m) => m.appliedResult)
     expect(applied).toHaveLength(2)
@@ -347,7 +347,7 @@ describe("useChat", () => {
       ok: true,
       data: { blocks: null, explanation: "ok", ask: null, applied: false },
     })
-    await chat.submitTurn("hi", snapshotBlocks, vi.fn())
+    await chat.submitTurn("hi", vi.fn())
     expect(requestJsonMock).toHaveBeenCalledTimes(1)
     expect(requestJsonMock.mock.calls[0][0]).toBe(
       "/api/ai/schedules/2026-05-07/chat/",
@@ -363,8 +363,8 @@ describe("useChat", () => {
     const chat = useChat()
     chat.setActiveDate("2026-05-07")
 
-    await chat.submitTurn("first", snapshotBlocks, vi.fn())
-    await chat.submitTurn("second", snapshotBlocks, vi.fn())
+    await chat.submitTurn("first", vi.fn())
+    await chat.submitTurn("second", vi.fn())
 
     expect(requestJsonMock.mock.calls[0][2]).toEqual(
       { expected_revision: expect.any(Number), messages: expect.any(Array) },
@@ -389,8 +389,8 @@ describe("useChat", () => {
         data: { blocks: null, explanation: "ok", ask: null, applied: false },
       })
 
-    await chat.submitTurn("add gym", snapshotBlocks, vi.fn())
-    await chat.submitTurn("18:00", snapshotBlocks, vi.fn())
+    await chat.submitTurn("add gym", vi.fn())
+    await chat.submitTurn("18:00", vi.fn())
 
     const secondBody = requestJsonMock.mock.calls[1][2] as { messages: unknown[] }
     expect(secondBody.messages).toEqual([
@@ -419,10 +419,10 @@ describe("useChat", () => {
         data: { blocks: null, explanation: "ok", ask: null, applied: false },
       })
 
-    await chat.submitTurn("move gym", snapshotBlocks, vi.fn())
+    await chat.submitTurn("move gym", vi.fn())
     fixtureRevision.value += 1
-    await chat.submitTurn("try again", snapshotBlocks, vi.fn())
-    await chat.submitTurn("try again", snapshotBlocks, vi.fn())
+    await chat.submitTurn("try again", vi.fn())
+    await chat.submitTurn("try again", vi.fn())
 
     const secondBody = requestJsonMock.mock.calls[1][2] as { messages: unknown[] }
     expect(secondBody.messages[1]).toEqual({
@@ -451,8 +451,8 @@ describe("useChat", () => {
         data: { blocks: null, explanation: "ok", ask: null, applied: false },
       })
 
-    await chat.submitTurn("add gym", snapshotBlocks, vi.fn())
-    await chat.submitTurn("thanks", snapshotBlocks, vi.fn())
+    await chat.submitTurn("add gym", vi.fn())
+    await chat.submitTurn("thanks", vi.fn())
 
     const secondBody = requestJsonMock.mock.calls[1][2] as { messages: unknown[] }
     expect(secondBody.messages[1]).toEqual({ role: "assistant", content: "Added gym" })
@@ -471,7 +471,7 @@ describe("useChat", () => {
       },
     })
 
-    await chat.submitTurn("add gym", snapshotBlocks, vi.fn())
+    await chat.submitTurn("add gym", vi.fn())
 
     const last = chat.messages.value[chat.messages.value.length - 1]
     // Content prefers ask so the next request's transcript carries the
@@ -499,7 +499,7 @@ describe("useChat", () => {
     })
     const pushUndo = vi.fn()
 
-    await chat.submitTurn("rename and move it", snapshotBlocks, pushUndo)
+    await chat.submitTurn("rename and move it", pushUndo)
 
     expect(pushUndo).toHaveBeenCalledOnce()
     expect(chat.pendingAsk.value).toBe("Should I look for an earlier or later slot?")
@@ -529,8 +529,8 @@ describe("useChat", () => {
         data: { blocks: null, explanation: "ok", ask: null, applied: false },
       })
 
-    await chat.submitTurn("add Gym plus Vocal", snapshotBlocks, vi.fn())
-    await chat.submitTurn("15 minutes", snapshotBlocks, vi.fn())
+    await chat.submitTurn("add Gym plus Vocal", vi.fn())
+    await chat.submitTurn("15 minutes", vi.fn())
 
     const secondBody = requestJsonMock.mock.calls[1][2] as { messages: unknown[] }
     expect(secondBody.messages[1]).toEqual({
@@ -553,7 +553,7 @@ describe("useChat", () => {
     })
     const pushUndo = vi.fn()
 
-    await chat.submitTurn("move gym", snapshotBlocks, pushUndo)
+    await chat.submitTurn("move gym", pushUndo)
 
     expect(requestJsonMock).toHaveBeenCalledTimes(1)
     expect(pushUndo).not.toHaveBeenCalled()
@@ -579,7 +579,7 @@ describe("useChat", () => {
       errors: { detail: "draft schedule already has blocks" },
     })
 
-    await chat.submitTurn("generate", snapshotBlocks, vi.fn())
+    await chat.submitTurn("generate", vi.fn())
 
     expect(requestJsonMock).toHaveBeenCalledTimes(1)
     expect(routerReload).not.toHaveBeenCalled()
@@ -600,7 +600,7 @@ describe("useChat", () => {
       errors: { detail: "boom" },
     })
 
-    await chat.submitTurn("oops", snapshotBlocks, vi.fn())
+    await chat.submitTurn("oops", vi.fn())
 
     expect(chat.messages.value.length).toBe(2)
     expect(chat.messages.value[0]).toMatchObject({
@@ -656,7 +656,7 @@ describe("useChat", () => {
       requestJsonMock.mockReturnValue(deferred.promise)
       const pushUndo = vi.fn()
 
-      const inFlight = chat.submitTurn("submit me", snapshotBlocks, pushUndo)
+      const inFlight = chat.submitTurn("submit me", pushUndo)
       expect(chat.isProcessing.value).toBe(true)
       // User message was appended optimistically.
       expect(chat.messages.value.length).toBe(1)
@@ -692,7 +692,7 @@ describe("useChat", () => {
       const deferred = makeDeferred()
       requestJsonMock.mockReturnValue(deferred.promise)
 
-      const inFlight = chat.submitTurn("hi", snapshotBlocks, vi.fn())
+      const inFlight = chat.submitTurn("hi", vi.fn())
       chat.clearThread()
 
       deferred.resolve({ ok: false, status: 500, errors: { detail: "boom" } })
@@ -754,7 +754,6 @@ describe("useChat", () => {
 
       const inFlight = chat.submitTurn(
         "authored on A",
-        snapshotBlocks,
         pushUndo,
       )
       chat.setActiveDate("2026-05-08")
@@ -785,7 +784,7 @@ describe("useChat", () => {
     // A is in-flight.
     const deferredA = makeDeferred()
     requestJsonMock.mockReturnValueOnce(deferredA.promise)
-    const inFlightA = chat.submitTurn("turn A", snapshotBlocks, vi.fn())
+    const inFlightA = chat.submitTurn("turn A", vi.fn())
     expect(chat.isProcessing.value).toBe(true)
 
     // Navigate away — this clears the thread + bumps token + resets
@@ -797,7 +796,7 @@ describe("useChat", () => {
     // B is in-flight on day B.
     const deferredB = makeDeferred()
     requestJsonMock.mockReturnValueOnce(deferredB.promise)
-    const inFlightB = chat.submitTurn("turn B", snapshotBlocks, vi.fn())
+    const inFlightB = chat.submitTurn("turn B", vi.fn())
     expect(chat.isProcessing.value).toBe(true)
 
     // Resolve A. Its resolver MUST NOT clear B's spinner nor leak its
@@ -844,14 +843,14 @@ describe("useChat", () => {
 
     const deferredA = makeDeferred()
     requestJsonMock.mockReturnValueOnce(deferredA.promise)
-    const inFlightA = chat.submitTurn("A", snapshotBlocks, vi.fn())
+    const inFlightA = chat.submitTurn("A", vi.fn())
 
     chat.setActiveDate("2026-05-08")
     await nextTick()
 
     const deferredB = makeDeferred()
     requestJsonMock.mockReturnValueOnce(deferredB.promise)
-    const inFlightB = chat.submitTurn("B", snapshotBlocks, vi.fn())
+    const inFlightB = chat.submitTurn("B", vi.fn())
 
     // B fails first.
     deferredB.resolve({ ok: false, status: 500, errors: { detail: "fail" } })
@@ -899,7 +898,7 @@ describe("useChat fallback-literal guard", () => {
     })
     const chat = useChat()
     chat.setActiveDate("2026-05-07")
-    await chat.submitTurn("hi", snapshotBlocks, vi.fn())
+    await chat.submitTurn("hi", vi.fn())
     expect(chat.lastError.value).toBe("AI chat failed")
   })
 })

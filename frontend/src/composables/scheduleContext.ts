@@ -1,10 +1,9 @@
 import type { InjectionKey, Ref } from "vue"
-import type { TimeBlock, UndoAction } from "../types"
+import type { UndoAction } from "../types"
 import type { useDrag } from "./useDrag"
 
 export interface ScheduleUndoContext {
   pushUndo: (action: UndoAction) => void
-  snapshotBlocks: () => TimeBlock[]
 }
 
 export type ScheduleDragContext = Pick<ReturnType<typeof useDrag>,

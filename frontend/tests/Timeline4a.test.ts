@@ -3,12 +3,13 @@ import { mount, VueWrapper } from "@vue/test-utils"
 import { makeCategories, makeScheduleProvides } from "./helpers/schedule"
 
 import Timeline4a from "../src/components/Timeline4a.vue"
-import { createTimelinePresentation } from "../src/composables/useTimelinePresentation"
+import { createTimelinePresentation, type TimelinePresentationInput, type TimelinePresentation } from "../src/composables/useTimelinePresentation"
 import type { TimeBlock } from "../src/types"
 import {
   DEFAULT_SCHEDULE_WINDOW,
   STUB_MINUTES,
   computeRenderBounds,
+  minutesToTime,
 } from "../src/utils/scheduleTime"
 
 let wrapper: VueWrapper | null = null
@@ -28,19 +29,26 @@ const BLOCK: TimeBlock = {
   sort_order: 0,
 }
 
-function mountTimeline(overrides: Record<string, unknown> = {}) {
+type TimelineFixture = Partial<TimelinePresentationInput> & { presentation?: TimelinePresentation }
+
+function mountTimeline(overrides: TimelineFixture = {}) {
   Element.prototype.scrollIntoView = vi.fn()
+  const input = {
+    blocks: [BLOCK],
+    date: "2026-08-22",
+    window: DEFAULT_SCHEDULE_WINDOW,
+    nowMinutes: 10 * 60,
+    nowDate: "2026-08-22",
+    pxPerMinute: 2,
+    ...overrides,
+  }
   wrapper = mount(Timeline4a, {
     props: {
-      blocks: [BLOCK],
-      date: "2026-08-22",
-      scheduleWindow: { start: "06:00", end: "23:00" },
-      nowMinutes: 10 * 60,
-      nowDate: "2026-08-22",
-      pxPerMinute: 2,
+      date: input.date,
+      currentHHMM: input.nowMinutes === null ? "" : minutesToTime(input.nowMinutes),
+      presentation: input.presentation ?? createTimelinePresentation(input),
       disabled: false,
       categories: makeCategories(),
-      ...overrides,
     },
     global: { provide: makeScheduleProvides() },
   })
@@ -60,8 +68,8 @@ describe("Timeline4a now-line", () => {
 })
 
 describe("Timeline4a absolute axis", () => {
-  it("renders an injected frozen model when live clock and scale props change", async () => {
-    const model = createTimelinePresentation({
+  it("keeps drag geometry frozen when the parent updates the clock and scale", async () => {
+    const input: TimelinePresentationInput = {
       blocks: [BLOCK], date: "2026-08-22", window: DEFAULT_SCHEDULE_WINDOW,
       nowMinutes: 630, nowDate: "2026-08-22", pxPerMinute: 1.6,
       drag: {
@@ -70,20 +78,25 @@ describe("Timeline4a absolute axis", () => {
         frozenNowMinutes: 630, frozenPxPerMinute: 1.6,
         frozenTimelineOriginMinutes: null, frozenWindow: DEFAULT_SCHEDULE_WINDOW,
       },
-    })
-    mountTimeline({ presentation: model, pxPerMinute: 1.6, nowMinutes: 630 })
+    }
+    const model = createTimelinePresentation(input)
+    mountTimeline({ presentation: model, nowMinutes: 630 })
     const initialHeight = wrapper!.get('[data-testid="timeline-4a"]').element.style.height
     const initialBlockTop = (wrapper!.get(".time-block-4a").element.parentElement as HTMLElement).style.top
-    await wrapper!.setProps({ pxPerMinute: 2, nowMinutes: 690 })
+    await wrapper!.setProps({
+      presentation: createTimelinePresentation({ ...input, pxPerMinute: 2, nowMinutes: 645 }),
+      currentHHMM: "10:45",
+    })
     expect(wrapper!.get('[data-testid="timeline-4a"]').element.style.height).toBe(initialHeight)
     expect((wrapper!.get(".time-block-4a").element.parentElement as HTMLElement).style.top).toBe(initialBlockTop)
     expect(wrapper!.get('[data-testid="timeline-4a"]').element.style.height).toBe(`${model.canvasHeightPx}px`)
+    expect(wrapper!.get('[data-testid="now-line-4a"]').text()).toContain("10:45")
   })
 
   it("positions a block from the axis origin at 2 px/min, not flow layout", () => {
     mountTimeline({
-      timelineOriginMinutes: 6 * 60,
-      timelineEndMinutes: 23 * 60,
+      axisOriginMinutes: 6 * 60,
+      axisEndMinutes: 23 * 60,
       pxPerMinute: 2,
     })
     const item = wrapper!.get(".time-block-4a").element.parentElement as HTMLElement
@@ -93,8 +106,8 @@ describe("Timeline4a absolute axis", () => {
 
   it("sizes the canvas from axis end minus origin", () => {
     mountTimeline({
-      timelineOriginMinutes: 6 * 60,
-      timelineEndMinutes: 23 * 60,
+      axisOriginMinutes: 6 * 60,
+      axisEndMinutes: 23 * 60,
       pxPerMinute: 2,
     })
     expect(wrapper!.get('[data-testid="timeline-4a"]').element.style.height).toBe(
@@ -105,8 +118,8 @@ describe("Timeline4a absolute axis", () => {
   it("gives an out-of-window early block a non-negative top", () => {
     mountTimeline({
       blocks: [{ ...BLOCK, start_time: "05:00", end_time: "06:00" }],
-      timelineOriginMinutes: 5 * 60,
-      timelineEndMinutes: 23 * 60,
+      axisOriginMinutes: 5 * 60,
+      axisEndMinutes: 23 * 60,
       pxPerMinute: 2,
     })
     const item = wrapper!.get(".time-block-4a").element.parentElement as HTMLElement
@@ -115,8 +128,8 @@ describe("Timeline4a absolute axis", () => {
 
   it("does not render spacer slots", () => {
     mountTimeline({
-      timelineOriginMinutes: 6 * 60,
-      timelineEndMinutes: 23 * 60,
+      axisOriginMinutes: 6 * 60,
+      axisEndMinutes: 23 * 60,
     })
     const items = wrapper!.findAll(".timeline-item")
     expect(items.length).toBeGreaterThan(0)
@@ -146,8 +159,8 @@ describe("Timeline4a edge stubs (0017)", () => {
     const bounds = computeRenderBounds([AFTERNOON], null, DEFAULT_SCHEDULE_WINDOW)
     mountTimeline({
       blocks: [AFTERNOON],
-      timelineOriginMinutes: bounds.renderStart,
-      timelineEndMinutes: bounds.renderEnd,
+      axisOriginMinutes: bounds.renderStart,
+      axisEndMinutes: bounds.renderEnd,
       nowDate: null,
       nowMinutes: null,
       pxPerMinute: px,
@@ -163,8 +176,8 @@ describe("Timeline4a edge stubs (0017)", () => {
     const bounds = computeRenderBounds([AFTERNOON], null, DEFAULT_SCHEDULE_WINDOW)
     mountTimeline({
       blocks: [AFTERNOON],
-      timelineOriginMinutes: bounds.renderStart,
-      timelineEndMinutes: bounds.renderEnd,
+      axisOriginMinutes: bounds.renderStart,
+      axisEndMinutes: bounds.renderEnd,
       nowDate: null,
       nowMinutes: null,
       pxPerMinute: px,
@@ -179,8 +192,8 @@ describe("Timeline4a edge stubs (0017)", () => {
     const bounds = computeRenderBounds([AFTERNOON], null, DEFAULT_SCHEDULE_WINDOW)
     mountTimeline({
       blocks: [AFTERNOON],
-      timelineOriginMinutes: bounds.renderStart,
-      timelineEndMinutes: bounds.renderEnd,
+      axisOriginMinutes: bounds.renderStart,
+      axisEndMinutes: bounds.renderEnd,
       nowDate: null,
       nowMinutes: null,
       pxPerMinute: px,
@@ -195,8 +208,8 @@ describe("Timeline4a edge stubs (0017)", () => {
     const bounds = computeRenderBounds([AFTERNOON], null, DEFAULT_SCHEDULE_WINDOW)
     mountTimeline({
       blocks: [AFTERNOON],
-      timelineOriginMinutes: bounds.renderStart,
-      timelineEndMinutes: bounds.renderEnd,
+      axisOriginMinutes: bounds.renderStart,
+      axisEndMinutes: bounds.renderEnd,
       nowMinutes: 10 * 60,
       nowDate: "2026-08-22",
       pxPerMinute: px,
@@ -213,8 +226,8 @@ describe("Timeline4a edge stubs (0017)", () => {
     const bounds = computeRenderBounds([morning, afternoon], null, DEFAULT_SCHEDULE_WINDOW)
     mountTimeline({
       blocks: [morning, afternoon],
-      timelineOriginMinutes: bounds.renderStart,
-      timelineEndMinutes: bounds.renderEnd,
+      axisOriginMinutes: bounds.renderStart,
+      axisEndMinutes: bounds.renderEnd,
       nowDate: null,
       nowMinutes: null,
       pxPerMinute: px,
@@ -227,7 +240,7 @@ describe("Timeline4a edge stubs (0017)", () => {
     expect((mid!.element as HTMLElement).style.height).toBe(`${120 * px}px`)
   })
 
-  it("uses compact render bounds when the parent omits an explicit axis", () => {
+  it("renders compact bounds supplied by the shared presentation builder", () => {
     mountTimeline({
       blocks: [AFTERNOON],
       nowDate: null,

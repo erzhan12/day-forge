@@ -52,7 +52,6 @@ function makeBlock(overrides: Partial<TimeBlockType> = {}): TimeBlockType {
 }
 
 const mockPushUndo = vi.fn()
-const mockSnapshotBlocks = vi.fn(() => [makeBlock()])
 
 function mountWithProvide(props: {
   block: TimeBlockType
@@ -65,7 +64,7 @@ function mountWithProvide(props: {
     global: {
       stubs: { teleport: true },
       provide: {
-        [ScheduleUndoKey]: { pushUndo: mockPushUndo, snapshotBlocks: mockSnapshotBlocks },
+        [ScheduleUndoKey]: { pushUndo: mockPushUndo },
         [ScheduleDragKey]: {
           startDrag: vi.fn(),
           isDragging: ref(false),
@@ -297,7 +296,7 @@ describe("TimeBlock", () => {
       props: { block: makeBlock(), date: "2026-04-10" },
       global: {
         provide: {
-          [ScheduleUndoKey]: { pushUndo: mockPushUndo, snapshotBlocks: mockSnapshotBlocks },
+          [ScheduleUndoKey]: { pushUndo: mockPushUndo },
           [ScheduleDragKey]: {
             startDrag: vi.fn(),
             isDragging: ref(false),
@@ -324,7 +323,7 @@ describe("TimeBlock", () => {
       },
       global: {
         provide: {
-          [ScheduleUndoKey]: { pushUndo: mockPushUndo, snapshotBlocks: mockSnapshotBlocks },
+          [ScheduleUndoKey]: { pushUndo: mockPushUndo },
           [ScheduleDragKey]: {
             startDrag: vi.fn(),
             isDragging: ref(false),

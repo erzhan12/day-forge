@@ -97,27 +97,6 @@ def _time_error_response(error):
     return JsonResponse({"errors": {error.field: error.message}}, status=400)
 
 
-def validate_five_minute_or_error(*times):
-    """Check grid alignment for every value. Return
-    ``None`` on success or a 400 ``JsonResponse`` on the first failure."""
-    try:
-        for t in times:
-            time_validation.validate_five_minute_granularity(t)
-    except time_validation.TimeValidationError as error:
-        return _time_error_response(error)
-    return None
-
-
-def validate_time_range(start, end, block_id=None):
-    """Verify ``start < end``. Return ``None`` on success or a 400
-    ``JsonResponse`` otherwise."""
-    try:
-        time_validation.validate_time_range(start, end, block_id=block_id)
-    except time_validation.TimeValidationError as error:
-        return _time_error_response(error)
-    return None
-
-
 def validate_block_times(start_str, end_str, block_id=None, *, enforce_granularity=True):
     """Parse and validate a pair of HH:MM strings: format, 5-minute
     granularity, and ``start < end``.

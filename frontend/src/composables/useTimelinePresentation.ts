@@ -164,7 +164,6 @@ export function useTimelinePresentation(options: UseTimelinePresentationOptions)
     liveRenderBounds: renderBounds.value,
   }))
   const timelineOriginMinutes = computed(() => presentation.value.axisOriginMinutes)
-  const timelineEndMinutes = computed(() => presentation.value.axisEndMinutes)
   const effectiveBlocks = computed(() => presentation.value.effectiveBlocks)
   const currentBlock = computed(() => presentation.value.currentBlock)
   const currentBlockRemaining = computed(() => presentation.value.currentBlockRemaining)
@@ -187,7 +186,7 @@ export function useTimelinePresentation(options: UseTimelinePresentationOptions)
     computeNowOffsetPercent(item.start_time, item.end_time, options.getNowMinutes())
 
   return {
-    renderBounds, timelineOriginMinutes, timelineEndMinutes,
+    renderBounds, timelineOriginMinutes,
     effectiveBlocks, currentBlock, currentBlockRemaining, displayList,
     ghostHeight, ghostIsCompact, itemHeight, nowOffsetPercent, presentation,
   }
