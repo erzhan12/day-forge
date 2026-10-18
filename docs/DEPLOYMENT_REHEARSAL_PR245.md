@@ -110,3 +110,14 @@ CUA, фактический viewport 1280×720. Сервер действите�
 - `check --deploy`: ошибок нет, два известных предупреждения: SQLite writer contention (`schedules.W001`) и отсутствие Django HSTS preload (`security.W021`). Настройки ради исчезновения предупреждений не менялись.
 
 Команды сборки и запуска раннера сохранены в [deployment runbook](../deployment/README.md#container-rehearsal-on-a-database-copy). Машиночитаемые результаты deployment, HTTP probes, образов и репетиции находятся в [evidence](evidence/DEPLOYMENT_REHEARSAL_PR245.json). Рабочие базы, credentials, cookies и raw container logs в репозиторий не добавляются.
+
+## Проверка замечаний PR #246
+
+[Первое Claude Review](https://github.com/erzhan12/day-forge/pull/246#issuecomment-6253069094) дало APPROVED. По двум рекомендациям раннер уточнён:
+
+- `sandbox.env` создаётся сразу с mode 0600 через exclusive open. Приватный каталог mode 0700 сохраняется.
+- HTML без `data-page` вызывает понятный `ValueError`, без вывода тела ответа.
+
+Рекомендация удалить `dayforge.habitreward.org` из sandbox `ALLOWED_HOSTS` не применена. Встроенный HEALTHCHECK production-образа отправляет этот Host. Изолированная проверка Django подтвердила `DisallowedHost` без записи в allowlist и успешную проверку с ней. В код добавлен комментарий; сетевое ограничение web и публикация только loopback proxy сохранены.
+
+Проверены обычный и ошибочный HTML, права каталога и env-файла при umask 022, целостность backup и неизменность источника, соответствие allowlist заголовку HEALTHCHECK. Повторный `make check` прошёл: backend 2118 passed, 1 skipped; frontend 1395 passed, type check и Ruff прошли. Контейнерные результаты выше относятся к коммиту `45fc7a0`; полный Docker-цикл после этих двух локальных изменений не повторялся.

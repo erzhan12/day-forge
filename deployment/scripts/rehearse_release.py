@@ -52,7 +52,10 @@ def digest(snapshot):
 
 
 def document_page(body):
-    return json.loads(html.unescape(re.search(r'data-page="([^"]+)"', body).group(1)))
+    match = re.search(r'data-page="([^"]+)"', body)
+    if match is None:
+        raise ValueError("Expected Inertia HTML with a data-page attribute")
+    return json.loads(html.unescape(match.group(1)))
 
 
 class LocalCookies(http.cookiejar.DefaultCookiePolicy):
@@ -354,6 +357,8 @@ def prepare(root, source, port):
     environment = {
         "DEBUG": "0",
         "DJANGO_SECRET_KEY": secrets.token_urlsafe(48),
+        # The image's inherited HEALTHCHECK sends this Host header. Allowing
+        # it here does not publish web; only the loopback proxy is exposed.
         "ALLOWED_HOSTS": "localhost,127.0.0.1,dayforge.habitreward.org",
         "CSRF_TRUSTED_ORIGINS": f"http://localhost:{port},http://127.0.0.1:{port}",
         "CALDAV_ENCRYPTION_KEY": key,
@@ -368,8 +373,9 @@ def prepare(root, source, port):
         "LLM_API_KEY": "",
         "REDIS_URL": "redis://redis:6379/0",
     }
-    (root / "sandbox.env").write_text("".join(f"{k}={v}\n" for k, v in environment.items()))
-    (root / "sandbox.env").chmod(0o600)
+    env_fd = os.open(root / "sandbox.env", os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(env_fd, "w") as env_file:
+        env_file.write("".join(f"{k}={v}\n" for k, v in environment.items()))
     (root / "Caddyfile").write_text(
         ":8080 {\n reverse_proxy web:8006 {\n header_up X-Forwarded-Proto https\n }\n}\n"
     )
