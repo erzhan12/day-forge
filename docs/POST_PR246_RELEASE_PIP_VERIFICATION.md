@@ -55,10 +55,12 @@ Chrome отсутствовал среди управляемых browser tabs, 
 | Снимок | Что подтверждает |
 | --- | --- |
 | [Открытое PiP](screenshots/post-pr246-pip-2026-10-19/pip-open.png) | Настоящее отдельное окно и первый тестовый блок |
-| [PiP после Settings](screenshots/post-pr246-pip-2026-10-19/pip-retained-settings.png) | Сохранение окна при Inertia-навигации |
+| [PiP после Settings](screenshots/post-pr246-pip-2026-10-19/pip-retained-settings.png) | Тот же вид отдельного PiP-окна; фоновая Settings в кадр не вошла |
 | [PiP второго аккаунта](screenshots/post-pr246-pip-2026-10-19/pip-second-account.png) | Отсутствие прежнего блока после session boundary |
 
 Снимки содержат только отдельное PiP-окно локального стенда. Полное окно Chrome с посторонними вкладками не включено в отчёт.
+
+`pip-open.png` и `pip-retained-settings.png` сделаны в разные моменты, но побайтно совпадают: содержимое PiP за это время не изменилось. Отдельной иллюстрации, показывающей одновременно Settings и PiP, нет. Переход в Settings и сохранение окна подтверждены нативным accessibility-наблюдением при переключении между окнами; HTTP evidence фиксирует успешный GET Settings. Совпадающие PNG показывают внешний вид PiP и сами по себе не доказывают переход.
 
 ## Проверки
 

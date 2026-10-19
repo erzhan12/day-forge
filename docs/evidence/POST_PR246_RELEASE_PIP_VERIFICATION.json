@@ -107,7 +107,17 @@
       "docs/screenshots/post-pr246-pip-2026-10-19/pip-second-account.png"
     ],
     "final_fixture_integrity": "ok",
-    "final_session_count": 0
+    "final_session_count": 0,
+    "screenshot_notes": {
+      "identical_pair": [
+        "docs/screenshots/post-pr246-pip-2026-10-19/pip-open.png",
+        "docs/screenshots/post-pr246-pip-2026-10-19/pip-retained-settings.png"
+      ],
+      "sha256": "e64b1c6b0a11b68403b9f2a47ca2fcfad6911aaa51b34bca87bd89495a403ea4",
+      "captured_at_distinct_steps": true,
+      "settings_background_visible": false,
+      "interpretation": "PiP appearance is identical before and after Settings. Navigation/retention was observed via native accessibility and window switching; HTTP events record Settings GET. The matching PNG files are not independent visual proof of that navigation."
+    }
   },
   "automated_checks": {
     "frontend_focus_suite_files": 6,
