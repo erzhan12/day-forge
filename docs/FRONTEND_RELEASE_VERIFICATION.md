@@ -2,6 +2,8 @@
 
 18 октября 2026 года. База: `a0fed38`, main после PR #244. Закрыт пункт о совместимости старой вкладки с новым релизом из итогового аудита.
 
+После merge PR #245 успешно прошёл Deploy. Опубликованный SHA и assets проверены; контейнерная репетиция обновления, миграции и rollback на SQLite-копии выполнена. Результаты и ограничения production-доступа описаны в [дополнительном отчёте](DEPLOYMENT_REHEARSAL_PR245.md).
+
 ## Реализация
 
 Production build получает `RELEASE_VERSION`, в deployment это полный `${{ github.sha }}`. Vite встраивает идентификатор в JS и записывает `.vite/release.json` с версией, entry и CSS. Имена JS/CSS содержат content hash. Для обычного локального `make frontend-build` без идентификатора версия вычисляется из manifest; dev server сохраняет `development` и HMR.
@@ -68,6 +70,6 @@ uv run python backend/scripts/release_browser_server.py /tmp/day-forge-release-e
 
 ## Границы результата
 
-Это локальная репетиция production assets и HTTP/version protocol. Production rollout не выполнялся. Docker daemon недоступен, поэтому новый контейнер локально не собирался и не запускался. Dockerfile и workflow передают release ID, а проверенная структура build соответствует COPY в runtime image.
+Первый прогон, описанный выше, проверял production assets и HTTP/version protocol без контейнера: Docker daemon тогда был недоступен. После merge PR #245 Docker удалось запустить, production Deploy завершился успешно, а дополнительная контейнерная репетиция закрыла эту часть проверки. Она использовала локальные ARM64-сборки из точных исходников и копию локальной базы, не production-базу. Подробности находятся в [дополнительном отчёте](DEPLOYMENT_REHEARSAL_PR245.md).
 
 Rollback B → A проверен для двух релизов с новым протоколом. Неизменённый старый backend image до этого исправления не умеет отклонять новые несовместимые API запросы; перед таким rollback потребуется обновить вкладки. Смена версии также не отменяет уже отправленную запись и не реализует durable request identity. PiP с открытым окном, настоящий iOS Safari и интеграции с живыми внешними аккаунтами остаются отдельными задачами.

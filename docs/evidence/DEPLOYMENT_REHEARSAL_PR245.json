@@ -1,0 +1,279 @@
+{
+  "release_commit": "afc94f658f4f09e293bfd922fdc6aca271da8ffb",
+  "deploy": {
+    "run_id": 39124762341,
+    "url": "https://github.com/erzhan12/day-forge/actions/runs/39124762341",
+    "conclusion": "success",
+    "completed_at": "2026-10-18T11:54:08Z"
+  },
+  "production_public": {
+    "version": "afc94f658f4f09e293bfd922fdc6aca271da8ffb",
+    "checks": [
+      {
+        "path": "/accounts/login/",
+        "status": 200,
+        "final_path": "/accounts/login/",
+        "content_type": "text/html; charset=utf-8"
+      },
+      {
+        "path": "/privacy/",
+        "status": 200,
+        "final_path": "/privacy/",
+        "content_type": "text/html; charset=utf-8"
+      },
+      {
+        "path": "/terms/",
+        "status": 200,
+        "final_path": "/terms/",
+        "content_type": "text/html; charset=utf-8"
+      },
+      {
+        "path": "/settings/",
+        "status": 200,
+        "final_path": "/accounts/login/?next=/settings/",
+        "content_type": "text/html; charset=utf-8"
+      },
+      {
+        "path": "/schedule/2026-10-18/",
+        "status": 200,
+        "final_path": "/accounts/login/?next=/schedule/2026-10-18/",
+        "content_type": "text/html; charset=utf-8"
+      },
+      {
+        "path": "/static/assets/app-COtgMyyv.css",
+        "status": 200,
+        "cache_control": "max-age=315360000, public, immutable",
+        "sha256": "d26f2305d3ef0accf5da103ac28ff78b6b40e68e7d401f75df97d1ebf341e85b",
+        "bytes": 71519
+      },
+      {
+        "path": "/static/assets/app-DDE0P96J.js",
+        "status": 200,
+        "cache_control": "max-age=315360000, public, immutable",
+        "sha256": "80a730a9fab49b359efd6e3b693984d11c57796ced3ab9f40f18cf0e2fb2183f",
+        "bytes": 483295
+      },
+      {
+        "path": "/settings/",
+        "stale_inertia": "1.0",
+        "status": 409,
+        "refresh": true
+      }
+    ]
+  },
+  "images": {
+    "pr244": {
+      "id": "sha256:a6e5bd140334bd4406446781ab4a92bc8410a4fa3131c6420e893688815f038f",
+      "architecture": "arm64",
+      "user": "app",
+      "command": [
+        "uvicorn",
+        "day_forge.asgi:application",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8006",
+        "--workers",
+        "1"
+      ]
+    },
+    "pr245": {
+      "id": "sha256:8ec73b27e9747be9ab941724136d5483028e67d38c5be303d558044a96d4403a",
+      "architecture": "arm64",
+      "user": "app",
+      "command": [
+        "uvicorn",
+        "day_forge.asgi:application",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8006",
+        "--workers",
+        "1"
+      ]
+    },
+    "compatible": {
+      "id": "sha256:8db35086ff9ac9a187e884a75a4b723c7353808e124b116e19996663fe225527",
+      "architecture": "arm64",
+      "user": "app",
+      "command": [
+        "uvicorn",
+        "day_forge.asgi:application",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8006",
+        "--workers",
+        "1"
+      ]
+    }
+  },
+  "container_rehearsal": {
+    "success": true,
+    "timestamp": "2026-10-18T12:05:33Z",
+    "source_snapshot_sha256": "e3483f8a74d0cac208e74924f8f62dccb39c0a2665b6c49379b41bda015a18e8",
+    "events": [
+      {
+        "stage": "start",
+        "image": "day-forge-rehearsal:pr244",
+        "version": "1.0",
+        "assets": [
+          "/static/assets/app.css",
+          "/static/assets/app.js"
+        ],
+        "status": 200
+      },
+      {
+        "stage": "start",
+        "image": "day-forge-rehearsal:pr245",
+        "version": "afc94f658f4f09e293bfd922fdc6aca271da8ffb",
+        "assets": [
+          "/static/assets/app-COtgMyyv.css",
+          "/static/assets/app-DDE0P96J.js"
+        ],
+        "status": 200
+      },
+      {
+        "stage": "stale_denied",
+        "server": "afc94f658f4f09e293bfd922fdc6aca271da8ffb",
+        "client": "1.0",
+        "database_unchanged": true
+      },
+      {
+        "stage": "authenticated_write_logout",
+        "version": "afc94f658f4f09e293bfd922fdc6aca271da8ffb",
+        "saved_revision": 1
+      },
+      {
+        "stage": "start",
+        "image": "day-forge-rehearsal:compatible",
+        "version": "rehearsal-compatible",
+        "assets": [
+          "/static/assets/app-COtgMyyv.css",
+          "/static/assets/app-jdPGjMOb.js"
+        ],
+        "status": 200
+      },
+      {
+        "stage": "start",
+        "image": "day-forge-rehearsal:pr245",
+        "version": "afc94f658f4f09e293bfd922fdc6aca271da8ffb",
+        "assets": [
+          "/static/assets/app-COtgMyyv.css",
+          "/static/assets/app-DDE0P96J.js"
+        ],
+        "status": 200
+      },
+      {
+        "stage": "stale_denied",
+        "server": "afc94f658f4f09e293bfd922fdc6aca271da8ffb",
+        "client": "rehearsal-compatible",
+        "database_unchanged": true
+      },
+      {
+        "stage": "authenticated_write_logout",
+        "version": "afc94f658f4f09e293bfd922fdc6aca271da8ffb",
+        "saved_revision": 2
+      },
+      {
+        "stage": "start",
+        "image": "day-forge-rehearsal:pr244",
+        "version": "1.0",
+        "assets": [
+          "/static/assets/app.css",
+          "/static/assets/app.js"
+        ],
+        "status": 200
+      },
+      {
+        "stage": "legacy_image_rollback",
+        "saved_writes_preserved": true,
+        "reload_required": true
+      },
+      {
+        "stage": "start",
+        "image": "day-forge-rehearsal:pr245",
+        "version": "afc94f658f4f09e293bfd922fdc6aca271da8ffb",
+        "assets": [
+          "/static/assets/app-COtgMyyv.css",
+          "/static/assets/app-DDE0P96J.js"
+        ],
+        "status": 200
+      },
+      {
+        "stage": "original_rows_preserved",
+        "tables": 24,
+        "source_snapshot_sha256": "e3483f8a74d0cac208e74924f8f62dccb39c0a2665b6c49379b41bda015a18e8"
+      },
+      {
+        "stage": "migration_0009_to_0010",
+        "data_preserved": true,
+        "legacy_origin": "unknown",
+        "second_start_noop": true
+      }
+    ]
+  },
+  "browser": {
+    "viewport": [
+      1280,
+      720
+    ],
+    "overflow": 0,
+    "upgrade_form_retained": true,
+    "rollback_form_retained": true,
+    "rejected_titles_absent": true,
+    "final_schedule_revision": 7,
+    "final_block_count": 4,
+    "reload_restored_sha": true,
+    "crud_undo_completion": true,
+    "theme_4a": true,
+    "review_notes_persisted": true,
+    "logout_back_private_history_cleared": true,
+    "original_rows_preserved": true,
+    "working_source_unchanged": true
+  },
+  "runtime": {
+    "web_memory_bytes": 262144000,
+    "web_memory_swap_bytes": 524288000,
+    "healthy": true,
+    "oom_killed": false,
+    "redis_probe": "set/get/delete passed",
+    "web_outbound_probe": "ENETUNREACH"
+  },
+  "checks": {
+    "backend_passed": 2118,
+    "backend_skipped": 1,
+    "frontend_passed": 1395,
+    "frontend_files": 103,
+    "ruff": "passed",
+    "type_check": "passed",
+    "image_retention": "passed",
+    "deployment_check_warnings": [
+      "schedules.W001",
+      "security.W021"
+    ]
+  },
+  "limitations": [
+    "Local images are ARM64 builds from exact Git sources, not downloaded production AMD64 images.",
+    "Source is a consistent copy of the local working database, not a production database download.",
+    "Production authenticated smoke was not run: no production test credentials available.",
+    "Real AI/provider calls, mobile viewport and open-window PiP were not repeated in this rehearsal."
+  ],
+  "final_runner_repeat": {
+    "success": true,
+    "timestamp": "2026-10-18T17:37:02Z",
+    "events": 13,
+    "base_url": "http://127.0.0.1:8010",
+    "automatic_container_cleanup": true,
+    "existing_project_guard": "passed"
+  },
+  "pr246_review_followup": {
+    "initial_review": "https://github.com/erzhan12/day-forge/pull/246#issuecomment-6253069094",
+    "atomic_private_env_creation": "passed with mode 0600 and umask 022",
+    "malformed_inertia_html_diagnostic": "passed",
+    "consistent_backup_and_unchanged_source": "passed",
+    "healthcheck_host_policy": "Django rejects inherited healthcheck Host without allowlist entry; hostname retained",
+    "full_container_cycle_repeated": false,
+    "container_evidence_commit": "45fc7a084c6f55636a40f89571cd183980cb7871"
+  }
+}

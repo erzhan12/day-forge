@@ -169,7 +169,7 @@ Fixture с реальным root controller и упрощённым publisher п
 
 ### Обновление frontend при несовместимом API
 
-Исправлено после PR #244: версия сборки, hashed assets, API guard и browser rehearsal A→B/B→A/legacy выполнены. Подробности и границы контейнерной проверки: [отчёт](FRONTEND_RELEASE_VERIFICATION.md). Ниже сохранено исходное описание риска.
+Исправлено в PR #245: версия сборки, hashed assets, API guard и browser rehearsal A→B/B→A/legacy выполнены. После merge прошли Deploy, публичная проверка релиза и контейнерная репетиция обновления, миграции и rollback на SQLite-копии. Подробности: [frontend](FRONTEND_RELEASE_VERIFICATION.md), [deployment и границы production-доступа](DEPLOYMENT_REHEARSAL_PR245.md). Ниже сохранено исходное описание риска.
 
 [vite.config.ts:20](/Users/erzhan/DATA/PROJ/day-forge/frontend/vite.config.ts:20) выдаёт постоянные `assets/app.js` и `assets/app.css`; [base.html](/Users/erzhan/DATA/PROJ/day-forge/backend/templates/base.html) подключает их напрямую. `INERTIA_VERSION` в project settings не задан; установленный inertia-django 1.2.0 использует постоянное `1.0`. Проверка middleware показала, что старый client version `1.0` не вызывает refresh. WhiteNoise в production по умолчанию задаёт max-age 60 с для таких assets, а уже открытая вкладка может жить дольше кеша.
 
