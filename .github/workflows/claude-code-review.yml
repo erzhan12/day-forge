@@ -2,10 +2,17 @@ name: Claude Code Review
 
 on:
   pull_request:
-    types: [opened, synchronize]
+    types: [opened, synchronize, ready_for_review]
 
 jobs:
   claude-review:
+    # Skip drafts, fork PRs and Dependabot PRs: the action rejects bot actors, and
+    # Dependabot/fork runs get no Actions secrets (CLAUDE_CODE_OAUTH_TOKEN). Review bumps by hand.
+    if: |
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login != 'dependabot[bot]'
+
     runs-on: ubuntu-latest
     permissions:
       contents: read
