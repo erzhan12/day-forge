@@ -1,0 +1,359 @@
+{
+  "checked_on": "2026-10-19",
+  "timezone": "Asia/Almaty",
+  "release_commit": "d449ec36201eefbf5e41e370ec723e41f792ea02",
+  "deploy": {
+    "run_id": 39209152976,
+    "url": "https://github.com/erzhan12/day-forge/actions/runs/39209152976",
+    "conclusion": "success",
+    "completed_at_utc": "2026-10-19T06:22:41Z"
+  },
+  "production_public": {
+    "checked_at_utc": "2026-10-19T10:08:16.957407+00:00",
+    "release": "d449ec36201eefbf5e41e370ec723e41f792ea02",
+    "deploy_run": 39209152976,
+    "deploy": "success",
+    "checks": [
+      {
+        "path": "/accounts/login/",
+        "status": 200,
+        "final_path": "/accounts/login/"
+      },
+      {
+        "path": "/privacy/",
+        "status": 200,
+        "final_path": "/privacy/"
+      },
+      {
+        "path": "/terms/",
+        "status": 200,
+        "final_path": "/terms/"
+      },
+      {
+        "path": "/settings/",
+        "status": 200,
+        "final_path": "/accounts/login/?next=/settings/"
+      },
+      {
+        "path": "/schedule/2026-10-19/",
+        "status": 200,
+        "final_path": "/accounts/login/?next=/schedule/2026-10-19/"
+      },
+      {
+        "path": "/static/assets/app-COtgMyyv.css",
+        "status": 200,
+        "sha256": "d26f2305d3ef0accf5da103ac28ff78b6b40e68e7d401f75df97d1ebf341e85b",
+        "bytes": 71519,
+        "cache_control": "max-age=315360000, public, immutable"
+      },
+      {
+        "path": "/static/assets/app-DWdcYqjF.js",
+        "status": 200,
+        "sha256": "8636756d3c84eed72f9cb6254d7bcf85c6147d4d8058dcd5eb46db773e6aafce",
+        "bytes": 483295,
+        "cache_control": "max-age=315360000, public, immutable"
+      },
+      {
+        "path": "/settings/",
+        "stale_version": "afc94f658f4f09e293bfd922fdc6aca271da8ffb",
+        "status": 409,
+        "location_refresh": true
+      }
+    ]
+  },
+  "production_native_chrome": {
+    "existing_authenticated_session": true,
+    "schedule_read": "passed",
+    "settings_read": "passed",
+    "analytics_read": "passed",
+    "dedicated_test_account_identified": false,
+    "credential_login_tested": false,
+    "content_mutations_tested": false,
+    "logout_tested": false,
+    "private_page_content_recorded": false
+  },
+  "local_pip": {
+    "browser": "Google Chrome, native macOS UI via CUA",
+    "origin": "http://127.0.0.1:8008",
+    "production_assets_sha256_match": true,
+    "server": "backend/scripts/release_browser_server.py, DEBUG=0 with isolated HTTP fixture overrides",
+    "ai_enabled": false,
+    "polling_enabled": false,
+    "integration_accounts": 0,
+    "document_title": "Focus",
+    "active_test_block_visible": true,
+    "window_count_open": 2,
+    "settings_navigation_retains_window": true,
+    "logout": {
+      "login_visible": true,
+      "window_count": 1,
+      "window_closed": true
+    },
+    "session_expiry": {
+      "method": "delete only isolated fixture django_session rows, then follow Settings link",
+      "login_visible": true,
+      "window_count": 1,
+      "window_closed": true
+    },
+    "relogin": {
+      "no_automatic_open": true,
+      "explicit_second_account_open": "Second account fixture",
+      "first_account_title_absent": true
+    },
+    "back_after_logout": "Login, no PiP reopened",
+    "screenshots": [
+      "docs/screenshots/post-pr246-pip-2026-10-19/pip-open.png",
+      "docs/screenshots/post-pr246-pip-2026-10-19/pip-retained-settings.png",
+      "docs/screenshots/post-pr246-pip-2026-10-19/pip-second-account.png"
+    ],
+    "final_fixture_integrity": "ok",
+    "final_session_count": 0
+  },
+  "automated_checks": {
+    "frontend_focus_suite_files": 6,
+    "frontend_focus_suite_passed": 106,
+    "production_build": "passed",
+    "deploy_ci": "passed"
+  },
+  "fixture_http_events": [
+    {
+      "release": "d449ec36201eefbf5e41e370ec723e41f792ea02",
+      "method": "GET",
+      "path": "/accounts/login/",
+      "frontend": null,
+      "inertia": null,
+      "status": 200,
+      "location": null
+    },
+    {
+      "release": "d449ec36201eefbf5e41e370ec723e41f792ea02",
+      "method": "GET",
+      "path": "/static/assets/app-COtgMyyv.css",
+      "frontend": null,
+      "inertia": null,
+      "status": 200,
+      "location": null
+    },
+    {
+      "release": "d449ec36201eefbf5e41e370ec723e41f792ea02",
+      "method": "GET",
+      "path": "/static/assets/app-DWdcYqjF.js",
+      "frontend": null,
+      "inertia": null,
+      "status": 200,
+      "location": null
+    },
+    {
+      "release": "d449ec36201eefbf5e41e370ec723e41f792ea02",
+      "method": "GET",
+      "path": "/static/favicon-32.png",
+      "frontend": null,
+      "inertia": null,
+      "status": 200,
+      "location": null
+    },
+    {
+      "release": "d449ec36201eefbf5e41e370ec723e41f792ea02",
+      "method": "GET",
+      "path": "/accounts/login/",
+      "frontend": null,
+      "inertia": null,
+      "status": 200,
+      "location": null
+    },
+    {
+      "release": "d449ec36201eefbf5e41e370ec723e41f792ea02",
+      "method": "POST",
+      "path": "/accounts/login/",
+      "frontend": null,
+      "inertia": "d449ec36201eefbf5e41e370ec723e41f792ea02",
+      "status": 302,
+      "location": null
+    },
+    {
+      "release": "d449ec36201eefbf5e41e370ec723e41f792ea02",
+      "method": "GET",
+      "path": "/schedule/2026-10-19/",
+      "frontend": null,
+      "inertia": "d449ec36201eefbf5e41e370ec723e41f792ea02",
+      "status": 200,
+      "location": null
+    },
+    {
+      "release": "d449ec36201eefbf5e41e370ec723e41f792ea02",
+      "method": "GET",
+      "path": "/settings/",
+      "frontend": null,
+      "inertia": "d449ec36201eefbf5e41e370ec723e41f792ea02",
+      "status": 200,
+      "location": null
+    },
+    {
+      "release": "d449ec36201eefbf5e41e370ec723e41f792ea02",
+      "method": "GET",
+      "path": "/api/calendar/google/accounts/",
+      "frontend": "d449ec36201eefbf5e41e370ec723e41f792ea02",
+      "inertia": null,
+      "status": 200,
+      "location": null
+    },
+    {
+      "release": "d449ec36201eefbf5e41e370ec723e41f792ea02",
+      "method": "GET",
+      "path": "/api/habitica/account/",
+      "frontend": "d449ec36201eefbf5e41e370ec723e41f792ea02",
+      "inertia": null,
+      "status": 200,
+      "location": null
+    },
+    {
+      "release": "d449ec36201eefbf5e41e370ec723e41f792ea02",
+      "method": "GET",
+      "path": "/api/todoist/account/",
+      "frontend": "d449ec36201eefbf5e41e370ec723e41f792ea02",
+      "inertia": null,
+      "status": 200,
+      "location": null
+    },
+    {
+      "release": "d449ec36201eefbf5e41e370ec723e41f792ea02",
+      "method": "GET",
+      "path": "/api/calendar/account/",
+      "frontend": "d449ec36201eefbf5e41e370ec723e41f792ea02",
+      "inertia": null,
+      "status": 200,
+      "location": null
+    },
+    {
+      "release": "d449ec36201eefbf5e41e370ec723e41f792ea02",
+      "method": "GET",
+      "path": "/schedule/2026-10-19/",
+      "frontend": null,
+      "inertia": "d449ec36201eefbf5e41e370ec723e41f792ea02",
+      "status": 200,
+      "location": null
+    },
+    {
+      "release": "d449ec36201eefbf5e41e370ec723e41f792ea02",
+      "method": "POST",
+      "path": "/accounts/logout/",
+      "frontend": null,
+      "inertia": "d449ec36201eefbf5e41e370ec723e41f792ea02",
+      "status": 302,
+      "location": null
+    },
+    {
+      "release": "d449ec36201eefbf5e41e370ec723e41f792ea02",
+      "method": "GET",
+      "path": "/accounts/login/",
+      "frontend": null,
+      "inertia": "d449ec36201eefbf5e41e370ec723e41f792ea02",
+      "status": 200,
+      "location": null
+    },
+    {
+      "release": "d449ec36201eefbf5e41e370ec723e41f792ea02",
+      "method": "POST",
+      "path": "/accounts/login/",
+      "frontend": null,
+      "inertia": "d449ec36201eefbf5e41e370ec723e41f792ea02",
+      "status": 302,
+      "location": null
+    },
+    {
+      "release": "d449ec36201eefbf5e41e370ec723e41f792ea02",
+      "method": "GET",
+      "path": "/schedule/2026-10-19/",
+      "frontend": null,
+      "inertia": "d449ec36201eefbf5e41e370ec723e41f792ea02",
+      "status": 200,
+      "location": null
+    },
+    {
+      "release": "d449ec36201eefbf5e41e370ec723e41f792ea02",
+      "method": "GET",
+      "path": "/settings/",
+      "frontend": null,
+      "inertia": "d449ec36201eefbf5e41e370ec723e41f792ea02",
+      "status": 302,
+      "location": null
+    },
+    {
+      "release": "d449ec36201eefbf5e41e370ec723e41f792ea02",
+      "method": "GET",
+      "path": "/accounts/login/",
+      "frontend": null,
+      "inertia": "d449ec36201eefbf5e41e370ec723e41f792ea02",
+      "status": 200,
+      "location": null
+    },
+    {
+      "release": "d449ec36201eefbf5e41e370ec723e41f792ea02",
+      "method": "POST",
+      "path": "/accounts/login/",
+      "frontend": null,
+      "inertia": "d449ec36201eefbf5e41e370ec723e41f792ea02",
+      "status": 302,
+      "location": null
+    },
+    {
+      "release": "d449ec36201eefbf5e41e370ec723e41f792ea02",
+      "method": "GET",
+      "path": "/schedule/2026-10-19/",
+      "frontend": null,
+      "inertia": "d449ec36201eefbf5e41e370ec723e41f792ea02",
+      "status": 200,
+      "location": null
+    },
+    {
+      "release": "d449ec36201eefbf5e41e370ec723e41f792ea02",
+      "method": "POST",
+      "path": "/accounts/logout/",
+      "frontend": null,
+      "inertia": "d449ec36201eefbf5e41e370ec723e41f792ea02",
+      "status": 302,
+      "location": null
+    },
+    {
+      "release": "d449ec36201eefbf5e41e370ec723e41f792ea02",
+      "method": "GET",
+      "path": "/accounts/login/",
+      "frontend": null,
+      "inertia": "d449ec36201eefbf5e41e370ec723e41f792ea02",
+      "status": 200,
+      "location": null
+    },
+    {
+      "release": "d449ec36201eefbf5e41e370ec723e41f792ea02",
+      "method": "GET",
+      "path": "/schedule/2026-10-19/",
+      "frontend": null,
+      "inertia": "d449ec36201eefbf5e41e370ec723e41f792ea02",
+      "status": 302,
+      "location": null
+    },
+    {
+      "release": "d449ec36201eefbf5e41e370ec723e41f792ea02",
+      "method": "GET",
+      "path": "/accounts/login/",
+      "frontend": null,
+      "inertia": "d449ec36201eefbf5e41e370ec723e41f792ea02",
+      "status": 200,
+      "location": null
+    }
+  ],
+  "limits": [
+    "Production authenticated session was existing, not a dedicated test account or a fresh password login.",
+    "Production content mutations and Logout were not exercised.",
+    "Native PiP lifecycle was checked on the local isolated fixture, not with production user data.",
+    "No real AI calls, live account mutation, iOS Safari or load test in this pass.",
+    "Internal retained snapshot generation is covered by existing automated tests; browser observations verify window contents and lifecycle."
+  ],
+  "cleanup": {
+    "fixture_server_stopped": true,
+    "fixture_directory_removed": true,
+    "agent_created_chrome_tab_closed": true,
+    "other_chrome_tabs_preserved": true,
+    "production_session_logout_performed": false
+  }
+}
