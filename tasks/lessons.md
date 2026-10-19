@@ -52,6 +52,15 @@ open window even on a fresh visible page with native input. A Login transition
 and passing cleanup unit tests cannot prove that an existing PiP window closed.
 Keep that browser case open and record the concrete limitation.
 
+The native Chrome app path later opened a real PiP window with ordinary clicks.
+Verify retention after Settings by switching back to that separate window.
+Compare Chrome's Window menu before and after Logout/session expiry: two windows
+became one. Use isolated accounts to verify that reopening after a new login
+shows only the new user's block. Save only standalone fixture PiP screenshots;
+a full browser screenshot may include unrelated personal tabs. An existing
+production session can establish authenticated reads, but not a fresh password
+login or safe write smoke under a dedicated test account.
+
 ## Silent Undo needs a visible control on touch screens
 
 Suppressing mutation toasts left every Undo entry available only through a keyboard

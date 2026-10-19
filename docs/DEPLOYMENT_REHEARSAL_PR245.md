@@ -2,6 +2,8 @@
 
 18 октября 2026 года. Проверен `main` на `afc94f658f4f09e293bfd922fdc6aca271da8ffb`.
 
+Дополнение после merge PR #246: 19 октября прошли новый Deploy, публичные release probes и авторизованное чтение через существующую Chrome-сессию. A07 закрыт на локальном стенде с настоящим PiP в нативном Chrome. Подробности и оставшиеся границы production smoke: [последующий отчёт](POST_PR246_RELEASE_PIP_VERIFICATION.md).
+
 ## Результат
 
 [Deploy #39124762341](https://github.com/erzhan12/day-forge/actions/runs/39124762341) завершился успешно в 11:54:08 UTC. Прошли общий CI, build/push, deployment и внешний HTTPS health check. Дополнительная проверка опубликованного frontend подтвердила SHA релиза и совпадение файлов с локальной контейнерной сборкой.
