@@ -2,6 +2,17 @@
 
 Patterns and corrections discovered during development. Review at session start.
 
+## Unknown AI outcomes need a frozen body and a durable commit receipt
+
+Audit success is best effort and cannot deduplicate a write. Store the terminal
+HTTP result in the same transaction as schedule mutations, fence lease takeovers,
+and keep completed UUID identities independent of Schedule deletion. A replay
+must precede stale-revision rejection. On the client, retain the exact original
+body before sending; an unknown result must not become a synthetic failed turn.
+Recovery storage needs an app-root account/Login boundary because the Schedule
+owner may already be disposed. Recovered older snapshots cannot rewind newer
+manual changes or recreate Undo after reload.
+
 ## Release handshakes must cover API writes and preserve auth redirects
 
 Inertia version checks alone miss custom fetch mutations and legacy bundles without

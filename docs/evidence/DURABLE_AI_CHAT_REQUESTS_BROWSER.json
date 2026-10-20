@@ -1,0 +1,476 @@
+{
+  "date": "2026-10-20",
+  "release": "durable-chat-20261020-verified",
+  "environment": "isolated localhost fixture; production untouched",
+  "events": [
+    {
+      "step": "desktop_drop_once_auto_recovery",
+      "at": "2026-10-20T17:28:22.256Z",
+      "titles": [
+        "Baseline block",
+        "Durable desktop"
+      ],
+      "viewport": {
+        "height": 900,
+        "width": 1440
+      },
+      "result": "one Durable desktop block; saved result delivered after lost response"
+    },
+    {
+      "step": "desktop_recovered_undo",
+      "result": "AI block removed, Baseline block preserved"
+    },
+    {
+      "step": "mobile_both_responses_lost",
+      "at": "2026-10-20T17:29:00.515Z",
+      "inputDisabled": true,
+      "recoverVisible": true,
+      "scrollWidth": 375,
+      "viewport": {
+        "height": 844,
+        "width": 390
+      },
+      "result": "block committed once; original request retained; new input disabled; no synthetic error assistant"
+    },
+    {
+      "step": "mobile_pending_after_server_restart_and_reload",
+      "result": "Recover and original prompt restored; exactly one committed block visible"
+    },
+    {
+      "step": "mobile_recovery_after_restart",
+      "at": "2026-10-20T17:29:25.536Z",
+      "result": "saved answer returned; one Durable mobile block; no fabricated Undo across reload"
+    },
+    {
+      "step": "mobile_delete_cancel_delete_undo",
+      "result": "Cancel retained block; Delete removed it; toolbar Undo restored it"
+    },
+    {
+      "step": "parallel_real_ai",
+      "at": "2026-10-20T17:30:21.521Z",
+      "count": 1,
+      "result": "one added block after two simultaneous upstream requests"
+    },
+    {
+      "step": "explicit_repeat_new_id",
+      "at": "2026-10-20T17:31:30.725Z",
+      "result": "same title intentionally added at 18:30–19:00 as a new request"
+    },
+    {
+      "step": "navigation_analytics",
+      "result": "Settings, Back/Forward and Analytics preserve the Baseline block; zero external accounts"
+    },
+    {
+      "step": "final_build_mobile_manual_edit_undo",
+      "result": "manual create, rename and toolbar Undo succeeded"
+    },
+    {
+      "step": "final_build_recovery_preserves_newer_manual_edit",
+      "at": "2026-10-20T17:33:50.799Z",
+      "blocks": [
+        {
+          "category": "work",
+          "end_time": "10:00",
+          "is_completed": false,
+          "sort_order": 0,
+          "start_time": "09:00",
+          "title": "Baseline block"
+        },
+        {
+          "category": "work",
+          "end_time": "18:30",
+          "is_completed": false,
+          "sort_order": 0,
+          "start_time": "18:00",
+          "title": "Concurrent manual"
+        },
+        {
+          "category": "work",
+          "end_time": "22:00",
+          "is_completed": false,
+          "sort_order": 1,
+          "start_time": "21:30",
+          "title": "Durable final"
+        }
+      ],
+      "date": "2026-10-20",
+      "revision": 16,
+      "scrollWidth": 375,
+      "version": "durable-chat-20261020-final",
+      "viewport": {
+        "height": 844,
+        "width": 390
+      }
+    },
+    {
+      "step": "newer_manual_edit_survives_recovery",
+      "result": "fresh server read retains Baseline block, Concurrent manual and Durable final at revision 16"
+    },
+    {
+      "step": "real_draft_mobile",
+      "at": "2026-10-20T17:35:34.858Z",
+      "result": "six generated blocks; Draft badge and Undo visible; draft protocol unchanged"
+    },
+    {
+      "step": "draft_undo_reload",
+      "blocks": [],
+      "date": "2026-10-21",
+      "revision": 2
+    },
+    {
+      "step": "mobile_logout_back_reload",
+      "result": "Login only, private history unavailable"
+    },
+    {
+      "step": "final_build_desktop_drop_once",
+      "at": "2026-10-20T17:36:48.270Z",
+      "result": "same-ID automatic replay restored one block and one Undo",
+      "viewport": {
+        "height": 900,
+        "width": 1440
+      }
+    },
+    {
+      "step": "final_desktop_logout_back_protected_url",
+      "result": "Login shown; no private Schedule restored"
+    },
+    {
+      "step": "verified_build_empty_http200_recovery",
+      "at": "2026-10-20T17:41:48.469Z",
+      "result": "empty 200 rejected as unknown; same UUID replay returned saved receipt; one block and one Undo"
+    },
+    {
+      "step": "verified_build_cleanup_logout",
+      "result": "Undo restored baseline; Logout and Back require Login"
+    }
+  ],
+  "proxy_requests": [
+    {
+      "request_id": "5139c20b-17e1-44c5-9cfd-e34bdff77028",
+      "body_sha256": "60fb43ba71f2b72acd9dd9cf10fc0ed8d1ac1a7e2d844edf857f5428ba4b98e2",
+      "attempt": 1,
+      "mode": "drop-once",
+      "response_dropped": true,
+      "upstream_statuses": [
+        200
+      ]
+    },
+    {
+      "request_id": "5139c20b-17e1-44c5-9cfd-e34bdff77028",
+      "body_sha256": "60fb43ba71f2b72acd9dd9cf10fc0ed8d1ac1a7e2d844edf857f5428ba4b98e2",
+      "attempt": 2,
+      "mode": "drop-once",
+      "response_dropped": false,
+      "upstream_statuses": [
+        200
+      ]
+    },
+    {
+      "request_id": "594ea7de-40cc-43bb-b572-17ffd75813ff",
+      "body_sha256": "a3a0b1281a15aa0678ec613e4a05f4d570001f209fa95678f5b1e36c66559247",
+      "attempt": 1,
+      "mode": "drop-until-recover",
+      "response_dropped": true,
+      "upstream_statuses": [
+        200
+      ]
+    },
+    {
+      "request_id": "594ea7de-40cc-43bb-b572-17ffd75813ff",
+      "body_sha256": "a3a0b1281a15aa0678ec613e4a05f4d570001f209fa95678f5b1e36c66559247",
+      "attempt": 2,
+      "mode": "drop-until-recover",
+      "response_dropped": true,
+      "upstream_statuses": [
+        200
+      ]
+    },
+    {
+      "request_id": "594ea7de-40cc-43bb-b572-17ffd75813ff",
+      "body_sha256": "a3a0b1281a15aa0678ec613e4a05f4d570001f209fa95678f5b1e36c66559247",
+      "attempt": 3,
+      "mode": "pass",
+      "response_dropped": false,
+      "upstream_statuses": [
+        200
+      ]
+    },
+    {
+      "request_id": "2498fb7a-c7b6-49d0-b13e-9885846722b8",
+      "body_sha256": "43dea22ed34b9e8ba255147a615cb242a67b4085bce3ce771fcf196c4792b5bd",
+      "attempt": 1,
+      "mode": "parallel",
+      "response_dropped": false,
+      "upstream_statuses": [
+        409,
+        200
+      ]
+    },
+    {
+      "request_id": "af83deb0-2948-4c9a-93e8-4595e3ce78ab",
+      "body_sha256": "d40661c36d24258e80d9f83f4f281ce7458df908d3414edd22df830c04776b28",
+      "attempt": 1,
+      "mode": "parallel",
+      "response_dropped": false,
+      "upstream_statuses": [
+        409,
+        200
+      ]
+    },
+    {
+      "request_id": "d6c1b8a0-f0b8-45fa-81a6-88ea3c95b6ce",
+      "body_sha256": "44540b6e9a1418dffcc6e445ec556b4e9646a89a582e2771db2b1478195d6df0",
+      "attempt": 1,
+      "mode": "drop-until-recover",
+      "response_dropped": true,
+      "upstream_statuses": [
+        200
+      ]
+    },
+    {
+      "request_id": "d6c1b8a0-f0b8-45fa-81a6-88ea3c95b6ce",
+      "body_sha256": "44540b6e9a1418dffcc6e445ec556b4e9646a89a582e2771db2b1478195d6df0",
+      "attempt": 2,
+      "mode": "drop-until-recover",
+      "response_dropped": true,
+      "upstream_statuses": [
+        200
+      ]
+    },
+    {
+      "request_id": "d6c1b8a0-f0b8-45fa-81a6-88ea3c95b6ce",
+      "body_sha256": "44540b6e9a1418dffcc6e445ec556b4e9646a89a582e2771db2b1478195d6df0",
+      "attempt": 3,
+      "mode": "pass",
+      "response_dropped": false,
+      "upstream_statuses": [
+        200
+      ]
+    },
+    {
+      "request_id": "b6c91a05-9979-4bd2-9f49-f60ab20f2cf7",
+      "body_sha256": "d998900cac844a1c8a543940c652c2d34360456a4827d8adcaddf23cfee3760d",
+      "attempt": 1,
+      "mode": "drop-once",
+      "response_dropped": true,
+      "upstream_statuses": [
+        200
+      ]
+    },
+    {
+      "request_id": "b6c91a05-9979-4bd2-9f49-f60ab20f2cf7",
+      "body_sha256": "d998900cac844a1c8a543940c652c2d34360456a4827d8adcaddf23cfee3760d",
+      "attempt": 2,
+      "mode": "drop-once",
+      "response_dropped": false,
+      "upstream_statuses": [
+        200
+      ]
+    },
+    {
+      "request_id": "5b18168c-1caf-4a10-858e-d5f728c2ece6",
+      "body_sha256": "37515e0f169b4fd8496545e590e2b440a560b7325e483451999744468f6818cd",
+      "attempt": 1,
+      "mode": "empty-once",
+      "response_dropped": false,
+      "response_emptied": true,
+      "upstream_statuses": [
+        200
+      ]
+    },
+    {
+      "request_id": "5b18168c-1caf-4a10-858e-d5f728c2ece6",
+      "body_sha256": "37515e0f169b4fd8496545e590e2b440a560b7325e483451999744468f6818cd",
+      "attempt": 2,
+      "mode": "empty-once",
+      "response_dropped": false,
+      "response_emptied": false,
+      "upstream_statuses": [
+        200
+      ]
+    }
+  ],
+  "database": {
+    "requests": [
+      {
+        "request_id": "5139c20b-17e1-44c5-9cfd-e34bdff77028",
+        "body_hash": "cef001cb007128de1ae4617b2069359962131ee6e44307c62d33ef6948c3d0ea",
+        "status": 200,
+        "completed": true
+      },
+      {
+        "request_id": "594ea7de-40cc-43bb-b572-17ffd75813ff",
+        "body_hash": "c51c6e8bd868bed0c83455f43498cea0d0f07ea848b1ee2fb58fcbae7f87f2af",
+        "status": 200,
+        "completed": true
+      },
+      {
+        "request_id": "2498fb7a-c7b6-49d0-b13e-9885846722b8",
+        "body_hash": "643513baf1adb075a7c535601a929bf6daf34c4d44e029c2b565f4ca12d4dbf1",
+        "status": 200,
+        "completed": true
+      },
+      {
+        "request_id": "af83deb0-2948-4c9a-93e8-4595e3ce78ab",
+        "body_hash": "89abfd826b40163e53a0ce7f557467dc7e3f8cd3db05d549c37be1629a24d858",
+        "status": 200,
+        "completed": true
+      },
+      {
+        "request_id": "d6c1b8a0-f0b8-45fa-81a6-88ea3c95b6ce",
+        "body_hash": "da24b6cfa835ac1b7125677ff4ab3e06f782b3436197b44e5a10ed316d4ec3a9",
+        "status": 200,
+        "completed": true
+      },
+      {
+        "request_id": "b6c91a05-9979-4bd2-9f49-f60ab20f2cf7",
+        "body_hash": "01815da46b025f6055421c09ba766158e08620e4f3e553f27d24cd95dd8aa927",
+        "status": 200,
+        "completed": true
+      },
+      {
+        "request_id": "5b18168c-1caf-4a10-858e-d5f728c2ece6",
+        "body_hash": "d4e16b8145d55ed405ea7154e557e1e8e625c929c78a7f460a7e2190a46a8269",
+        "status": 200,
+        "completed": true
+      }
+    ],
+    "audit_counts": {
+      "chat": 7,
+      "draft": 1
+    },
+    "audit_success_counts": {
+      "chat": 7,
+      "draft": 1
+    },
+    "remaining_test_blocks": [],
+    "remaining_sessions": 0,
+    "integrity": "ok"
+  },
+  "tests": {
+    "command": "make check",
+    "backend_passed": 2136,
+    "backend_skipped": 1,
+    "frontend_passed": 1409,
+    "frontend_files": 104,
+    "ruff": "passed",
+    "typecheck": "passed",
+    "production_build": "passed",
+    "npm_production_audit": "0 vulnerabilities",
+    "image_retention": "passed"
+  },
+  "local_migration": {
+    "name": "ai.0007_chatrequest",
+    "original_rows_preserved": 1143,
+    "original_tables_checked": 23,
+    "new_metadata": {
+      "django_content_type": 1,
+      "auth_permission": 4
+    },
+    "integrity": "ok",
+    "private_backup": true
+  },
+  "builds": [
+    {
+      "version": "durable-chat-20261020",
+      "script": "assets/app-FHEbaUPO.js",
+      "styles": [
+        "assets/app-BZzrqCMg.css"
+      ]
+    },
+    {
+      "version": "durable-chat-20261020-final",
+      "script": "assets/app-DJoY1xIc.js",
+      "styles": [
+        "assets/app-DhYMgyGp.css"
+      ]
+    },
+    {
+      "version": "durable-chat-20261020-verified",
+      "script": "assets/app-CVWJs3Ds.js",
+      "styles": [
+        "assets/app-DhYMgyGp.css"
+      ]
+    }
+  ],
+  "screenshots": [
+    {
+      "path": "screenshots/durable-chat-2026-10-20/final-desktop-recovered.jpg",
+      "sha256": "43a23559f889d66eff52da633602f9b30bfd0c10a2b70bd2fee7c6c306025310"
+    },
+    {
+      "path": "screenshots/durable-chat-2026-10-20/final-logout.jpg",
+      "sha256": "55a1939b18af0aafa5fb4e703558ed013d1606bad0aa37b10d786ea37e4850a1"
+    },
+    {
+      "path": "screenshots/durable-chat-2026-10-20/mobile-parallel-once.jpg",
+      "sha256": "a206e14e657cc7b4c1ba732bba1cbc2382b3225e6d3954582fcf4eddcc634ab1"
+    },
+    {
+      "path": "screenshots/durable-chat-2026-10-20/mobile-pending.jpg",
+      "sha256": "1ee0d4e633634ae137876650c623f43962c5485158a882f1056c0248a48534e6"
+    },
+    {
+      "path": "screenshots/durable-chat-2026-10-20/mobile-preserved-newer-edit.jpg",
+      "sha256": "b912125be1413aa19f1ea1d3c886436967f2177dd6a890033fff38107092e94e"
+    },
+    {
+      "path": "screenshots/durable-chat-2026-10-20/mobile-real-draft.jpg",
+      "sha256": "895ce5bebe11bcc97374279d4abbf6957a43c63b1478eee48377cddf2ff1d417"
+    },
+    {
+      "path": "screenshots/durable-chat-2026-10-20/mobile-recovered-after-restart.jpg",
+      "sha256": "766986ce822352d8872638b2b4d144f3ddd1817a2e79a6b40beca3d45869b2aa"
+    },
+    {
+      "path": "screenshots/durable-chat-2026-10-20/verified-empty-response-recovery.jpg",
+      "sha256": "26057eb49af30060750d504097c39fc2eeede4c6a3831c13c490f2ac844ae1cd"
+    }
+  ],
+  "source_sha256": {
+    "backend/ai/models.py": "bda05152001d7c4deb7c30e0232cc9014155a0e1e406e1f8fc0598bcf42e47a7",
+    "backend/ai/views.py": "c8cd8da3947a05b5076a6020d3b1a323d4c90b0d4edce8e1ac09da9e97d84607",
+    "backend/ai/chat_requests.py": "36b95cebf86ad25b398d5324c7dd7e7782f849a57d70f9d95a413571065b4203",
+    "backend/ai/migrations/0007_chatrequest.py": "dda6cac2008ff33a820d73c7ae8bcf2a3acc257b1cdede98783609f999e74409",
+    "frontend/src/composables/useChat.ts": "6782724dce060eb80b65e502c1c9e296b500905a6617ee2aa8dccde72595c839",
+    "frontend/src/utils/chatRequestRecovery.ts": "a0f211596206eb26108be36b6426ab836eee1c2222f7623a43956fa00818f837",
+    "frontend/src/composables/scheduleWriteCoordinator.ts": "5c6fd664d04fa9ee8c334610bbe2808ec92cebbb9f7a55544e0b87e6af970eb2",
+    "frontend/src/components/CommandBar.vue": "3444172e5cb44ea43852bf4764a002865f8825e036ba3ddc6bba7954caae4686",
+    "backend/scripts/chat_request_proxy.py": "4879decb3acc5ced950abc001b8734031a2634b040a1ceb973ea1cc8354a2594"
+  },
+  "cleanup": {
+    "fixture_removed": true,
+    "fixture_sessions_after_logout": 0,
+    "test_tab_closed": true,
+    "viewport_reset": true,
+    "fixture_servers_stopped": true,
+    "working_database_backup_retained_privately": true
+  },
+  "post_review_validation": {
+    "pr": "https://github.com/erzhan12/day-forge/pull/252",
+    "initial_ci": "https://github.com/erzhan12/day-forge/actions/runs/39474195686",
+    "initial_review": "https://github.com/erzhan12/day-forge/pull/252#issuecomment-6298151186",
+    "changes": [
+      "Preserve empty audit outcomes and test no-op/ask receipts",
+      "Extract the parallel HTTP worker into a linted helper",
+      "Document response-body retention beside the field"
+    ],
+    "deferred": "Date-only index: no current date-only query; age-based identity deletion is prohibited",
+    "command": "make check",
+    "backend_passed": 2138,
+    "backend_skipped": 1,
+    "frontend_passed": 1409,
+    "frontend_files": 104,
+    "ruff": "passed",
+    "typecheck": "passed",
+    "migration_drift": "none",
+    "browser_rerun": false,
+    "browser_scope_note": "Original browser source hashes remain unchanged. Post-review edits affect audit persistence, tests and a field comment; frontend and recovery protocol are unchanged.",
+    "source_sha256": {
+      "backend/ai/models.py": "3018eb4474b320b4383ca45f8da411a34c26a2f08dd9c02d167aef94b97e02bd",
+      "backend/ai/views.py": "f570fbfd5946d09e63efff47842a0e94f0303012c24f5f46d467abf5a4c1c9a9",
+      "backend/tests/test_ai_chat_requests.py": "3d39e42cbdc5a36400f3673ca59bfa550e94a5cc291320c74361852d561879eb",
+      "backend/tests/helpers/parallel_chat_worker.py": "cd4be89b4048a22b231c753566ec1c6bb53aae1126c6a53a8da5a1c6b6dd87d1"
+    }
+  }
+}

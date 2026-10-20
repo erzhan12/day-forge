@@ -8,6 +8,7 @@ Malformed and oversized bodies are left untouched to test the HTTP boundary.
 
 import json
 import re
+import uuid
 
 from django.test import Client
 from schedules.models import Schedule, TimeBlock
@@ -44,6 +45,10 @@ class RevisionClient(Client):
                             ).values_list("schedule_id", flat=True).first()
                             schedule = Schedule.objects.filter(pk=schedule_id).first()
                     payload["expected_revision"] = schedule.revision if schedule else 0
+                    data = json.dumps(payload)
+                    content_type = "application/json"
+                if isinstance(payload, dict) and path.endswith("/chat/"):
+                    payload.setdefault("request_id", str(uuid.uuid4()))
                     data = json.dumps(payload)
                     content_type = "application/json"
         return super().generic(method, path, data, content_type, **extra)

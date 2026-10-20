@@ -11,6 +11,9 @@ import { clearLocalStorage } from "./helpers/storage"
 const setActiveDate = vi.fn()
 const clearThread = vi.fn()
 const submitTurn = vi.fn()
+const recoverPending = vi.fn()
+const hasPendingRequest = ref(false)
+const pendingRequestText = ref("Add Smoke")
 const isProcessing = ref(false)
 const lastError = ref<string | null>(null)
 const pendingAsk = ref<string | null>(null)
@@ -51,6 +54,9 @@ vi.mock("../src/composables/useChat", () => ({
     setActiveDate,
     clearThread,
     submitTurn,
+    recoverPending,
+    hasPendingRequest,
+    pendingRequestText,
   }),
 }))
 
@@ -81,6 +87,7 @@ describe("CommandBar (chat dock)", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     isProcessing.value = false
+    hasPendingRequest.value = false
     lastError.value = null
     pendingAsk.value = null
     apiHealthy.value = true
@@ -89,6 +96,16 @@ describe("CommandBar (chat dock)", () => {
     page.props.ui_preferences = {
       theme: "classic",
     }
+  })
+
+  it("shows the unresolved request and recovery control while preventing a new turn or clear", async () => {
+    hasPendingRequest.value = true
+    const bar = mountBar()
+    expect(bar.text()).toContain("Previous request: Add Smoke")
+    expect((bar.get('[data-testid="chat-input"]').element as HTMLTextAreaElement).disabled).toBe(true)
+    await bar.get('[data-testid="chat-recover"]').trigger("click")
+    expect(recoverPending).toHaveBeenCalledWith(bar.props("pushUndo"))
+    expect(submitTurn).not.toHaveBeenCalled()
   })
 
   afterEach(() => {

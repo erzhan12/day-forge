@@ -1,5 +1,7 @@
 # R11: AI chat heuristics, pending intent, and request identity
 
+Implementation update, 20 October 2026: durable chat request identity is implemented with migration `ai.0007_chatrequest`, fenced leases, atomic response storage and client recovery. See [the implementation and verification report](DURABLE_AI_CHAT_REQUESTS.md). Server-owned pending intent remains a separate proposal. The research notes below retain their original context.
+
 This note records the R11 research and the narrow replay guard boundary fix in the current worktree on 11 October 2026. It does not implement `pending_intent`, `request_id`, or a broad heuristic removal. R00–R10 remain uncommitted. The last recorded live chat and draft attempts failed to connect to OpenRouter (`docs/REFACTORING_R10.md`), so the fixed completion runs establish application behavior only.
 
 ## What the current path knows

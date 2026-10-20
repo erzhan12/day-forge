@@ -1,6 +1,7 @@
 """Revision and prompt-policy boundaries for AI and frozen review writes."""
 
 import json
+import uuid
 
 import pytest
 from ai.models import AIInteraction
@@ -25,6 +26,8 @@ def revision_client(user):
 
 
 def post(client, url, body):
+    if url == CHAT:
+        body = {"request_id": str(uuid.uuid4()), **body}
     return client.post(url, json.dumps(body), content_type="application/json")
 
 

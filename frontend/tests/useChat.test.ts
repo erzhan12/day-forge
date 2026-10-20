@@ -24,10 +24,12 @@ const { requestJsonMock, routerReload } = vi.hoisted(() => ({
 vi.mock("../src/composables/useHttp", () => ({
   requestJson: async (...args: unknown[]) => {
     const result = await requestJsonMock(...args)
-    if (!result.ok) return result
+    if (!result.ok) return result.data?.request_completed
+      ? { ...result, data: { ...result.data, request_id: (args[2] as { request_id: string }).request_id } }
+      : result
     const date = String(args[0]).split("/")[4]
     const revision = Number((args[2] as { expected_revision: number }).expected_revision) + (result.data?.applied ? 1 : 0)
-    return { ...result, data: { ...result.data, revision, schedule: { id: 1, date, status: "active", revision } } }
+    return { ...result, data: { ...result.data, request_completed: true, request_id: (args[2] as { request_id: string }).request_id, revision, schedule: { id: 1, date, status: "active", revision } } }
   },
 }))
 
@@ -203,15 +205,14 @@ describe("useChat", () => {
     routerReload.mockImplementationOnce((options) => { finish = () => { options.onSuccess(); options.onFinish() } })
     const pushUndo = vi.fn()
     const pending = chat.submitTurn("unknown", pushUndo)
-    await Promise.resolve()
-    await Promise.resolve()
+    await vi.waitFor(() => expect(finish).toBeTypeOf("function"))
     expect(fixtureState!.busy.value).toBe(true)
     await chat.submitTurn("retry before reconciliation", pushUndo)
-    expect(requestJsonMock).toHaveBeenCalledTimes(1)
+    expect(requestJsonMock).toHaveBeenCalledTimes(2)
     finish()
     await pending
     expect(routerReload).toHaveBeenCalledTimes(1)
-    expect(requestJsonMock).toHaveBeenCalledTimes(1)
+    expect(requestJsonMock).toHaveBeenCalledTimes(2)
     expect(pushUndo).not.toHaveBeenCalled()
     expect(fixtureState!.busy.value).toBe(false)
   })
@@ -354,7 +355,7 @@ describe("useChat", () => {
     )
   })
 
-  it("sends messages only and never reads the browser timezone", async () => {
+  it("sends identity, revision and transcript without reading the browser timezone", async () => {
     const formatSpy = vi.spyOn(Intl, "DateTimeFormat")
     requestJsonMock.mockResolvedValue({
       ok: true,
@@ -367,10 +368,10 @@ describe("useChat", () => {
     await chat.submitTurn("second", vi.fn())
 
     expect(requestJsonMock.mock.calls[0][2]).toEqual(
-      { expected_revision: expect.any(Number), messages: expect.any(Array) },
+      { request_id: expect.any(String), expected_revision: expect.any(Number), messages: expect.any(Array) },
     )
     expect(requestJsonMock.mock.calls[1][2]).toEqual(
-      { expected_revision: expect.any(Number), messages: expect.any(Array) },
+      { request_id: expect.any(String), expected_revision: expect.any(Number), messages: expect.any(Array) },
     )
     expect(formatSpy).not.toHaveBeenCalled()
     formatSpy.mockRestore()
@@ -412,6 +413,7 @@ describe("useChat", () => {
       .mockResolvedValueOnce({
         ok: false,
         status: 502,
+        data: { request_completed: true },
         errors: { detail: "boom" },
       })
       .mockResolvedValueOnce({
@@ -596,6 +598,7 @@ describe("useChat", () => {
     chat.setActiveDate("2026-05-07")
     requestJsonMock.mockResolvedValue({
       ok: false,
+      data: { request_completed: true },
       status: 500,
       errors: { detail: "boom" },
     })
@@ -893,6 +896,7 @@ describe("useChat fallback-literal guard", () => {
   it("submitTurn surfaces the exact fallback literal on an empty errors map", async () => {
     requestJsonMock.mockResolvedValueOnce({
       ok: false,
+      data: { request_completed: true },
       status: 500,
       errors: {},
     })
