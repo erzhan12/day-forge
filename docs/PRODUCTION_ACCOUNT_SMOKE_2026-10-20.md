@@ -76,7 +76,7 @@ Production admin показала одну AIInteraction для тестовог
 - Frontend type-check: прошёл.
 - Frontend: **1395 passed, 103 файла**, 10,46 с.
 
-Новых runtime-изменений нет. Повторная локальная production-сборка и полный AI dialogue corpus не запускались. Build/deploy CI опубликованного релиза прошёл.
+Новых runtime-изменений нет. Повторная локальная production-сборка и платный R11 live comparison не запускались. Build/deploy CI опубликованного релиза прошёл.
 
 ## Evidence и итоговое состояние
 
