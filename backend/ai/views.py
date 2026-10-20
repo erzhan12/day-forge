@@ -37,6 +37,7 @@ from schedules.window import (
 from templates_mgr.models import Rule, Template
 
 from ai.category_resolution import UnresolvedCategory
+from ai.chat_requests import ChatClaim, claim_request, finish_request, request_identity
 from ai.free_slot import GRID_MINUTES
 from ai.models import AIInteraction
 from ai.mutation_planner import (
@@ -292,7 +293,7 @@ def _build_category_ask(
     return f'Which category should "{truncate_title(title)}" use: {labels}?'
 
 
-async def _replay_guard_response(
+def _replay_guard_response(
     interaction: AIInteraction | None,
     parsed_actions: list[dict],
     offending: tuple[int, ...],
@@ -321,7 +322,6 @@ async def _replay_guard_response(
         for idx, action in enumerate(parsed_actions)
     ]
     outcome_payload = [action_outcome_to_dict(o) for o in outcomes]
-    await _mark_success(interaction, outcome_payload)
     logger.warning(
         "AI chat replay guard tripped (user=%s, schedule=%s, interaction=%s, actions=%s)",
         user_id,
@@ -927,14 +927,14 @@ async def ai_chat(request, date):
       4. Validate ``messages[]`` (length, roles, alternation, content
          caps). Bad body returns 400 BEFORE any DB write or rate-limit
          consumption.
-      5. ``Schedule.get_or_create``.
-      6. Consume the chat rate-limit token.
-      7. Snapshot blocks (no transaction — LLM call must not hold locks).
+      5. Validate UUID/body hash; replay or reserve a durable identity.
+      6. Capture revision/policies, then consume one rate-limit token.
+      7. Release the context capture's database lock.
       8. ``run_chat`` outside any transaction.
       9. Audit-log this turn (success-row variant; failure-row was
          logged in the ``except AIError`` branch).
-     10. Apply actions atomically if any, OR return clarifying-question
-         payload, OR return chit-chat (empty actions + null ask).
+     10. Fence the lease, apply actions and store the terminal HTTP result
+         together, including ask/no-op/error results. Audit is best effort.
     """
     oversized = reject_oversized_body(request)
     if oversized is not None:
@@ -957,7 +957,19 @@ async def ai_chat(request, date):
         expected_revision = parse_expected_revision(data)
     except ScheduleChanged as exc:
         return schedule_changed_response(exc)
+    try:
+        identity, body_hash = request_identity(data)
+    except ValueError as exc:
+        return JsonResponse({"errors": {"request_id": str(exc)}}, status=400)
     user = await request.auser()
+    claim = await sync_to_async(claim_request, thread_sensitive=True)(
+        user.pk, parsed_date, identity, body_hash
+    )
+    if not isinstance(claim, ChatClaim):
+        return claim
+
+    async def terminal(response):
+        return await sync_to_async(finish_request, thread_sensitive=True)(claim, lambda: response)
     try:
         (
             schedule,
@@ -970,10 +982,10 @@ async def ai_chat(request, date):
             user, parsed_date, expected_revision
         )
     except ScheduleChanged as exc:
-        return schedule_changed_response(exc)
+        return await terminal(schedule_changed_response(exc))
 
     if not await _consume_rate_limit(user.id, "ai_chat_rl", settings.LLM_CHAT_RATE_LIMIT_PER_HOUR):
-        return rate_limited_response()
+        return await terminal(rate_limited_response())
 
     last_user_msg = messages[-1]["content"]
 
@@ -997,7 +1009,7 @@ async def ai_chat(request, date):
         # supplied text) is kept only in the audit row's ``error_detail``
         # (see ``_log_chat_failure``), never sent to the client.
         detail = AI_PARSE_ERROR_DETAIL if isinstance(e, AIParseError) else str(e)
-        return JsonResponse({"errors": {"detail": detail}}, status=status)
+        return await terminal(JsonResponse({"errors": {"detail": detail}}, status=status))
 
     audit_response = _build_chat_audit_response(
         messages,
@@ -1016,8 +1028,26 @@ async def ai_chat(request, date):
         kind=AIInteraction.Kind.CHAT,
     )
 
-    async def unchanged_snapshot():
-        confirmed = await sync_to_async(_apply_actions_sync, thread_sensitive=True)(
+    response = await sync_to_async(finish_request, thread_sensitive=True)(
+        claim,
+        lambda: _finish_chat_sync(
+            user, schedule, current_blocks, messages, result, interaction,
+            expected_revision, expected_fingerprint,
+        ),
+    )
+    if response.status_code == 200 and not getattr(response, "chat_request_replayed", False):
+        outcomes = json.loads(response.content).get("outcomes")
+        await _mark_success(interaction, outcomes or None)
+    return response
+
+
+def _finish_chat_sync(
+    user, schedule, current_blocks, messages, result, interaction,
+    expected_revision, expected_fingerprint,
+):
+    """Build the result under the durable operation's outer write transaction."""
+    def unchanged_snapshot():
+        confirmed = _apply_actions_sync(
             schedule,
             replace(result, parsed_actions=[]),
             expected_revision=expected_revision,
@@ -1028,13 +1058,12 @@ async def ai_chat(request, date):
 
     if result.ask is not None or not result.parsed_actions:
         try:
-            snapshot = await unchanged_snapshot()
+            snapshot = unchanged_snapshot()
         except _Rollback as rb:
             return rb.response
 
     # Clarifying-question turn — no mutations, no schedule status flip.
     if result.ask is not None:
-        await _mark_success(interaction)
         return JsonResponse(
             {
                 **snapshot,
@@ -1056,7 +1085,6 @@ async def ai_chat(request, date):
     # model's) because the model's explanation could claim a category
     # change that never happened.
     if not result.parsed_actions and result.unresolved_categories:
-        await _mark_success(interaction)
         block_titles = {block.id: _safe_block_title(block) for block in current_blocks}
         return JsonResponse(
             {
@@ -1074,7 +1102,6 @@ async def ai_chat(request, date):
 
     # Chit-chat / "thanks" turn — empty actions and null ask.
     if not result.parsed_actions:
-        await _mark_success(interaction)
         return JsonResponse(
             {
                 **snapshot,
@@ -1097,10 +1124,10 @@ async def ai_chat(request, date):
     )
     if offending:
         try:
-            snapshot = await unchanged_snapshot()
+            snapshot = unchanged_snapshot()
         except _Rollback as rb:
             return rb.response
-        return await _replay_guard_response(
+        return _replay_guard_response(
             interaction,
             result.parsed_actions,
             offending,
@@ -1115,10 +1142,9 @@ async def ai_chat(request, date):
     relative_ask = relative_add_guard_ask(messages, result.parsed_actions, current_blocks)
     if relative_ask is not None:
         try:
-            snapshot = await unchanged_snapshot()
+            snapshot = unchanged_snapshot()
         except _Rollback as rb:
             return rb.response
-        await _mark_success(interaction)
         return JsonResponse(
             {
                 **snapshot,
@@ -1134,7 +1160,7 @@ async def ai_chat(request, date):
     # The apply path re-fetches under the write lock and validates the final
     # candidate schedule before persisting its accepted diff.
     try:
-        applied_result = await sync_to_async(_apply_actions_sync, thread_sensitive=True)(
+        applied_result = _apply_actions_sync(
             schedule,
             result,
             expected_fingerprint=expected_fingerprint,
@@ -1152,7 +1178,6 @@ async def ai_chat(request, date):
 
     plan = applied_result.value
     outcome_payload = [action_outcome_to_dict(outcome) for outcome in plan.outcomes]
-    await _mark_success(interaction, outcome_payload)
 
     protected_ids = {
         block.id for block in current_blocks if block.origin != TimeBlock.Origin.MANUAL

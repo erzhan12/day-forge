@@ -54,6 +54,9 @@ const {
   setActiveDate,
   clearThread,
   submitTurn,
+  recoverPending,
+  hasPendingRequest,
+  pendingRequestText,
 } = useChat()
 
 setActiveDate(props.date)
@@ -64,7 +67,7 @@ watch(
 
 const scheduleDisabled = inject(ScheduleDisabledKey, null)
 const inputDisabled = computed(
-  () => isProcessing.value || Boolean(scheduleDisabled?.value),
+  () => isProcessing.value || Boolean(hasPendingRequest?.value) || Boolean(scheduleDisabled?.value),
 )
 
 const input = draftInput
@@ -270,6 +273,16 @@ onUnmounted(() => {
       :disabled="inputDisabled"
       @suggestion="(text: string) => void submitSuggestion(text)"
     />
+    <p v-if="hasPendingRequest && !isProcessing" class="recovery-request">Previous request: {{ pendingRequestText }}</p>
+    <button
+      v-if="hasPendingRequest"
+      type="button"
+      :disabled="isProcessing || Boolean(scheduleDisabled)"
+      data-testid="chat-recover"
+      class="recover-btn"
+      @click="recoverPending(props.pushUndo)"
+      title="Return the saved result, or finish the original request if needed."
+    >Recover previous AI request</button>
     <form class="command-row" @submit.prevent="handleSubmit">
       <span
         class="status-dot"
@@ -295,7 +308,7 @@ onUnmounted(() => {
         v-if="messages.length > 0"
         type="button"
         class="clear-btn"
-        :disabled="Boolean(scheduleDisabled)"
+        :disabled="Boolean(scheduleDisabled) || Boolean(hasPendingRequest)"
         title="Clear thread"
         data-testid="chat-clear"
         @click="clearThread"
@@ -319,6 +332,25 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.recovery-request {
+  margin: 8px 0;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.recover-btn {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.recover-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
 /*
  * CommandBar is intentionally theme-invariant. It is the AI command
  * cockpit — a dark, terminal-style surface that does NOT participate

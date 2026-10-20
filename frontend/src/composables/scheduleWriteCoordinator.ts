@@ -1,5 +1,6 @@
 import { inject, provide, watch, type InjectionKey } from "vue"
 import { usePage } from "@inertiajs/vue3"
+import { retainChatRequestsForUser } from "../utils/chatRequestRecovery"
 
 type Settlement = "accepted" | "uncertain" | "rejected"
 interface WriteRecord {
@@ -70,9 +71,12 @@ export function provideScheduleWriteCoordinator() {
   provide(ScheduleWriteCoordinatorKey, coordinator)
   watch(() => [page?.component, page?.props?.auth_user_id] as const, ([component, userId], previous) => {
     const priorUserId = previous?.[1]
+    if (component === "Login" || userId === null || typeof userId === "number") {
+      retainChatRequestsForUser(component === "Login" ? null : userId as number | null)
+    }
     if (component === "Login" || userId === null
       || (priorUserId !== undefined && userId !== undefined && userId !== priorUserId)) coordinator.clear()
-  }, { flush: "sync" })
+  }, { flush: "sync", immediate: true })
   return coordinator
 }
 

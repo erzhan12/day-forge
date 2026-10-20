@@ -71,7 +71,8 @@ def test_blank_no_ask_reply_rejected_before_mutation(
 
     first = _post(auth_client, [{"role": "user", "content": "add a block"}])
     assert first.status_code == 502
-    assert first.json() == {"errors": {"detail": AI_PARSE_ERROR_DETAIL}}
+    assert first.json()["errors"] == {"detail": AI_PARSE_ERROR_DETAIL}
+    assert first.json()["request_completed"] is True
     assert "Private test block" not in first.content.decode()
     schedule.refresh_from_db()
     assert schedule.revision == 0
@@ -105,7 +106,8 @@ def test_blank_ask_rejected_even_with_explanation(auth_client, user, monkeypatch
 
     response = _post(auth_client, [{"role": "user", "content": "add a block"}])
     assert response.status_code == 502
-    assert response.json() == {"errors": {"detail": AI_PARSE_ERROR_DETAIL}}
+    assert response.json()["errors"] == {"detail": AI_PARSE_ERROR_DETAIL}
+    assert response.json()["request_completed"] is True
     assert not TimeBlock.objects.filter(schedule=schedule).exists()
 
 

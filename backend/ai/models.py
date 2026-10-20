@@ -1,4 +1,31 @@
+from django.conf import settings
 from django.db import models
+
+
+class ChatRequest(models.Model):
+    """Durable chat identity, retained until its owner is deleted.
+
+    The namespace is (owner, civil date, chat endpoint). Never prune completed
+    rows and accept their UUIDs again: a replay could otherwise apply twice.
+    No schedule FK: deleting/recreating a day must not erase its identities.
+    """
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    date = models.DateField()
+    request_id = models.UUIDField()
+    body_hash = models.CharField(max_length=64)
+    lease_token = models.UUIDField()
+    lease_expires_at = models.DateTimeField()
+    completed_at = models.DateTimeField(null=True)
+    response_status = models.PositiveSmallIntegerField(null=True)
+    response_body = models.TextField(null=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("user", "date", "request_id"), name="unique_chat_request_identity"
+            ),
+        ]
 
 
 class AIInteraction(models.Model):

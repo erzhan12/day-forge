@@ -2,7 +2,7 @@
 // owner or ending its session clears the transcript, input, and request tokens.
 // UI cancellation drops a reply; the mutation owner still settles its write.
 
-import { ref, type Ref } from "vue"
+import { computed, ref, type Ref } from "vue"
 import type { TimeBlock, UndoAction } from "../types"
 import {
   isScheduleChangedConflict,
@@ -10,6 +10,7 @@ import {
 } from "../utils/aiScheduleConflict"
 import { type ApiResult, requestJson } from "./useHttp"
 import { registerMutationUndo } from "./useMutationUndo"
+import { clearChatRequests, readChatRequest, removeChatRequest, storeChatRequest, type PendingChatRequest } from "../utils/chatRequestRecovery"
 import { extractErrorMessage } from "../utils/errorMessage"
 import { useScheduleRevision, runScheduleMutation, type ScheduleRevisionState } from "./useScheduleRevision"
 
@@ -47,6 +48,8 @@ interface ChatState {
   apiHealthy: Ref<boolean>
   draftInput: Ref<string>
   latestRequestId: number
+  pendingRequest: Ref<PendingChatRequest | null>
+  userId?: number
   unsubscribe?: () => void
 }
 
@@ -55,7 +58,7 @@ function createChatState(): ChatState {
     activeDate: ref<string | null>(null), messages: ref<ChatMessage[]>([]),
     isProcessing: ref(false), lastError: ref<string | null>(null),
     pendingAsk: ref<string | null>(null), apiHealthy: ref(true),
-    draftInput: ref(""), latestRequestId: 0,
+    draftInput: ref(""), latestRequestId: 0, pendingRequest: ref(null),
   }
 }
 
@@ -70,8 +73,10 @@ function stateFor(owner?: ScheduleRevisionState): ChatState {
     state = createChatState()
     ownerStates.set(owner, state)
     state.unsubscribe = owner.subscribeScopeReset((reason) => {
+      if (reason === "user" || reason === "session") clearChatRequests(state!.userId)
       if (reason === "date") clearThreadState(state!)
       else clearSessionState(state!)
+      state!.pendingRequest.value = null
       if (reason === "dispose") {
         state!.unsubscribe?.()
         state!.unsubscribe = undefined
@@ -143,6 +148,12 @@ function addedBlockIdsFromDiff(snapshot: TimeBlock[], blocks: unknown): number[]
     .map((block) => block.id)
 }
 
+function uncertain(result: ApiResult): boolean {
+  if (result.ok || result.data?.request_completed === true) return false
+  return result.code === "request_in_progress" || result.code === "request_unavailable"
+    || result.status === undefined || result.status >= 500 || result.status < 300
+}
+
 /** Share one owner's thread between the page, dock, and regenerate button. */
 export function useChat(explicitRevision?: ScheduleRevisionState) {
   const revision = useScheduleRevision(explicitRevision)
@@ -152,7 +163,9 @@ export function useChat(explicitRevision?: ScheduleRevisionState) {
   function setActiveDate(date: string): void {
     if (activeDate.value === date) return
     clearThread()
+    state.pendingRequest.value = null
     activeDate.value = date
+    restorePending()
   }
 
   function clearThread(): void {
@@ -163,9 +176,33 @@ export function useChat(explicitRevision?: ScheduleRevisionState) {
     clearThreadState(state)
   }
 
-  async function submitTurn(
+  function restorePending(): void {
+    if (!activeDate.value || state.pendingRequest.value) return
+    const capture = revision?.capture(activeDate.value)
+    state.userId = capture?.userId
+    state.pendingRequest.value = readChatRequest(state.userId, activeDate.value)
+  }
+
+  async function submitTurn(text: string, pushUndo: (a: UndoAction) => void): Promise<void> {
+    restorePending()
+    if (state.pendingRequest.value) {
+      lastError.value = "Recover the previous AI request before sending another turn."
+      draftInput.value = text
+      return
+    }
+    await executeTurn(text, pushUndo, false)
+  }
+
+  async function recoverPending(pushUndo: (a: UndoAction) => void): Promise<void> {
+    restorePending()
+    if (!state.pendingRequest.value) return
+    await executeTurn("", pushUndo, true)
+  }
+
+  async function executeTurn(
     text: string,
     pushUndo: (a: UndoAction) => void,
+    recovering: boolean,
   ): Promise<void> {
     if (activeDate.value === null) {
       // Surface a user-visible message before throwing — if the
@@ -179,7 +216,7 @@ export function useChat(explicitRevision?: ScheduleRevisionState) {
       )
     }
     const trimmed = text.trim()
-    if (!trimmed) return
+    if (!trimmed && !recovering) return
 
     // The UI token controls transcript updates; the owner controls writes.
     const requestDate = activeDate.value
@@ -193,7 +230,7 @@ export function useChat(explicitRevision?: ScheduleRevisionState) {
     isProcessing.value = true
     lastError.value = null
 
-    messages.value = [
+    if (!recovering) messages.value = [
       ...messages.value,
       {
         role: "user",
@@ -204,25 +241,53 @@ export function useChat(explicitRevision?: ScheduleRevisionState) {
       },
     ]
 
+    let pending = recovering ? state.pendingRequest.value : null
+    if (recovering && pending && messages.value.length === 0) {
+      messages.value = pending.body.messages.map(m => ({
+        role: m.role as "user" | "assistant", content: m.content,
+        ask: m.is_ask ? m.content : null, explanation: null, ts: Date.now(),
+        isError: m.is_error, appliedAddBlockIds: m.applied_add_block_ids,
+      }))
+    }
     let result: ChatApiResult
     try {
-      result = await runScheduleMutation(revision, requestDate, (capture) => requestJson(
-        `/api/ai/schedules/${requestDate}/chat/`,
-        "POST",
-        {
-          expected_revision: capture.revision,
-          messages: messages.value.map(({ role, content, ask, isError, appliedAddBlockIds }) => ({
-            role,
-            content,
-            ...(role === "assistant" && ask !== null ? { is_ask: true } : {}),
-            ...(role === "assistant" && isError ? { is_error: true } : {}),
-            ...(role === "assistant" && appliedAddBlockIds !== undefined
-              ? { applied_add_block_ids: appliedAddBlockIds }
-              : {}),
-          })),
-        },
-        { expectedUserId: capture.userId },
-      )) as ChatApiResult
+      result = await runScheduleMutation(revision, requestDate, async (capture) => {
+        if (!pending) {
+          pending = {
+            date: requestDate, userId: capture.userId,
+            body: {
+              request_id: crypto.randomUUID(), expected_revision: capture.revision,
+              messages: messages.value.map(({ role, content, ask, isError, appliedAddBlockIds }) => ({
+                role, content,
+                ...(role === "assistant" && ask !== null ? { is_ask: true } : {}),
+                ...(role === "assistant" && isError ? { is_error: true } : {}),
+                ...(role === "assistant" && appliedAddBlockIds !== undefined ? { applied_add_block_ids: [...appliedAddBlockIds] } : {}),
+              })),
+            },
+          }
+          state.userId = capture.userId
+          if (!storeChatRequest(pending)) {
+            draftInput.value = trimmed
+            return { ok: false, status: 400, errors: { detail: "Cannot save AI recovery state. Enable session storage before sending." } }
+          }
+          state.pendingRequest.value = pending
+        }
+        // Exactly one immediate transport retry. Never manufacture a new
+        // transcript/revision/UUID, and never retry across a session boundary.
+        let response: ApiResult
+        for (let attempt = 0; ; attempt++) {
+          response = await requestJson(`/api/ai/schedules/${requestDate}/chat/`, "POST", pending.body, { expectedUserId: pending.userId })
+          // A proxy can deliver an empty 200 without triggering fetch's body
+          // error. Only a receipt for this UUID establishes a terminal result.
+          if ((response.ok || response.data?.request_completed === true)
+            && (response.data?.request_completed !== true || response.data.request_id !== pending.body.request_id)) {
+            response = { ok: false, status: 503, code: "request_unavailable", errors: { detail: "AI response could not be verified. Recover the original request." } }
+          }
+          if (!uncertain(response) || response.code === "request_in_progress" || attempt === 1
+            || myId !== state.latestRequestId || !revision.isCurrent(capture)) break
+        }
+        return response
+      }) as ChatApiResult
     } finally {
       // Only the most-recent owner of the latest-request slot may clear
       // the spinner. If `clearThread` (manual or via date change) or a
@@ -233,6 +298,10 @@ export function useChat(explicitRevision?: ScheduleRevisionState) {
       }
     }
 
+    if (pending && !uncertain(result)) {
+      removeChatRequest(pending)
+      if (state.pendingRequest.value?.body.request_id === pending.body.request_id) state.pendingRequest.value = null
+    }
     // A cancelled turn can still commit, but cannot update a newer thread.
     if (myId !== state.latestRequestId) return
 
@@ -278,6 +347,13 @@ export function useChat(explicitRevision?: ScheduleRevisionState) {
         silent: true,
       })
       if (result.code === "schedule_sync_failed") lastError.value = "Changes were saved, but the display could not refresh. Reload the page."
+      return
+    }
+
+    if (uncertain(result) && state.pendingRequest.value) {
+      apiHealthy.value = false
+      lastError.value = "The previous AI result is not confirmed. Recover it before sending another turn."
+      // No synthetic is_error bubble: the original write may have committed.
       return
     }
 
@@ -337,6 +413,9 @@ export function useChat(explicitRevision?: ScheduleRevisionState) {
     setActiveDate,
     clearThread,
     submitTurn,
+    recoverPending,
+    hasPendingRequest: computed(() => state.pendingRequest.value !== null),
+    pendingRequestText: computed(() => state.pendingRequest.value?.body.messages.at(-1)?.content ?? ""),
   }
 }
 

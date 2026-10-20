@@ -101,7 +101,7 @@ Undo is a local snapshot stack bound to date, account and revision. It is not a 
 
 Multi-turn natural-language assistant for the command bar (feature 0007). Each request carries the full client-side transcript; the server validates it, calls the LLM for the latest user turn, and either applies schedule mutations, asks a clarifying question, or returns chit-chat with no mutations. Active server-side Rules are injected into the trusted schedule-context message in the User-locked `ai.views._load_ai_context_sync` capture (same as draft). Provider attempts are logged to `AIInteraction` on a best-effort basis; rejected preconditions need not create a row, and audit success is not a commit receipt.
 
-**Privacy:** the full client-supplied `messages[]` transcript is re-sent to the LLM provider on every turn. Users should clear the thread (or reload the page) before discussing anything sensitive.
+**Privacy:** the full client-supplied `messages[]` transcript is sent to the LLM provider on every new turn. Completed identical request replays return the saved result without a provider call. An unresolved request keeps its original body in this tab's account/date-scoped session storage across reloads until recovery; Logout/Login or account changes clear those client copies. Resolve an uncertain request before clearing the thread or starting a new one.
 
 A latest turn with no explicit instruction (no command verb, not a question, not a short reply or greeting, not an answer to a pending clarifying ask, not a retry after an error bubble) is interpreted as an add: the server prefixes the copy sent to the LLM with `add ` (or `добавь ` for Cyrillic text) before the call, while the stored transcript and audit log keep the original text (feature 0083 Addendum D — see `backend/ai/implicit_add.py`).
 
@@ -117,14 +117,25 @@ Requires `LLM_API_KEY` to be set. When unset, every call returns `503` so the fr
 
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
-| `expected_revision` | integer | yes | Revision from the canonical day snapshot; missing/invalid/stale returns 409 before the provider call. |
+| `request_id` | UUID string | yes | Canonical lowercase UUID generated once per new user turn. Transport retries reuse this ID and the complete original body. Missing/invalid returns 400 without admission. |
+| `expected_revision` | integer | yes | Revision from the canonical day snapshot; missing/invalid returns 409. A completed identical replay is resolved before checking whether this revision is stale. A fresh stale request returns 409 before the provider call. |
 | `messages` | array | yes | Non-empty list of `{role, content}` turns. Roles strictly alternate `user` / `assistant`, starting with `user`. Last turn must be `user`. `1 ≤ len ≤ LLM_CHAT_MAX_TURNS` (default 40). Each `content` contains non-whitespace text and is 1–`LLM_MAX_COMMAND_CHARS` (default 500) chars. Sum of all `content` lengths ≤ `LLM_CHAT_MAX_TOTAL_CHARS` (default 4000). |
 | `messages[].is_ask` | boolean | no | **Assistant turns only** (feature 0083). The client marks an assistant turn `is_ask: true` when its `ask` was non-null on the wire — a correctness aid for the replay guard, not a security control. A client that forges this flag only disables the guard for its own turn, no more than it could already do by typing the replayed title directly. Non-boolean, or present on a `user` turn, → `400`. |
-| `messages[].is_error` | boolean | no | **Assistant turns only** (feature 0083). The client marks every synthetic failure bubble (400/409/429/5xx/network) `is_error: true`. The replay guard excludes the contiguous failed turns and any preceding pending ask chain from text evidence, while preserving already-applied siblings through their reported IDs and current blocks. A network failure does not prove that the prior request never applied: retry after a lost response can duplicate a committed add. No durable request idempotency is implemented. Same non-boolean / assistant-only validation as `is_ask`. |
+| `messages[].is_error` | boolean | no | **Assistant turns only** (feature 0083). Definite rejected turns use synthetic `is_error: true` bubbles. Unknown network/proxy outcomes retain the original request instead; they must not become a new `try again` turn. The replay guard still handles semantic replays across distinct request IDs. Same non-boolean / assistant-only validation as `is_ask`. |
 
 Assistant asks may also include `applied_add_block_ids`, a list of positive plain-integer block IDs (maximum 100). It identifies adds accepted in that partial turn for replay handling; it is not a server-owned authorization claim.
 
 Malformed `messages` (including non-object JSON roots) return `400` **before** `Schedule.get_or_create` and **before** the rate-limit counter is consumed. Prompt time and untimed-add placement use the user's persisted schedule `time_zone`; legacy `client_tz` fields are ignored.
+
+**Durable request contract**
+
+The identity namespace is authenticated owner + civil date + chat endpoint. The hash covers the complete parsed JSON object, including messages, markers, expected revision and additional fields; object key order is insignificant. An identical completed request returns its stored HTTP status and JSON bytes without another provider call, rate-limit token or schedule write. A valid different body for the same identity returns `409 request_id_conflict`.
+
+Concurrent identical requests get `409 request_in_progress` with `Retry-After: 2` while the owner holds its lease. The default lease lasts `max(120, LLM_REQUEST_TIMEOUT * 4 + 30)` seconds. A later retry may take over an expired lease with a new token; the previous worker cannot apply after takeover. Provider calls run outside database write locks. The terminal result and any schedule mutation commit together under the User lock. Provider errors are terminal for that ID; an intentional retry after a known error needs a new ID. Temporary identity-store contention returns `503 request_unavailable`, retaining the same client ID/body.
+
+Every admitted terminal JSON response adds `request_id` and `request_completed: true`, including error and ask/no-op results. Pre-admission validation, identity conflicts, in-progress and unavailable responses do not include that terminal marker. Responses may describe an older snapshot on replay; clients must reconcile rather than overwrite a newer canonical revision. Frontend performs one immediate retry for an unknown transport result, then offers **Recover previous AI request**. Recovery shows the original latest message and may finish an uncompleted request. It blocks new AI turns and thread clearing until the outcome is known. Manual schedule edits remain available after ordinary reconciliation.
+
+`ChatRequest` rows, including their response snapshots, remain until the owning account is deleted. They are not tied to the lifetime of a Schedule row and must not be pruned/reaccepted under the same UUID scope. No automatic cleanup is provided. A future retention change must preserve uniqueness with durable tombstones. Draft requests are outside this protocol.
 
 **Success — apply turn — `200 OK`**
 

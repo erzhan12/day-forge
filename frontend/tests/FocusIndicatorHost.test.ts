@@ -273,4 +273,16 @@ describe("FocusIndicatorHost", () => {
 
     expect(vnode.type).toBe(FocusIndicatorHost)
   })
+
+  it("clears persisted chat recovery bodies on Login even when Schedule is unmounted", async () => {
+    page.props.auth_user_id = 1
+    sessionStorage.setItem("day-forge:chat-request:1:2027-01-15", "private frozen body")
+    const wrapper = mount(FocusIndicatorHost, { slots: { default: () => h(Consumer) } })
+    expect(sessionStorage.getItem("day-forge:chat-request:1:2027-01-15")).not.toBeNull()
+    page.component = "Login"
+    page.props.auth_user_id = null
+    await nextTick()
+    expect(sessionStorage.getItem("day-forge:chat-request:1:2027-01-15")).toBeNull()
+    wrapper.unmount()
+  })
 })
