@@ -1,0 +1,299 @@
+{
+  "date": "2026-10-20",
+  "production": "https://dayforge.habitreward.org",
+  "username": "<redacted-test-username>",
+  "account": {
+    "id": 2,
+    "staff": false,
+    "superuser": false
+  },
+  "events": [
+    {
+      "at": "2026-10-20T11:44:15.117Z",
+      "step": "anonymous_login_page",
+      "result": "Sign in form, independent IAB session"
+    },
+    {
+      "at": "2026-10-20T11:44:30.610Z",
+      "step": "fresh_login",
+      "result": "Schedule loaded, Logout visible, empty schedule, no weekday template"
+    },
+    {
+      "at": "2026-10-20T11:45:04.366Z",
+      "step": "session_reload_and_empty_target",
+      "date": "2026-10-21",
+      "result": "authenticated reload succeeded; target contains no blocks"
+    },
+    {
+      "at": "2026-10-20T11:45:15.868Z",
+      "step": "create_persisted_after_reload",
+      "blocks": [
+        {
+          "category": "work",
+          "end_time": "14:30",
+          "id": 1064,
+          "is_completed": false,
+          "sort_order": 0,
+          "start_time": "14:00",
+          "title": "Release smoke test"
+        }
+      ],
+      "component": "Schedule",
+      "date": "2026-10-21",
+      "schedule": {
+        "date": "2026-10-21",
+        "id": 119,
+        "revision": 1,
+        "status": "active"
+      },
+      "user_id": 2,
+      "version": "b8b133f750b822c9873d502a41ff25fab7fc50d5"
+    },
+    {
+      "at": "2026-10-20T11:45:28.259Z",
+      "step": "rename",
+      "result": "Release smoke test edited visible after mutation"
+    },
+    {
+      "at": "2026-10-20T11:45:28.975Z",
+      "step": "rename_undo_reload",
+      "result": "original title and 14:00\u201314:30 persisted"
+    },
+    {
+      "at": "2026-10-20T11:45:35.368Z",
+      "step": "delete_cancel",
+      "result": "block retained"
+    },
+    {
+      "at": "2026-10-20T11:45:36.012Z",
+      "step": "delete_confirm",
+      "result": "block removed; Undo enabled"
+    },
+    {
+      "at": "2026-10-20T11:45:36.722Z",
+      "step": "delete_undo_reload",
+      "result": "one restored block with original fields persisted"
+    },
+    {
+      "at": "2026-10-20T11:46:05.640Z",
+      "step": "settings_integrations",
+      "result": "Settings opened; Apple, Google, Todoist and Habitica all disconnected"
+    },
+    {
+      "at": "2026-10-20T11:46:05.730Z",
+      "step": "settings_back_forward",
+      "result": "schedule/date/block restored on Back, Settings on Forward"
+    },
+    {
+      "at": "2026-10-20T11:46:15.720Z",
+      "step": "real_ai_submitted",
+      "date": "2026-10-20",
+      "prompt": "Add a Work block titled \"Release AI smoke\" from 15:00 to 15:30 on this schedule. Keep all other blocks unchanged.",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "at": "2026-10-20T11:46:34.998Z",
+      "step": "real_ai_result_mobile",
+      "result": "Added the requested Work block from 15:00 to 15:30.",
+      "logout": {
+        "height": 28,
+        "hit": "Logout",
+        "width": 65.375,
+        "x": 293.625,
+        "y": 470.5
+      },
+      "scrollWidth": 375,
+      "viewport": {
+        "height": 844,
+        "width": 390
+      }
+    },
+    {
+      "at": "2026-10-20T11:46:42.264Z",
+      "step": "ai_independent_server_read",
+      "blocks": [
+        {
+          "category": "work",
+          "end_time": "15:30",
+          "id": 1067,
+          "is_completed": false,
+          "sort_order": 0,
+          "start_time": "15:00",
+          "title": "Release AI smoke"
+        }
+      ],
+      "date": "2026-10-20",
+      "integrations": {
+        "apple": false,
+        "google": false,
+        "habitica": false,
+        "todoist": false
+      },
+      "schedule": {
+        "date": "2026-10-20",
+        "id": 118,
+        "revision": 1,
+        "status": "active"
+      }
+    },
+    {
+      "at": "2026-10-20T11:46:42.960Z",
+      "step": "ai_undo_independent_server_read",
+      "blocks": [],
+      "date": "2026-10-20",
+      "schedule": {
+        "date": "2026-10-20",
+        "id": 118,
+        "revision": 2,
+        "status": "active"
+      }
+    },
+    {
+      "at": "2026-10-20T11:46:52.231Z",
+      "step": "analytics_navigation",
+      "result": "Current progress, 0/0 blocks, no active blocks; Mark reviewed visible but not clicked"
+    },
+    {
+      "at": "2026-10-20T11:47:09.229Z",
+      "step": "manual_cleanup_reload",
+      "blocks": [],
+      "date": "2026-10-21",
+      "schedule": {
+        "date": "2026-10-21",
+        "id": 119,
+        "revision": 6,
+        "status": "active"
+      },
+      "scrollWidth": 375,
+      "viewport": {
+        "height": 844,
+        "width": 390
+      }
+    },
+    {
+      "at": "2026-10-20T11:47:09.866Z",
+      "step": "mobile_logout",
+      "result": "Login rendered"
+    },
+    {
+      "at": "2026-10-20T11:47:09.883Z",
+      "step": "mobile_logout_back",
+      "result": "Sign in form; private Schedule not restored"
+    },
+    {
+      "at": "2026-10-20T11:47:11.780Z",
+      "step": "logged_out_protected_urls_and_second_tab",
+      "result": "reload, direct Schedule and other-tab reload all require Sign in"
+    },
+    {
+      "at": "2026-10-20T11:48:07.241Z",
+      "step": "desktop_cleanup_confirmed",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "result": "Today empty; chat transcript cleared across Logout/login"
+    },
+    {
+      "at": "2026-10-20T11:48:10.809Z",
+      "step": "desktop_fresh_login_reload",
+      "blocks": [],
+      "date": "2026-10-21",
+      "user_id": 2,
+      "viewport": {
+        "height": 900,
+        "width": 1440
+      }
+    },
+    {
+      "at": "2026-10-20T11:48:12.806Z",
+      "step": "desktop_logout_back_reload_protected_analytics",
+      "result": "All show Login; no private content"
+    }
+  ],
+  "release": "b8b133f750b822c9873d502a41ff25fab7fc50d5",
+  "ai_prompt": "Add a Work block titled \"Release AI smoke\" from 15:00 to 15:30 on this schedule. Keep all other blocks unchanged.",
+  "ai_audit": {
+    "id": 853,
+    "schedule_id": 118,
+    "interaction_count": 1,
+    "kind": "Chat",
+    "actions": [
+      {
+        "type": "add",
+        "title": "Release AI smoke",
+        "category": "work",
+        "start_time": "15:00",
+        "end_time": "15:30"
+      }
+    ],
+    "outcome": "applied",
+    "mocking": false,
+    "success": true
+  },
+  "public_release": {
+    "sha": "b8b133f750b822c9873d502a41ff25fab7fc50d5",
+    "deploy_run": "https://github.com/erzhan12/day-forge/actions/runs/39265904184",
+    "deploy_conclusion": "success",
+    "login_status": 200,
+    "assets": [
+      {
+        "path": "/static/assets/app-ckrUuoMy.js",
+        "sha256": "814b73f65045f52fd89c880364a48c85aeb8adac073ca452f28e624149779c62",
+        "cache_control": "max-age=315360000, public, immutable"
+      },
+      {
+        "path": "/static/assets/app-COtgMyyv.css",
+        "sha256": "d26f2305d3ef0accf5da103ac28ff78b6b40e68e7d401f75df97d1ebf341e85b",
+        "cache_control": "max-age=315360000, public, immutable"
+      }
+    ]
+  },
+  "tests": {
+    "command": "make check",
+    "ruff": "passed",
+    "backend_passed": 2118,
+    "backend_skipped": 1,
+    "frontend_typecheck": "passed",
+    "frontend_files": 103,
+    "frontend_passed": 1395
+  },
+  "limits": [
+    "No provider stubs, injected responses or local fixture server used.",
+    "One controlled AI add is a connectivity/persistence smoke, not a quality evaluation.",
+    "No draft scenario: new account has no templates.",
+    "No live OAuth or iOS Safari check.",
+    "No production database snapshot or direct database access.",
+    "Schedule content returned to empty on both dates; revision/status and AI audit history remain."
+  ],
+  "completed_at": "2026-10-20T11:48:35.881Z",
+  "screenshots": [
+    {
+      "path": "screenshots/production-smoke-2026-10-20/desktop-cleanup.jpg",
+      "sha256": "75c7656e013379adf13d20e6b4bbc221cc28b74da1f9480ae7ba05e961653bb9"
+    },
+    {
+      "path": "screenshots/production-smoke-2026-10-20/desktop-created.jpg",
+      "sha256": "fc51b817374a055de56066eeb1cf415d154e4c3632439560fee99fcef8c925f0"
+    },
+    {
+      "path": "screenshots/production-smoke-2026-10-20/desktop-logged-out.jpg",
+      "sha256": "a9ea27a2d84bdb1d121cef2f42ba3acf1258c89edca949c70b75d2c385c62836"
+    },
+    {
+      "path": "screenshots/production-smoke-2026-10-20/mobile-ai-created.jpg",
+      "sha256": "e4e6a6223426c821653b73ca7eca5ad65c655c3d90c78fe61e1edfb922076de8"
+    },
+    {
+      "path": "screenshots/production-smoke-2026-10-20/mobile-analytics-empty.jpg",
+      "sha256": "8bab414026e3d4343176d9a1bb76dc12718f2d39b151b39d3323cd9dde84b2ba"
+    },
+    {
+      "path": "screenshots/production-smoke-2026-10-20/mobile-cleanup.jpg",
+      "sha256": "0eeaa8a980fdfaa3b52bfd3f991945f0c4688618070671652c3823a88c6c5b98"
+    }
+  ]
+}
