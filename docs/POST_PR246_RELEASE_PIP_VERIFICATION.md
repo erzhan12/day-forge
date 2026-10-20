@@ -2,6 +2,8 @@
 
 19 октября 2026 года, Asia/Almaty. База: `d449ec36201eefbf5e41e370ec723e41f792ea02`, `main` после PR #246.
 
+Дополнение 20 октября: выделенный production-аккаунт создан, свежий вход, mutations, Undo, реальный AI и Logout проверены на релизе после PR #250. См. [production smoke](PRODUCTION_ACCOUNT_SMOKE_2026-10-20.md). Ограничения ниже описывают исходный прогон 19 октября.
+
 ## Результат
 
 [Deploy #39209152976](https://github.com/erzhan12/day-forge/actions/runs/39209152976) завершился успешно в 11:22:41 по Asia/Almaty (06:22:41 UTC). Опубликованный HTML и frontend bundle содержат правильный SHA. Проверены публичные страницы и чтение Schedule, Settings и Analytics через существующую Chrome-сессию.
@@ -99,4 +101,4 @@ with sqlite3.connect((root / "fixture.sqlite3").as_uri() + "?mode=rw", uri=True)
 
 ## Что остаётся
 
-Новый вход с паролем, mutations и Logout на выделенном production-тестере остаются незакрытым smoke. Также этот прогон не проверял настоящий iOS Safari, нагрузку, живые OAuth reconnect/completion и качество AI. Закрытие A07 относится к нативному Chrome на локальном стенде с frontend assets текущего production-релиза.
+Новый вход с паролем, mutations и Logout на выделенном production-тестере впоследствии проверены в [прогоне 20 октября](PRODUCTION_ACCOUNT_SMOKE_2026-10-20.md). Настоящий iOS Safari, нагрузка, живые OAuth reconnect/completion и качество AI остаются отдельными задачами. Закрытие A07 относится к нативному Chrome на локальном стенде с frontend assets production-релиза от 19 октября.
