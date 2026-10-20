@@ -54,7 +54,7 @@
     {
       "step": "explicit_repeat_new_id",
       "at": "2026-10-20T17:31:30.725Z",
-      "result": "same title intentionally added at 18:30\u201319:00 as a new request"
+      "result": "same title intentionally added at 18:30–19:00 as a new request"
     },
     {
       "step": "navigation_analytics",
@@ -445,5 +445,32 @@
     "viewport_reset": true,
     "fixture_servers_stopped": true,
     "working_database_backup_retained_privately": true
+  },
+  "post_review_validation": {
+    "pr": "https://github.com/erzhan12/day-forge/pull/252",
+    "initial_ci": "https://github.com/erzhan12/day-forge/actions/runs/39474195686",
+    "initial_review": "https://github.com/erzhan12/day-forge/pull/252#issuecomment-6298151186",
+    "changes": [
+      "Preserve empty audit outcomes and test no-op/ask receipts",
+      "Extract the parallel HTTP worker into a linted helper",
+      "Document response-body retention beside the field"
+    ],
+    "deferred": "Date-only index: no current date-only query; age-based identity deletion is prohibited",
+    "command": "make check",
+    "backend_passed": 2138,
+    "backend_skipped": 1,
+    "frontend_passed": 1409,
+    "frontend_files": 104,
+    "ruff": "passed",
+    "typecheck": "passed",
+    "migration_drift": "none",
+    "browser_rerun": false,
+    "browser_scope_note": "Original browser source hashes remain unchanged. Post-review edits affect audit persistence, tests and a field comment; frontend and recovery protocol are unchanged.",
+    "source_sha256": {
+      "backend/ai/models.py": "3018eb4474b320b4383ca45f8da411a34c26a2f08dd9c02d167aef94b97e02bd",
+      "backend/ai/views.py": "f570fbfd5946d09e63efff47842a0e94f0303012c24f5f46d467abf5a4c1c9a9",
+      "backend/tests/test_ai_chat_requests.py": "3d39e42cbdc5a36400f3673ca59bfa550e94a5cc291320c74361852d561879eb",
+      "backend/tests/helpers/parallel_chat_worker.py": "cd4be89b4048a22b231c753566ec1c6bb53aae1126c6a53a8da5a1c6b6dd87d1"
+    }
   }
 }

@@ -79,6 +79,14 @@ Frontend tests покрывают потерю fetch и response body, пуст�
 
 Пропущен opt-in платный R11 comparison; обычный фиксированный dialogue corpus вошёл в полный backend-прогон. Дополнительное удалённое PR CI и ревью выполняются при создании PR.
 
+### Проверка PR #252
+
+Первый удалённый [CI](https://github.com/erzhan12/day-forge/actions/runs/39474195686) прошёл: 2136 backend, 1 skipped и 1409 frontend, lint, type-check, production build, dependency audit и deployment checks. [Claude Review](https://github.com/erzhan12/day-forge/pull/252#issuecomment-6298151186) дал **APPROVED**, без блокирующих замечаний.
+
+По замечаниям ревью исправлено сохранение пустого списка `outcomes` в audit, добавлены два регрессионных теста, worker для двухпроцессной проверки вынесен в отдельный Python-файл под lint, а поле `response_body` получило комментарий о retention. Повторный локальный `make check` прошёл: **2138 backend, 1 skipped и 1409 frontend**. Migration drift отсутствует. Клиентский код и протокол recovery не менялись; браузерные результаты ниже относятся к сборкам до этой небольшой правки audit. Исходные hashes браузерного прогона сохранены в evidence отдельно от hashes правок после ревью.
+
+Предложенный индекс только по дате отложен: текущие запросы используют owner/date/UUID и существующий unique index, запросов по одной дате нет. Удаление identities по возрасту противоречит принятому контракту. Если появится отдельная операция по дате, индекс следует добавлять вместе с ней и проверкой её query plan.
+
 ## Браузерные проверки
 
 Стенд использует существующий `release_browser_server.py` и новый loopback-only `chat_request_proxy.py`. Proxy передаёт запросы настоящему backend, теряет уже полученные ответы, возвращает пустой HTTP 200 либо отправляет две одинаковые копии одновременно. Provider responses не подменялись.

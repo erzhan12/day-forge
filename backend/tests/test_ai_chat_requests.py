@@ -3,6 +3,7 @@
 import datetime
 import json
 import uuid
+from pathlib import Path
 
 import pytest
 from ai.chat_requests import ChatClaim, claim_request, finish_request, request_identity
@@ -85,6 +86,28 @@ class TestChatRequestHTTP:
         assert cache.get(f"ai_chat_rl:{user.id}") == 1
         assert recovered.json()["request_completed"] is True
         assert recovered.json()["request_id"] == payload["request_id"]
+
+    @pytest.mark.parametrize("ask", [None, "Which slot?"])
+    def test_empty_outcomes_are_preserved_in_audit_and_receipt(
+        self, auth_client, monkeypatch, ask
+    ):
+        calls = []
+
+        async def provider(*args):
+            calls.append(args)
+            return AIChatResult("{}", [], "No changes.", ask)
+
+        monkeypatch.setattr("ai.views.run_chat", provider)
+        payload = body()
+        response = post(auth_client, payload)
+        assert response.status_code == 200
+        assert response.json()["outcomes"] == []
+        interaction = AIInteraction.objects.get()
+        assert interaction.success is True
+        assert interaction.outcomes_json == []
+        assert post(auth_client, payload).content == response.content
+        assert len(calls) == 1
+        assert AIInteraction.objects.count() == 1
 
     @pytest.mark.parametrize("change", [
         {"messages": [{"role": "user", "content": "Different command"}]},
@@ -216,45 +239,8 @@ from django.contrib.auth.models import User
 from ai.models import ChatRequest
 user = User.objects.create_user(username='process-chat')
 identity = str(uuid.uuid4())
-worker = r"""
-import datetime,json,sys,time,uuid
-from django.conf import settings
-settings.DATABASES['default']['NAME'] = sys.argv[1]
-settings.DATABASES['default']['OPTIONS'] = {'timeout': 3}
-settings.CACHES = {'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache'}}
-import django
-django.setup()
-from ai import views
-from ai.service import AIChatResult
-from asgiref.sync import async_to_sync
-from django.contrib.auth.models import User
-from django.test import RequestFactory
-from pathlib import Path
-import asyncio
-root=Path(sys.argv[1]).parent
-(root/('ready-'+str(__import__('os').getpid()))).touch()
-for _ in range(500):
-    if len(list(root.glob('ready-*')))==2:break
-    time.sleep(0.01)
-else:raise RuntimeError('process rendezvous failed')
-async def provider(*args):
-    with (root/'provider-calls').open('a') as f:f.write('call\n')
-    await asyncio.sleep(0.4)
-    return AIChatResult('{}',[{'type':'add','title':'Parallel','category':'work',
-                             'start_time':'14:00','end_time':'14:30'}],'Added.',None)
-views.run_chat=provider
-user=User.objects.get(pk=int(sys.argv[2]))
-async def auser():return user
-request=RequestFactory().post('/api/ai/schedules/2027-01-15/chat/',
-    json.dumps({'request_id':sys.argv[3],'expected_revision':0,
-                'messages':[{'role':'user','content':'Add Parallel at 14:00'}]}),
-    content_type='application/json')
-request.user=user
-request.auser=auser
-response=async_to_sync(views.ai_chat)(request,'2027-01-15')
-print(response.status_code)
-"""
-processes=[subprocess.Popen([sys.executable,'-c',worker,sys.argv[1],str(user.pk),identity],
+worker = WORKER_PATH
+processes=[subprocess.Popen([sys.executable,worker,sys.argv[1],str(user.pk),identity],
                            stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
            for _ in range(2)]
 results=[]
@@ -271,4 +257,4 @@ assert TimeBlock.objects.count()==1
 assert Schedule.objects.get().revision==1
 assert ChatRequest.objects.count()==1
 assert ChatRequest.objects.get().completed_at is not None
-''')
+'''.replace('WORKER_PATH', repr(str(Path(__file__).parent / 'helpers/parallel_chat_worker.py'))))

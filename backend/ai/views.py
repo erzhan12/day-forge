@@ -1037,7 +1037,7 @@ async def ai_chat(request, date):
     )
     if response.status_code == 200 and not getattr(response, "chat_request_replayed", False):
         outcomes = json.loads(response.content).get("outcomes")
-        await _mark_success(interaction, outcomes or None)
+        await _mark_success(interaction, outcomes)
     return response
 
 

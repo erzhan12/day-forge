@@ -18,6 +18,8 @@ class ChatRequest(models.Model):
     lease_expires_at = models.DateTimeField()
     completed_at = models.DateTimeField(null=True)
     response_status = models.PositiveSmallIntegerField(null=True)
+    # Full private HTTP body, retained with the identity until account deletion.
+    # See docs/DURABLE_AI_CHAT_REQUESTS.md for retention and rollback constraints.
     response_body = models.TextField(null=True)
 
     class Meta:
