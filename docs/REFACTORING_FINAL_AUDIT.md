@@ -1,5 +1,7 @@
 # Итоговый аудит Day Forge после R00–R12
 
+Дополнение 21 октября: [production и rollback после #252](POST_PR252_RELEASE_VERIFICATION.md) проверены на релизе `52bc5c9` после dependency fix #254. Точный UUID replay, Undo, Logout и сохранение receipts при откате образа подтверждены. Pending intent остаётся открытым.
+
 Дополнение 20 октября: [durable request_id для AI-chat](DURABLE_AI_CHAT_REQUESTS.md) реализован и проверен с потерей ответа, отдельными процессами и реальными browser/provider calls. Server-owned pending intent остаётся отдельной задачей. Исторические выводы ниже не описывают статус этой новой реализации.
 
 Текущий статус после исправлений: A00–A07 реализованы, основные desktop/mobile сценарии и live R11 закрыты в PR #241. Последующий [браузерный прогон A00–A06](BROWSER_VERIFICATION_A00_A07.md) проверил управляемые ошибки и гонки и исправил category confirmation/mobile overflow. A07 закрыт 19 октября через нативный Chrome с настоящим PiP: Settings сохраняет окно, Logout/session expiry закрывают его, смена локального пользователя не показывает прежний блок. См. [отчёт после PR #246](POST_PR246_RELEASE_PIP_VERIFICATION.md). 20 октября [production smoke на выделенном аккаунте](PRODUCTION_ACCOUNT_SMOKE_2026-10-20.md) закрыл свежий вход, запись, Undo, реальный AI и Logout на desktop/mobile ширинах. Подтверждённый cleanup выполнен после PR #243; удаления, сокращение инструкций Claude и проверки описаны в [cleanup-отчёте](AUDIT_CLEANUP.md). Ниже сохранены исходные находки аудита; открытые задачи находятся в [todo](../tasks/todo.md).

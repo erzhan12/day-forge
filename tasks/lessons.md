@@ -2,6 +2,15 @@
 
 Patterns and corrections discovered during development. Review at session start.
 
+## A retained request table cannot teach an old image a new protocol
+
+An image rollback across the durable-chat boundary preserves receipts but the
+old view does not know how to replay them. Pause AI with an empty LLM_API_KEY
+during that rollback, keep manual writes available, and recover frozen requests
+only after returning to the supporting image. Rehearse both the disabled old AI
+path and exact replay after reupgrade. Fixture services that reuse the web image
+also need their own healthcheck; the inherited web probe checks the wrong port.
+
 ## Unknown AI outcomes need a frozen body and a durable commit receipt
 
 Audit success is best effort and cannot deduplicate a write. Store the terminal

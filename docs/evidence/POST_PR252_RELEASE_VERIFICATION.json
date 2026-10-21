@@ -1,0 +1,380 @@
+{
+  "date": "2026-10-21T07:32:40+05:00",
+  "original_pr": 252,
+  "original_merge": "8b5189518e166f9b55cb0da930fbacc0a1bef1c1",
+  "failed_deploy": "https://github.com/erzhan12/day-forge/actions/runs/39481554138",
+  "blocker": {
+    "package": "follow-redirects",
+    "from": "1.16.0",
+    "to": "1.16.1",
+    "audit_bypassed": false,
+    "fix_pr": 254,
+    "fix_commit": "52bc5c9dc209a0eca85ec031be3ada945480319b"
+  },
+  "successful_deploy": "https://github.com/erzhan12/day-forge/actions/runs/39482514988",
+  "production": {
+    "release": "52bc5c9dc209a0eca85ec031be3ada945480319b",
+    "login_status": 200,
+    "tls_verified": true,
+    "assets": [
+      {
+        "path": "/static/assets/app-DhYMgyGp.css",
+        "sha256": "f1b175f0173a8efb42595af259316daff29ebc1275cae2f1246ff7211d67cbdd",
+        "cache_control": "max-age=315360000, public, immutable"
+      },
+      {
+        "path": "/static/assets/app-mNWRl_8o.js",
+        "sha256": "eec7dcd96f389dc9d0574c28ccd7032f5c11348564f983d852a8b995db1afafc",
+        "cache_control": "max-age=315360000, public, immutable"
+      }
+    ]
+  },
+  "production_api": {
+    "release": "52bc5c9dc209a0eca85ec031be3ada945480319b",
+    "base": "https://dayforge.habitreward.org",
+    "date": "2026-10-23",
+    "success": true,
+    "events": [
+      {
+        "stage": "real_ai_and_identical_replay",
+        "date": "2026-10-23",
+        "status": 200,
+        "replay_status": 200,
+        "request_sha256": "1500c45ecbf000fb2ae6dec61a8a7c921f3f22200f69c42d4b189eb91f2fb3ae",
+        "response_sha256": "fec048423c6a70b5851b1a8a0cb98be39f2650921d3f8b20ce0e982a54299cb4",
+        "single_block": true,
+        "revision_unchanged_on_replay": true,
+        "different_body_status": 409
+      },
+      {
+        "stage": "undo_then_same_id_replay",
+        "restore_status": 200,
+        "replay_status": 200,
+        "saved_response_identical": true,
+        "schedule_still_empty": true,
+        "revision_unchanged_on_replay": true
+      },
+      {
+        "stage": "logout",
+        "protected_read_requires_login": true
+      }
+    ],
+    "transport": "independent HTTPS client, not the browser UI",
+    "provider": "real production provider; no stubs",
+    "raw_credentials_cookies_and_proofs_included": false
+  },
+  "browser": {
+    "release": "52bc5c9dc209a0eca85ec031be3ada945480319b",
+    "date": "2026-10-21",
+    "transport": "CUA in-app Chromium",
+    "mobile": {
+      "layout": {
+        "logout": {
+          "clickable": true,
+          "height": 28,
+          "width": 65.375,
+          "x": 308.625,
+          "y": 437.5
+        },
+        "scrollWidth": 390,
+        "viewport": [
+          390,
+          844
+        ]
+      },
+      "initial_blocks": 0,
+      "after_ai": {
+        "blocks": [
+          {
+            "category": "work",
+            "end_time": "15:30",
+            "start_time": "15:00",
+            "title": "Release browser smoke"
+          }
+        ],
+        "date": "2026-10-22",
+        "revision": 1
+      },
+      "after_undo": {
+        "blocks": 0,
+        "date": "2026-10-22",
+        "revision": 2
+      },
+      "settings_back": true,
+      "logout": true,
+      "back_shows_login": true,
+      "second_tab_reload_requires_login": true
+    },
+    "desktop": {
+      "blocks": 0,
+      "date": "2026-10-22",
+      "revision": 2,
+      "scrollWidth": 1440,
+      "viewport": [
+        1440,
+        900
+      ],
+      "fresh_login": true,
+      "logout": true,
+      "back_and_reload_require_login": true
+    },
+    "notes": [
+      "Viewport override applied to the selected tab; both final viewports were measured in the DOM.",
+      "Some desktop automation waits expired before the completed navigation was observed. No duplicate POST was sent."
+    ],
+    "credentials_included": false
+  },
+  "container": {
+    "success": true,
+    "source_snapshot_sha256": "30dd3f757f8f1abdb64ef8f11b1724f7a20b1675926ac61a97a32595b09490e7",
+    "source_tables": 25,
+    "source_rows": 1198,
+    "old_version": "7a86acac2b83d1ced1485292de8a0b3b222a895d",
+    "new_version": "f282fc03eb0af4b4c9eeb17c70f67bdbc8ee51c8",
+    "provider": "isolated fixture; no paid calls",
+    "events": [
+      {
+        "stage": "start",
+        "image": "day-forge-rehearsal:pr252-old",
+        "version": "7a86acac2b83d1ced1485292de8a0b3b222a895d",
+        "assets": [
+          "/static/assets/app-COtgMyyv.css",
+          "/static/assets/app-B9GREc0o.js"
+        ],
+        "status": 200
+      },
+      {
+        "stage": "start",
+        "image": "day-forge-rehearsal:pr252-new",
+        "version": "f282fc03eb0af4b4c9eeb17c70f67bdbc8ee51c8",
+        "assets": [
+          "/static/assets/app-DhYMgyGp.css",
+          "/static/assets/app-CXja3eKr.js"
+        ],
+        "status": 200
+      },
+      {
+        "stage": "ai_0006_to_0007",
+        "existing_rows_preserved": true
+      },
+      {
+        "stage": "durable_http_replay",
+        "same_response": true,
+        "provider_calls": 1,
+        "different_body_status": 409
+      },
+      {
+        "stage": "start",
+        "image": "day-forge-rehearsal:pr252-old",
+        "version": "7a86acac2b83d1ced1485292de8a0b3b222a895d",
+        "assets": [
+          "/static/assets/app-COtgMyyv.css",
+          "/static/assets/app-B9GREc0o.js"
+        ],
+        "status": 200
+      },
+      {
+        "stage": "image_rollback",
+        "receipt_retained": true,
+        "writes_preserved": true,
+        "stale_chat_denied": true,
+        "old_protocol_ai_disabled_status": 503
+      },
+      {
+        "stage": "start",
+        "image": "day-forge-rehearsal:pr252-new",
+        "version": "f282fc03eb0af4b4c9eeb17c70f67bdbc8ee51c8",
+        "assets": [
+          "/static/assets/app-DhYMgyGp.css",
+          "/static/assets/app-CXja3eKr.js"
+        ],
+        "status": 200
+      },
+      {
+        "stage": "reupgrade_replay",
+        "same_response": true,
+        "newer_writes_preserved": true,
+        "provider_calls": 1
+      }
+    ],
+    "images": {
+      "old": {
+        "tag": "docker.io/library/day-forge-rehearsal:pr252-old",
+        "id": "sha256:8c5fbfdcce9f6b87d733c5dc02399654796cb1195d56f7debaea74e3c14e1c93",
+        "architecture": "arm64",
+        "os": "linux"
+      },
+      "new": {
+        "tag": "docker.io/library/day-forge-rehearsal:pr252-new",
+        "id": "sha256:8c10bb36a02af8e29f8f7caa47f70cf19a4d9ff9c770df30b3e9574b1417a5f6",
+        "architecture": "arm64",
+        "os": "linux"
+      }
+    },
+    "new_source_tree_matches_deployed_merge": true,
+    "original_row_comparison_excludes_migration_metadata": true,
+    "source_database_comparison_excludes_nothing": true
+  },
+  "checks": {
+    "backend_passed": 2138,
+    "backend_skipped": 1,
+    "frontend_passed": 1409,
+    "frontend_files": 104,
+    "ruff": "passed",
+    "typecheck": "passed",
+    "production_build": "passed",
+    "production_audit": "0 vulnerabilities",
+    "runner_ruff": "passed",
+    "deployed_ci": "passed"
+  },
+  "limitations": [
+    "Container source is a local working SQLite backup, not a production database download.",
+    "Production migration state was inferred from successful durable endpoint operation, not direct database inspection.",
+    "Container images run on Linux arm64 in Docker Desktop; the production deployment builds independently.",
+    "Two successful real AI operations (one API, one browser); internal SDK retries were not separately counted.",
+    "No production fault injection, load test or actual iOS Safari test.",
+    "A brief 502 was observed during container replacement before the successful first health probe."
+  ],
+  "screenshots": [
+    {
+      "path": "screenshots/post-pr252-2026-10-21/desktop-clean.jpg",
+      "sha256": "7503099885f9e8d63a166ece4ef660018b5f5dcc8adac7e8b2d53b37276e5aeb"
+    },
+    {
+      "path": "screenshots/post-pr252-2026-10-21/desktop-logout.jpg",
+      "sha256": "55a1939b18af0aafa5fb4e703558ed013d1606bad0aa37b10d786ea37e4850a1"
+    },
+    {
+      "path": "screenshots/post-pr252-2026-10-21/mobile-ai.jpg",
+      "sha256": "5f08de81f3760a4e52ac371186dba338dbbf6d48459a404fae9a0391ceac31c7"
+    },
+    {
+      "path": "screenshots/post-pr252-2026-10-21/mobile-logout.jpg",
+      "sha256": "73f2c96ec5db129ab8c216aaee9aace845222742af289bcf0ed8799fe4bf057e"
+    },
+    {
+      "path": "screenshots/post-pr252-2026-10-21/mobile-undo.jpg",
+      "sha256": "8b7c6a5620c1911632635ce83d2bbe562a337099a6428be3eb8f2f9cff587fad"
+    }
+  ],
+  "runner_source_sha256": {
+    "deployment/scripts/rehearse_chat_requests.py": "c42c0cd1d5dedde14ff11ab66724d00bce2fc65af031d64d98c9933c4237a879",
+    "deployment/scripts/rehearsal_chat_provider.py": "4c1363154980d00267f0239b674da1715dcb20ca833c58794c21f50fb7232cc6"
+  },
+  "cleanup": {
+    "source_database_unchanged": true,
+    "test_dates_empty": true,
+    "production_sessions_logged_out": true,
+    "created_browser_tabs_closed": true,
+    "viewport_reset": true,
+    "owned_containers_and_networks_removed": true,
+    "private_database_copies_and_container_logs_removed": true,
+    "source_archives_removed": true,
+    "rehearsal_images_retained_for_reproduction": true,
+    "existing_private_test_credentials_retained": true
+  },
+  "runner_source_revision": "de52c3e89d0d6a65842d1cb1d2d477124f90de01",
+  "post_review_validation": {
+    "initial_ci": "https://github.com/erzhan12/day-forge/actions/runs/39544493789",
+    "initial_review": "https://github.com/erzhan12/day-forge/pull/255#issuecomment-6308115762",
+    "changes": [
+      "Validate the expected fixture key line before substitution",
+      "Document fixture-only network binding",
+      "Save truthful evidence after artifact collection and container cleanup"
+    ],
+    "deferred_review_suggestion": "No redundant table initialization: a sqlite connect exception propagates before the later table check.",
+    "checks": {
+      "command": "make check",
+      "backend_passed": 2142,
+      "backend_skipped": 1,
+      "frontend_passed": 1409,
+      "frontend_files": 104,
+      "ruff": "passed",
+      "typecheck": "passed",
+      "focused_regression_cases": 4
+    },
+    "container_rehearsal": {
+      "success": true,
+      "source_snapshot_sha256": "30dd3f757f8f1abdb64ef8f11b1724f7a20b1675926ac61a97a32595b09490e7",
+      "source_tables": 25,
+      "source_rows": 1198,
+      "old_version": "7a86acac2b83d1ced1485292de8a0b3b222a895d",
+      "new_version": "f282fc03eb0af4b4c9eeb17c70f67bdbc8ee51c8",
+      "provider": "isolated fixture; no paid calls",
+      "events": [
+        {
+          "stage": "start",
+          "image": "day-forge-rehearsal:pr252-old",
+          "version": "7a86acac2b83d1ced1485292de8a0b3b222a895d",
+          "assets": [
+            "/static/assets/app-COtgMyyv.css",
+            "/static/assets/app-B9GREc0o.js"
+          ],
+          "status": 200
+        },
+        {
+          "stage": "start",
+          "image": "day-forge-rehearsal:pr252-new",
+          "version": "f282fc03eb0af4b4c9eeb17c70f67bdbc8ee51c8",
+          "assets": [
+            "/static/assets/app-DhYMgyGp.css",
+            "/static/assets/app-CXja3eKr.js"
+          ],
+          "status": 200
+        },
+        {
+          "stage": "ai_0006_to_0007",
+          "existing_rows_preserved": true
+        },
+        {
+          "stage": "durable_http_replay",
+          "same_response": true,
+          "provider_calls": 1,
+          "different_body_status": 409
+        },
+        {
+          "stage": "start",
+          "image": "day-forge-rehearsal:pr252-old",
+          "version": "7a86acac2b83d1ced1485292de8a0b3b222a895d",
+          "assets": [
+            "/static/assets/app-COtgMyyv.css",
+            "/static/assets/app-B9GREc0o.js"
+          ],
+          "status": 200
+        },
+        {
+          "stage": "image_rollback",
+          "receipt_retained": true,
+          "writes_preserved": true,
+          "stale_chat_denied": true,
+          "old_protocol_ai_disabled_status": 503
+        },
+        {
+          "stage": "start",
+          "image": "day-forge-rehearsal:pr252-new",
+          "version": "f282fc03eb0af4b4c9eeb17c70f67bdbc8ee51c8",
+          "assets": [
+            "/static/assets/app-DhYMgyGp.css",
+            "/static/assets/app-CXja3eKr.js"
+          ],
+          "status": 200
+        },
+        {
+          "stage": "reupgrade_replay",
+          "same_response": true,
+          "newer_writes_preserved": true,
+          "provider_calls": 1
+        }
+      ],
+      "cleanup_completed": true
+    },
+    "source_database_unchanged": true,
+    "production_rerun": false,
+    "source_sha256": {
+      "deployment/scripts/rehearse_chat_requests.py": "44891444826eddb55749c68587a81df4d9838adcfd21148fe98f0b5b44646753",
+      "deployment/scripts/rehearsal_chat_provider.py": "938589d6444fd9b24c37cca7aa98a62ff9f7a9b0659649761b8eefde7b0e9517",
+      "backend/tests/test_chat_rehearsal_cleanup.py": "b36f892990e6e28db61969f70bd33f1e4d971ea56f1e655a9abe01fefb09ba2a"
+    },
+    "private_sandbox_removed": true
+  }
+}
