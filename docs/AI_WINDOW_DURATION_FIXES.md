@@ -98,6 +98,8 @@ npm run build
 
 Первое [Claude Review в PR #256](https://github.com/erzhan12/day-forge/pull/256#issuecomment-6318357868) вернуло APPROVED с двумя рекомендациями. Защита индекса добавлена вместе с тремя fault-injection случаями. Предложение перевести дополнение на английский не принято: существующий отчёт ведётся на русском, API-справочник и описание PR остаются английскими.
 
+Второе [ревью](https://github.com/erzhan12/day-forge/pull/256#issuecomment-6318467852) также вернуло APPROVED. По его замечаниям fallback `None → 0` записан явным условием, а fault-injection тесты проверяют весь `errors`, включая ожидаемый `action_index`.
+
 Команды для повторения из корня проекта:
 
 ```sh

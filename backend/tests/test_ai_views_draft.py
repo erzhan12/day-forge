@@ -619,9 +619,9 @@ class TestDraftDayWindow:
         assert interaction.kind == AIInteraction.Kind.DRAFT
         assert interaction.success is False
 
-    @pytest.mark.parametrize("action_index", [None, -1, 2])
+    @pytest.mark.parametrize("action_index,response_index", [(None, 0), (-1, -1), (2, 2)])
     def test_window_error_without_known_command_keeps_planner_detail(
-        self, auth_client, user, template, monkeypatch, action_index
+        self, auth_client, user, template, monkeypatch, action_index, response_index
     ):
         _set_window(user, datetime.time(5, 0), datetime.time(22, 0))
         _patch_run(monkeypatch, _ok_result())
@@ -635,7 +635,7 @@ class TestDraftDayWindow:
         resp = _post(auth_client)
 
         assert resp.status_code == 400
-        assert resp.json()["errors"]["detail"] == detail
+        assert resp.json()["errors"] == {"action_index": response_index, "detail": detail}
         schedule = Schedule.objects.get(user=user, date="2026-05-04")
         assert schedule.revision == 0
         assert not TimeBlock.objects.filter(schedule=schedule).exists()

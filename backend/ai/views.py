@@ -604,7 +604,7 @@ def _apply_draft_sync(
                     f"outside your day window ({window.start_str}-{window.end_str}). "
                     "The draft was not saved. Try generating it again."
                 )
-            return _action_error(action_index or 0, detail)
+            return _action_error(action_index if action_index is not None else 0, detail)
         _persist_mutation_diff(locked_schedule, ctx.blocks, plan.diff)
 
     try:
