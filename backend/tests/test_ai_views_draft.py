@@ -21,6 +21,7 @@ from ai.views import AI_PARSE_ERROR_DETAIL
 from django.contrib.auth.models import User
 from django.core.cache import cache
 from schedules.models import Schedule, TimeBlock, UserScheduleSettings
+from schedules.planning import CommandError
 from templates_mgr.models import Rule, Template
 
 URL = "/api/ai/schedules/2026-05-04/generate-draft/"
@@ -587,6 +588,81 @@ class TestDraftDayWindow:
         assert resp.status_code == 400
         assert "23:00" in resp.json()["errors"]["detail"]
 
+    @pytest.mark.parametrize("action_index", [0, 1])
+    @pytest.mark.parametrize("start,end", [("04:30", "05:30"), ("21:30", "22:30")])
+    def test_window_error_explains_failed_draft_and_identifies_block(
+        self, auth_client, user, template, monkeypatch, start, end, action_index
+    ):
+        _set_window(user, datetime.time(5, 0), datetime.time(22, 0))
+        schedule = Schedule.objects.create(user=user, date="2026-05-04", revision=7)
+        before = (schedule.revision, schedule.status, schedule.updated_at)
+        result = _ok_result()
+        action = result.parsed_actions[action_index]
+        action.update(start_time=start, end_time=end)
+        _patch_run(monkeypatch, result)
+
+        resp = _post(auth_client, body=json.dumps({"expected_revision": 7}))
+
+        assert resp.status_code == 400
+        assert resp.json()["errors"] == {
+            "action_index": action_index,
+            "detail": (
+                f'AI scheduled "{action["title"]}" ({start}-{end}) '
+                "outside your day window (05:00-22:00). "
+                "The draft was not saved. Try generating it again."
+            ),
+        }
+        schedule.refresh_from_db()
+        assert (schedule.revision, schedule.status, schedule.updated_at) == before
+        assert not TimeBlock.objects.filter(schedule=schedule).exists()
+        interaction = AIInteraction.objects.get(schedule=schedule)
+        assert interaction.kind == AIInteraction.Kind.DRAFT
+        assert interaction.success is False
+
+    @pytest.mark.parametrize("action_index,response_index", [(None, 0), (-1, -1), (2, 2)])
+    def test_window_error_without_known_command_keeps_planner_detail(
+        self, auth_client, user, template, monkeypatch, action_index, response_index
+    ):
+        _set_window(user, datetime.time(5, 0), datetime.time(22, 0))
+        _patch_run(monkeypatch, _ok_result())
+        detail = "Times must fall within 05:00-22:00."
+
+        def reject_plan(*args, **kwargs):
+            raise CommandError("out_of_window", "time", detail, action_index=action_index)
+
+        monkeypatch.setattr("ai.views.plan_commands", reject_plan)
+
+        resp = _post(auth_client)
+
+        assert resp.status_code == 400
+        assert resp.json()["errors"] == {"action_index": response_index, "detail": detail}
+        schedule = Schedule.objects.get(user=user, date="2026-05-04")
+        assert schedule.revision == 0
+        assert not TimeBlock.objects.filter(schedule=schedule).exists()
+
+    def test_rejected_draft_can_be_regenerated_at_exact_window_boundaries(
+        self, auth_client, user, template, monkeypatch
+    ):
+        _set_window(user, datetime.time(5, 0), datetime.time(22, 0))
+        _patch_run(monkeypatch, self._draft_add("04:30", "05:30"))
+        assert _post(auth_client).status_code == 400
+
+        _patch_run(monkeypatch, self._draft_add("05:00", "22:00"))
+        resp = _post(auth_client, body=json.dumps({"expected_revision": 0}))
+
+        assert resp.status_code == 200, resp.content
+        assert resp.json()["revision"] == 1
+        schedule = Schedule.objects.get(user=user, date="2026-05-04")
+        assert schedule.status == Schedule.Status.DRAFT
+        block = TimeBlock.objects.get(schedule=schedule)
+        assert block.start_time == datetime.time(5, 0)
+        assert block.end_time == datetime.time(22, 0)
+        assert list(
+            AIInteraction.objects.filter(schedule=schedule)
+            .order_by("id")
+            .values_list("success", flat=True)
+        ) == [False, True]
+
     def test_draft_add_accepted_under_widened_window(
         self, auth_client, user, template, monkeypatch
     ):
@@ -611,5 +687,6 @@ class TestDraftDayWindow:
 
         resp = _post(auth_client)
         assert resp.status_code == 400
+        assert resp.json()["errors"]["detail"] == "Blocks would overlap."
         schedule = Schedule.objects.get(user=user, date="2026-05-04")
         assert not TimeBlock.objects.filter(schedule=schedule).exists()
