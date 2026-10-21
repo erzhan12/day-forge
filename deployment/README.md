@@ -220,6 +220,43 @@ does not reverse migrations or undo writes made after deployment. Do not run a
 backward migration on the working database merely to match an older tag. If a
 release needs database restoration, plan for writes made since the backup.
 
+### Rolling back across the durable-chat boundary (PR #252)
+
+Keep `ai_chatrequest` and migration `ai.0007_chatrequest` when rolling back the
+image. Never reverse this migration after request identities have been used.
+A pre-252 image does not implement durable request recovery, even if the table
+is still present. Set `LLM_API_KEY=` for that temporary rollback and recreate the
+web container. Manual schedule writes remain available; AI returns 503. Do not
+retry unresolved AI turns through the old protocol. Restore the configured key
+when returning to a release that supports durable request IDs, then recover the
+original frozen request. The frontend-version guard rejects a new bundle's writes
+against the old release, but a freshly loaded old bundle cannot enforce the new
+chat contract itself.
+
+The isolated rehearsal verifies migration 0006 → 0007, exact HTTP replay, a
+different-body conflict, AI-disabled image rollback, preserved receipts and manual
+writes, and replay after returning to the new image. Build an old image from
+`7a86acac2b83d1ced1485292de8a0b3b222a895d` and a new image from the desired release,
+using the production Dockerfile and each source commit's full `RELEASE_VERSION`.
+Then run:
+
+```sh
+uv run python deployment/scripts/rehearse_chat_requests.py \
+  --source-db db/day_forge.db --output-dir /tmp/day-forge-chat-rehearsal-example \
+  --old-image day-forge-rehearsal:pr252-old \
+  --old-version 7a86acac2b83d1ced1485292de8a0b3b222a895d \
+  --new-image day-forge-rehearsal:pr252-new --new-version <new-image-commit-sha>
+```
+
+The source must be a local SQLite file. The runner backs it up without changing
+it and requires a new private directory under `/tmp`. To create a real pending
+migration from an already-migrated source, it reverses 0007 only in the sandbox
+and only when that copied request table is empty; otherwise it refuses the run.
+The copied database, secrets and logs stay private. Only sanitized `evidence.json`
+belongs in the report. Containers use uvicorn, Redis and an internal network with
+a fixed local AI fixture; no paid provider calls or production connections occur.
+Only the proxy is exposed on `127.0.0.1:8010`. Containers stop after the run.
+
 PR #245 adds no migration. Rollback to PR #244 retains saved writes, but that old
 backend has no frontend-version API guard. Refresh open tabs before continuing
 to write after returning to a pre-245 image. Two releases with the new guard
