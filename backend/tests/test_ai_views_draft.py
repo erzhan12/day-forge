@@ -21,6 +21,7 @@ from ai.views import AI_PARSE_ERROR_DETAIL
 from django.contrib.auth.models import User
 from django.core.cache import cache
 from schedules.models import Schedule, TimeBlock, UserScheduleSettings
+from schedules.planning import CommandError
 from templates_mgr.models import Rule, Template
 
 URL = "/api/ai/schedules/2026-05-04/generate-draft/"
@@ -617,6 +618,27 @@ class TestDraftDayWindow:
         interaction = AIInteraction.objects.get(schedule=schedule)
         assert interaction.kind == AIInteraction.Kind.DRAFT
         assert interaction.success is False
+
+    @pytest.mark.parametrize("action_index", [None, -1, 2])
+    def test_window_error_without_known_command_keeps_planner_detail(
+        self, auth_client, user, template, monkeypatch, action_index
+    ):
+        _set_window(user, datetime.time(5, 0), datetime.time(22, 0))
+        _patch_run(monkeypatch, _ok_result())
+        detail = "Times must fall within 05:00-22:00."
+
+        def reject_plan(*args, **kwargs):
+            raise CommandError("out_of_window", "time", detail, action_index=action_index)
+
+        monkeypatch.setattr("ai.views.plan_commands", reject_plan)
+
+        resp = _post(auth_client)
+
+        assert resp.status_code == 400
+        assert resp.json()["errors"]["detail"] == detail
+        schedule = Schedule.objects.get(user=user, date="2026-05-04")
+        assert schedule.revision == 0
+        assert not TimeBlock.objects.filter(schedule=schedule).exists()
 
     def test_rejected_draft_can_be_regenerated_at_exact_window_boundaries(
         self, auth_client, user, template, monkeypatch
