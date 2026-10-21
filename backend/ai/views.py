@@ -589,7 +589,18 @@ def _apply_draft_sync(
                 window=schedule_settings.window,
             )
         except CommandError as error:
-            return _action_error(error.action_index or 0, error.message)
+            action_index = error.action_index or 0
+            detail = error.message
+            if error.code == "out_of_window":
+                command = commands[action_index]
+                window = schedule_settings.window
+                detail = (
+                    f'AI scheduled "{command.title}" '
+                    f"({command.start_time:%H:%M}-{command.end_time:%H:%M}) "
+                    f"outside your day window ({window.start_str}-{window.end_str}). "
+                    "The draft was not saved. Try generating it again."
+                )
+            return _action_error(action_index, detail)
         _persist_mutation_diff(locked_schedule, ctx.blocks, plan.diff)
 
     try:

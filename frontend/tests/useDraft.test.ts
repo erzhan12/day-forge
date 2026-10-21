@@ -105,6 +105,35 @@ describe("useDraft", () => {
     expect(pushUndo).not.toHaveBeenCalled()
   })
 
+  it("shows the rejected block and window without creating Undo and clears the error on retry", async () => {
+    const owner = makeRevisionState("2026-05-04")
+    const draft = actualUseDraft(owner)
+    const pushUndo = vi.fn()
+    const detail = 'AI scheduled "Deep work" (21:30-22:30) outside your day window (05:00-22:00). The draft was not saved. Try generating it again.'
+    requestJsonMock.mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      errors: { action_index: 1, detail },
+    })
+
+    const rejected = await draft.generateDraft("2026-05-04", pushUndo)
+
+    expect(rejected.ok).toBe(false)
+    expect(draft.lastDraftError.value).toBe(detail)
+    expect(draft.isGeneratingDraft.value).toBe(false)
+    expect(owner.revision.value).toBe(0)
+    expect(owner.blocks.value).toEqual([])
+    expect(pushUndo).not.toHaveBeenCalled()
+    expect(routerReload).not.toHaveBeenCalled()
+
+    requestJsonMock.mockResolvedValueOnce({ ok: true, data: { blocks: [] } })
+    const retry = await draft.generateDraft("2026-05-04", pushUndo)
+
+    expect(retry.ok).toBe(true)
+    expect(draft.lastDraftError.value).toBeNull()
+    expect(draft.isGeneratingDraft.value).toBe(false)
+  })
+
   it("clears draft errors and invalidates an old response when the session ends", async () => {
     const owner = makeRevisionState("2026-05-04")
     const draft = actualUseDraft(owner)

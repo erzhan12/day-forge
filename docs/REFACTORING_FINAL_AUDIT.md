@@ -1,5 +1,7 @@
 # Итоговый аудит Day Forge после R00–R12
 
+Дополнение 21 октября: [сообщение об AI-draft вне рабочего окна](AI_WINDOW_DURATION_FIXES.md) называет отклонённый блок и его время, показывает настроенное окно и объясняет, что draft не сохранён. Проверены атомарный отказ, сохранность revision/status, повторная генерация и передача сообщения во frontend.
+
 Дополнение 21 октября: [production и rollback после #252](POST_PR252_RELEASE_VERIFICATION.md) проверены на релизе `52bc5c9` после dependency fix #254. Точный UUID replay, Undo, Logout и сохранение receipts при откате образа подтверждены. Pending intent остаётся открытым.
 
 Дополнение 20 октября: [durable request_id для AI-chat](DURABLE_AI_CHAT_REQUESTS.md) реализован и проверен с потерей ответа, отдельными процессами и реальными browser/provider calls. Server-owned pending intent остаётся отдельной задачей. Исторические выводы ниже не описывают статус этой новой реализации.

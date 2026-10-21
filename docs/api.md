@@ -434,6 +434,7 @@ until the user makes a real edit.
 | Status | `errors` key | Meaning |
 |--------|--------------|---------|
 | `400` | `date` | Path date is not `YYYY-MM-DD`. |
+| `400` | `action_index`, `detail` | The returned draft failed schedule validation. For an out-of-window block, detail identifies its title, attempted interval and the configured day window, and explains that the draft was not saved. No blocks are applied and revision/status remain unchanged. |
 | `403` | `detail` | CSRF token missing/invalid. |
 | `409` | `detail` | Schedule already has blocks; delete them before regenerating. |
 | `413` | `body` | Request body exceeds 100 KB. |
