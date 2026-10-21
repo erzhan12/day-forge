@@ -272,5 +272,109 @@
     "source_archives_removed": true,
     "rehearsal_images_retained_for_reproduction": true,
     "existing_private_test_credentials_retained": true
+  },
+  "runner_source_revision": "de52c3e89d0d6a65842d1cb1d2d477124f90de01",
+  "post_review_validation": {
+    "initial_ci": "https://github.com/erzhan12/day-forge/actions/runs/39544493789",
+    "initial_review": "https://github.com/erzhan12/day-forge/pull/255#issuecomment-6308115762",
+    "changes": [
+      "Validate the expected fixture key line before substitution",
+      "Document fixture-only network binding",
+      "Save truthful evidence after artifact collection and container cleanup"
+    ],
+    "deferred_review_suggestion": "No redundant table initialization: a sqlite connect exception propagates before the later table check.",
+    "checks": {
+      "command": "make check",
+      "backend_passed": 2142,
+      "backend_skipped": 1,
+      "frontend_passed": 1409,
+      "frontend_files": 104,
+      "ruff": "passed",
+      "typecheck": "passed",
+      "focused_regression_cases": 4
+    },
+    "container_rehearsal": {
+      "success": true,
+      "source_snapshot_sha256": "30dd3f757f8f1abdb64ef8f11b1724f7a20b1675926ac61a97a32595b09490e7",
+      "source_tables": 25,
+      "source_rows": 1198,
+      "old_version": "7a86acac2b83d1ced1485292de8a0b3b222a895d",
+      "new_version": "f282fc03eb0af4b4c9eeb17c70f67bdbc8ee51c8",
+      "provider": "isolated fixture; no paid calls",
+      "events": [
+        {
+          "stage": "start",
+          "image": "day-forge-rehearsal:pr252-old",
+          "version": "7a86acac2b83d1ced1485292de8a0b3b222a895d",
+          "assets": [
+            "/static/assets/app-COtgMyyv.css",
+            "/static/assets/app-B9GREc0o.js"
+          ],
+          "status": 200
+        },
+        {
+          "stage": "start",
+          "image": "day-forge-rehearsal:pr252-new",
+          "version": "f282fc03eb0af4b4c9eeb17c70f67bdbc8ee51c8",
+          "assets": [
+            "/static/assets/app-DhYMgyGp.css",
+            "/static/assets/app-CXja3eKr.js"
+          ],
+          "status": 200
+        },
+        {
+          "stage": "ai_0006_to_0007",
+          "existing_rows_preserved": true
+        },
+        {
+          "stage": "durable_http_replay",
+          "same_response": true,
+          "provider_calls": 1,
+          "different_body_status": 409
+        },
+        {
+          "stage": "start",
+          "image": "day-forge-rehearsal:pr252-old",
+          "version": "7a86acac2b83d1ced1485292de8a0b3b222a895d",
+          "assets": [
+            "/static/assets/app-COtgMyyv.css",
+            "/static/assets/app-B9GREc0o.js"
+          ],
+          "status": 200
+        },
+        {
+          "stage": "image_rollback",
+          "receipt_retained": true,
+          "writes_preserved": true,
+          "stale_chat_denied": true,
+          "old_protocol_ai_disabled_status": 503
+        },
+        {
+          "stage": "start",
+          "image": "day-forge-rehearsal:pr252-new",
+          "version": "f282fc03eb0af4b4c9eeb17c70f67bdbc8ee51c8",
+          "assets": [
+            "/static/assets/app-DhYMgyGp.css",
+            "/static/assets/app-CXja3eKr.js"
+          ],
+          "status": 200
+        },
+        {
+          "stage": "reupgrade_replay",
+          "same_response": true,
+          "newer_writes_preserved": true,
+          "provider_calls": 1
+        }
+      ],
+      "cleanup_completed": true
+    },
+    "source_database_unchanged": true,
+    "production_rerun": false,
+    "source_sha256": {
+      "deployment/scripts/rehearse_chat_requests.py": "44891444826eddb55749c68587a81df4d9838adcfd21148fe98f0b5b44646753",
+      "deployment/scripts/rehearsal_chat_provider.py": "938589d6444fd9b24c37cca7aa98a62ff9f7a9b0659649761b8eefde7b0e9517",
+      "backend/tests/test_chat_rehearsal_cleanup.py": "b36f892990e6e28db61969f70bd33f1e4d971ea56f1e655a9abe01fefb09ba2a"
+    },
+    "private_sandbox_removed": true
   }
 }

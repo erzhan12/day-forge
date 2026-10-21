@@ -180,9 +180,32 @@ def configure_provider(root, image):
     compose["services"]["web"]["depends_on"]["provider"] = {"condition": "service_healthy"}
     compose_path.write_text(json.dumps(compose, indent=2) + "\n")
     path = root / "sandbox.env"
-    text = path.read_text().replace("LLM_API_KEY=\n", "LLM_API_KEY=rehearsal-local-only\n")
+    text = path.read_text()
+    if text.count("LLM_API_KEY=\n") != 1:
+        raise ValueError("sandbox.env missing a single expected LLM_API_KEY= line")
+    text = text.replace("LLM_API_KEY=\n", "LLM_API_KEY=rehearsal-local-only\n")
     path.write_text(text + "LLM_BASE_URL=http://provider:8000/v1\n"
                     "LLM_MODEL=rehearsal-fixture\nLLM_DRAFT_MODEL=rehearsal-fixture\n")
+
+
+def finalize_rehearsal(runner, evidence):
+    """Stop the sandbox and report artifact or cleanup failures as failures."""
+    try:
+        logs = runner.compose("logs", "--no-color", capture=True)
+        (runner.root / "containers.log").write_text(logs)
+    except BaseException:
+        evidence["success"] = False
+        raise
+    finally:
+        evidence["cleanup_completed"] = False
+        try:
+            runner.compose("down")
+            evidence["cleanup_completed"] = True
+        except BaseException:
+            evidence["success"] = False
+            raise
+        finally:
+            (runner.root / "evidence.json").write_text(json.dumps(evidence, indent=2) + "\n")
 
 
 def main():
@@ -227,16 +250,12 @@ def main():
         assert source_before == database_snapshot(source), "Working source database changed"
         success = True
     finally:
-        try:
-            evidence = {"success": success, "source_snapshot_sha256": digest(source_before),
-                        "source_tables": len(source_before),
-                        "source_rows": sum(map(len, source_before.values())),
-                        "old_version": args.old_version, "new_version": args.new_version,
-                        "provider": "isolated fixture; no paid calls", "events": runner.events}
-            (root / "evidence.json").write_text(json.dumps(evidence, indent=2) + "\n")
-            (root / "containers.log").write_text(runner.compose("logs", "--no-color", capture=True))
-        finally:
-            runner.compose("down")
+        evidence = {"success": success, "source_snapshot_sha256": digest(source_before),
+                    "source_tables": len(source_before),
+                    "source_rows": sum(map(len, source_before.values())),
+                    "old_version": args.old_version, "new_version": args.new_version,
+                    "provider": "isolated fixture; no paid calls", "events": runner.events}
+        finalize_rehearsal(runner, evidence)
     print(f"PASS: {root / 'evidence.json'}")
 
 
