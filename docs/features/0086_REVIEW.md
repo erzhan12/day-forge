@@ -33,3 +33,5 @@ Rejected: none.
 ## PR #261 claude-review
 
 Round 1 (b105920): verdict APPROVED, no P0/P1. Applied: P2 hoisted the two deferred `find_slot` imports in `backend/ai/mutation_planner.py` to the module import (no circular import: `free_slot` imports `SlotSuggestion` lazily inside `find_slot`); P3 extended the Settings help text with the day-window-end case. Rejected: P3 "re-sorting inside the retry loop" — `sorted(...)` runs once before the loop; only the padding list is rebuilt per trial, which is intended.
+
+Round 2 (432159a): verdict APPROVED, no P0/P1. Applied: P2 removed the orphaned comment that still explained the function-local `find_slot` import.

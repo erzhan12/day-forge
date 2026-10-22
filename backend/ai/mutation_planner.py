@@ -748,9 +748,6 @@ def plan_mutations(
     non-today schedules), otherwise placement scans forward from this
     grid-aligned time. It never affects explicit-time adds.
     """
-    # Function-local (not module-level) to avoid the free_slot ↔ mutation_planner
-    # circular import (free_slot type-imports SlotSuggestion from here). Deferring
-    # to call time keeps module load acyclic; the import cache makes it free.
 
     window_start, window_end = _day_bounds(day_start, day_end)
     window = ScheduleWindow(window_start, window_end)
