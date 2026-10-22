@@ -504,7 +504,16 @@ def finish(context, schedule, result, build_response, reload_context):
                 after_schedule.revision,
                 fingerprint,
             )
-            row.save()
+            row.save(
+                update_fields=[
+                    "version",
+                    "items",
+                    "accepted_changes",
+                    "question",
+                    "revision",
+                    "context_fingerprint",
+                ]
+            )
         else:
             if active:
                 active.state = "cancelled"

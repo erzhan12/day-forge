@@ -391,7 +391,12 @@ def test_read_classification_discards_actions_but_retains_unresolved_work(
     response, _ = send(auth_client, user, "Is there room?", ref)
     assert response.status_code == 200 and not response.json()["applied"]
     assert not TimeBlock.objects.exists()
-    assert PendingIntent.objects.get().items == [item()]
+    next_ref = response.json()["pending_intent"]
+    assert next_ref is not None
+    assert next_ref["version"] == ref["version"] + 1
+    row = PendingIntent.objects.get()
+    assert row.state == "open"
+    assert row.items == [item()]
 
 
 @pytest.mark.parametrize("duration", [30, 45])

@@ -37,7 +37,7 @@ export function readChatRequest(userId: number | undefined, date: string): Pendi
     if (action !== undefined && !["new", "continue", "cancel"].includes(action)) return null
     if (intentId !== undefined || version !== undefined || action === "continue" || action === "cancel") {
       if (typeof intentId !== "string" || !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(intentId)
-        || !Number.isSafeInteger(version) || version! < 1) return null
+        || typeof version !== "number" || !Number.isSafeInteger(version) || version < 1) return null
     }
     return value
   } catch { return null }
