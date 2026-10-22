@@ -251,7 +251,7 @@ def _build_resolution_ask(
     for outcome in skipped:
         if outcome.reason_code == "no_slot":
             return (
-                f"No free slot with the required gaps fits {title(outcome)} in your "
+                f"No free slot fits {title(outcome)} in your "
                 "day window. Try a shorter duration or a specific free time."
             )
     for outcome in skipped:

@@ -218,14 +218,16 @@ describe("SettingsTemplatesRulesPanel", () => {
 
     // Feature 0067: the Rules subtitle documents that untimed chat block
     // placement is backend-owned (nearest free slot forward, 25-min default,
-    // 10-min gaps), extending — not replacing — the existing "passed to the AI"
-    // prose.
+    // preferred 10-min gaps), alongside the existing "passed to the AI" prose.
     const rulesSubtitle = wrapper.text()
     expect(rulesSubtitle).toContain("passed to the AI")
     expect(rulesSubtitle).toContain("nearest free slot")
     // Pin the concrete backend-placement figures, not just the lead phrase.
     expect(rulesSubtitle).toContain("25-minute")
     expect(rulesSubtitle).toContain("10-minute")
+    expect(rulesSubtitle).toContain("prefers a 10-minute gap")
+    expect(rulesSubtitle).toContain("shrinks to 5 minutes or none")
+    expect(rulesSubtitle).toContain("aligned to 5 minutes")
     expect(rulesSubtitle).toContain("5 minutes")
 
     const buttons = wrapper.findAll("button")

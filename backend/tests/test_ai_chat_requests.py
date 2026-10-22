@@ -87,6 +87,39 @@ class TestChatRequestHTTP:
         assert recovered.json()["request_completed"] is True
         assert recovered.json()["request_id"] == payload["request_id"]
 
+    def test_tight_window_result_replays_after_clock_advances(self, auth_client, user, monkeypatch):
+        schedule = Schedule.objects.create(user=user, date=DAY)
+        TimeBlock.objects.create(schedule=schedule, title="Standup", category="work",
+                                 start_time="10:30", end_time="10:55")
+        calls = []
+
+        async def provider(*args):
+            calls.append(args)
+            return AIChatResult(
+                "{}", [{"type": "add", "title": "Write report", "category": "work"}],
+                "Added Write report.", None,
+            )
+
+        monkeypatch.setattr("ai.views.run_chat", provider)
+        now = datetime.datetime.combine(datetime.date.fromisoformat(DAY), datetime.time(10, 3))
+        monkeypatch.setattr("ai.views.timezone.localtime", lambda *a, **k: now)
+        payload = body(messages=[{"role": "user", "content": "add Write report"}])
+        first = post(auth_client, payload)
+        assert first.status_code == 200, first.content
+        assert first.json()["outcomes"][0]["status"] == "applied"
+        report = schedule.time_blocks.get(title="Write report")
+        assert (report.start_time, report.end_time) == (datetime.time(10, 5), datetime.time(10, 30))
+        schedule.refresh_from_db()
+        assert schedule.revision == 1
+        now = datetime.datetime.combine(datetime.date.fromisoformat(DAY), datetime.time(11))
+        replay = post(auth_client, payload)
+        assert replay.status_code == first.status_code
+        assert replay.content == first.content
+        assert len(calls) == 1
+        assert schedule.time_blocks.filter(title="Write report").count() == 1
+        schedule.refresh_from_db()
+        assert schedule.revision == 1
+
     @pytest.mark.parametrize("ask", [None, "Which slot?"])
     def test_empty_outcomes_are_preserved_in_audit_and_receipt(
         self, auth_client, monkeypatch, ask

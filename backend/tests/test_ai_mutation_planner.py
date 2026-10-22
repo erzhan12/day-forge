@@ -965,7 +965,8 @@ def test_nested_updates_for_multiple_ids_form_one_diff():
 # ``plan_mutations(..., earliest_start=...)`` places a titled/categorised add
 # with no start/end at the nearest free 5-min-grid slot forward from
 # ``earliest_start`` (today) or the window start (other dates), 25-min default
-# duration, 10-min gaps around neighbours. Failure → ``no_slot`` skip.
+# duration, preferred 10-min gaps, and smaller gaps only in the initial window
+# (feature 0086). No initial-window fit or full-gap fallback → ``no_slot`` skip.
 # ---------------------------------------------------------------------------
 
 
@@ -1280,7 +1281,7 @@ class TestAutoPlacement:
         assert _create_intervals(result) == [("09:35", "10:00")]
 
     def test_auto_inserted_after_overlap_fixpoint_union_is_non_overlapping(self):
-        # Defensive: find_slot is the sole overlap guard for autos. Assert
+        # Auto placement also retains interval and final-state validation. Assert
         # non-overlap over the union of unchanged snapshot blocks and the diff.
         snap = _schedule([_block(1, "09:00", "09:30"), _block(2, "11:00", "11:30")])
         actions = [_auto_add("A"), _auto_add("B")]
@@ -1306,6 +1307,140 @@ class TestAutoPlacement:
         )
         assert isinstance(result, MutationPlan)
         assert _create_intervals(result) == [("06:00", "06:25")]
+
+
+class TestAutoPlacementGapPreference:
+    @staticmethod
+    def _plan(blocks, expected, *, base="10:05", day_start=DAY_START, day_end=DAY_END,
+              actions=None, date="2026-04-18", snapshot=None):
+        snap = snapshot if snapshot is not None else _schedule(blocks, date=date)
+        actions = actions if actions is not None else [_auto_add("Write report")]
+        result = plan_mutations(
+            snap, actions, day_start=day_start, day_end=day_end,
+            earliest_start=_t(base) if base is not None else None,
+        )
+        assert isinstance(result, MutationPlan)
+        assert _create_intervals(result) == expected
+        for create, action in zip(result.diff.creates, actions, strict=True):
+            assert create.title == action["title"]
+            assert create.action_index == actions.index(action)
+            start = create.start_time.hour * 60 + create.start_time.minute
+            end = create.end_time.hour * 60 + create.end_time.minute
+            default_duration = mutation_planner.DEFAULT_AUTO_DURATION_MINUTES
+            assert end - start == action.get("duration_minutes", default_duration)
+            assert start % mutation_planner.GRID_MINUTES == 0
+            assert end % mutation_planner.GRID_MINUTES == 0
+        _assert_non_overlapping(_union_intervals(snap, result))
+        return result
+
+    def test_full_gap_between_neighbours_is_unchanged(self):
+        self._plan([_block(1, "09:30", "10:00"), _block(2, "10:45", "11:00")],
+                   [("10:10", "10:35")])
+
+    def test_tight_window_uses_five_minute_gap_on_both_sides(self):
+        self._plan([_block(1, "09:30", "10:00"), _block(2, "10:35", "10:55")],
+                   [("10:05", "10:30")])
+
+    @pytest.mark.parametrize("preceding", [False, True])
+    def test_issue_260_zero_gap_before_standup(self, preceding):
+        blocks = [_block(1, "10:30", "10:55", title="Standup")]
+        if preceding:
+            blocks.append(_block(2, "09:40", "10:05"))
+        self._plan(blocks, [("10:05", "10:30")])
+
+    def test_reduced_gap_leaves_spare_grid_minutes_before_block(self):
+        self._plan([_block(1, "09:30", "10:00"), _block(2, "10:40", "10:55")],
+                   [("10:10", "10:35")], base="10:00")
+
+    def test_short_initial_window_keeps_full_gap_later(self):
+        self._plan([_block(1, "10:25", "10:55")], [("11:05", "11:30")])
+
+    @pytest.mark.parametrize("date", ["2026-04-17", "2026-04-19"])
+    def test_non_today_tight_window_uses_day_start(self, date):
+        self._plan([_block(1, "08:25", "08:55")], [("08:00", "08:25")],
+                   base=None, day_start="08:00", day_end="18:00", date=date)
+
+    def test_two_default_adds_consume_tight_window_then_skip_forward(self):
+        self._plan([_block(1, "10:30", "10:55", title="Standup")],
+                   [("10:05", "10:30"), ("11:05", "11:30")],
+                   actions=[_auto_add("First"), _auto_add("Second")])
+
+    def test_second_auto_add_uses_first_raw_interval(self):
+        self._plan([_block(1, "09:30", "10:00")],
+                   [("10:05", "10:35"), ("10:00", "10:05")],
+                   base="10:00", day_start="09:00", day_end="10:35",
+                   actions=[_auto_add("First", duration_minutes=30),
+                            _auto_add("Second", duration_minutes=5)])
+
+    @pytest.mark.parametrize("previous_end", ["10:00", "10:05"])
+    def test_tight_window_at_day_end_relaxes_neighbour_gap(self, previous_end):
+        self._plan([_block(1, "09:30", previous_end)], [("10:05", "10:30")],
+                   day_end="10:30")
+
+    def test_reduced_gap_rejects_level_when_left_padding_blocks_right_aligned_start(self):
+        self._plan([_block(1, "09:35", "10:05"),
+                    _block(2, "10:35", "10:55", title="Standup")],
+                   [("10:10", "10:35")])
+
+    def test_reduced_gap_respects_off_grid_neighbour(self):
+        self._plan([_block(1, "10:34", "10:55")], [("10:05", "10:30")])
+
+    def test_gap_retries_derive_from_default(self, monkeypatch):
+        monkeypatch.setattr(mutation_planner, "AUTO_PLACEMENT_GAP_MINUTES", 20)
+        self._plan([_block(1, "09:30", "10:00"), _block(2, "10:55", "11:20")],
+                   [("10:15", "10:40")], base="10:00")
+
+    def test_zero_default_gap_has_no_retry_levels_and_keeps_fallback(self, monkeypatch):
+        # Reachable only via a configured gap (#258): with a 0-minute default the
+        # retry range is empty, so a fallback outside the initial window stands.
+        monkeypatch.setattr(mutation_planner, "AUTO_PLACEMENT_GAP_MINUTES", 0)
+        self._plan([_block(1, "10:25", "10:55")], [("10:55", "11:20")])
+
+    def test_non_grid_default_gap_degrades_through_grid_multiples(self, monkeypatch):
+        # 7 → trial gaps 5, 0 (grid multiples below the default); padding of
+        # 7 minutes stays in minute space, so off-grid pads are fine.
+        monkeypatch.setattr(mutation_planner, "AUTO_PLACEMENT_GAP_MINUTES", 7)
+        self._plan([_block(1, "09:35", "10:05"),
+                    _block(2, "10:35", "10:55", title="Standup")],
+                   [("10:10", "10:35")])
+
+    def test_block_covering_base_keeps_full_gap_fallback(self):
+        self._plan([_block(1, "10:00", "10:20"), _block(2, "10:50", "11:20")],
+                   [("11:30", "11:55")])
+
+    def test_retry_exhaustion_without_full_gap_fallback_is_no_slot(self):
+        snap = _schedule([_block(1, "10:25", "10:55"), _block(2, "11:25", "23:00")])
+        result = plan_mutations(snap, [_auto_add("Write report")],
+                                day_start=DAY_START, day_end=DAY_END,
+                                earliest_start=_t("10:05"))
+        assert isinstance(result, MutationPlan)
+        assert result.diff.creates == ()
+        outcome = result.outcomes[0]
+        assert outcome.task_id is None
+        assert outcome.status == "skipped"
+        assert outcome.reason_code == "no_slot"
+        assert outcome.skipped_fields == ("title", "category", "start_time", "end_time")
+        assert outcome.conflicting_task_ids == ()
+        assert outcome.suggestion is None
+        assert outcome.attempted_direction is None
+        _assert_non_overlapping(_union_intervals(snap, result))
+
+    def test_tight_window_plan_is_deterministic_for_snapshot_order(self):
+        blocks = [_block(1, "11:30", "12:00"), _block(2, "10:35", "10:55"),
+                  _block(3, "09:30", "10:00")]
+        by_id = _schedule(blocks)
+        chronological = ScheduleSnapshot(id=by_id.id, date=by_id.date,
+                                         blocks=tuple(reversed(blocks)))
+        assert by_id.blocks != chronological.blocks
+        first = self._plan([], [("10:05", "10:30")], snapshot=by_id)
+        second = self._plan([], [("10:05", "10:30")], snapshot=chronological)
+        assert first.diff == second.diff
+        assert first.outcomes == second.outcomes
+        fingerprints = [compute_apply_context_fingerprint(
+            schedule_id=snap.id, schedule_date=snap.date.isoformat(),
+            blocks=snap.blocks, rules=[],
+        ) for snap in (by_id, chronological)]
+        assert fingerprints[0] == fingerprints[1]
 
 
 class TestDurationResize:

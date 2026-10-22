@@ -173,20 +173,37 @@ per-action result is reported via `outcomes`.
 
 `blocks` is the full schedule after apply.
 
-**Untimed (auto-placed) adds — chat only (feature 0067).** A chat `add` may omit
-**both** `start_time` and `end_time`; the backend then places the block
-deterministically at the nearest free 5-minute-grid slot forward from the current
-local time (for a today schedule) or the schedule-window start (for any other
-date), using a **25-minute default duration** and a **10-minute gap** before and
-after neighbouring blocks. An optional `duration_minutes` (a positive multiple of
-5) overrides the default length; supplying only one of the two time fields is
-rejected. If no forward slot with the required gaps fits inside the day window,
-the create is **skipped** with `reason_code="no_slot"` (see the outcomes table)
-and the response carries a server-owned `ask` suggesting a shorter duration or a
-specific free time. Explicit adds (both times supplied) are unchanged and are
-never auto-relocated. **The `generate-draft` endpoint is unaffected: draft `add`s
-still require explicit HH:MM start/end for every block and are never
-auto-placed.**
+**Untimed (auto-placed) adds, chat only (features 0067, 0086).** A chat `add`
+may omit **both** `start_time` and `end_time`; the backend then places the block
+on the 5-minute grid with a **25-minute default duration**. The forward floor
+is unchanged: current local time rounded up to the grid for today, or the
+day-window start for another date. An optional `duration_minutes` (a positive
+multiple of 5) overrides the default length; supplying only one time field is
+rejected.
+
+The backend searches forward with a preferred **10-minute gap** on both sides
+of neighbouring blocks. If that result fits in the initial raw free window,
+it keeps the result unchanged. Otherwise it retries only that initial window
+with symmetric **5-minute, then zero-minute gaps**. Each retry checks one
+right-aligned placement: the latest grid-aligned end that is no later than the
+next block's start minus the trial gap (so with a zero gap the block may touch
+the next block), minus the full duration. Placement never starts before the
+forward floor. An off-grid neighbour is respected by rounding the candidate end down.
+If no block follows, the window ends at the day-window end, with no gap required
+from that boundary. A block covering or starting at the floor makes the initial
+window empty. Each accepted add contributes its raw interval to the next add's
+occupancy.
+
+For example, at **10:03**, with `Standup` at **10:30–10:55**, an untimed
+`Write report` uses **10:05–10:30**, touching `Standup` with zero gap. If no
+retry fits the initial window, the original full-gap forward-search result is
+used; later windows retain the full 10-minute gap. If neither the initial-window
+retries nor the full-gap fallback fit inside the day window, the create is
+**skipped** with `reason_code="no_slot"` (see the outcomes table), and the response
+carries a server-owned `ask` suggesting a shorter duration or a specific free
+time. Explicit adds (both times supplied) are unchanged and are never
+auto-relocated. **The `generate-draft` endpoint is unaffected: draft `add`s still
+require explicit HH:MM start/end for every block and are never auto-placed.**
 
 **Duration resize — chat only (feature 0068).** A `resize` action must use
 exactly one mode: boundary mode (`start_time` and/or `end_time`), absolute
@@ -215,7 +232,7 @@ Each `outcomes[]` entry:
 | `status` | string | `"applied"` (all requested fields landed), `"partial"` (some fields landed, some skipped), or `"skipped"` (nothing landed for this action). |
 | `applied_fields` | array | Field names that persisted (e.g. `title`, `category`, `start_time`, `end_time`). For `remove` actions this is always `[]` — the action's effect is the deletion of the block itself, not a field change. |
 | `skipped_fields` | array | Field names rejected by a policy check. For `remove` actions this is always `[]` (see `applied_fields`). |
-| `reason_code` | string \| null | Why the skip happened (e.g. `out_of_window`, `unresolved_conflict`, `no_slot`, `replay_guard`). `null` when nothing was skipped. `interval` also covers a computed duration below the 5-minute floor; duration ends beyond the day window are `out_of_window` and are rejected rather than truncated. `no_slot` (feature 0067) means an **untimed** chat `add` found no free forward slot with the required gaps in the day window; `task_id` is `null` and `suggestion`/`attempted_direction`/`conflicting_task_ids` are empty. For a `no_slot` skip, `skipped_fields` lists the fields that would have been written had a slot been found (`["title", "category", "start_time", "end_time"]`). `replay_guard` (feature 0083) means the whole turn's actions were skipped because the server-side replay guard flagged an `add` as replayed from an earlier turn — see the replay-guard success variant above. |
+| `reason_code` | string \| null | Why the skip happened (e.g. `out_of_window`, `unresolved_conflict`, `no_slot`, `replay_guard`). `null` when nothing was skipped. `interval` also covers a computed duration below the 5-minute floor; duration ends beyond the day window are `out_of_window` and are rejected rather than truncated. `no_slot` (features 0067, 0086) means an **untimed** chat `add` found no fit after the initial-window gap retries and the full-gap forward fallback in the day window; `task_id` is `null` and `suggestion`/`attempted_direction`/`conflicting_task_ids` are empty. For a `no_slot` skip, `skipped_fields` lists the fields that would have been written had a slot been found (`["title", "category", "start_time", "end_time"]`). `replay_guard` (feature 0083) means the whole turn's actions were skipped because the server-side replay guard flagged an `add` as replayed from an earlier turn — see the replay-guard success variant above. |
 | `conflicting_task_ids` | array | Block ids that the skipped time work collided with. |
 | `attempted_direction` | string \| null | `"earlier"` / `"later"` when a directional free-slot search was attempted and found nothing, else `null`. |
 | `suggestion` | object \| null | `null`, or `{ "start_time", "end_time", "direction" }` (a concrete free slot to offer), or `{ "direction_required": true }` (the model must ask the user which direction to search). |
