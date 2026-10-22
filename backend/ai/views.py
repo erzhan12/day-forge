@@ -1109,7 +1109,7 @@ async def ai_chat(request, date):
             return pending_intents.finish(
                 intent_context, schedule, result, build_response, reload_context
             )
-        except (ValueError, TypeError) as exc:
+        except pending_intents.IntentScopeError as exc:
             raise MutationRejected(
                 JsonResponse(
                     {

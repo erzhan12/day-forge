@@ -6,6 +6,7 @@ import uuid
 
 import pytest
 from ai.models import ChatRequest, PendingIntent
+from ai.pending_intents import IntentScopeError
 from ai.service import AIChatResult
 from django.contrib.auth.models import User
 from django.core.cache import cache
@@ -288,7 +289,7 @@ def test_scope_error_after_apply_rolls_back_schedule_and_stores_receipt(
     provider(monkeypatch, AIChatResult("{}", [add()], "Added.", None, intent_decision="continue"))
     monkeypatch.setattr(
         "ai.pending_intents.validate_items",
-        lambda *args: (_ for _ in ()).throw(ValueError("late failure")),
+        lambda *args: (_ for _ in ()).throw(IntentScopeError("late failure")),
     )
     response, body = send(auth_client, user, "Gym at 14:00", ref)
     assert response.status_code == 409
@@ -296,6 +297,31 @@ def test_scope_error_after_apply_rolls_back_schedule_and_stores_receipt(
     assert PendingIntent.objects.get().version == 1
     receipt = ChatRequest.objects.get(request_id=body["request_id"])
     assert receipt.response_status == 409 and receipt.completed_at is not None
+
+
+@pytest.mark.parametrize("error_type", [ValueError, TypeError])
+def test_executor_programming_error_propagates_and_rolls_back(
+    auth_client, user, monkeypatch, error_type
+):
+    from ai import views
+
+    ref, _, _ = ask(auth_client, user, monkeypatch)
+    provider(monkeypatch, AIChatResult("{}", [add()], "Added.", None, intent_decision="continue"))
+    original = views._finish_chat_sync
+
+    def fail_after_apply(*args, **kwargs):
+        response = original(*args, **kwargs)
+        assert response.status_code == 200
+        raise error_type("executor programming error")
+
+    monkeypatch.setattr(views, "_finish_chat_sync", fail_after_apply)
+    with pytest.raises(error_type, match="executor programming error"):
+        send(auth_client, user, "14:00", ref)
+    assert not TimeBlock.objects.exists()
+    assert Schedule.objects.get().revision == 0
+    row = PendingIntent.objects.get()
+    assert row.state == "open" and row.version == ref["version"]
+    assert ChatRequest.objects.filter(completed_at__isnull=True).count() == 1
 
 
 @pytest.mark.parametrize(

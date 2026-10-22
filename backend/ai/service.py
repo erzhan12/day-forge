@@ -51,6 +51,7 @@ from schedules.window import DEFAULT_WINDOW
 
 from ai.category_resolution import UnresolvedCategory, normalize_action_categories
 from ai.implicit_add import apply_implicit_add, has_explicit_add_command
+from ai.pending_intents import validate_items
 from ai.prompts import (
     _DEFAULT_CATEGORIES,
     build_chat_user_message,
@@ -527,8 +528,6 @@ async def run_chat(messages, schedule, blocks, rules, now, categories=None) -> A
         parsed["ask"] = None
     pending_actions = parsed.get("pending_actions")
     if pending_actions is not None:
-        from ai.pending_intents import validate_items
-
         try:
             pending_actions = validate_items(
                 pending_actions,

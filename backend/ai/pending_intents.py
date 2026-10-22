@@ -29,6 +29,10 @@ TIME_FIELDS = {
 }
 
 
+class IntentScopeError(ValueError):
+    """A pending proposal violates its shape or continuation permission."""
+
+
 @dataclass(frozen=True)
 class IntentReference:
     id: uuid.UUID | None = None
@@ -147,7 +151,7 @@ def canonical_action(action):
 def validate_items(items, task_ids, categories):
     """Bound a proposal before storing it; it never grants new target ownership."""
     if not isinstance(items, list) or len(items) > MAX_ACTIONS_PER_COMMAND:
-        raise ValueError("pending_actions must be a bounded array.")
+        raise IntentScopeError("pending_actions must be a bounded array.")
     result = []
     for item in items:
         if not isinstance(item, dict) or set(item) - {
@@ -157,12 +161,12 @@ def validate_items(items, task_ids, categories):
             "known_fields",
             "missing_fields",
         }:
-            raise ValueError("Invalid pending action shape.")
+            raise IntentScopeError("Invalid pending action shape.")
         kind = item.get("type")
         if isinstance(kind, str) and kind in {"move", "resize"}:
             kind = "update"
         if not isinstance(kind, str) or kind not in {"add", "update", "remove"}:
-            raise ValueError("Invalid pending action type.")
+            raise IntentScopeError("Invalid pending action type.")
         target = item.get("task_id")
         targets = item.get("target_ids", [target] if target is not None else [])
         if (
@@ -170,13 +174,13 @@ def validate_items(items, task_ids, categories):
             or len(targets) > MAX_ACTIONS_PER_COMMAND
             or any(type(value) is not int or value not in task_ids for value in targets)
         ):
-            raise ValueError("Pending targets must belong to this schedule.")
+            raise IntentScopeError("Pending targets must belong to this schedule.")
         if target is not None and (type(target) is not int or target not in targets):
-            raise ValueError("Invalid pending target.")
+            raise IntentScopeError("Invalid pending target.")
         if kind == "add" and (target is not None or targets):
-            raise ValueError("An add cannot select existing targets.")
+            raise IntentScopeError("An add cannot select existing targets.")
         if kind != "add" and not targets:
-            raise ValueError("A pending edit needs bounded target choices.")
+            raise IntentScopeError("A pending edit needs bounded target choices.")
         known, missing = item.get("known_fields", {}), item.get("missing_fields")
         allowed = FIELDS | {"task_id", "confirmation"}
         if (
@@ -187,31 +191,31 @@ def validate_items(items, task_ids, categories):
             or any(not isinstance(key, str) or key not in allowed for key in missing)
             or set(known) & set(missing)
         ):
-            raise ValueError("Invalid pending fields.")
+            raise IntentScopeError("Invalid pending fields.")
         for key, value in known.items():
             if key == "title" and (
                 not isinstance(value, str) or not value.strip() or len(value) > MAX_TITLE_LEN
             ):
-                raise ValueError("Invalid pending title.")
+                raise IntentScopeError("Invalid pending title.")
             if key == "category" and (not isinstance(value, str) or value not in categories):
-                raise ValueError("Invalid pending category.")
+                raise IntentScopeError("Invalid pending category.")
             if key in {"start_time", "end_time"} and not _is_hhmm(value):
-                raise ValueError("Invalid pending time.")
+                raise IntentScopeError("Invalid pending time.")
             if key in {"duration_minutes", "duration_delta_minutes"} and (
                 type(value) is not int
                 or value == 0
                 or value % 5
                 or (key == "duration_minutes" and value < 0)
             ):
-                raise ValueError("Invalid pending duration.")
+                raise IntentScopeError("Invalid pending duration.")
             if key == "placement_direction" and (
                 not isinstance(value, str) or value not in {"exact", "earlier", "later"}
             ):
-                raise ValueError("Invalid pending direction.")
+                raise IntentScopeError("Invalid pending direction.")
         if kind == "add" and "title" not in known and "title" not in missing:
-            raise ValueError("A pending add needs a title or an explicit missing title.")
+            raise IntentScopeError("A pending add needs a title or an explicit missing title.")
         if "task_id" in missing and (kind == "add" or target is not None):
-            raise ValueError("Only an unselected existing target can be missing.")
+            raise IntentScopeError("Only an unselected existing target can be missing.")
         result.append(
             {
                 "type": kind,
@@ -320,7 +324,7 @@ def refine_question(item, originals, *, derived=False):
             "known_fields": {**known, **item["known_fields"]},
             "missing_fields": sorted(missing & set(original["missing_fields"])),
         }
-    raise ValueError("Pending question expanded its scope.")
+    raise IntentScopeError("Pending question expanded its scope.")
 
 
 def provider_context(context):
@@ -399,7 +403,7 @@ def finish(context, schedule, result, build_response, reload_context):
     decision = result.intent_decision
     continuing = context.reference.id is not None and context.reference.action == "continue"
     if continuing and decision not in {"continue", "cancel", "read"}:
-        raise ValueError("A continuation needs an explicit intent decision.")
+        raise IntentScopeError("A continuation needs an explicit intent decision.")
     if context.reference.action == "cancel" or decision == "cancel":
         # Check schedule/policy freshness through the existing no-op executor.
         response = build_response(cancel=True)
@@ -504,6 +508,7 @@ def finish(context, schedule, result, build_response, reload_context):
                 after_schedule.revision,
                 fingerprint,
             )
+            # Keep the original expiry; follow-ups never extend the 15-minute window.
             row.save(
                 update_fields=[
                     "version",
