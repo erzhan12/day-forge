@@ -1,0 +1,829 @@
+{
+  "release": "2d607b70abbd10a4039a444f5b6031212f0b9ab7",
+  "site": "https://dayforge.habitreward.org",
+  "deploy": {
+    "url": "https://github.com/erzhan12/day-forge/actions/runs/39728917859",
+    "conclusion": "success"
+  },
+  "date": "2026-10-22",
+  "timezone": "Asia/Almaty",
+  "uiWindowUtc": {
+    "firstMeasurement": "2026-10-22T06:01:49.056Z",
+    "lastMeasurement": "2026-10-22T06:06:25.103Z"
+  },
+  "publicRelease": {
+    "loginStatus": 200,
+    "version": "2d607b70abbd10a4039a444f5b6031212f0b9ab7",
+    "assets": [
+      {
+        "path": "/static/assets/app-BIArPliO.css",
+        "status": 200,
+        "sha256": "2a558214d7e0fc47a8d2b3a630003b22c8cdd739277af13449514c149703887b",
+        "cacheControl": "max-age=315360000, public, immutable",
+        "wrapRulePresent": true
+      },
+      {
+        "path": "/static/assets/app-exCm7APL.js",
+        "status": 200,
+        "sha256": "513aca2660c267ce9ab6d9ade36cdec2131cf805aad9aa7067dda234fa4e9650",
+        "cacheControl": "max-age=315360000, public, immutable",
+        "wrapRulePresent": null
+      }
+    ],
+    "draftErrorRules": [
+      ".draft-error[data-v-b3efb8fc]{max-width:640px;overflow-wrap:anywhere;margin:0 auto;padding:8px 16px;background:var(--danger-surface);color:var(--danger-text);border-radius:8px;font-size:13px}",
+      ".draft-error[data-v-b3efb8fc]{max-width:880px}"
+    ]
+  },
+  "account": {
+    "dedicatedTestUser": true,
+    "userId": 2,
+    "credentialsExcluded": true
+  },
+  "baseline": {
+    "snapshots": [
+      {
+        "date": "2026-10-26",
+        "version": "2d607b70abbd10a4039a444f5b6031212f0b9ab7",
+        "schedule": {
+          "id": 124,
+          "revision": 0,
+          "status": "draft"
+        },
+        "blocks": [],
+        "window": {
+          "start": "06:00",
+          "end": "23:00",
+          "time_zone": "UTC"
+        },
+        "hasTemplate": false,
+        "autoDraftPending": false
+      },
+      {
+        "date": "2026-10-27",
+        "version": "2d607b70abbd10a4039a444f5b6031212f0b9ab7",
+        "schedule": {
+          "id": 125,
+          "revision": 0,
+          "status": "draft"
+        },
+        "blocks": [],
+        "window": {
+          "start": "06:00",
+          "end": "23:00",
+          "time_zone": "UTC"
+        },
+        "hasTemplate": false,
+        "autoDraftPending": false
+      }
+    ],
+    "templatesBefore": {
+      "templates": []
+    },
+    "rulesBefore": {
+      "rules": []
+    },
+    "createdTemplate": {
+      "id": 2,
+      "name": "PR 257 temporary smoke",
+      "type": "weekday",
+      "blocks": [
+        {
+          "title": "Release 257 draft",
+          "start_time": "10:00",
+          "end_time": "10:30",
+          "category": "work"
+        }
+      ]
+    }
+  },
+  "snapshots": {
+    "final-desktop-draft": {
+      "date": "2026-10-28",
+      "version": "2d607b70abbd10a4039a444f5b6031212f0b9ab7",
+      "schedule": {
+        "id": 126,
+        "revision": 2,
+        "status": "draft"
+      },
+      "blocks": [],
+      "window": {
+        "start": "06:00",
+        "end": "23:00",
+        "time_zone": "UTC"
+      },
+      "hasTemplate": false,
+      "autoDraftPending": false
+    },
+    "final-mobile": {
+      "date": "2026-10-27",
+      "version": "2d607b70abbd10a4039a444f5b6031212f0b9ab7",
+      "schedule": {
+        "id": 125,
+        "revision": 4,
+        "status": "active"
+      },
+      "blocks": [],
+      "window": {
+        "start": "06:00",
+        "end": "23:00",
+        "time_zone": "UTC"
+      },
+      "hasTemplate": false,
+      "autoDraftPending": false
+    },
+    "mobile-chat-applied": {
+      "date": "2026-10-27",
+      "version": "2d607b70abbd10a4039a444f5b6031212f0b9ab7",
+      "schedule": {
+        "id": 125,
+        "revision": 3,
+        "status": "active"
+      },
+      "blocks": [
+        {
+          "id": 1094,
+          "title": "Release 257 mobile chat",
+          "start_time": "15:00",
+          "end_time": "15:30",
+          "category": "work",
+          "is_completed": false
+        }
+      ],
+      "window": {
+        "start": "06:00",
+        "end": "23:00",
+        "time_zone": "UTC"
+      },
+      "hasTemplate": true,
+      "autoDraftPending": false
+    },
+    "desktop-chat-applied": {
+      "date": "2026-10-26",
+      "version": "2d607b70abbd10a4039a444f5b6031212f0b9ab7",
+      "schedule": {
+        "id": 124,
+        "revision": 1,
+        "status": "active"
+      },
+      "blocks": [
+        {
+          "id": 1091,
+          "title": "Release 257 desktop chat",
+          "start_time": "14:00",
+          "end_time": "14:30",
+          "category": "work",
+          "is_completed": false
+        }
+      ],
+      "window": {
+        "start": "06:00",
+        "end": "23:00",
+        "time_zone": "UTC"
+      },
+      "hasTemplate": true,
+      "autoDraftPending": false
+    },
+    "mobile-draft-applied": {
+      "date": "2026-10-27",
+      "version": "2d607b70abbd10a4039a444f5b6031212f0b9ab7",
+      "schedule": {
+        "id": 125,
+        "revision": 1,
+        "status": "draft"
+      },
+      "blocks": [
+        {
+          "id": 1093,
+          "title": "Release 257 draft",
+          "start_time": "10:00",
+          "end_time": "10:30",
+          "category": "work",
+          "is_completed": false
+        }
+      ],
+      "window": {
+        "start": "06:00",
+        "end": "23:00",
+        "time_zone": "UTC"
+      },
+      "hasTemplate": true,
+      "autoDraftPending": false
+    },
+    "desktop-draft-before": {
+      "date": "2026-10-28",
+      "version": "2d607b70abbd10a4039a444f5b6031212f0b9ab7",
+      "schedule": {
+        "id": 126,
+        "revision": 0,
+        "status": "draft"
+      },
+      "blocks": [],
+      "window": {
+        "start": "06:00",
+        "end": "23:00",
+        "time_zone": "UTC"
+      },
+      "hasTemplate": true,
+      "autoDraftPending": true
+    },
+    "desktop-chat-undone": {
+      "date": "2026-10-26",
+      "version": "2d607b70abbd10a4039a444f5b6031212f0b9ab7",
+      "schedule": {
+        "id": 124,
+        "revision": 2,
+        "status": "active"
+      },
+      "blocks": [],
+      "window": {
+        "start": "06:00",
+        "end": "23:00",
+        "time_zone": "UTC"
+      },
+      "hasTemplate": true,
+      "autoDraftPending": false
+    },
+    "desktop-draft-applied": {
+      "date": "2026-10-28",
+      "version": "2d607b70abbd10a4039a444f5b6031212f0b9ab7",
+      "schedule": {
+        "id": 126,
+        "revision": 1,
+        "status": "draft"
+      },
+      "blocks": [
+        {
+          "id": 1092,
+          "title": "Release 257 draft",
+          "start_time": "10:00",
+          "end_time": "10:30",
+          "category": "work",
+          "is_completed": false
+        }
+      ],
+      "window": {
+        "start": "06:00",
+        "end": "23:00",
+        "time_zone": "UTC"
+      },
+      "hasTemplate": true,
+      "autoDraftPending": false
+    },
+    "final-desktop-chat": {
+      "date": "2026-10-26",
+      "version": "2d607b70abbd10a4039a444f5b6031212f0b9ab7",
+      "schedule": {
+        "id": 124,
+        "revision": 2,
+        "status": "active"
+      },
+      "blocks": [],
+      "window": {
+        "start": "06:00",
+        "end": "23:00",
+        "time_zone": "UTC"
+      },
+      "hasTemplate": false,
+      "autoDraftPending": false
+    },
+    "mobile-draft-undone": {
+      "date": "2026-10-27",
+      "version": "2d607b70abbd10a4039a444f5b6031212f0b9ab7",
+      "schedule": {
+        "id": 125,
+        "revision": 2,
+        "status": "draft"
+      },
+      "blocks": [],
+      "window": {
+        "start": "06:00",
+        "end": "23:00",
+        "time_zone": "UTC"
+      },
+      "hasTemplate": true,
+      "autoDraftPending": false
+    },
+    "mobile-chat-undone": {
+      "date": "2026-10-27",
+      "version": "2d607b70abbd10a4039a444f5b6031212f0b9ab7",
+      "schedule": {
+        "id": 125,
+        "revision": 4,
+        "status": "active"
+      },
+      "blocks": [],
+      "window": {
+        "start": "06:00",
+        "end": "23:00",
+        "time_zone": "UTC"
+      },
+      "hasTemplate": true,
+      "autoDraftPending": false
+    },
+    "desktop-draft-undone": {
+      "date": "2026-10-28",
+      "version": "2d607b70abbd10a4039a444f5b6031212f0b9ab7",
+      "schedule": {
+        "id": 126,
+        "revision": 2,
+        "status": "draft"
+      },
+      "blocks": [],
+      "window": {
+        "start": "06:00",
+        "end": "23:00",
+        "time_zone": "UTC"
+      },
+      "hasTemplate": true,
+      "autoDraftPending": false
+    }
+  },
+  "ui": {
+    "observations": [
+      {
+        "label": "desktop-before-chat",
+        "at": "2026-10-22T06:01:49.056Z",
+        "documentWidth": 1425,
+        "logout": {
+          "centerHitsButton": false,
+          "rect": {
+            "height": 28,
+            "width": 65.375,
+            "x": 761.125,
+            "y": 2297.5
+          },
+          "centerWithinViewport": false
+        },
+        "undoDisabled": true,
+        "version": "2d607b70abbd10a4039a444f5b6031212f0b9ab7",
+        "viewport": {
+          "height": 900,
+          "width": 1440
+        }
+      },
+      {
+        "label": "desktop-chat-applied",
+        "at": "2026-10-22T06:02:00.418Z",
+        "documentWidth": 1440,
+        "logout": {
+          "centerHitsButton": true,
+          "rect": {
+            "height": 28,
+            "width": 65.375,
+            "x": 768.625,
+            "y": 389.5
+          },
+          "centerWithinViewport": true
+        },
+        "undoDisabled": false,
+        "version": "2d607b70abbd10a4039a444f5b6031212f0b9ab7",
+        "viewport": {
+          "height": 900,
+          "width": 1440
+        }
+      },
+      {
+        "label": "desktop-chat-undone",
+        "at": "2026-10-22T06:02:23.611Z",
+        "documentWidth": 1425,
+        "logout": {
+          "centerHitsButton": false,
+          "rect": {
+            "height": 28,
+            "width": 65.375,
+            "x": 761.125,
+            "y": 2249.5
+          },
+          "centerWithinViewport": false
+        },
+        "undoDisabled": true,
+        "version": "2d607b70abbd10a4039a444f5b6031212f0b9ab7",
+        "viewport": {
+          "height": 900,
+          "width": 1440
+        }
+      },
+      {
+        "label": "desktop-draft-before",
+        "at": "2026-10-22T06:02:50.811Z",
+        "documentWidth": 1425,
+        "logout": {
+          "centerHitsButton": false,
+          "rect": {
+            "height": 28,
+            "width": 65.375,
+            "x": 761.125,
+            "y": 2297.5
+          },
+          "centerWithinViewport": false
+        },
+        "undoDisabled": true,
+        "version": "2d607b70abbd10a4039a444f5b6031212f0b9ab7",
+        "viewport": {
+          "height": 900,
+          "width": 1440
+        }
+      },
+      {
+        "label": "desktop-draft-applied",
+        "at": "2026-10-22T06:03:04.866Z",
+        "documentWidth": 1440,
+        "logout": {
+          "centerHitsButton": true,
+          "rect": {
+            "height": 28,
+            "width": 65.375,
+            "x": 768.625,
+            "y": 420
+          },
+          "centerWithinViewport": true
+        },
+        "undoDisabled": false,
+        "version": "2d607b70abbd10a4039a444f5b6031212f0b9ab7",
+        "viewport": {
+          "height": 900,
+          "width": 1440
+        }
+      },
+      {
+        "label": "desktop-draft-undone",
+        "at": "2026-10-22T06:03:27.754Z",
+        "documentWidth": 1425,
+        "logout": {
+          "centerHitsButton": false,
+          "rect": {
+            "height": 28,
+            "width": 65.375,
+            "x": 761.125,
+            "y": 2297.5
+          },
+          "centerWithinViewport": false
+        },
+        "undoDisabled": true,
+        "version": "2d607b70abbd10a4039a444f5b6031212f0b9ab7",
+        "viewport": {
+          "height": 900,
+          "width": 1440
+        }
+      },
+      {
+        "label": "desktop-logged-out",
+        "at": "2026-10-22T06:03:36.918Z",
+        "documentWidth": 1440,
+        "logout": null,
+        "version": "2d607b70abbd10a4039a444f5b6031212f0b9ab7",
+        "viewport": {
+          "height": 900,
+          "width": 1440
+        }
+      },
+      {
+        "label": "mobile-draft-before",
+        "at": "2026-10-22T06:03:48.421Z",
+        "documentWidth": 375,
+        "logout": {
+          "centerHitsButton": false,
+          "rect": {
+            "height": 28,
+            "width": 65.375,
+            "x": 293.625,
+            "y": 2345.5
+          },
+          "centerWithinViewport": false
+        },
+        "undoDisabled": true,
+        "version": "2d607b70abbd10a4039a444f5b6031212f0b9ab7",
+        "viewport": {
+          "height": 844,
+          "width": 390
+        }
+      },
+      {
+        "label": "mobile-draft-applied",
+        "at": "2026-10-22T06:04:07.088Z",
+        "documentWidth": 375,
+        "logout": {
+          "centerHitsButton": true,
+          "rect": {
+            "height": 28,
+            "width": 65.375,
+            "x": 293.625,
+            "y": 468
+          },
+          "centerWithinViewport": true
+        },
+        "undoDisabled": false,
+        "version": "2d607b70abbd10a4039a444f5b6031212f0b9ab7",
+        "viewport": {
+          "height": 844,
+          "width": 390
+        }
+      },
+      {
+        "label": "mobile-draft-undone",
+        "at": "2026-10-22T06:04:24.086Z",
+        "documentWidth": 375,
+        "logout": {
+          "centerHitsButton": false,
+          "rect": {
+            "height": 28,
+            "width": 65.375,
+            "x": 293.625,
+            "y": 2345.5
+          },
+          "centerWithinViewport": false
+        },
+        "undoDisabled": true,
+        "version": "2d607b70abbd10a4039a444f5b6031212f0b9ab7",
+        "viewport": {
+          "height": 844,
+          "width": 390
+        }
+      },
+      {
+        "label": "mobile-chat-applied-390",
+        "at": "2026-10-22T06:04:47.273Z",
+        "documentWidth": 375,
+        "logout": {
+          "centerHitsButton": true,
+          "rect": {
+            "height": 28,
+            "width": 65.375,
+            "x": 293.625,
+            "y": 437.5
+          },
+          "centerWithinViewport": true
+        },
+        "undoDisabled": false,
+        "version": "2d607b70abbd10a4039a444f5b6031212f0b9ab7",
+        "viewport": {
+          "height": 844,
+          "width": 390
+        }
+      },
+      {
+        "label": "mobile-chat-applied-320",
+        "at": "2026-10-22T06:04:51.484Z",
+        "documentWidth": 305,
+        "logout": {
+          "centerHitsButton": false,
+          "rect": {
+            "height": 28,
+            "width": 65.375,
+            "x": 223.625,
+            "y": 512.5
+          },
+          "centerWithinViewport": true
+        },
+        "undoDisabled": false,
+        "version": "2d607b70abbd10a4039a444f5b6031212f0b9ab7",
+        "viewport": {
+          "height": 740,
+          "width": 320
+        }
+      },
+      {
+        "label": "mobile-chat-320-scrolled-to-footer",
+        "at": "2026-10-22T06:05:17.351Z",
+        "documentWidth": 305,
+        "logout": {
+          "centerHitsButton": true,
+          "rect": {
+            "height": 28,
+            "width": 65.375,
+            "x": 223.625,
+            "y": 226.5
+          },
+          "centerWithinViewport": true
+        },
+        "undoDisabled": false,
+        "version": "2d607b70abbd10a4039a444f5b6031212f0b9ab7",
+        "viewport": {
+          "height": 740,
+          "width": 320
+        }
+      },
+      {
+        "label": "mobile-chat-undone-320",
+        "at": "2026-10-22T06:05:31.288Z",
+        "documentWidth": 305,
+        "logout": {
+          "centerHitsButton": false,
+          "rect": {
+            "height": 28,
+            "width": 65.375,
+            "x": 223.625,
+            "y": 2372.5
+          },
+          "centerWithinViewport": false
+        },
+        "undoDisabled": true,
+        "version": "2d607b70abbd10a4039a444f5b6031212f0b9ab7",
+        "viewport": {
+          "height": 740,
+          "width": 320
+        }
+      },
+      {
+        "label": "mobile-before-logout-320",
+        "at": "2026-10-22T06:05:31.975Z",
+        "documentWidth": 305,
+        "logout": {
+          "centerHitsButton": true,
+          "rect": {
+            "height": 28,
+            "width": 65.375,
+            "x": 223.625,
+            "y": 402
+          },
+          "centerWithinViewport": true
+        },
+        "undoDisabled": true,
+        "version": "2d607b70abbd10a4039a444f5b6031212f0b9ab7",
+        "viewport": {
+          "height": 740,
+          "width": 320
+        }
+      },
+      {
+        "label": "mobile-logged-out-320",
+        "at": "2026-10-22T06:05:45.692Z",
+        "documentWidth": 320,
+        "logout": null,
+        "version": "2d607b70abbd10a4039a444f5b6031212f0b9ab7",
+        "viewport": {
+          "height": 740,
+          "width": 320
+        }
+      },
+      {
+        "label": "mobile-fresh-login-clean-390",
+        "at": "2026-10-22T06:06:08.054Z",
+        "documentWidth": 375,
+        "logout": {
+          "centerHitsButton": true,
+          "rect": {
+            "height": 28,
+            "width": 65.375,
+            "x": 293.625,
+            "y": 360.5
+          },
+          "centerWithinViewport": true
+        },
+        "undoDisabled": true,
+        "version": "2d607b70abbd10a4039a444f5b6031212f0b9ab7",
+        "viewport": {
+          "height": 844,
+          "width": 390
+        }
+      },
+      {
+        "label": "mobile-before-logout-390",
+        "at": "2026-10-22T06:06:19.278Z",
+        "documentWidth": 375,
+        "logout": {
+          "centerHitsButton": true,
+          "rect": {
+            "height": 28,
+            "width": 65.375,
+            "x": 293.625,
+            "y": 666
+          },
+          "centerWithinViewport": true
+        },
+        "undoDisabled": true,
+        "version": "2d607b70abbd10a4039a444f5b6031212f0b9ab7",
+        "viewport": {
+          "height": 844,
+          "width": 390
+        }
+      },
+      {
+        "label": "mobile-logged-out-390",
+        "at": "2026-10-22T06:06:25.103Z",
+        "documentWidth": 390,
+        "logout": null,
+        "version": "2d607b70abbd10a4039a444f5b6031212f0b9ab7",
+        "viewport": {
+          "height": 844,
+          "width": 390
+        }
+      }
+    ],
+    "freshMobileServerState": {
+      "blockCount": 0,
+      "date": "2026-10-27",
+      "hasTemplate": false,
+      "revision": 4,
+      "status": "active",
+      "version": "2d607b70abbd10a4039a444f5b6031212f0b9ab7"
+    }
+  },
+  "realAi": {
+    "successfulUiOperations": 4,
+    "chat": 2,
+    "draft": 2,
+    "stubs": false,
+    "providerModelNotExtracted": true,
+    "providerInternalRetriesNotCounted": true,
+    "replies": {
+      "desktopChat": "Added the requested Work block from 14:00 to 14:30.",
+      "desktopDraft": "Follows the weekday template exactly.",
+      "mobileChat": "Added the requested Work block from 15:00 to 15:30.",
+      "mobileDraft": "Followed weekday template exactly; no history or rules to adjust."
+    }
+  },
+  "logoutChecks": {
+    "desktop": {
+      "viewport": [
+        1440,
+        900
+      ],
+      "loginShown": true,
+      "backShowsLogin": true,
+      "protectedReloadRequiresLogin": true
+    },
+    "mobile320": {
+      "viewport": [
+        320,
+        740
+      ],
+      "loginShown": true,
+      "backShowsLogin": true,
+      "protectedReloadRequiresLogin": true
+    },
+    "mobile390": {
+      "viewport": [
+        390,
+        844
+      ],
+      "loginShown": true,
+      "backShowsLogin": true,
+      "protectedReloadRequiresLogin": true
+    }
+  },
+  "cleanup": {
+    "templatesRestored": true,
+    "rulesUnchanged": true,
+    "testDatesEmpty": true,
+    "browserTabClosed": true,
+    "viewportReset": true,
+    "browserSessionsLoggedOut": true,
+    "independentClientSendsLogoutInFinally": true,
+    "privateVerificationDirectoryRemoved": true
+  },
+  "validation": {
+    "source": "Deploy validation for the published commit",
+    "backendPassed": 2150,
+    "backendSkipped": 1,
+    "frontendPassed": 1410,
+    "frontendFiles": 104,
+    "productionDependencyVulnerabilities": 0,
+    "productionBuildPassed": true
+  },
+  "screenshots": [
+    {
+      "path": "docs/screenshots/post-pr257-2026-10-22/desktop-chat-applied.jpg",
+      "sha256": "27d8495ba1508466265085dfdc3b787bdff013c6ad51dcd7a415246c17794263"
+    },
+    {
+      "path": "docs/screenshots/post-pr257-2026-10-22/desktop-draft-applied.jpg",
+      "sha256": "2ec8623425c3dda9ac9009374f4ac84e321789ff58302e2ad5246ea3f300b2ef"
+    },
+    {
+      "path": "docs/screenshots/post-pr257-2026-10-22/desktop-logged-out.jpg",
+      "sha256": "55a1939b18af0aafa5fb4e703558ed013d1606bad0aa37b10d786ea37e4850a1"
+    },
+    {
+      "path": "docs/screenshots/post-pr257-2026-10-22/mobile-chat-320-footer.jpg",
+      "sha256": "38a87f6f7e8ac07fa6841ed47faa193593357ee0ea61925becc87b300457fdda"
+    },
+    {
+      "path": "docs/screenshots/post-pr257-2026-10-22/mobile-chat-applied-320.jpg",
+      "sha256": "9f11d7644c70ea57d5f4191653cb016e5236ab6fe6daa06640aabb21dcf04281"
+    },
+    {
+      "path": "docs/screenshots/post-pr257-2026-10-22/mobile-chat-applied-390.jpg",
+      "sha256": "a81194f2eec778ae86f76d639984ee684bbde91662ee49cdf45952a5b8543c19"
+    },
+    {
+      "path": "docs/screenshots/post-pr257-2026-10-22/mobile-draft-applied.jpg",
+      "sha256": "b37067714ab33e165987361d36540f76c6bb5c3d650cb7fe01e351c0dafb7196"
+    },
+    {
+      "path": "docs/screenshots/post-pr257-2026-10-22/mobile-logged-out-320.jpg",
+      "sha256": "77c067c5385a05dbd5e197c4ab2644d609ef2186362b0bd9fb89addc692fd091"
+    },
+    {
+      "path": "docs/screenshots/post-pr257-2026-10-22/mobile-logged-out-390.jpg",
+      "sha256": "ec9a5da68a0abc9f136a45a9494dbe3fe3ce6bd28dd2ada675b5f51168746ba2"
+    }
+  ],
+  "limits": [
+    "Chromium viewport testing, not a real iOS Safari device",
+    "No forced invalid AI output in production; error wrapping was browser-tested in PR 257 and its published CSS rule is verified here",
+    "No provider-call interception or independent provider-call counter",
+    "Logout center hit tests are evaluated after scrolling to make the footer reachable; an unscrolled fixed dock can visually cover a lower footer until scrolling"
+  ]
+}
