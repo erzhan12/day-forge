@@ -635,6 +635,7 @@ defineExpose({
 
 .draft-error {
   max-width: 640px;
+  overflow-wrap: anywhere;
   margin: 0 auto;
   padding: 8px 16px;
   background: var(--danger-surface);

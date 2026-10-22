@@ -1,0 +1,55 @@
+{
+  "result": "PASS",
+  "sdkCompletions": 1,
+  "externalAiCalls": 0,
+  "measurements": [
+    {
+      "width": 320,
+      "actual": {
+        "scrollWidth": 320,
+        "clientWidth": 320,
+        "documentWidth": 320,
+        "viewport": 320
+      },
+      "withoutWrap": {
+        "scrollWidth": 3217,
+        "clientWidth": 320
+      }
+    },
+    {
+      "width": 1440,
+      "actual": {
+        "scrollWidth": 640,
+        "clientWidth": 640,
+        "documentWidth": 1440,
+        "viewport": 1440
+      },
+      "withoutWrap": {
+        "scrollWidth": 3217,
+        "clientWidth": 640
+      }
+    }
+  ],
+  "scheduleAfterRejection": {
+    "date": "2027-08-06",
+    "status": "draft",
+    "revision": 7,
+    "blocks": 0
+  },
+  "auditSuccess": [
+    false
+  ],
+  "controlsRestored": true,
+  "checkedAtUtc": "2026-10-22T04:32:01Z",
+  "sourceSha256": {
+    "frontend/scripts/check-draft-error-wrap.mjs": "7ea21dedd360e20a61c8c08963c0cd56d4242606cc38fb42d5b8a9f1908227f3",
+    "backend/scripts/browser_audit_server.py": "383a0446dbdaa0a1a34f5534113e06f6e67edbe420ac284ea9f7101106fa83ff",
+    "frontend/src/pages/Schedule.vue": "c700e8e661b719bf31c4c6b5abb6a8c34e8bb0c437b22828431e922b69f7677a"
+  },
+  "cleanup": {
+    "ownedServerStopped": true,
+    "redisKeyPrefix": "day-forge-draft-wrap-review-20261022-8547d32",
+    "redisKeysRemoved": 5,
+    "privateDirectoryRemoved": true
+  }
+}

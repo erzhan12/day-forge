@@ -2,6 +2,15 @@
 
 Patterns and corrections discovered during development. Review at session start.
 
+## Bounded provider titles still need wrapping in error messages
+
+A valid 255-character title without spaces expanded a 320 px page to 3217 px when
+the draft error embedded it in plain text. Keep the identifying title and wrap the
+message with overflow-wrap: anywhere. Verify scrollWidth against clientWidth in a
+real browser at desktop and mobile widths; service bounds and JSDOM cannot prove
+that the rendered error fits. Rebuild production assets and reload before checking
+the CSS fix.
+
 ## A retained request table cannot teach an old image a new protocol
 
 An image rollback across the durable-chat boundary preserves receipts but the
