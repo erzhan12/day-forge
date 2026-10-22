@@ -14,6 +14,7 @@ import argparse
 import datetime as dt
 import json
 import os
+import secrets
 import sys
 import time
 from pathlib import Path
@@ -32,7 +33,7 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "day_forge.settings")
 if args.draft_window:
     os.environ.update(
         DEBUG="0",
-        DJANGO_SECRET_KEY="isolated-draft-window-fixture-not-for-production",
+        DJANGO_SECRET_KEY=secrets.token_urlsafe(50),
         ALLOWED_HOSTS="127.0.0.1,localhost",
         LLM_API_KEY="local-fixture-only",
         REDIS_URL="redis://127.0.0.1:6379/0",
@@ -109,7 +110,9 @@ class FaultControls:
 
 
 hooks.FaultControls = FaultControls
-(ROOT / "controls.json").write_text(json.dumps({"google": "good", "ai": "good"}))
+(ROOT / "controls.json").write_text(
+    json.dumps({"google": "good", "ai": "good", "draft_window": args.draft_window})
+)
 
 import django  # noqa: E402
 

@@ -1,5 +1,34 @@
 # Playwright smoke harness
 
+## Isolated draft-error layout regression
+
+`frontend/scripts/check-draft-error-wrap.mjs` is separate from the shared-user
+smoke scripts below. Build production assets, start local Redis on port 6379,
+and launch a fresh fixture server from the repository root:
+
+```sh
+make frontend-build
+uv run python backend/scripts/browser_audit_server.py /tmp/day-forge-draft-wrap-new --draft-window
+```
+
+In another terminal, from `frontend/`:
+
+```sh
+node scripts/check-draft-error-wrap.mjs /tmp/day-forge-draft-wrap-new
+```
+
+Install Chromium once with `npx playwright install chromium` if needed. The
+script logs into the local non-staff fixture account on port 8007, generates a
+rejected draft containing a 255-character title without spaces, and checks the
+message and document widths at 320 and 1440 px. A negative control removes the
+wrap rule and must overflow at both widths. There is one stubbed SDK completion
+and no external AI request. The script closes its browser and restores
+`controls.json`; the caller owns the server, private directory and namespaced
+Redis cleanup. Run serially against a fresh fixture. This opt-in check is not
+part of `make e2e` or CI.
+
+## Shared-user smoke scripts
+
 These 20 scripts exercise Day Forge through a real browser. They are smoke
 scenarios rather than an isolated test suite: several call the configured LLM
 or Todoist account, and all use the shared `playwright` Django user.
