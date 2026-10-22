@@ -58,7 +58,7 @@ const emit = defineEmits<{
         block without a time, the backend places it at the nearest free slot
         forward from now with a 25-minute default duration, aligned to 5 minutes, and
         prefers a 10-minute gap that shrinks to 5 minutes or none when the block
-        otherwise would not fit before the next block.
+        otherwise would not fit before the next block or the day-window end.
       </p>
       <RulesList :rules="rules" @changed="emit('rules-changed')" />
     </div>

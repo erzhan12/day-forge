@@ -29,3 +29,7 @@ Rejected: none.
 - `uv run ruff check backend/`: clean.
 - `make check`: backend 2173 passed, 1 skipped; `vue-tsc` clean; Vitest 104 files / 1410 tests passed.
 - `make frontend-build`: production bundle built.
+
+## PR #261 claude-review
+
+Round 1 (b105920): verdict APPROVED, no P0/P1. Applied: P2 hoisted the two deferred `find_slot` imports in `backend/ai/mutation_planner.py` to the module import (no circular import: `free_slot` imports `SlotSuggestion` lazily inside `find_slot`); P3 extended the Settings help text with the day-window-end case. Rejected: P3 "re-sorting inside the retry loop" — `sorted(...)` runs once before the loop; only the padding list is rebuilt per trial, which is intended.

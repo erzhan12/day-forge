@@ -33,7 +33,7 @@ from schedules.time_validation import (
 )
 from schedules.window import DEFAULT_WINDOW, ScheduleWindow
 
-from ai.free_slot import GRID_MINUTES
+from ai.free_slot import GRID_MINUTES, find_slot
 
 logger = logging.getLogger(__name__)
 
@@ -363,7 +363,6 @@ def _find_auto_slot(
     window: ScheduleWindow, gap: int,
 ) -> SlotSuggestion | None:
     """Prefer smaller gaps only within the initial raw window (feature 0086)."""
-    from ai.free_slot import find_slot
 
     raw = sorted(blocks, key=lambda block: (block.start_time, block.end_time, block.id))
     next_start = next(
@@ -752,7 +751,6 @@ def plan_mutations(
     # Function-local (not module-level) to avoid the free_slot ↔ mutation_planner
     # circular import (free_slot type-imports SlotSuggestion from here). Deferring
     # to call time keeps module load acyclic; the import cache makes it free.
-    from ai.free_slot import find_slot
 
     window_start, window_end = _day_bounds(day_start, day_end)
     window = ScheduleWindow(window_start, window_end)
