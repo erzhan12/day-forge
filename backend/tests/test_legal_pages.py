@@ -161,10 +161,10 @@ class TestPrivacyDisclosures:
     def test_states_credentials_are_encrypted_at_rest(self, body):
         assert "encrypted at rest" in body
 
-    def test_discloses_llm_egress_of_the_whole_transcript(self, body):
-        # CLAUDE.md's chat privacy note: every turn re-sends the full prior
-        # transcript to the provider, and the mitigation is clearing it.
-        assert "entire visible conversation" in body
+    def test_discloses_transcript_and_pending_summary_egress(self, body):
+        assert "prior conversation" in body
+        assert "server-built summary" in body
+        assert "Clearing the visible thread does not delete server records" in body
         assert "clear the thread" in body.lower()
 
     def test_discloses_draft_history_egress(self, body):

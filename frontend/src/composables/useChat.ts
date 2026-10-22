@@ -49,6 +49,7 @@ interface ChatState {
   draftInput: Ref<string>
   latestRequestId: number
   pendingRequest: Ref<PendingChatRequest | null>
+  pendingIntent: Ref<{ id: string; version: number; expires_at: string; ask: string } | null>
   userId?: number
   unsubscribe?: () => void
 }
@@ -58,7 +59,7 @@ function createChatState(): ChatState {
     activeDate: ref<string | null>(null), messages: ref<ChatMessage[]>([]),
     isProcessing: ref(false), lastError: ref<string | null>(null),
     pendingAsk: ref<string | null>(null), apiHealthy: ref(true),
-    draftInput: ref(""), latestRequestId: 0, pendingRequest: ref(null),
+    draftInput: ref(""), latestRequestId: 0, pendingRequest: ref(null), pendingIntent: ref(null),
   }
 }
 
@@ -93,6 +94,7 @@ function clearThreadState(state: ChatState): void {
   state.isProcessing.value = false
   state.messages.value = []
   state.pendingAsk.value = null
+  state.pendingIntent.value = null
   state.lastError.value = null
 }
 
@@ -199,10 +201,17 @@ export function useChat(explicitRevision?: ScheduleRevisionState) {
     await executeTurn("", pushUndo, true)
   }
 
+  async function cancelPendingIntent(pushUndo: (a: UndoAction) => void): Promise<void> {
+    restorePending()
+    if (!state.pendingIntent.value || state.pendingRequest.value) return
+    await executeTurn("Cancel pending request.", pushUndo, false, "cancel")
+  }
+
   async function executeTurn(
     text: string,
     pushUndo: (a: UndoAction) => void,
     recovering: boolean,
+    intentAction: "continue" | "cancel" = "continue",
   ): Promise<void> {
     if (activeDate.value === null) {
       // Surface a user-visible message before throwing — if the
@@ -257,6 +266,11 @@ export function useChat(explicitRevision?: ScheduleRevisionState) {
             date: requestDate, userId: capture.userId,
             body: {
               request_id: crypto.randomUUID(), expected_revision: capture.revision,
+              ...(state.pendingIntent.value ? {
+                pending_intent_id: state.pendingIntent.value.id,
+                pending_intent_version: state.pendingIntent.value.version,
+                intent_action: intentAction,
+              } : {}),
               messages: messages.value.map(({ role, content, ask, isError, appliedAddBlockIds }) => ({
                 role, content,
                 ...(role === "assistant" && ask !== null ? { is_ask: true } : {}),
@@ -308,6 +322,12 @@ export function useChat(explicitRevision?: ScheduleRevisionState) {
     if (result.ok) {
       apiHealthy.value = true
       const data = result.data ?? {}
+      const intent = data.pending_intent as Record<string, unknown> | null | undefined
+      state.pendingIntent.value = intent && typeof intent.id === "string"
+        && Number.isSafeInteger(intent.version) && Number(intent.version) >= 1
+        && typeof intent.expires_at === "string" && typeof intent.ask === "string"
+        ? { id: intent.id, version: Number(intent.version), expires_at: intent.expires_at, ask: intent.ask }
+        : null
       const ask = typeof data.ask === "string" ? data.ask : null
       const explanation =
         typeof data.explanation === "string" ? data.explanation : null
@@ -360,7 +380,12 @@ export function useChat(explicitRevision?: ScheduleRevisionState) {
     // Failure path — keep the optimistically-appended user message and
     // append a synthetic assistant bubble carrying the error so the
     // user has a record they can edit and retry against.
+    if (result.code === "pending_intent_stale") {
+      state.pendingIntent.value = null
+      pendingAsk.value = null
+    }
     if (isScheduleChangedConflict(result)) {
+      state.pendingIntent.value = null
       apiHealthy.value = true
       lastError.value = SCHEDULE_CHANGED_RETRY_MESSAGE
       messages.value = [
@@ -414,6 +439,8 @@ export function useChat(explicitRevision?: ScheduleRevisionState) {
     clearThread,
     submitTurn,
     recoverPending,
+    cancelPendingIntent,
+    hasPendingIntent: computed(() => state.pendingIntent.value !== null),
     hasPendingRequest: computed(() => state.pendingRequest.value !== null),
     pendingRequestText: computed(() => state.pendingRequest.value?.body.messages.at(-1)?.content ?? ""),
   }

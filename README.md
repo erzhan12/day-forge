@@ -167,5 +167,5 @@ docs/
 ## Privacy Notes
 
 - User commands and chat turns are logged to `AIInteraction` for audit (PRD §6.5). Avoid entering passwords or API keys in prompts.
-- The chat endpoint sends the prior client-supplied transcript to the LLM provider on each turn, so each new turn can send more text. Clear the thread before discussing anything sensitive. The UI keeps thread state in memory per tab; `AIInteraction` stores audit records on the server.
+- Fresh chat commands send the prior client transcript as untrusted provider context. Bound clarifications send the latest turn and a server-owned pending summary instead. Clear the thread before discussing anything sensitive. The UI keeps its thread in memory; the server retains audit records, durable receipts and pending-intent data. See [the pending-intent contract](docs/AI_PENDING_INTENT.md).
 - Prior client turns are flattened into a single user-role message under an "Untrusted prior transcript" header. They are not forwarded as privileged `assistant` messages. `backend/tests/test_ai_service_chat.py` covers this boundary.

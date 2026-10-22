@@ -1,0 +1,28 @@
+{
+  "date": "2026-10-22",
+  "command": "make check",
+  "backend": {
+    "passed": 2202,
+    "skipped": 1,
+    "seconds": 21.2,
+    "skip_reason": "Paid R11 live comparison is opt-in (R11_LIVE_AI=1); this run used real AI through the browser instead."
+  },
+  "frontend": {
+    "passed": 1422,
+    "files": 104
+  },
+  "typecheck": "passed",
+  "ruff": "passed",
+  "prod_build": "passed",
+  "production_dependency_audit": "0 vulnerabilities",
+  "ssh_pinning": "7/7 pinned",
+  "provider_model": "x-ai/grok-4.3",
+  "provider_host": "openrouter.ai",
+  "build": {
+    "version": "build:d3d3464cd17f51338a85",
+    "script": "assets/app-M7IGzPo5.js",
+    "styles": [
+      "assets/app-DjGxK3Up.css"
+    ]
+  }
+}

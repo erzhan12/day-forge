@@ -116,7 +116,7 @@ try {
     fail("State A: privacy hint not visible on fresh schedule (iter-5 always-on regression)")
   }
   const hintText = (await privacyHint.textContent()) || ""
-  if (!hintText.includes("Full chat history is re-sent to the AI provider")) {
+  if (!hintText.includes("Messages and schedule context may be sent to the AI provider")) {
     fail(`State A: privacy hint text unexpected: ${hintText.slice(0, 80)}`)
   }
   if ((await thread.count()) > 0) {

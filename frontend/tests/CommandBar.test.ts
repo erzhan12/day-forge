@@ -12,6 +12,8 @@ const setActiveDate = vi.fn()
 const clearThread = vi.fn()
 const submitTurn = vi.fn()
 const recoverPending = vi.fn()
+const cancelPendingIntent = vi.fn()
+const hasPendingIntent = ref(false)
 const hasPendingRequest = ref(false)
 const pendingRequestText = ref("Add Smoke")
 const isProcessing = ref(false)
@@ -55,6 +57,8 @@ vi.mock("../src/composables/useChat", () => ({
     clearThread,
     submitTurn,
     recoverPending,
+    cancelPendingIntent,
+    hasPendingIntent,
     hasPendingRequest,
     pendingRequestText,
   }),
@@ -84,10 +88,21 @@ function mountBar(overrides: Record<string, unknown> = {}) {
 }
 
 describe("CommandBar (chat dock)", () => {
+  it("exposes cancellation for a saved intent and disables it during transport", async () => {
+    hasPendingIntent.value = true
+    const bar = mountBar()
+    await bar.get('[data-testid="chat-cancel-intent"]').trigger("click")
+    expect(cancelPendingIntent).toHaveBeenCalledWith(bar.props("pushUndo"))
+    hasPendingRequest.value = true
+    await nextTick()
+    expect(bar.get('[data-testid="chat-cancel-intent"]').attributes("disabled")).toBeDefined()
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     isProcessing.value = false
     hasPendingRequest.value = false
+    hasPendingIntent.value = false
     lastError.value = null
     pendingAsk.value = null
     apiHealthy.value = true

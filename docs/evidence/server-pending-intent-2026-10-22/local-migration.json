@@ -1,0 +1,10 @@
+{
+  "database": "local working SQLite",
+  "migration": "ai.0008_pendingintent",
+  "applied": true,
+  "existing_rows_preserved": 1043,
+  "existing_tables_preserved": 22,
+  "new_content_types": 1,
+  "new_permissions": 4,
+  "new_intents": 0
+}

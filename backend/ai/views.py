@@ -36,6 +36,7 @@ from schedules.window import (
 )
 from templates_mgr.models import Rule, Template
 
+from ai import pending_intents
 from ai.category_resolution import UnresolvedCategory
 from ai.chat_requests import ChatClaim, claim_request, finish_request, request_identity
 from ai.free_slot import GRID_MINUTES
@@ -74,6 +75,7 @@ logger = logging.getLogger(__name__)
 
 def _safe_block_title(block) -> str:
     return block.title if block.origin == TimeBlock.Origin.MANUAL else "[private block]"
+
 
 _AI_ERROR_STATUS = {
     AIUnavailableError: 503,
@@ -402,13 +404,12 @@ def _validation_error_detail(e: ValidationError) -> dict:
     return getattr(e, "message_dict", None) or {"detail": str(e)}
 
 
-
 def _persist_mutation_diff(
     schedule: Schedule, locked_blocks: list[TimeBlock], diff: MutationDiff
-) -> None:
+) -> list[TimeBlock]:
     """Persist a validated diff and map row failures to the source action."""
     try:
-        persist_command_diff(schedule, locked_blocks, diff)
+        return persist_command_diff(schedule, locked_blocks, diff)
     except PersistenceError as error:
         if not isinstance(error.cause, ValidationError):
             raise error.cause from error
@@ -437,13 +438,20 @@ def _ai_context_fingerprint(schedule, blocks, rules, schedule_settings, categori
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
 
 
-def _load_ai_context_sync(user, parsed_date, expected_revision, *, draft=False):
+def _load_ai_context_sync(
+    user, parsed_date, expected_revision, *, draft=False, intent_reference=None
+):
     """Capture one prompt context while policy and schedule writers are excluded."""
 
     def capture(locked_user):
-        schedule, _ = Schedule.objects.get_or_create(user=locked_user, date=parsed_date)
-        if schedule.revision != expected_revision:
-            raise ScheduleChanged()
+        if intent_reference is not None and intent_reference.id is not None:
+            schedule = Schedule.objects.filter(user=locked_user, date=parsed_date).first()
+            if schedule is None:
+                # An old reference must not recreate a deleted day or consume
+                # its first-visit auto-draft signal.
+                raise MutationRejected(pending_intents.stale_response())
+        else:
+            schedule, _ = Schedule.objects.get_or_create(user=locked_user, date=parsed_date)
         blocks = list(schedule.time_blocks.order_by("start_time", "sort_order", "id"))
         rules = list(Rule.objects.filter(user=user, is_active=True).order_by("-priority", "id"))
         schedule_settings = get_schedule_settings(user)
@@ -460,6 +468,18 @@ def _load_ai_context_sync(user, parsed_date, expected_revision, *, draft=False):
         )
         schedule._schedule_window = schedule_settings.window
         schedule._categories = categories
+        if intent_reference is not None:
+            schedule._intent_context = pending_intents.capture(
+                schedule, fingerprint, intent_reference
+            )
+            if not schedule._intent_context.error:
+                schedule._pending_intent_summary = pending_intents.provider_context(
+                    schedule._intent_context
+                )
+        if schedule.revision != expected_revision and not (
+            intent_reference is not None and schedule._intent_context.error
+        ):
+            raise ScheduleChanged()
         return schedule, blocks, rules, schedule_settings, template, fingerprint
 
     return run_user_maintenance(user.pk, capture)
@@ -517,7 +537,47 @@ def _apply_actions_sync(
         )
         if isinstance(plan_result, PlanError):
             return _action_error(plan_result.action_index, plan_result.detail)
-        _persist_mutation_diff(locked_schedule, locked_blocks, plan_result.diff)
+        created = _persist_mutation_diff(locked_schedule, locked_blocks, plan_result.diff)
+        created_entries = sorted(
+            plan_result.diff.creates,
+            key=lambda entry: (entry.action_index is None, entry.action_index or 0),
+        )
+        result.accepted_changes = (
+            [
+                {
+                    "type": "add",
+                    "action_index": entry.action_index,
+                    "block_id": block.pk,
+                    "fields": ["title", "category", "start_time", "end_time"],
+                }
+                for entry, block in zip(created_entries, created, strict=True)
+            ]
+            + [
+                {
+                    "type": "update",
+                    "action_index": entry.action_index,
+                    "block_id": entry.block_id,
+                    "fields": next(
+                        (
+                            list(outcome.applied_fields)
+                            for outcome in plan_result.outcomes
+                            if outcome.action_index == entry.action_index
+                        ),
+                        [],
+                    ),
+                }
+                for entry in plan_result.diff.updates
+            ]
+            + [
+                {
+                    "type": "remove",
+                    "action_index": entry.action_index,
+                    "block_id": entry.block_id,
+                    "fields": [],
+                }
+                for entry in plan_result.diff.deletes
+            ]
+        )
         if plan_result.diff.deletes or plan_result.diff.updates or plan_result.diff.creates:
             locked_schedule.mark_active_on_edit()
         return plan_result
@@ -969,6 +1029,10 @@ async def ai_chat(request, date):
     if err is not None:
         return JsonResponse({"errors": {"messages": err}}, status=400)
     try:
+        intent_reference = pending_intents.parse_reference(data)
+    except ValueError as exc:
+        return JsonResponse({"errors": {"pending_intent": str(exc)}}, status=400)
+    try:
         expected_revision = parse_expected_revision(data)
     except ScheduleChanged as exc:
         return schedule_changed_response(exc)
@@ -984,7 +1048,10 @@ async def ai_chat(request, date):
         return claim
 
     async def terminal(response):
-        return await sync_to_async(finish_request, thread_sensitive=True)(claim, lambda: response)
+        return await sync_to_async(finish_request, thread_sensitive=True)(
+            claim, response if callable(response) else lambda: response
+        )
+
     try:
         (
             schedule,
@@ -994,10 +1061,72 @@ async def ai_chat(request, date):
             _,
             expected_fingerprint,
         ) = await sync_to_async(_load_ai_context_sync, thread_sensitive=True)(
-            user, parsed_date, expected_revision
+            user, parsed_date, expected_revision, intent_reference=intent_reference
         )
+    except MutationRejected as exc:
+        return await terminal(exc.response)
     except ScheduleChanged as exc:
         return await terminal(schedule_changed_response(exc))
+
+    intent_context = schedule._intent_context
+    if intent_context.error:
+        return await terminal(lambda: pending_intents.stale_response(intent_context))
+
+    def complete(result, interaction=None):
+        if result.intent_decision == "read":
+            result = replace(result, parsed_actions=[], unresolved_categories=(), ask=None)
+        result.source_message = messages[-1]["content"]
+
+        def build_response(*, cancel):
+            clean_result = (
+                replace(
+                    result,
+                    parsed_actions=[],
+                    unresolved_categories=(),
+                    ask=None,
+                    explanation="Pending request cancelled.",
+                )
+                if cancel
+                else result
+            )
+            return _finish_chat_sync(
+                user,
+                schedule,
+                current_blocks,
+                messages,
+                clean_result,
+                interaction,
+                expected_revision,
+                expected_fingerprint,
+            )
+
+        def reload_context():
+            schedule.refresh_from_db()
+            after = _load_ai_context_sync(user, parsed_date, schedule.revision)
+            return after[0], after[1], after[5]
+
+        try:
+            return pending_intents.finish(
+                intent_context, schedule, result, build_response, reload_context
+            )
+        except (ValueError, TypeError) as exc:
+            raise MutationRejected(
+                JsonResponse(
+                    {
+                        "code": "pending_intent_scope",
+                        "pending_intent": pending_intents.wire(intent_context.row)
+                        if intent_context.row
+                        else None,
+                        "errors": {
+                            "detail": "The reply changed the pending request. Please restate it."
+                        },
+                    },
+                    status=409,
+                )
+            ) from exc
+
+    if intent_reference.action == "cancel":
+        return await terminal(lambda: complete(AIChatResult("", [], "Cancelled.", None)))
 
     if not await _consume_rate_limit(user.id, "ai_chat_rl", settings.LLM_CHAT_RATE_LIMIT_PER_HOUR):
         return await terminal(rate_limited_response())
@@ -1007,6 +1136,15 @@ async def ai_chat(request, date):
     try:
         now = timezone.localtime(timezone.now(), resolve_time_zone(schedule_settings.time_zone))
         result = await run_chat(messages, schedule, current_blocks, rules, now)
+        if (
+            intent_reference.id is not None
+            and intent_reference.action == "continue"
+            and result.intent_decision == "new"
+        ):
+            # Reinterpret a fresh command without old pending/transcript authority.
+            schedule._pending_intent_summary = None
+            result = await run_chat([messages[-1]], schedule, current_blocks, rules, now)
+            intent_context.reference = replace(intent_reference, action="new")
     except AIError as e:
         await _log_chat_failure(schedule, last_user_msg, messages, e)
         status = next(
@@ -1045,10 +1183,7 @@ async def ai_chat(request, date):
 
     response = await sync_to_async(finish_request, thread_sensitive=True)(
         claim,
-        lambda: _finish_chat_sync(
-            user, schedule, current_blocks, messages, result, interaction,
-            expected_revision, expected_fingerprint,
-        ),
+        lambda: complete(result, interaction),
     )
     if response.status_code == 200 and not getattr(response, "chat_request_replayed", False):
         outcomes = json.loads(response.content).get("outcomes")
@@ -1057,10 +1192,17 @@ async def ai_chat(request, date):
 
 
 def _finish_chat_sync(
-    user, schedule, current_blocks, messages, result, interaction,
-    expected_revision, expected_fingerprint,
+    user,
+    schedule,
+    current_blocks,
+    messages,
+    result,
+    interaction,
+    expected_revision,
+    expected_fingerprint,
 ):
     """Build the result under the durable operation's outer write transaction."""
+
     def unchanged_snapshot():
         confirmed = _apply_actions_sync(
             schedule,

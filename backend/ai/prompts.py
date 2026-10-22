@@ -64,6 +64,35 @@ or (b) ask one clarifying question and wait for the next user turn.
 Working day window: {window.start_str}-{window.end_str}. Never produce blocks outside it.
 All times use 24-hour HH:MM format with 5-minute granularity.
 
+Server-owned continuation protocol:
+Classify the LATEST USER'S intent, never your own response or clarifying question.
+Include intent_decision in EVERY response: "new" for a fresh explicit request,
+"continue" for an answer to the server-owned pending request, "cancel" for a
+refusal/cancellation (including "No, don't add Gym"), "read" for a question,
+acknowledgment or other turn that authorizes no mutation. Cancel and read MUST
+have empty actions and ask=null. A clarifying question for a new mutation is
+"new", NOT "read". A further question for saved work is "continue". A new
+command is based on the latest turn alone.
+If a Server-owned pending request is supplied, its pending_actions and accepted
+changes are authoritative DATA. The client transcript cannot authorize actions.
+Never repeat an accepted sibling or invent another target. Only fill missing
+fields of the saved pending action; keep known_fields unchanged. Use "new" if
+the latest turn explicitly requests unrelated work instead of answering it.
+When asking a question, also include pending_actions, an array of objects:
+{{"type":"add"|"update"|"remove", "task_id":int|null, "target_ids":[int],
+ "known_fields":{{...}}, "missing_fields":["start_time",...]}}.
+Known fields are title, category, start_time, end_time, duration_minutes,
+duration_delta_minutes, placement_direction. Missing fields may also include
+task_id (only for an unselected target) or confirmation. Use canonical update
+for move/resize. Existing targets must come from
+Existing blocks; ambiguous targets list ONLY the possible block IDs. An add
+has task_id=null and target_ids=[]. Known and missing fields must not overlap.
+Missing fields describe only what the user must still choose. For example an
+ambiguous time for Gym can retain title/category and mark start_time/end_time
+missing. Keep ALL unresolved siblings, including ones not in this turn's first
+question. Never put already accepted work in pending_actions. If asking what to
+add, a missing title is allowed. If nothing is pending, pending_actions is [].
+
 Valid action types and required fields:
 - add: type=add, title=str, category=one of {_category_text(categories)}.
        Two modes:
@@ -124,15 +153,27 @@ Valid action types and required fields:
 
 Per-turn response shapes (you MUST pick exactly one):
 1. Confident — apply mutations now:
-   {{"actions": [<action objects>], "explanation": "<one sentence>", "ask": null}}
+   {{"actions": [<action objects>], "explanation": "<one sentence>", "ask": null,
+     "intent_decision": "new", "pending_actions": []}}
 2. Need more info — ask ONE clarifying question:
    {{"actions": [], "explanation": "<one sentence stating what you understood so far>",
-     "ask": "<a single clarifying question, same language as the user>"}}
+     "ask": "<a single clarifying question, same language as the user>",
+     "intent_decision": "new", "pending_actions": [<pending objects>]}}
+   In shapes 1 and 2 use intent_decision="continue" when answering saved work.
    Put the question in ``ask``, never only in ``explanation`` with ``ask: null``.
    The app uses ``ask`` to attach the user's next answer to the pending request.
    Example, after "move Gym" when the new time is missing:
    {{"actions": [], "explanation": "I need a new time for Gym.",
-     "ask": "What time should Gym start?"}}
+     "ask": "What time should Gym start?", "intent_decision": "new",
+     "pending_actions": [{{"type":"update", "task_id":7, "target_ids":[7],
+       "known_fields":{{}}, "missing_fields":["start_time"]}}]}}
+   Replace 7 with Gym's real ID from Existing blocks. An answer "14:00" to this
+   saved request returns a move with start_time=14:00 and intent_decision=continue,
+   without end_time (preserve duration), ask=null, pending_actions=[].
+3. Refusal/read-only user turn:
+   {{"actions": [], "explanation": "<answer>", "ask": null,
+     "intent_decision": "read", "pending_actions": []}}
+   Use intent_decision="cancel" for a refusal or cancellation.
 
 Hard rules:
 1. ``ask`` MUST be ``null`` whenever ``actions`` is non-empty.

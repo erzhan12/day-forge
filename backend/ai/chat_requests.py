@@ -12,9 +12,10 @@ import uuid
 from dataclasses import dataclass
 
 from django.conf import settings
+from django.db import transaction
 from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
-from schedules.mutations import ScheduleChanged, run_user_maintenance
+from schedules.mutations import MutationRejected, ScheduleChanged, run_user_maintenance
 
 from ai.models import ChatRequest
 
@@ -45,26 +46,33 @@ def request_identity(data):
 
 
 def processing_response():
-    response = JsonResponse({
-        "code": "request_in_progress",
-        "errors": {"detail": "The previous AI request is still processing. Check it again."},
-    }, status=409)
+    response = JsonResponse(
+        {
+            "code": "request_in_progress",
+            "errors": {"detail": "The previous AI request is still processing. Check it again."},
+        },
+        status=409,
+    )
     response["Retry-After"] = "2"
     return response
 
 
 def unavailable_response():
-    return JsonResponse({
-        "code": "request_unavailable",
-        "errors": {
-            "detail": "AI request state is temporarily unavailable. Retry the same request."
+    return JsonResponse(
+        {
+            "code": "request_unavailable",
+            "errors": {
+                "detail": "AI request state is temporarily unavailable. Retry the same request."
+            },
         },
-    }, status=503)
+        status=503,
+    )
 
 
 def _stored_response(row):
-    response = HttpResponse(row.response_body, status=row.response_status,
-                            content_type="application/json")
+    response = HttpResponse(
+        row.response_body, status=row.response_status, content_type="application/json"
+    )
     response.chat_request_replayed = True
     return response
 
@@ -75,10 +83,15 @@ def claim_request(user_id, date, request_id, body_hash):
         row = ChatRequest.objects.filter(user_id=user_id, date=date, request_id=request_id).first()
         if row is not None:
             if row.body_hash != body_hash:
-                return JsonResponse({
-                    "code": "request_id_conflict",
-                    "errors": {"detail": "request_id was already used for a different request."},
-                }, status=409)
+                return JsonResponse(
+                    {
+                        "code": "request_id_conflict",
+                        "errors": {
+                            "detail": "request_id was already used for a different request."
+                        },
+                    },
+                    status=409,
+                )
             if row.completed_at is not None:
                 return _stored_response(row)
             if row.lease_expires_at > now:
@@ -89,8 +102,12 @@ def claim_request(user_id, date, request_id, body_hash):
         expiry = now + datetime.timedelta(seconds=max(120, settings.LLM_REQUEST_TIMEOUT * 4 + 30))
         if row is None:
             row = ChatRequest.objects.create(
-                user_id=user_id, date=date, request_id=request_id, body_hash=body_hash,
-                lease_token=token, lease_expires_at=expiry,
+                user_id=user_id,
+                date=date,
+                request_id=request_id,
+                body_hash=body_hash,
+                lease_token=token,
+                lease_expires_at=expiry,
             )
         else:
             row.lease_token, row.lease_expires_at = token, expiry
@@ -110,7 +127,13 @@ def finish_request(claim, build_response):
             return _stored_response(row)
         if row.lease_token != claim.token:
             return processing_response()
-        response = build_response()
+        try:
+            # A scope violation detected after planning rolls back that entire
+            # plan before its terminal error is durably stored.
+            with transaction.atomic():
+                response = build_response()
+        except MutationRejected as exc:
+            response = exc.response
         payload = json.loads(response.content)
         payload.update(request_id=str(row.request_id), request_completed=True)
         response.content = JsonResponse(payload).content

@@ -57,6 +57,8 @@ const {
   recoverPending,
   hasPendingRequest,
   pendingRequestText,
+  cancelPendingIntent,
+  hasPendingIntent,
 } = useChat()
 
 setActiveDate(props.date)
@@ -245,7 +247,7 @@ onUnmounted(() => {
     <!-- Always visible (not gated on visibleMessages) so the warning
          lands before the user types anything, not after. -->
     <div class="privacy-hint" data-testid="chat-privacy-hint">
-      Full chat history is re-sent to the AI provider each turn — clear before discussing sensitive data.
+      Messages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.
     </div>
     <div v-if="visibleMessages.length > 0" class="thread" data-testid="chat-thread">
       <div
@@ -283,6 +285,14 @@ onUnmounted(() => {
       @click="recoverPending(props.pushUndo)"
       title="Return the saved result, or finish the original request if needed."
     >Recover previous AI request</button>
+    <button
+      v-if="hasPendingIntent"
+      type="button"
+      class="recover-btn"
+      data-testid="chat-cancel-intent"
+      :disabled="inputDisabled"
+      @click="cancelPendingIntent(props.pushUndo)"
+    >Cancel pending request</button>
     <form class="command-row" @submit.prevent="handleSubmit">
       <span
         class="status-dot"
