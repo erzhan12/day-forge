@@ -111,3 +111,70 @@ npm --prefix frontend audit --omit=dev --audit-level=high
 bash deployment/tests/test_image_retention.sh
 git diff --check
 ```
+
+## Дополнение 22 октября: браузерная проверка AI-draft после PR #256
+
+Проверена локальная production-сборка поверх `c21f9cc` через встроенный Chromium и CUA. Использованы два свежих fixture-окружения: до исправления CSS и после него. В каждом отдельная SQLite-база, non-staff аккаунт, namespaced localhost Redis и настроенное окно 05:00–22:00. Настоящий SDK transport заменён управляемым ответом; HTTP views, авторизация, CSRF, разбор ответа, planner и persistence работают без подмены.
+
+### Проверенные сценарии
+
+| Сценарий | Размер viewport | Результат |
+| --- | --- | --- |
+| Блок 04:30–05:30 до начала окна | 1440×900 и 390×844 | Правильные название, интервал и границы окна; HTTP 400; ни одного блока в БД; revision 7 и статус draft сохранены; Undo выключен |
+| Блок 21:30–22:30 после конца окна | 1440×900 и 320×740 | Тот же атомарный отказ; допустимый сосед 09:00–09:30 также не записан |
+| Клавиатурный Undo после отказа | Desktop и mobile | `Nothing to undo.`; запроса restore и изменения revision нет |
+| Повторная генерация с 05:00–05:30 или 21:30–22:00 | Desktop и mobile | Ошибка исчезает, оба блока сохраняются, revision становится 8; Undo включается |
+| Undo успешного draft | Desktop и mobile | Restore возвращает пустой день с revision 9; Undo снова выключен |
+| Длинное название из 255 символов без пробелов | 1440×900, 390×844 и 320×740 | Обнаружено переполнение сообщения; после исправления текст полностью переносится внутри контейнера |
+
+Исходная матрица из четырёх сценариев выполнена до CSS-правки. На новой сборке повторены полные цепочки отказ → генерация → Undo на desktop и mobile, включая сохранение того же длинного названия после исправления времени. Все тестовые дни оставлены пустыми. Финальный Logout показал Login.
+
+В двух окружениях выполнено 15 управляемых SDK completion: 9 до CSS-правки и 6 после. Внешних AI-запросов нет. Снимки SQLite и журнал HTTP отдельно подтверждают последовательности `400 → 200 → restore 200`, сохранность revision при отказе и audit `success=false/true` для отказа и принятого повтора. Результаты не являются проверкой качества живой модели или опубликованного production.
+
+### Найденная и исправленная ошибка
+
+Ограничение названия в planner до 255 символов не гарантирует, что оно помещается в интерфейс. Строка из 255 `W` без пробелов выходила из `.draft-error` и создавала горизонтальную прокрутку всей страницы. Добавлен `overflow-wrap: anywhere` в `Schedule.vue`; полное название в API и тексте сообщения сохранено.
+
+| Измерение | До исправления | После исправления |
+| --- | --- | --- |
+| Desktop: ширина документа при viewport 1440 | 3610 px | 1425 px |
+| Desktop: scrollWidth / clientWidth сообщения | 3217 / 640 px | 640 / 640 px |
+| Mobile: ширина документа при viewport 320 | 3217 px | 305 px |
+| Mobile: scrollWidth / clientWidth сообщения | 3217 / 305 px | 305 / 305 px |
+| Mobile 390: scrollWidth / clientWidth после исправления | — | 375 / 375 px |
+
+Разница между viewport и шириной документа после исправления обусловлена вертикальной полосой прокрутки. Новая сборка имеет версию `build:31d514caf6cdfdea2c19`, CSS `app-BIArPliO.css` и JS `app-BJ5vBv9P.js`. После пересборки сервер запущен с новой fixture-базой, страница перезагружена и выполнен новый вход.
+
+Доказательства: [JSON с 25 DOM-измерениями и 29 снимками состояния](evidence/AI_DRAFT_WINDOW_BROWSER.json), [desktop до](screenshots/ai-draft-window-2026-10-22/desktop-long-before-fix.jpg), [desktop после](screenshots/ai-draft-window-2026-10-22/desktop-long-after-fix.jpg), [mobile до](screenshots/ai-draft-window-2026-10-22/mobile-long-before-fix.jpg), [mobile после](screenshots/ai-draft-window-2026-10-22/mobile-long-after-fix.jpg), [обычная ошибка на исправленной mobile-сборке](screenshots/ai-draft-window-2026-10-22/mobile-after-rejected-fixed.jpg).
+
+### Проверки и воспроизведение
+
+`make check` прошёл: Ruff, 2150 backend-тестов, один платный opt-in R11-тест пропущен, Vue type-check и 1410 frontend-тестов в 104 файлах. Production build прошёл. Production dependency audit: 0 vulnerabilities. Image-retention tests, formatter для изменённого fixture-скрипта и `git diff --check` прошли. Повторный запуск fixture на существующей директории отклонён до изменения её БД.
+
+В существующий [fixture-сервер](../backend/scripts/browser_audit_server.py) добавлен флаг `--draft-window`. Нужен локальный Redis на 6379; сервер использует dummy AI key и слушает только 127.0.0.1:8007. Лимит draft повышен до 100 только внутри этого тестового процесса.
+
+```sh
+make frontend-build
+uv run python backend/scripts/browser_audit_server.py /tmp/day-forge-draft-window-new --draft-window
+```
+
+В другом терминале задать ответ модели через `controls.json`, используя выбранную новую директорию:
+
+```python
+import json
+from pathlib import Path
+
+root = Path("/tmp/day-forge-draft-window-new")
+config = json.loads((root / "controls.json").read_text())
+config.update(ai="draft", draft_actions=[
+    {"type": "add", "title": "Valid fixture block", "start_time": "09:00", "end_time": "09:30", "category": "work"},
+    {"type": "add", "title": "Draft early block", "start_time": "04:30", "end_time": "05:30", "category": "work"},
+])
+replacement = root / "controls.next.json"
+replacement.write_text(json.dumps(config))
+replacement.replace(root / "controls.json")
+```
+
+Открыть `http://localhost:8007/accounts/login/`, войти с локальными fixture credentials из скрипта и перейти на `/schedule/2027-08-02/`. Нажать Regenerate draft, проверить сообщение, пустой день и выключенный Undo. Заменить время второго действия на 05:00–05:30, повторить генерацию и нажать Undo. Для позднего отказа использовать 21:30–22:30 и исправить конец на 22:00. Для проверки переноса задать `title="W" * 255`. Дни 2027-08-02…2027-08-06 заранее созданы пустыми с revision 7, поэтому их открытие не запускает auto-draft.
+
+Тестовая вкладка закрыта, viewport сброшен, оба fixture-сервера остановлены, приватные базы и staticfiles удалены. Удалены только 12 Redis-ключей с точными префиксами этих запусков. SHA-256 рабочей SQLite-базы совпадает до и после проверки. Проверка настоящего iOS Safari остаётся отдельной задачей.

@@ -1,0 +1,1525 @@
+{
+  "schema_version": 1,
+  "client_date": "2026-10-22",
+  "client_timezone": "Asia/Almaty",
+  "created_at_utc": "2026-10-21T20:32:38.838104+00:00",
+  "base_commit": "c21f9ccabfa265d88f63eb7b5c9bb176fc38086a",
+  "environment": "Isolated localhost fixture, fresh SQLite, namespaced localhost Redis, production frontend, CUA browser input",
+  "provider": "Controlled SDK completion; real service validation, HTTP views, planner and persistence",
+  "frontend_release": {
+    "version": "build:31d514caf6cdfdea2c19",
+    "script": "assets/app-BJ5vBv9P.js",
+    "styles": [
+      "assets/app-BIArPliO.css"
+    ]
+  },
+  "source_hashes": {
+    "frontend/src/pages/Schedule.vue": "c700e8e661b719bf31c4c6b5abb6a8c34e8bb0c437b22828431e922b69f7677a",
+    "backend/scripts/browser_audit_server.py": "4629c778c40281a42d56e0726e6eb2bd9888e5b4bb66dc8e317d477cc6a2dffa"
+  },
+  "source_database_unchanged": true,
+  "browser_measurements": [
+    {
+      "label": "desktop-before-rejected",
+      "documentWidth": 1425,
+      "error": {
+        "clientWidth": 640,
+        "overflowWrap": "normal",
+        "rect": {
+          "height": 55,
+          "width": 640,
+          "x": 392.5,
+          "y": 135
+        },
+        "scrollWidth": 640,
+        "text": "AI scheduled \"Draft early block\" (04:30-05:30) outside your day window (05:00-22:00). The draft was not saved. Try generating it again."
+      },
+      "regenerateEnabled": true,
+      "undoDisabled": true,
+      "viewport": {
+        "height": 900,
+        "width": 1440
+      }
+    },
+    {
+      "label": "desktop-before-regenerated",
+      "documentWidth": 1440,
+      "error": null,
+      "regenerateEnabled": null,
+      "undoDisabled": false,
+      "viewport": {
+        "height": 900,
+        "width": 1440
+      }
+    },
+    {
+      "label": "desktop-before-undone",
+      "documentWidth": 1425,
+      "error": null,
+      "regenerateEnabled": true,
+      "undoDisabled": true,
+      "viewport": {
+        "height": 900,
+        "width": 1440
+      }
+    },
+    {
+      "label": "desktop-after-rejected",
+      "documentWidth": 1425,
+      "error": {
+        "clientWidth": 640,
+        "overflowWrap": "normal",
+        "rect": {
+          "height": 55,
+          "width": 640,
+          "x": 392.5,
+          "y": 135
+        },
+        "scrollWidth": 640,
+        "text": "AI scheduled \"Draft late block\" (21:30-22:30) outside your day window (05:00-22:00). The draft was not saved. Try generating it again."
+      },
+      "regenerateEnabled": true,
+      "undoDisabled": true,
+      "viewport": {
+        "height": 900,
+        "width": 1440
+      }
+    },
+    {
+      "label": "desktop-after-regenerated",
+      "documentWidth": 1425,
+      "error": null,
+      "regenerateEnabled": null,
+      "undoDisabled": false,
+      "viewport": {
+        "height": 900,
+        "width": 1440
+      }
+    },
+    {
+      "label": "desktop-after-undone",
+      "documentWidth": 1425,
+      "error": null,
+      "regenerateEnabled": true,
+      "undoDisabled": true,
+      "viewport": {
+        "height": 900,
+        "width": 1440
+      }
+    },
+    {
+      "label": "mobile-before-rejected",
+      "documentWidth": 375,
+      "error": {
+        "clientWidth": 375,
+        "overflowWrap": "normal",
+        "rect": {
+          "height": 74.5,
+          "width": 375,
+          "x": 0,
+          "y": 183
+        },
+        "scrollWidth": 375,
+        "text": "AI scheduled \"Draft early block\" (04:30-05:30) outside your day window (05:00-22:00). The draft was not saved. Try generating it again."
+      },
+      "regenerateEnabled": true,
+      "undoDisabled": true,
+      "viewport": {
+        "height": 844,
+        "width": 390
+      }
+    },
+    {
+      "label": "mobile-before-regenerated",
+      "documentWidth": 375,
+      "error": null,
+      "regenerateEnabled": null,
+      "undoDisabled": false,
+      "viewport": {
+        "height": 844,
+        "width": 390
+      }
+    },
+    {
+      "label": "mobile-before-undone",
+      "documentWidth": 375,
+      "error": null,
+      "regenerateEnabled": true,
+      "undoDisabled": true,
+      "viewport": {
+        "height": 844,
+        "width": 390
+      }
+    },
+    {
+      "label": "mobile-after-rejected",
+      "documentWidth": 305,
+      "error": {
+        "clientWidth": 305,
+        "overflowWrap": "normal",
+        "rect": {
+          "height": 94,
+          "width": 305,
+          "x": 0,
+          "y": 183
+        },
+        "scrollWidth": 305,
+        "text": "AI scheduled \"Draft late block\" (21:30-22:30) outside your day window (05:00-22:00). The draft was not saved. Try generating it again."
+      },
+      "regenerateEnabled": true,
+      "undoDisabled": true,
+      "viewport": {
+        "height": 740,
+        "width": 320
+      }
+    },
+    {
+      "label": "mobile-after-regenerated",
+      "documentWidth": 305,
+      "error": null,
+      "regenerateEnabled": null,
+      "undoDisabled": false,
+      "viewport": {
+        "height": 740,
+        "width": 320
+      }
+    },
+    {
+      "label": "mobile-after-undone",
+      "documentWidth": 305,
+      "error": null,
+      "regenerateEnabled": true,
+      "undoDisabled": true,
+      "viewport": {
+        "height": 740,
+        "width": 320
+      }
+    },
+    {
+      "label": "long-title-mobile-before-fix",
+      "documentWidth": 3217,
+      "error": {
+        "clientWidth": 305,
+        "overflowWrap": "normal",
+        "rect": {
+          "height": 113.5,
+          "width": 305,
+          "x": 0,
+          "y": 183
+        },
+        "scrollWidth": 3217,
+        "text": "AI scheduled \"WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW\" (21:30-22:30) outside your day window (05:00-22:00). The draft was not saved. Try generating it again."
+      },
+      "regenerateEnabled": true,
+      "undoDisabled": true,
+      "viewport": {
+        "height": 740,
+        "width": 320
+      }
+    },
+    {
+      "label": "long-title-desktop-before-fix",
+      "documentWidth": 3610,
+      "error": {
+        "clientWidth": 640,
+        "overflowWrap": "normal",
+        "rect": {
+          "height": 94,
+          "width": 640,
+          "x": 392.5,
+          "y": 135
+        },
+        "scrollWidth": 3217,
+        "text": "AI scheduled \"WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW\" (21:30-22:30) outside your day window (05:00-22:00). The draft was not saved. Try generating it again."
+      },
+      "regenerateEnabled": true,
+      "undoDisabled": true,
+      "viewport": {
+        "height": 900,
+        "width": 1440
+      }
+    },
+    {
+      "label": "long-title-desktop-after-fix",
+      "documentWidth": 1425,
+      "error": {
+        "clientWidth": 640,
+        "overflowWrap": "anywhere",
+        "rect": {
+          "height": 172,
+          "width": 640,
+          "x": 392.5,
+          "y": 135
+        },
+        "scrollWidth": 640,
+        "text": "AI scheduled \"WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW\" (21:30-22:30) outside your day window (05:00-22:00). The draft was not saved. Try generating it again."
+      },
+      "regenerateEnabled": true,
+      "undoDisabled": true,
+      "viewport": {
+        "height": 900,
+        "width": 1440
+      }
+    },
+    {
+      "label": "long-title-mobile-after-fix",
+      "documentWidth": 305,
+      "error": {
+        "clientWidth": 305,
+        "overflowWrap": "anywhere",
+        "rect": {
+          "height": 328,
+          "width": 305,
+          "x": 0,
+          "y": 183
+        },
+        "scrollWidth": 305,
+        "text": "AI scheduled \"WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW\" (21:30-22:30) outside your day window (05:00-22:00). The draft was not saved. Try generating it again."
+      },
+      "regenerateEnabled": true,
+      "undoDisabled": true,
+      "viewport": {
+        "height": 740,
+        "width": 320
+      }
+    },
+    {
+      "label": "long-title-mobile390-after-fix",
+      "documentWidth": 375,
+      "error": {
+        "clientWidth": 375,
+        "overflowWrap": "anywhere",
+        "rect": {
+          "height": 269.5,
+          "width": 375,
+          "x": 0,
+          "y": 183
+        },
+        "scrollWidth": 375,
+        "text": "AI scheduled \"WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW\" (21:30-22:30) outside your day window (05:00-22:00). The draft was not saved. Try generating it again."
+      },
+      "regenerateEnabled": true,
+      "undoDisabled": true,
+      "viewport": {
+        "height": 844,
+        "width": 390
+      }
+    },
+    {
+      "label": "fixed-long-regenerated",
+      "documentWidth": 375,
+      "error": null,
+      "regenerateEnabled": null,
+      "undoDisabled": false,
+      "viewport": {
+        "height": 844,
+        "width": 390
+      }
+    },
+    {
+      "label": "fixed-long-undone",
+      "documentWidth": 375,
+      "error": null,
+      "regenerateEnabled": true,
+      "undoDisabled": true,
+      "viewport": {
+        "height": 844,
+        "width": 390
+      }
+    },
+    {
+      "label": "fixed-desktop-before-rejected",
+      "documentWidth": 1425,
+      "error": {
+        "clientWidth": 640,
+        "overflowWrap": "anywhere",
+        "rect": {
+          "height": 55,
+          "width": 640,
+          "x": 392.5,
+          "y": 135
+        },
+        "scrollWidth": 640,
+        "text": "AI scheduled \"Draft early block\" (04:30-05:30) outside your day window (05:00-22:00). The draft was not saved. Try generating it again."
+      },
+      "regenerateEnabled": true,
+      "undoDisabled": true,
+      "viewport": {
+        "height": 900,
+        "width": 1440
+      }
+    },
+    {
+      "label": "fixed-desktop-before-regenerated",
+      "documentWidth": 1440,
+      "error": null,
+      "regenerateEnabled": null,
+      "undoDisabled": false,
+      "viewport": {
+        "height": 900,
+        "width": 1440
+      }
+    },
+    {
+      "label": "fixed-desktop-before-undone",
+      "documentWidth": 1425,
+      "error": null,
+      "regenerateEnabled": true,
+      "undoDisabled": true,
+      "viewport": {
+        "height": 900,
+        "width": 1440
+      }
+    },
+    {
+      "label": "fixed-mobile-after-rejected",
+      "documentWidth": 375,
+      "error": {
+        "clientWidth": 375,
+        "overflowWrap": "anywhere",
+        "rect": {
+          "height": 74.5,
+          "width": 375,
+          "x": 0,
+          "y": 183
+        },
+        "scrollWidth": 375,
+        "text": "AI scheduled \"Draft late block\" (21:30-22:30) outside your day window (05:00-22:00). The draft was not saved. Try generating it again."
+      },
+      "regenerateEnabled": true,
+      "undoDisabled": true,
+      "viewport": {
+        "height": 844,
+        "width": 390
+      }
+    },
+    {
+      "label": "fixed-mobile-after-regenerated",
+      "documentWidth": 375,
+      "error": null,
+      "regenerateEnabled": null,
+      "undoDisabled": false,
+      "viewport": {
+        "height": 844,
+        "width": 390
+      }
+    },
+    {
+      "label": "fixed-mobile-after-undone",
+      "documentWidth": 375,
+      "error": null,
+      "regenerateEnabled": true,
+      "undoDisabled": true,
+      "viewport": {
+        "height": 844,
+        "width": 390
+      }
+    }
+  ],
+  "runs": [
+    {
+      "phase": "before-wrap-fix",
+      "sdk_fixture_calls": 9,
+      "external_provider_calls": 0,
+      "account": {
+        "is_staff": 0,
+        "is_superuser": 0
+      },
+      "snapshots": [
+        {
+          "label": "desktop-before-rejected",
+          "id": 1,
+          "date": "2027-08-02",
+          "status": "draft",
+          "revision": 7,
+          "updated_at": "2026-10-21 20:26:01.058667",
+          "blocks": [],
+          "audit": [
+            {
+              "id": 1,
+              "kind": "draft",
+              "success": 0
+            }
+          ],
+          "writes": [
+            {
+              "kind": "http",
+              "path": "/api/ai/schedules/2027-08-02/generate-draft/",
+              "method": "POST",
+              "status": 400,
+              "response": "{\"errors\": {\"action_index\": 1, \"detail\": \"AI scheduled \\\"Draft early block\\\" (04:30-05:30) outside your day window (05:00-22:00). The draft was not saved. Try generating it again.\"}}"
+            }
+          ]
+        },
+        {
+          "label": "desktop-before-regenerated",
+          "id": 1,
+          "date": "2027-08-02",
+          "status": "draft",
+          "revision": 8,
+          "updated_at": "2026-10-21 20:27:07.055688",
+          "blocks": [
+            {
+              "id": 4,
+              "title": "Draft early block",
+              "start_time": "05:00:00",
+              "end_time": "05:30:00",
+              "category": "work",
+              "sort_order": 1
+            },
+            {
+              "id": 3,
+              "title": "Valid fixture block",
+              "start_time": "09:00:00",
+              "end_time": "09:30:00",
+              "category": "work",
+              "sort_order": 0
+            }
+          ],
+          "audit": [
+            {
+              "id": 1,
+              "kind": "draft",
+              "success": 0
+            },
+            {
+              "id": 2,
+              "kind": "draft",
+              "success": 1
+            }
+          ],
+          "writes": [
+            {
+              "kind": "http",
+              "path": "/api/ai/schedules/2027-08-02/generate-draft/",
+              "method": "POST",
+              "status": 400,
+              "response": "{\"errors\": {\"action_index\": 1, \"detail\": \"AI scheduled \\\"Draft early block\\\" (04:30-05:30) outside your day window (05:00-22:00). The draft was not saved. Try generating it again.\"}}"
+            },
+            {
+              "kind": "http",
+              "path": "/api/ai/schedules/2027-08-02/generate-draft/",
+              "method": "POST",
+              "status": 200,
+              "response": "{\"schedule\": {\"id\": 1, \"date\": \"2027-08-02\", \"status\": \"draft\", \"revision\": 8}, \"blocks\": [{\"id\": 4, \"title\": \"Draft early block\", \"start_time\": \"05:00\", \"end_time\": \"05:30\", \"category\": \"work\", \"is_completed\": false, \"sort_order\": 1, \"restore_proof\": \"WzEsNCwiRHJhZnQgZWFybHkgYmxvY2siLCJtYW51YWwiXQ:QbBhqDURJeun0OZS-6eGa5aEtUP2PXibKviu1yrJZys\"}, {\"id\": 3, \"title\": \"Valid fixture block\", \"start_time\": \"09:00\", \"end_time\": \"09:30\", \"category\": \"work\", \"is_completed\": false, \"sort_order\": 0, \"restore_proof\": \"WzEsMywiVmFsaWQgZml4dHVyZSBibG9jayIsIm1hbnVhbCJd:SZJA7YMDvKaW3UNmEROXj85Vxk-Yb5Ks0_eBVHO4pAA\"}], \"revision\": 8, \"explanation\": \"Audit response accepted.\"}"
+            }
+          ]
+        },
+        {
+          "label": "desktop-before-undone",
+          "id": 1,
+          "date": "2027-08-02",
+          "status": "draft",
+          "revision": 9,
+          "updated_at": "2026-10-21 20:27:23.843381",
+          "blocks": [],
+          "audit": [
+            {
+              "id": 1,
+              "kind": "draft",
+              "success": 0
+            },
+            {
+              "id": 2,
+              "kind": "draft",
+              "success": 1
+            }
+          ],
+          "writes": [
+            {
+              "kind": "http",
+              "path": "/api/ai/schedules/2027-08-02/generate-draft/",
+              "method": "POST",
+              "status": 400,
+              "response": "{\"errors\": {\"action_index\": 1, \"detail\": \"AI scheduled \\\"Draft early block\\\" (04:30-05:30) outside your day window (05:00-22:00). The draft was not saved. Try generating it again.\"}}"
+            },
+            {
+              "kind": "http",
+              "path": "/api/ai/schedules/2027-08-02/generate-draft/",
+              "method": "POST",
+              "status": 200,
+              "response": "{\"schedule\": {\"id\": 1, \"date\": \"2027-08-02\", \"status\": \"draft\", \"revision\": 8}, \"blocks\": [{\"id\": 4, \"title\": \"Draft early block\", \"start_time\": \"05:00\", \"end_time\": \"05:30\", \"category\": \"work\", \"is_completed\": false, \"sort_order\": 1, \"restore_proof\": \"WzEsNCwiRHJhZnQgZWFybHkgYmxvY2siLCJtYW51YWwiXQ:QbBhqDURJeun0OZS-6eGa5aEtUP2PXibKviu1yrJZys\"}, {\"id\": 3, \"title\": \"Valid fixture block\", \"start_time\": \"09:00\", \"end_time\": \"09:30\", \"category\": \"work\", \"is_completed\": false, \"sort_order\": 0, \"restore_proof\": \"WzEsMywiVmFsaWQgZml4dHVyZSBibG9jayIsIm1hbnVhbCJd:SZJA7YMDvKaW3UNmEROXj85Vxk-Yb5Ks0_eBVHO4pAA\"}], \"revision\": 8, \"explanation\": \"Audit response accepted.\"}"
+            },
+            {
+              "kind": "http",
+              "path": "/api/schedules/2027-08-02/blocks/restore/",
+              "method": "POST",
+              "status": 200,
+              "response": "{\"schedule\": {\"id\": 1, \"date\": \"2027-08-02\", \"status\": \"draft\", \"revision\": 9}, \"blocks\": [], \"revision\": 9}"
+            }
+          ]
+        },
+        {
+          "label": "desktop-after-baseline",
+          "id": 2,
+          "date": "2027-08-03",
+          "status": "draft",
+          "revision": 7,
+          "updated_at": "2026-10-21 20:26:01.058839",
+          "blocks": [],
+          "audit": [],
+          "writes": []
+        },
+        {
+          "label": "desktop-after-rejected",
+          "id": 2,
+          "date": "2027-08-03",
+          "status": "draft",
+          "revision": 7,
+          "updated_at": "2026-10-21 20:26:01.058839",
+          "blocks": [],
+          "audit": [
+            {
+              "id": 3,
+              "kind": "draft",
+              "success": 0
+            }
+          ],
+          "writes": [
+            {
+              "kind": "http",
+              "path": "/api/ai/schedules/2027-08-03/generate-draft/",
+              "method": "POST",
+              "status": 400,
+              "response": "{\"errors\": {\"action_index\": 1, \"detail\": \"AI scheduled \\\"Draft late block\\\" (21:30-22:30) outside your day window (05:00-22:00). The draft was not saved. Try generating it again.\"}}"
+            }
+          ]
+        },
+        {
+          "label": "desktop-after-regenerated",
+          "id": 2,
+          "date": "2027-08-03",
+          "status": "draft",
+          "revision": 8,
+          "updated_at": "2026-10-21 20:27:39.742084",
+          "blocks": [
+            {
+              "id": 5,
+              "title": "Valid fixture block",
+              "start_time": "09:00:00",
+              "end_time": "09:30:00",
+              "category": "work",
+              "sort_order": 0
+            },
+            {
+              "id": 6,
+              "title": "Draft late block",
+              "start_time": "21:30:00",
+              "end_time": "22:00:00",
+              "category": "work",
+              "sort_order": 1
+            }
+          ],
+          "audit": [
+            {
+              "id": 3,
+              "kind": "draft",
+              "success": 0
+            },
+            {
+              "id": 4,
+              "kind": "draft",
+              "success": 1
+            }
+          ],
+          "writes": [
+            {
+              "kind": "http",
+              "path": "/api/ai/schedules/2027-08-03/generate-draft/",
+              "method": "POST",
+              "status": 400,
+              "response": "{\"errors\": {\"action_index\": 1, \"detail\": \"AI scheduled \\\"Draft late block\\\" (21:30-22:30) outside your day window (05:00-22:00). The draft was not saved. Try generating it again.\"}}"
+            },
+            {
+              "kind": "http",
+              "path": "/api/ai/schedules/2027-08-03/generate-draft/",
+              "method": "POST",
+              "status": 200,
+              "response": "{\"schedule\": {\"id\": 2, \"date\": \"2027-08-03\", \"status\": \"draft\", \"revision\": 8}, \"blocks\": [{\"id\": 5, \"title\": \"Valid fixture block\", \"start_time\": \"09:00\", \"end_time\": \"09:30\", \"category\": \"work\", \"is_completed\": false, \"sort_order\": 0, \"restore_proof\": \"WzIsNSwiVmFsaWQgZml4dHVyZSBibG9jayIsIm1hbnVhbCJd:6aKICSwm4ths4NFH0-Zpa8BTTJgr_SENZGvfRZ8UYUY\"}, {\"id\": 6, \"title\": \"Draft late block\", \"start_time\": \"21:30\", \"end_time\": \"22:00\", \"category\": \"work\", \"is_completed\": false, \"sort_order\": 1, \"restore_proof\": \"WzIsNiwiRHJhZnQgbGF0ZSBibG9jayIsIm1hbnVhbCJd:ptQQP8RFFtvbzP6tymlmzJaOiCRCBmxPga_feUF62as\"}], \"revision\": 8, \"explanation\": \"Audit response accepted.\"}"
+            }
+          ]
+        },
+        {
+          "label": "mobile-before-baseline",
+          "id": 3,
+          "date": "2027-08-04",
+          "status": "draft",
+          "revision": 7,
+          "updated_at": "2026-10-21 20:26:01.059008",
+          "blocks": [],
+          "audit": [],
+          "writes": []
+        },
+        {
+          "label": "desktop-after-undone",
+          "id": 2,
+          "date": "2027-08-03",
+          "status": "draft",
+          "revision": 9,
+          "updated_at": "2026-10-21 20:27:46.748766",
+          "blocks": [],
+          "audit": [
+            {
+              "id": 3,
+              "kind": "draft",
+              "success": 0
+            },
+            {
+              "id": 4,
+              "kind": "draft",
+              "success": 1
+            }
+          ],
+          "writes": [
+            {
+              "kind": "http",
+              "path": "/api/ai/schedules/2027-08-03/generate-draft/",
+              "method": "POST",
+              "status": 400,
+              "response": "{\"errors\": {\"action_index\": 1, \"detail\": \"AI scheduled \\\"Draft late block\\\" (21:30-22:30) outside your day window (05:00-22:00). The draft was not saved. Try generating it again.\"}}"
+            },
+            {
+              "kind": "http",
+              "path": "/api/ai/schedules/2027-08-03/generate-draft/",
+              "method": "POST",
+              "status": 200,
+              "response": "{\"schedule\": {\"id\": 2, \"date\": \"2027-08-03\", \"status\": \"draft\", \"revision\": 8}, \"blocks\": [{\"id\": 5, \"title\": \"Valid fixture block\", \"start_time\": \"09:00\", \"end_time\": \"09:30\", \"category\": \"work\", \"is_completed\": false, \"sort_order\": 0, \"restore_proof\": \"WzIsNSwiVmFsaWQgZml4dHVyZSBibG9jayIsIm1hbnVhbCJd:6aKICSwm4ths4NFH0-Zpa8BTTJgr_SENZGvfRZ8UYUY\"}, {\"id\": 6, \"title\": \"Draft late block\", \"start_time\": \"21:30\", \"end_time\": \"22:00\", \"category\": \"work\", \"is_completed\": false, \"sort_order\": 1, \"restore_proof\": \"WzIsNiwiRHJhZnQgbGF0ZSBibG9jayIsIm1hbnVhbCJd:ptQQP8RFFtvbzP6tymlmzJaOiCRCBmxPga_feUF62as\"}], \"revision\": 8, \"explanation\": \"Audit response accepted.\"}"
+            },
+            {
+              "kind": "http",
+              "path": "/api/schedules/2027-08-03/blocks/restore/",
+              "method": "POST",
+              "status": 200,
+              "response": "{\"schedule\": {\"id\": 2, \"date\": \"2027-08-03\", \"status\": \"draft\", \"revision\": 9}, \"blocks\": [], \"revision\": 9}"
+            }
+          ]
+        },
+        {
+          "label": "mobile-before-rejected",
+          "id": 3,
+          "date": "2027-08-04",
+          "status": "draft",
+          "revision": 7,
+          "updated_at": "2026-10-21 20:26:01.059008",
+          "blocks": [],
+          "audit": [
+            {
+              "id": 5,
+              "kind": "draft",
+              "success": 0
+            }
+          ],
+          "writes": [
+            {
+              "kind": "http",
+              "path": "/api/ai/schedules/2027-08-04/generate-draft/",
+              "method": "POST",
+              "status": 400,
+              "response": "{\"errors\": {\"action_index\": 1, \"detail\": \"AI scheduled \\\"Draft early block\\\" (04:30-05:30) outside your day window (05:00-22:00). The draft was not saved. Try generating it again.\"}}"
+            }
+          ]
+        },
+        {
+          "label": "mobile-before-regenerated",
+          "id": 3,
+          "date": "2027-08-04",
+          "status": "draft",
+          "revision": 8,
+          "updated_at": "2026-10-21 20:27:58.407991",
+          "blocks": [
+            {
+              "id": 8,
+              "title": "Draft early block",
+              "start_time": "05:00:00",
+              "end_time": "05:30:00",
+              "category": "work",
+              "sort_order": 1
+            },
+            {
+              "id": 7,
+              "title": "Valid fixture block",
+              "start_time": "09:00:00",
+              "end_time": "09:30:00",
+              "category": "work",
+              "sort_order": 0
+            }
+          ],
+          "audit": [
+            {
+              "id": 5,
+              "kind": "draft",
+              "success": 0
+            },
+            {
+              "id": 6,
+              "kind": "draft",
+              "success": 1
+            }
+          ],
+          "writes": [
+            {
+              "kind": "http",
+              "path": "/api/ai/schedules/2027-08-04/generate-draft/",
+              "method": "POST",
+              "status": 400,
+              "response": "{\"errors\": {\"action_index\": 1, \"detail\": \"AI scheduled \\\"Draft early block\\\" (04:30-05:30) outside your day window (05:00-22:00). The draft was not saved. Try generating it again.\"}}"
+            },
+            {
+              "kind": "http",
+              "path": "/api/ai/schedules/2027-08-04/generate-draft/",
+              "method": "POST",
+              "status": 200,
+              "response": "{\"schedule\": {\"id\": 3, \"date\": \"2027-08-04\", \"status\": \"draft\", \"revision\": 8}, \"blocks\": [{\"id\": 8, \"title\": \"Draft early block\", \"start_time\": \"05:00\", \"end_time\": \"05:30\", \"category\": \"work\", \"is_completed\": false, \"sort_order\": 1, \"restore_proof\": \"WzMsOCwiRHJhZnQgZWFybHkgYmxvY2siLCJtYW51YWwiXQ:KiRkErAvQU4YUe5YkhxQINUqkUcEPqMv52vbCy-kkuU\"}, {\"id\": 7, \"title\": \"Valid fixture block\", \"start_time\": \"09:00\", \"end_time\": \"09:30\", \"category\": \"work\", \"is_completed\": false, \"sort_order\": 0, \"restore_proof\": \"WzMsNywiVmFsaWQgZml4dHVyZSBibG9jayIsIm1hbnVhbCJd:n9K7zcMaziJwUKxefqJpPgkRzOHj1iQ-NzZM0sCgfFY\"}], \"revision\": 8, \"explanation\": \"Audit response accepted.\"}"
+            }
+          ]
+        },
+        {
+          "label": "mobile-after-baseline",
+          "id": 4,
+          "date": "2027-08-05",
+          "status": "draft",
+          "revision": 7,
+          "updated_at": "2026-10-21 20:26:01.059148",
+          "blocks": [],
+          "audit": [],
+          "writes": []
+        },
+        {
+          "label": "mobile-before-undone",
+          "id": 3,
+          "date": "2027-08-04",
+          "status": "draft",
+          "revision": 9,
+          "updated_at": "2026-10-21 20:28:05.021968",
+          "blocks": [],
+          "audit": [
+            {
+              "id": 5,
+              "kind": "draft",
+              "success": 0
+            },
+            {
+              "id": 6,
+              "kind": "draft",
+              "success": 1
+            }
+          ],
+          "writes": [
+            {
+              "kind": "http",
+              "path": "/api/ai/schedules/2027-08-04/generate-draft/",
+              "method": "POST",
+              "status": 400,
+              "response": "{\"errors\": {\"action_index\": 1, \"detail\": \"AI scheduled \\\"Draft early block\\\" (04:30-05:30) outside your day window (05:00-22:00). The draft was not saved. Try generating it again.\"}}"
+            },
+            {
+              "kind": "http",
+              "path": "/api/ai/schedules/2027-08-04/generate-draft/",
+              "method": "POST",
+              "status": 200,
+              "response": "{\"schedule\": {\"id\": 3, \"date\": \"2027-08-04\", \"status\": \"draft\", \"revision\": 8}, \"blocks\": [{\"id\": 8, \"title\": \"Draft early block\", \"start_time\": \"05:00\", \"end_time\": \"05:30\", \"category\": \"work\", \"is_completed\": false, \"sort_order\": 1, \"restore_proof\": \"WzMsOCwiRHJhZnQgZWFybHkgYmxvY2siLCJtYW51YWwiXQ:KiRkErAvQU4YUe5YkhxQINUqkUcEPqMv52vbCy-kkuU\"}, {\"id\": 7, \"title\": \"Valid fixture block\", \"start_time\": \"09:00\", \"end_time\": \"09:30\", \"category\": \"work\", \"is_completed\": false, \"sort_order\": 0, \"restore_proof\": \"WzMsNywiVmFsaWQgZml4dHVyZSBibG9jayIsIm1hbnVhbCJd:n9K7zcMaziJwUKxefqJpPgkRzOHj1iQ-NzZM0sCgfFY\"}], \"revision\": 8, \"explanation\": \"Audit response accepted.\"}"
+            },
+            {
+              "kind": "http",
+              "path": "/api/schedules/2027-08-04/blocks/restore/",
+              "method": "POST",
+              "status": 200,
+              "response": "{\"schedule\": {\"id\": 3, \"date\": \"2027-08-04\", \"status\": \"draft\", \"revision\": 9}, \"blocks\": [], \"revision\": 9}"
+            }
+          ]
+        },
+        {
+          "label": "mobile-after-rejected",
+          "id": 4,
+          "date": "2027-08-05",
+          "status": "draft",
+          "revision": 7,
+          "updated_at": "2026-10-21 20:26:01.059148",
+          "blocks": [],
+          "audit": [
+            {
+              "id": 7,
+              "kind": "draft",
+              "success": 0
+            }
+          ],
+          "writes": [
+            {
+              "kind": "http",
+              "path": "/api/ai/schedules/2027-08-05/generate-draft/",
+              "method": "POST",
+              "status": 400,
+              "response": "{\"errors\": {\"action_index\": 1, \"detail\": \"AI scheduled \\\"Draft late block\\\" (21:30-22:30) outside your day window (05:00-22:00). The draft was not saved. Try generating it again.\"}}"
+            }
+          ]
+        },
+        {
+          "label": "mobile-after-regenerated",
+          "id": 4,
+          "date": "2027-08-05",
+          "status": "draft",
+          "revision": 8,
+          "updated_at": "2026-10-21 20:28:11.494542",
+          "blocks": [
+            {
+              "id": 9,
+              "title": "Valid fixture block",
+              "start_time": "09:00:00",
+              "end_time": "09:30:00",
+              "category": "work",
+              "sort_order": 0
+            },
+            {
+              "id": 10,
+              "title": "Draft late block",
+              "start_time": "21:30:00",
+              "end_time": "22:00:00",
+              "category": "work",
+              "sort_order": 1
+            }
+          ],
+          "audit": [
+            {
+              "id": 7,
+              "kind": "draft",
+              "success": 0
+            },
+            {
+              "id": 8,
+              "kind": "draft",
+              "success": 1
+            }
+          ],
+          "writes": [
+            {
+              "kind": "http",
+              "path": "/api/ai/schedules/2027-08-05/generate-draft/",
+              "method": "POST",
+              "status": 400,
+              "response": "{\"errors\": {\"action_index\": 1, \"detail\": \"AI scheduled \\\"Draft late block\\\" (21:30-22:30) outside your day window (05:00-22:00). The draft was not saved. Try generating it again.\"}}"
+            },
+            {
+              "kind": "http",
+              "path": "/api/ai/schedules/2027-08-05/generate-draft/",
+              "method": "POST",
+              "status": 200,
+              "response": "{\"schedule\": {\"id\": 4, \"date\": \"2027-08-05\", \"status\": \"draft\", \"revision\": 8}, \"blocks\": [{\"id\": 9, \"title\": \"Valid fixture block\", \"start_time\": \"09:00\", \"end_time\": \"09:30\", \"category\": \"work\", \"is_completed\": false, \"sort_order\": 0, \"restore_proof\": \"WzQsOSwiVmFsaWQgZml4dHVyZSBibG9jayIsIm1hbnVhbCJd:PTJRrWw4qZUeeWxopJc8KLCjFZ4NLtYt-VL6WUYMnBs\"}, {\"id\": 10, \"title\": \"Draft late block\", \"start_time\": \"21:30\", \"end_time\": \"22:00\", \"category\": \"work\", \"is_completed\": false, \"sort_order\": 1, \"restore_proof\": \"WzQsMTAsIkRyYWZ0IGxhdGUgYmxvY2siLCJtYW51YWwiXQ:DkU1vt_77MJ9ctd7QqYGK0hONySXvrRBGq4sPgeykBU\"}], \"revision\": 8, \"explanation\": \"Audit response accepted.\"}"
+            }
+          ]
+        },
+        {
+          "label": "long-title-baseline",
+          "id": 5,
+          "date": "2027-08-06",
+          "status": "draft",
+          "revision": 7,
+          "updated_at": "2026-10-21 20:26:01.059283",
+          "blocks": [],
+          "audit": [],
+          "writes": []
+        },
+        {
+          "label": "mobile-after-undone",
+          "id": 4,
+          "date": "2027-08-05",
+          "status": "draft",
+          "revision": 9,
+          "updated_at": "2026-10-21 20:28:17.847341",
+          "blocks": [],
+          "audit": [
+            {
+              "id": 7,
+              "kind": "draft",
+              "success": 0
+            },
+            {
+              "id": 8,
+              "kind": "draft",
+              "success": 1
+            }
+          ],
+          "writes": [
+            {
+              "kind": "http",
+              "path": "/api/ai/schedules/2027-08-05/generate-draft/",
+              "method": "POST",
+              "status": 400,
+              "response": "{\"errors\": {\"action_index\": 1, \"detail\": \"AI scheduled \\\"Draft late block\\\" (21:30-22:30) outside your day window (05:00-22:00). The draft was not saved. Try generating it again.\"}}"
+            },
+            {
+              "kind": "http",
+              "path": "/api/ai/schedules/2027-08-05/generate-draft/",
+              "method": "POST",
+              "status": 200,
+              "response": "{\"schedule\": {\"id\": 4, \"date\": \"2027-08-05\", \"status\": \"draft\", \"revision\": 8}, \"blocks\": [{\"id\": 9, \"title\": \"Valid fixture block\", \"start_time\": \"09:00\", \"end_time\": \"09:30\", \"category\": \"work\", \"is_completed\": false, \"sort_order\": 0, \"restore_proof\": \"WzQsOSwiVmFsaWQgZml4dHVyZSBibG9jayIsIm1hbnVhbCJd:PTJRrWw4qZUeeWxopJc8KLCjFZ4NLtYt-VL6WUYMnBs\"}, {\"id\": 10, \"title\": \"Draft late block\", \"start_time\": \"21:30\", \"end_time\": \"22:00\", \"category\": \"work\", \"is_completed\": false, \"sort_order\": 1, \"restore_proof\": \"WzQsMTAsIkRyYWZ0IGxhdGUgYmxvY2siLCJtYW51YWwiXQ:DkU1vt_77MJ9ctd7QqYGK0hONySXvrRBGq4sPgeykBU\"}], \"revision\": 8, \"explanation\": \"Audit response accepted.\"}"
+            },
+            {
+              "kind": "http",
+              "path": "/api/schedules/2027-08-05/blocks/restore/",
+              "method": "POST",
+              "status": 200,
+              "response": "{\"schedule\": {\"id\": 4, \"date\": \"2027-08-05\", \"status\": \"draft\", \"revision\": 9}, \"blocks\": [], \"revision\": 9}"
+            }
+          ]
+        },
+        {
+          "label": "long-title-rejected-before-fix",
+          "id": 5,
+          "date": "2027-08-06",
+          "status": "draft",
+          "revision": 7,
+          "updated_at": "2026-10-21 20:26:01.059283",
+          "blocks": [],
+          "audit": [
+            {
+              "id": 9,
+              "kind": "draft",
+              "success": 0
+            }
+          ],
+          "writes": [
+            {
+              "kind": "http",
+              "path": "/api/ai/schedules/2027-08-06/generate-draft/",
+              "method": "POST",
+              "status": 400,
+              "response": "{\"errors\": {\"action_index\": 1, \"detail\": \"AI scheduled \\\"WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW\\\" (21:30-22:30) outside your day window (05:00-22:00). The draft was not saved. Try generating it again.\"}}"
+            }
+          ]
+        }
+      ],
+      "final_days": [
+        {
+          "date": "2027-08-02",
+          "revision": 9,
+          "status": "draft",
+          "block_count": 0
+        },
+        {
+          "date": "2027-08-03",
+          "revision": 9,
+          "status": "draft",
+          "block_count": 0
+        },
+        {
+          "date": "2027-08-04",
+          "revision": 9,
+          "status": "draft",
+          "block_count": 0
+        },
+        {
+          "date": "2027-08-05",
+          "revision": 9,
+          "status": "draft",
+          "block_count": 0
+        },
+        {
+          "date": "2027-08-06",
+          "revision": 7,
+          "status": "draft",
+          "block_count": 0
+        }
+      ],
+      "sessions_before_disposal": 1
+    },
+    {
+      "phase": "after-wrap-fix",
+      "sdk_fixture_calls": 6,
+      "external_provider_calls": 0,
+      "account": {
+        "is_staff": 0,
+        "is_superuser": 0
+      },
+      "snapshots": [
+        {
+          "label": "fixed-long-baseline",
+          "id": 5,
+          "date": "2027-08-06",
+          "status": "draft",
+          "revision": 7,
+          "updated_at": "2026-10-21 20:29:19.607958",
+          "blocks": [],
+          "audit": [],
+          "writes": []
+        },
+        {
+          "label": "fixed-long-rejected",
+          "id": 5,
+          "date": "2027-08-06",
+          "status": "draft",
+          "revision": 7,
+          "updated_at": "2026-10-21 20:29:19.607958",
+          "blocks": [],
+          "audit": [
+            {
+              "id": 1,
+              "kind": "draft",
+              "success": 0
+            }
+          ],
+          "writes": [
+            {
+              "kind": "http",
+              "path": "/api/ai/schedules/2027-08-06/generate-draft/",
+              "method": "POST",
+              "status": 400,
+              "response": "{\"errors\": {\"action_index\": 1, \"detail\": \"AI scheduled \\\"WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW\\\" (21:30-22:30) outside your day window (05:00-22:00). The draft was not saved. Try generating it again.\"}}"
+            }
+          ]
+        },
+        {
+          "label": "fixed-long-regenerated",
+          "id": 5,
+          "date": "2027-08-06",
+          "status": "draft",
+          "revision": 8,
+          "updated_at": "2026-10-21 20:30:25.372238",
+          "blocks": [
+            {
+              "id": 3,
+              "title": "Valid fixture block",
+              "start_time": "09:00:00",
+              "end_time": "09:30:00",
+              "category": "work",
+              "sort_order": 0
+            },
+            {
+              "id": 4,
+              "title": "WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW",
+              "start_time": "21:30:00",
+              "end_time": "22:00:00",
+              "category": "work",
+              "sort_order": 1
+            }
+          ],
+          "audit": [
+            {
+              "id": 1,
+              "kind": "draft",
+              "success": 0
+            },
+            {
+              "id": 2,
+              "kind": "draft",
+              "success": 1
+            }
+          ],
+          "writes": [
+            {
+              "kind": "http",
+              "path": "/api/ai/schedules/2027-08-06/generate-draft/",
+              "method": "POST",
+              "status": 400,
+              "response": "{\"errors\": {\"action_index\": 1, \"detail\": \"AI scheduled \\\"WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW\\\" (21:30-22:30) outside your day window (05:00-22:00). The draft was not saved. Try generating it again.\"}}"
+            },
+            {
+              "kind": "http",
+              "path": "/api/ai/schedules/2027-08-06/generate-draft/",
+              "method": "POST",
+              "status": 200,
+              "response": "{\"schedule\": {\"id\": 5, \"date\": \"2027-08-06\", \"status\": \"draft\", \"revision\": 8}, \"blocks\": [{\"id\": 3, \"title\": \"Valid fixture block\", \"start_time\": \"09:00\", \"end_time\": \"09:30\", \"category\": \"work\", \"is_completed\": false, \"sort_order\": 0, \"restore_proof\": \"WzUsMywiVmFsaWQgZml4dHVyZSBibG9jayIsIm1hbnVhbCJd:tRpX8L18iSZDECx8SSVGlCgtyxNWSdcAFJihE4So6qI\"}, {\"id\": 4, \"title\": \"WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW\", \"start_time\": \"21:30\", \"end_time\": \"22:00\", \"category\": \"work\", \"is_completed\": false, \"sort_order\": 1, \"restore_proof\": \"WzUsNCwiV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXIiwibWFudWFsIl0:JnwKISxZK-ZjyIwkCnyA2iFnJWjxfTmhzQIOOIiQEQ0\"}], \"revision\": 8, \"explanation\": \"Audit response accepted.\"}"
+            }
+          ]
+        },
+        {
+          "label": "fixed-desktop-before-baseline",
+          "id": 1,
+          "date": "2027-08-02",
+          "status": "draft",
+          "revision": 7,
+          "updated_at": "2026-10-21 20:29:19.607296",
+          "blocks": [],
+          "audit": [],
+          "writes": []
+        },
+        {
+          "label": "fixed-long-undone",
+          "id": 5,
+          "date": "2027-08-06",
+          "status": "draft",
+          "revision": 9,
+          "updated_at": "2026-10-21 20:30:34.751939",
+          "blocks": [],
+          "audit": [
+            {
+              "id": 1,
+              "kind": "draft",
+              "success": 0
+            },
+            {
+              "id": 2,
+              "kind": "draft",
+              "success": 1
+            }
+          ],
+          "writes": [
+            {
+              "kind": "http",
+              "path": "/api/ai/schedules/2027-08-06/generate-draft/",
+              "method": "POST",
+              "status": 400,
+              "response": "{\"errors\": {\"action_index\": 1, \"detail\": \"AI scheduled \\\"WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW\\\" (21:30-22:30) outside your day window (05:00-22:00). The draft was not saved. Try generating it again.\"}}"
+            },
+            {
+              "kind": "http",
+              "path": "/api/ai/schedules/2027-08-06/generate-draft/",
+              "method": "POST",
+              "status": 200,
+              "response": "{\"schedule\": {\"id\": 5, \"date\": \"2027-08-06\", \"status\": \"draft\", \"revision\": 8}, \"blocks\": [{\"id\": 3, \"title\": \"Valid fixture block\", \"start_time\": \"09:00\", \"end_time\": \"09:30\", \"category\": \"work\", \"is_completed\": false, \"sort_order\": 0, \"restore_proof\": \"WzUsMywiVmFsaWQgZml4dHVyZSBibG9jayIsIm1hbnVhbCJd:tRpX8L18iSZDECx8SSVGlCgtyxNWSdcAFJihE4So6qI\"}, {\"id\": 4, \"title\": \"WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW\", \"start_time\": \"21:30\", \"end_time\": \"22:00\", \"category\": \"work\", \"is_completed\": false, \"sort_order\": 1, \"restore_proof\": \"WzUsNCwiV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXIiwibWFudWFsIl0:JnwKISxZK-ZjyIwkCnyA2iFnJWjxfTmhzQIOOIiQEQ0\"}], \"revision\": 8, \"explanation\": \"Audit response accepted.\"}"
+            },
+            {
+              "kind": "http",
+              "path": "/api/schedules/2027-08-06/blocks/restore/",
+              "method": "POST",
+              "status": 200,
+              "response": "{\"schedule\": {\"id\": 5, \"date\": \"2027-08-06\", \"status\": \"draft\", \"revision\": 9}, \"blocks\": [], \"revision\": 9}"
+            }
+          ]
+        },
+        {
+          "label": "fixed-desktop-before-rejected",
+          "id": 1,
+          "date": "2027-08-02",
+          "status": "draft",
+          "revision": 7,
+          "updated_at": "2026-10-21 20:29:19.607296",
+          "blocks": [],
+          "audit": [
+            {
+              "id": 3,
+              "kind": "draft",
+              "success": 0
+            }
+          ],
+          "writes": [
+            {
+              "kind": "http",
+              "path": "/api/ai/schedules/2027-08-02/generate-draft/",
+              "method": "POST",
+              "status": 400,
+              "response": "{\"errors\": {\"action_index\": 1, \"detail\": \"AI scheduled \\\"Draft early block\\\" (04:30-05:30) outside your day window (05:00-22:00). The draft was not saved. Try generating it again.\"}}"
+            }
+          ]
+        },
+        {
+          "label": "fixed-desktop-before-regenerated",
+          "id": 1,
+          "date": "2027-08-02",
+          "status": "draft",
+          "revision": 8,
+          "updated_at": "2026-10-21 20:30:41.623980",
+          "blocks": [
+            {
+              "id": 6,
+              "title": "Draft early block",
+              "start_time": "05:00:00",
+              "end_time": "05:30:00",
+              "category": "work",
+              "sort_order": 1
+            },
+            {
+              "id": 5,
+              "title": "Valid fixture block",
+              "start_time": "09:00:00",
+              "end_time": "09:30:00",
+              "category": "work",
+              "sort_order": 0
+            }
+          ],
+          "audit": [
+            {
+              "id": 3,
+              "kind": "draft",
+              "success": 0
+            },
+            {
+              "id": 4,
+              "kind": "draft",
+              "success": 1
+            }
+          ],
+          "writes": [
+            {
+              "kind": "http",
+              "path": "/api/ai/schedules/2027-08-02/generate-draft/",
+              "method": "POST",
+              "status": 400,
+              "response": "{\"errors\": {\"action_index\": 1, \"detail\": \"AI scheduled \\\"Draft early block\\\" (04:30-05:30) outside your day window (05:00-22:00). The draft was not saved. Try generating it again.\"}}"
+            },
+            {
+              "kind": "http",
+              "path": "/api/ai/schedules/2027-08-02/generate-draft/",
+              "method": "POST",
+              "status": 200,
+              "response": "{\"schedule\": {\"id\": 1, \"date\": \"2027-08-02\", \"status\": \"draft\", \"revision\": 8}, \"blocks\": [{\"id\": 6, \"title\": \"Draft early block\", \"start_time\": \"05:00\", \"end_time\": \"05:30\", \"category\": \"work\", \"is_completed\": false, \"sort_order\": 1, \"restore_proof\": \"WzEsNiwiRHJhZnQgZWFybHkgYmxvY2siLCJtYW51YWwiXQ:nLFnGlXY6rkHiDqzA0CCr1U2kNMYiLgnbMBGCv7r9Tk\"}, {\"id\": 5, \"title\": \"Valid fixture block\", \"start_time\": \"09:00\", \"end_time\": \"09:30\", \"category\": \"work\", \"is_completed\": false, \"sort_order\": 0, \"restore_proof\": \"WzEsNSwiVmFsaWQgZml4dHVyZSBibG9jayIsIm1hbnVhbCJd:HOvpyQgGIRYoaDVhRAzkkcbXoPie3nkBdA40wmdMTJg\"}], \"revision\": 8, \"explanation\": \"Audit response accepted.\"}"
+            }
+          ]
+        },
+        {
+          "label": "fixed-mobile-after-baseline",
+          "id": 4,
+          "date": "2027-08-05",
+          "status": "draft",
+          "revision": 7,
+          "updated_at": "2026-10-21 20:29:19.607798",
+          "blocks": [],
+          "audit": [],
+          "writes": []
+        },
+        {
+          "label": "fixed-desktop-before-undone",
+          "id": 1,
+          "date": "2027-08-02",
+          "status": "draft",
+          "revision": 9,
+          "updated_at": "2026-10-21 20:30:48.761889",
+          "blocks": [],
+          "audit": [
+            {
+              "id": 3,
+              "kind": "draft",
+              "success": 0
+            },
+            {
+              "id": 4,
+              "kind": "draft",
+              "success": 1
+            }
+          ],
+          "writes": [
+            {
+              "kind": "http",
+              "path": "/api/ai/schedules/2027-08-02/generate-draft/",
+              "method": "POST",
+              "status": 400,
+              "response": "{\"errors\": {\"action_index\": 1, \"detail\": \"AI scheduled \\\"Draft early block\\\" (04:30-05:30) outside your day window (05:00-22:00). The draft was not saved. Try generating it again.\"}}"
+            },
+            {
+              "kind": "http",
+              "path": "/api/ai/schedules/2027-08-02/generate-draft/",
+              "method": "POST",
+              "status": 200,
+              "response": "{\"schedule\": {\"id\": 1, \"date\": \"2027-08-02\", \"status\": \"draft\", \"revision\": 8}, \"blocks\": [{\"id\": 6, \"title\": \"Draft early block\", \"start_time\": \"05:00\", \"end_time\": \"05:30\", \"category\": \"work\", \"is_completed\": false, \"sort_order\": 1, \"restore_proof\": \"WzEsNiwiRHJhZnQgZWFybHkgYmxvY2siLCJtYW51YWwiXQ:nLFnGlXY6rkHiDqzA0CCr1U2kNMYiLgnbMBGCv7r9Tk\"}, {\"id\": 5, \"title\": \"Valid fixture block\", \"start_time\": \"09:00\", \"end_time\": \"09:30\", \"category\": \"work\", \"is_completed\": false, \"sort_order\": 0, \"restore_proof\": \"WzEsNSwiVmFsaWQgZml4dHVyZSBibG9jayIsIm1hbnVhbCJd:HOvpyQgGIRYoaDVhRAzkkcbXoPie3nkBdA40wmdMTJg\"}], \"revision\": 8, \"explanation\": \"Audit response accepted.\"}"
+            },
+            {
+              "kind": "http",
+              "path": "/api/schedules/2027-08-02/blocks/restore/",
+              "method": "POST",
+              "status": 200,
+              "response": "{\"schedule\": {\"id\": 1, \"date\": \"2027-08-02\", \"status\": \"draft\", \"revision\": 9}, \"blocks\": [], \"revision\": 9}"
+            }
+          ]
+        },
+        {
+          "label": "fixed-mobile-after-rejected",
+          "id": 4,
+          "date": "2027-08-05",
+          "status": "draft",
+          "revision": 7,
+          "updated_at": "2026-10-21 20:29:19.607798",
+          "blocks": [],
+          "audit": [
+            {
+              "id": 5,
+              "kind": "draft",
+              "success": 0
+            }
+          ],
+          "writes": [
+            {
+              "kind": "http",
+              "path": "/api/ai/schedules/2027-08-05/generate-draft/",
+              "method": "POST",
+              "status": 400,
+              "response": "{\"errors\": {\"action_index\": 1, \"detail\": \"AI scheduled \\\"Draft late block\\\" (21:30-22:30) outside your day window (05:00-22:00). The draft was not saved. Try generating it again.\"}}"
+            }
+          ]
+        },
+        {
+          "label": "fixed-mobile-after-regenerated",
+          "id": 4,
+          "date": "2027-08-05",
+          "status": "draft",
+          "revision": 8,
+          "updated_at": "2026-10-21 20:31:04.068427",
+          "blocks": [
+            {
+              "id": 7,
+              "title": "Valid fixture block",
+              "start_time": "09:00:00",
+              "end_time": "09:30:00",
+              "category": "work",
+              "sort_order": 0
+            },
+            {
+              "id": 8,
+              "title": "Draft late block",
+              "start_time": "21:30:00",
+              "end_time": "22:00:00",
+              "category": "work",
+              "sort_order": 1
+            }
+          ],
+          "audit": [
+            {
+              "id": 5,
+              "kind": "draft",
+              "success": 0
+            },
+            {
+              "id": 6,
+              "kind": "draft",
+              "success": 1
+            }
+          ],
+          "writes": [
+            {
+              "kind": "http",
+              "path": "/api/ai/schedules/2027-08-05/generate-draft/",
+              "method": "POST",
+              "status": 400,
+              "response": "{\"errors\": {\"action_index\": 1, \"detail\": \"AI scheduled \\\"Draft late block\\\" (21:30-22:30) outside your day window (05:00-22:00). The draft was not saved. Try generating it again.\"}}"
+            },
+            {
+              "kind": "http",
+              "path": "/api/ai/schedules/2027-08-05/generate-draft/",
+              "method": "POST",
+              "status": 200,
+              "response": "{\"schedule\": {\"id\": 4, \"date\": \"2027-08-05\", \"status\": \"draft\", \"revision\": 8}, \"blocks\": [{\"id\": 7, \"title\": \"Valid fixture block\", \"start_time\": \"09:00\", \"end_time\": \"09:30\", \"category\": \"work\", \"is_completed\": false, \"sort_order\": 0, \"restore_proof\": \"WzQsNywiVmFsaWQgZml4dHVyZSBibG9jayIsIm1hbnVhbCJd:XsFmwmNgoCl32wpBEWrFaLRm_yCnwGLxPxGtDqqJDL0\"}, {\"id\": 8, \"title\": \"Draft late block\", \"start_time\": \"21:30\", \"end_time\": \"22:00\", \"category\": \"work\", \"is_completed\": false, \"sort_order\": 1, \"restore_proof\": \"WzQsOCwiRHJhZnQgbGF0ZSBibG9jayIsIm1hbnVhbCJd:ykBmU_fglsRSGw2FfdxZTFd-ZWa_oLRLtBTtocdo_H0\"}], \"revision\": 8, \"explanation\": \"Audit response accepted.\"}"
+            }
+          ]
+        },
+        {
+          "label": "fixed-mobile-after-undone",
+          "id": 4,
+          "date": "2027-08-05",
+          "status": "draft",
+          "revision": 9,
+          "updated_at": "2026-10-21 20:31:11.724872",
+          "blocks": [],
+          "audit": [
+            {
+              "id": 5,
+              "kind": "draft",
+              "success": 0
+            },
+            {
+              "id": 6,
+              "kind": "draft",
+              "success": 1
+            }
+          ],
+          "writes": [
+            {
+              "kind": "http",
+              "path": "/api/ai/schedules/2027-08-05/generate-draft/",
+              "method": "POST",
+              "status": 400,
+              "response": "{\"errors\": {\"action_index\": 1, \"detail\": \"AI scheduled \\\"Draft late block\\\" (21:30-22:30) outside your day window (05:00-22:00). The draft was not saved. Try generating it again.\"}}"
+            },
+            {
+              "kind": "http",
+              "path": "/api/ai/schedules/2027-08-05/generate-draft/",
+              "method": "POST",
+              "status": 200,
+              "response": "{\"schedule\": {\"id\": 4, \"date\": \"2027-08-05\", \"status\": \"draft\", \"revision\": 8}, \"blocks\": [{\"id\": 7, \"title\": \"Valid fixture block\", \"start_time\": \"09:00\", \"end_time\": \"09:30\", \"category\": \"work\", \"is_completed\": false, \"sort_order\": 0, \"restore_proof\": \"WzQsNywiVmFsaWQgZml4dHVyZSBibG9jayIsIm1hbnVhbCJd:XsFmwmNgoCl32wpBEWrFaLRm_yCnwGLxPxGtDqqJDL0\"}, {\"id\": 8, \"title\": \"Draft late block\", \"start_time\": \"21:30\", \"end_time\": \"22:00\", \"category\": \"work\", \"is_completed\": false, \"sort_order\": 1, \"restore_proof\": \"WzQsOCwiRHJhZnQgbGF0ZSBibG9jayIsIm1hbnVhbCJd:ykBmU_fglsRSGw2FfdxZTFd-ZWa_oLRLtBTtocdo_H0\"}], \"revision\": 8, \"explanation\": \"Audit response accepted.\"}"
+            },
+            {
+              "kind": "http",
+              "path": "/api/schedules/2027-08-05/blocks/restore/",
+              "method": "POST",
+              "status": 200,
+              "response": "{\"schedule\": {\"id\": 4, \"date\": \"2027-08-05\", \"status\": \"draft\", \"revision\": 9}, \"blocks\": [], \"revision\": 9}"
+            }
+          ]
+        }
+      ],
+      "final_days": [
+        {
+          "date": "2027-08-02",
+          "revision": 9,
+          "status": "draft",
+          "block_count": 0
+        },
+        {
+          "date": "2027-08-03",
+          "revision": 7,
+          "status": "draft",
+          "block_count": 0
+        },
+        {
+          "date": "2027-08-04",
+          "revision": 7,
+          "status": "draft",
+          "block_count": 0
+        },
+        {
+          "date": "2027-08-05",
+          "revision": 9,
+          "status": "draft",
+          "block_count": 0
+        },
+        {
+          "date": "2027-08-06",
+          "revision": 9,
+          "status": "draft",
+          "block_count": 0
+        }
+      ],
+      "sessions_before_disposal": 0
+    }
+  ],
+  "screenshots": [
+    {
+      "path": "docs/screenshots/ai-draft-window-2026-10-22/desktop-before-rejected.jpg",
+      "sha256": "9ce8cb24521f791c0d0a495b38e58f04b9998530646aff81f689def343e50524"
+    },
+    {
+      "path": "docs/screenshots/ai-draft-window-2026-10-22/mobile-before-rejected.jpg",
+      "sha256": "eca82e482fc68fad8a62174b39b85a9b8d781d23dcd8e18e85cb4067c22f6036"
+    },
+    {
+      "path": "docs/screenshots/ai-draft-window-2026-10-22/mobile-regenerated.jpg",
+      "sha256": "d66b9553fc69c0bd7c03aff28fdba8ae3c1e34a27ecea41d3c59a24e5c36a54b"
+    },
+    {
+      "path": "docs/screenshots/ai-draft-window-2026-10-22/mobile-long-before-fix.jpg",
+      "sha256": "8de64c35c00a7328c08553f25de313cba3dd01c0b2602353637b2df4ddc5b592"
+    },
+    {
+      "path": "docs/screenshots/ai-draft-window-2026-10-22/desktop-long-before-fix.jpg",
+      "sha256": "55b7d3dba1b93101646ddeff8be09eb8d1987a8d45b8e8cb6cfe72ec5377aebb"
+    },
+    {
+      "path": "docs/screenshots/ai-draft-window-2026-10-22/desktop-long-after-fix.jpg",
+      "sha256": "badbace342eeb2b38b748b4052eb37d1185ef304e0feeece0ce927cef05d7976"
+    },
+    {
+      "path": "docs/screenshots/ai-draft-window-2026-10-22/mobile-long-after-fix.jpg",
+      "sha256": "375a75e74dca8aa204aea3a3d0d89d5bdd58c6b903ee6dac224bad6fdaad4eed"
+    },
+    {
+      "path": "docs/screenshots/ai-draft-window-2026-10-22/mobile-after-rejected-fixed.jpg",
+      "sha256": "7b256d22f470bd23f1a47a41fb80ebdc1002d7c1d5f0c73d95ae20833fe28b2f"
+    }
+  ],
+  "checks": {
+    "backend_passed": 2150,
+    "backend_skipped": 1,
+    "frontend_passed": 1410,
+    "frontend_files": 104,
+    "ruff": "passed",
+    "type_check": "passed",
+    "production_build": "passed",
+    "production_dependency_audit": "0 vulnerabilities",
+    "image_retention": "passed",
+    "fixture_reuse_guard": "passed"
+  },
+  "cleanup": {
+    "owned_tab_closed": true,
+    "viewport_reset": true,
+    "fixture_server_stopped": true,
+    "private_fixtures_removed": true,
+    "namespaced_redis_keys_removed": 12
+  }
+}

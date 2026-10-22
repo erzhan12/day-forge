@@ -3,8 +3,14 @@
 Run with ``uv run python backend/scripts/browser_audit_server.py /tmp/NEW_DIR``.
 Uses a fresh SQLite database, a namespaced cache, synthetic accounts, and provider
 stubs. Only listens on 127.0.0.1:8007. See the browser audit report for controls.
+
+``--draft-window`` uses production frontend assets (run ``make frontend-build``
+first), local Redis, a dummy AI key and empty 2027-08-02 through 2027-08-06 draft
+days at revision 7. Set ``draft_actions`` in controls.json to the desired provider
+actions. The real SDK transport is replaced; no external AI request is made.
 """
 
+import argparse
 import datetime as dt
 import json
 import os
@@ -13,12 +19,24 @@ import time
 from pathlib import Path
 from types import SimpleNamespace
 
-ROOT = Path(sys.argv[1]).resolve() if len(sys.argv) == 2 else None
-if ROOT is None or ROOT.exists() or not ROOT.is_relative_to(Path("/tmp").resolve()):
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("root", type=Path)
+parser.add_argument("--draft-window", action="store_true", help="Seed empty draft test days")
+args = parser.parse_args()
+ROOT = args.root.resolve()
+if ROOT.exists() or not ROOT.is_relative_to(Path("/tmp").resolve()):
     raise SystemExit("Pass a NEW directory under /tmp (existing data is never replaced)")
 ROOT.mkdir(mode=0o700)
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "day_forge.settings")
+if args.draft_window:
+    os.environ.update(
+        DEBUG="0",
+        DJANGO_SECRET_KEY="isolated-draft-window-fixture-not-for-production",
+        ALLOWED_HOSTS="127.0.0.1,localhost",
+        LLM_API_KEY="local-fixture-only",
+        REDIS_URL="redis://127.0.0.1:6379/0",
+    )
 
 from django.conf import settings  # noqa: E402
 
@@ -27,6 +45,13 @@ settings.CACHES["default"]["KEY_PREFIX"] = ROOT.name
 settings.SESSION_COOKIE_NAME = "audit_sessionid"
 settings.CSRF_COOKIE_NAME = "XSRF-TOKEN"  # Frontend's existing header contract.
 settings.MIDDLEWARE.append("scripts.browser_audit_hooks.FaultControls")
+if args.draft_window:
+    settings.STATIC_ROOT = ROOT / "staticfiles"
+    settings.SECURE_SSL_REDIRECT = False
+    settings.SECURE_HSTS_SECONDS = 0
+    settings.SESSION_COOKIE_SECURE = False
+    settings.CSRF_COOKIE_SECURE = False
+    settings.LLM_DRAFT_RATE_LIMIT_PER_HOUR = 100
 
 # Register a separate in-memory module so Django can import the middleware.
 import types  # noqa: E402
@@ -108,6 +133,29 @@ from schedules.models import Schedule, TimeBlock, UserScheduleSettings  # noqa: 
 user = User.objects.create_user("audit-browser-local", password="audit-browser-local-only")
 UserScheduleSettings.objects.create(user=user, time_zone="UTC")
 ordered_categories(user)
+if args.draft_window:
+    from templates_mgr.models import Template
+
+    UserScheduleSettings.objects.filter(user=user).update(
+        day_start=dt.time(5, 0), day_end=dt.time(22, 0)
+    )
+    for slot_type in ("weekday", "weekend"):
+        Template.objects.create(
+            user=user,
+            name=f"Draft window {slot_type}",
+            type=slot_type,
+            blocks=[
+                {
+                    "title": "Valid fixture block",
+                    "start_time": "09:00",
+                    "end_time": "09:30",
+                    "category": "work",
+                }
+            ],
+        )
+    for day in range(2, 7):
+        Schedule.objects.create(user=user, date=dt.date(2027, 8, day), revision=7)
+    call_command("collectstatic", verbosity=0, interactive=False)
 for day in (
     dt.date.today(),
     dt.date(2027, 5, 10),
@@ -181,9 +229,10 @@ async def no_cached_events(*args):
 
 
 async def completion(**kwargs):
-    mode = controls()["ai"]
+    config = controls()
+    mode = config["ai"]
     record("sdk", mode=mode, messages=kwargs["messages"])
-    actions = []
+    actions = config.get("draft_actions", [])
     if mode in ("invalid", "add"):
         actions = [
             {
