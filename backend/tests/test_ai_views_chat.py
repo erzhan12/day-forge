@@ -2300,7 +2300,7 @@ class TestResolutionAskPrecedence:
         ("overlap", None, "later",
          "No free later slot fits Focus within your day window. Please choose another time."),
         ("no_slot", None, None,
-         "No free slot with the required gaps fits Focus in your day window. "
+         "No free slot fits Focus in your day window. "
          "Try a shorter duration or a specific free time."),
     ])
     def test_specific_resolution_still_precedes_out_of_window_create(
@@ -2642,6 +2642,50 @@ class TestAutoPlacementIntegration:
         assert block["end_time"] == "10:30"
 
     @pytest.mark.django_db
+    def test_untimed_add_uses_tight_window_at_fresh_apply_floor(
+        self, auth_client, today_schedule, monkeypatch
+    ):
+        TimeBlock.objects.create(schedule=today_schedule, title="Standup", category="work",
+                                 start_time="10:30", end_time="10:55")
+        times = iter([datetime.datetime(2026, 4, 18, 9, 0),
+                      datetime.datetime(2026, 4, 18, 10, 3)])
+        monkeypatch.setattr("ai.views.timezone.localtime", lambda *a, **k: next(times))
+        _patch_run_chat(monkeypatch, AIChatResult(
+            "{}", [{"type": "add", "title": "Write report", "category": "work"}],
+            "Added Write report.", None,
+        ))
+        response = _post(auth_client, {"messages": [_user_turn("add Write report")]})
+        assert response.status_code == 200, response.content
+        assert response.json()["applied"] is True
+        assert response.json()["outcomes"][0]["status"] == "applied"
+        report = today_schedule.time_blocks.get(title="Write report")
+        assert (report.start_time, report.end_time) == (datetime.time(10, 5), datetime.time(10, 30))
+
+    @pytest.mark.django_db
+    @pytest.mark.parametrize("offset", [-1, 1])
+    def test_non_today_untimed_add_relaxes_gap_from_day_start(
+        self, auth_client, user, monkeypatch, offset
+    ):
+        now = datetime.datetime(2026, 4, 18, 14, 3)
+        day = now.date() + datetime.timedelta(days=offset)
+        schedule = Schedule.objects.create(user=user, date=day)
+        _set_window(user, "08:00", "18:00")
+        TimeBlock.objects.create(schedule=schedule, title="Standup", category="work",
+                                 start_time="08:25", end_time="08:55")
+        monkeypatch.setattr("ai.views.timezone.localtime", lambda *a, **k: now)
+        _patch_run_chat(monkeypatch, AIChatResult(
+            "{}", [{"type": "add", "title": "Write report", "category": "work"}],
+            "Added Write report.", None,
+        ))
+        response = _post(auth_client, {"messages": [_user_turn("add Write report")]},
+                         url=f"/api/ai/schedules/{day}/chat/")
+        assert response.status_code == 200, response.content
+        assert response.json()["applied"] is True
+        assert response.json()["outcomes"][0]["status"] == "applied"
+        report = schedule.time_blocks.get(title="Write report")
+        assert (report.start_time, report.end_time) == (datetime.time(8), datetime.time(8, 25))
+
+    @pytest.mark.django_db
     def test_untimed_add_no_slot_surfaces_ask(self, user, auth_client, today_schedule, monkeypatch):
         # Fill the whole window so no forward slot fits → no_slot skip.
         TimeBlock.objects.create(
@@ -2666,7 +2710,7 @@ class TestAutoPlacementIntegration:
         assert outcome["status"] == "skipped"
         assert outcome["reason_code"] == "no_slot"
         assert data["ask"] == (
-            "No free slot with the required gaps fits LeverX in your day window. "
+            "No free slot fits LeverX in your day window. "
             "Try a shorter duration or a specific free time."
         )
 
@@ -2892,7 +2936,7 @@ class TestResolutionAskNoSlotPrecedence:
         outcome = self._no_slot(0)
         ask = _build_resolution_ask((outcome,), {}, {0: "LeverX"})
         assert ask == (
-            "No free slot with the required gaps fits LeverX in your day window. "
+            "No free slot fits LeverX in your day window. "
             "Try a shorter duration or a specific free time."
         )
 
@@ -2914,7 +2958,7 @@ class TestResolutionAskNoSlotPrecedence:
         no_slot = self._no_slot(0)
         generic = self._skipped_add(1)
         expected = (
-            "No free slot with the required gaps fits LeverX in your day window. "
+            "No free slot fits LeverX in your day window. "
             "Try a shorter duration or a specific free time."
         )
         ask_a = _build_resolution_ask((no_slot, generic), {}, create_titles)
@@ -3501,7 +3545,7 @@ class TestReplayGuard:
                 "messages": [
                     _user_turn("add Momentum"),
                     _ask_turn(
-                        "No free slot with the required gaps fits Momentum in your "
+                        "No free slot fits Momentum in your "
                         "day window. Try a shorter duration or a specific free time."
                     ),
                     _user_turn("make it 15 minutes"),

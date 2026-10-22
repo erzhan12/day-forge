@@ -154,6 +154,12 @@ class TestChatSystemPromptAutoPlacement:
         assert "10" in prompt  # default gap minutes
         assert "5-min" in prompt or "5 minute" in prompt.lower() or "5-minute" in prompt
 
+    def test_auto_placement_gap_is_a_bounded_preference(self):
+        prompt = self._prompt().lower()
+        assert "full 10-minute gap first" in prompt
+        assert "5-minute and then zero gaps only in the initial window" in prompt
+        assert "later windows keep the full gap" in prompt
+
     def test_forbids_fabricated_start(self):
         low = self._prompt().lower()
         assert "omit both" in low or "never" in low

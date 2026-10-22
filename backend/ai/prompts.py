@@ -99,9 +99,12 @@ Valid action types and required fields:
        * explicit — supply BOTH start_time=HH:MM and end_time=HH:MM.
        * automatic — the user gave no start time: OMIT both start_time and
          end_time. The backend places the block deterministically at the
-         nearest free slot forward (25-minute default duration, 10-minute
-         gaps around neighbours, aligned to the 5-minute grid, within the
-         working-day window). You MAY add an optional duration_minutes (a
+         nearest free slot forward (25-minute default duration, aligned to the
+         5-minute grid, within the working-day window). It tries the full 10-minute gap first,
+         then 5-minute and then zero gaps only in the initial window when the full-gap
+         placement would not fit before the next block (or before the day-window end
+         when no block follows). Reduced-gap placements align to that window's right
+         edge. Later windows keep the full gap. You MAY add an optional duration_minutes (a
          positive multiple of 5) when the user or a rule implies a length,
          but NEVER invent a start_time. Supplying only one of the two time
          fields is invalid.

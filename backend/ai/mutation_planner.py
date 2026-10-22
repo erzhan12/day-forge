@@ -33,7 +33,7 @@ from schedules.time_validation import (
 )
 from schedules.window import DEFAULT_WINDOW, ScheduleWindow
 
-from ai.free_slot import GRID_MINUTES
+from ai.free_slot import GRID_MINUTES, find_slot
 
 logger = logging.getLogger(__name__)
 
@@ -343,6 +343,63 @@ def _time_from_minutes(value: int) -> datetime.time:
 def _minutes_from_time(value: datetime.time) -> int:
     """Inverse of ``_time_from_minutes``: minutes since midnight (feature 0067)."""
     return value.hour * 60 + value.minute
+
+
+def _padded_auto_intervals(
+    blocks: Sequence[BlockCandidate], window: ScheduleWindow, gap: int,
+) -> list[tuple[datetime.time, datetime.time]]:
+    """Pad raw occupancy symmetrically, clamping in minutes before conversion."""
+    padded = []
+    for block in blocks:
+        lo = max(_minutes_from_time(block.start_time) - gap, window.start_minutes)
+        hi = min(_minutes_from_time(block.end_time) + gap, window.end_minutes)
+        if hi > lo:
+            padded.append((_time_from_minutes(lo), _time_from_minutes(hi)))
+    return padded
+
+
+def _find_auto_slot(
+    blocks: Sequence[BlockCandidate], base_min: int, duration: int,
+    window: ScheduleWindow, gap: int,
+) -> SlotSuggestion | None:
+    """Prefer smaller gaps only within the initial raw window (feature 0086)."""
+
+    raw = sorted(blocks, key=lambda block: (block.start_time, block.end_time, block.id))
+    next_start = next(
+        (_minutes_from_time(block.start_time) for block in raw
+         if _minutes_from_time(block.end_time) > base_min),
+        None,
+    )
+    initial_end = window.end_minutes if next_start is None else min(next_start, window.end_minutes)
+    fallback = find_slot(
+        _time_from_minutes(base_min), _time_from_minutes(base_min + duration),
+        "later", window, _padded_auto_intervals(raw, window, gap),
+    )
+    if initial_end <= base_min or (
+        fallback is not None and fallback.end_time is not None
+        and _minutes_from_time(fallback.end_time) <= initial_end
+    ):
+        return fallback
+
+    # Derive smaller grid multiples per call, including zero. Day boundaries
+    # need no gap; only an upcoming neighbour reduces the latest permitted end.
+    for trial_gap in range(((gap - 1) // GRID_MINUTES) * GRID_MINUTES, -1, -GRID_MINUTES):
+        end_min = window.end_minutes if next_start is None else min(
+            window.end_minutes, next_start - trial_gap,
+        )
+        end_min = (end_min // GRID_MINUTES) * GRID_MINUTES
+        start_min = end_min - duration
+        if start_min < base_min:
+            continue
+        start, end = _time_from_minutes(start_min), _time_from_minutes(end_min)
+        # Duration is schema-validated on the grid. Check exactly this right-aligned
+        # candidate; a forward search could escape the initial window.
+        if not any(
+            times_overlap(start, end, lo, hi)
+            for lo, hi in _padded_auto_intervals(raw, window, trial_gap)
+        ):
+            return SlotSuggestion(start, end, "later")
+    return fallback
 
 
 def _duration_fails_end_verdict(
@@ -691,10 +748,6 @@ def plan_mutations(
     non-today schedules), otherwise placement scans forward from this
     grid-aligned time. It never affects explicit-time adds.
     """
-    # Function-local (not module-level) to avoid the free_slot ↔ mutation_planner
-    # circular import (free_slot type-imports SlotSuggestion from here). Deferring
-    # to call time keeps module load acyclic; the import cache makes it free.
-    from ai.free_slot import find_slot
 
     window_start, window_end = _day_bounds(day_start, day_end)
     window = ScheduleWindow(window_start, window_end)
@@ -851,10 +904,10 @@ def plan_mutations(
 
     # ------------------------------------------------------------------
     # Feature 0067: deterministic auto-placement of untimed chat adds.
-    # Runs AFTER the overlap fixpoint so ``find_slot``'s occupancy check is
-    # the SOLE overlap guard for autos (the fixpoint is not re-entered). Each
-    # auto searches forward from the common base against current occupancy;
-    # its RAW (unpadded) placed interval feeds the next auto's padding.
+    # Runs after the overlap fixpoint, with interval and final-state validation
+    # retained below. Each auto searches from the common base, preferring full
+    # gaps and reducing them only in the initial window (feature 0086). Its raw
+    # placed interval feeds the next auto's padding.
     # ------------------------------------------------------------------
     auto_creates = [c for c in creates if c.auto_place]
     if auto_creates:
@@ -873,29 +926,14 @@ def plan_mutations(
                 reject(temp_id, "no_slot")
                 continue
 
-            padded: list[tuple[datetime.time, datetime.time]] = []
-            for block_id, block in candidate.items():
-                if block_id == temp_id:
-                    continue
-                lo = max(
-                    _minutes_from_time(block.start_time) - AUTO_PLACEMENT_GAP_MINUTES,
-                    window.start_minutes,
-                )
-                hi = min(
-                    _minutes_from_time(block.end_time) + AUTO_PLACEMENT_GAP_MINUTES,
-                    window.end_minutes,
-                )
-                if hi <= lo:
-                    continue
-                padded.append((_time_from_minutes(lo), _time_from_minutes(hi)))
-
-            base_start = _time_from_minutes(base_min)
-            base_end = _time_from_minutes(base_min + dur)
-            suggestion = find_slot(base_start, base_end, "later", window, padded)
+            suggestion = _find_auto_slot(
+                list(candidate.values()), base_min, dur, window, AUTO_PLACEMENT_GAP_MINUTES,
+            )
             if suggestion is None or suggestion.start_time is None or suggestion.end_time is None:
-                # find_slot(direction="later") always populates both bounds
-                # together; the end_time check documents that invariant and
-                # guards against a broadened return contract.
+                # Both producers — find_slot(direction="later") and
+                # _find_auto_slot's own right-aligned candidate — populate both
+                # bounds together; the end_time check documents that invariant
+                # and guards against a broadened return contract.
                 reject(temp_id, "no_slot")
                 continue
             candidate[temp_id] = BlockCandidate(
