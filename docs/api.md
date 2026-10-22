@@ -182,7 +182,7 @@ multiple of 5) overrides the default length; supplying only one time field is
 rejected.
 
 The backend searches forward with a preferred **10-minute gap** on both sides
-of neighbouring blocks. If that result fits in the initial raw free window,
+of neighbouring blocks. If that result fits in the initial window,
 it keeps the result unchanged. Otherwise it retries only that initial window
 with symmetric **5-minute, then zero-minute gaps**. Each retry checks one
 right-aligned placement: the latest grid-aligned end that is no later than the

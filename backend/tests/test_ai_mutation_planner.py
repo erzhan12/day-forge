@@ -1321,9 +1321,9 @@ class TestAutoPlacementGapPreference:
         )
         assert isinstance(result, MutationPlan)
         assert _create_intervals(result) == expected
-        for create, action in zip(result.diff.creates, actions, strict=True):
+        for idx, (create, action) in enumerate(zip(result.diff.creates, actions, strict=True)):
             assert create.title == action["title"]
-            assert create.action_index == actions.index(action)
+            assert create.action_index == idx
             start = create.start_time.hour * 60 + create.start_time.minute
             end = create.end_time.hour * 60 + create.end_time.minute
             default_duration = mutation_planner.DEFAULT_AUTO_DURATION_MINUTES
