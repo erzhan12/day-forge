@@ -12,5 +12,6 @@
       "is_completed": false
     }
   ],
-  "status": "active"
+  "status": "active",
+  "capture_stage": "after_admin_inspection_and_forbidden_page_checks"
 }

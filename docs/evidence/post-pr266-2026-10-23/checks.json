@@ -14,5 +14,6 @@
   "staff_post_executed_in_production": false,
   "staff_post_403_checked_by_local_regression_tests": true,
   "production_admin_checks": "Read-only UI for empty/nonempty inline; direct GET add/delete routes show 403; independent API states unchanged",
-  "runtime_source_sha256": "05c86da86bd21b9039cc9e661b1c3b717587ef9ffeb54d2c4061e40b00390e1c"
+  "runtime_source_sha256": "05c86da86bd21b9039cc9e661b1c3b717587ef9ffeb54d2c4061e40b00390e1c",
+  "runtime_source_sha256_file": "backend/schedules/admin.py"
 }

@@ -12,5 +12,6 @@
       "is_completed": false
     }
   ],
-  "status": "active"
+  "status": "active",
+  "capture_stage": "after_creating_synthetic_block_before_admin_inspection"
 }
