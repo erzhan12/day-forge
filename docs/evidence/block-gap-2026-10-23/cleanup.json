@@ -1,0 +1,237 @@
+{
+  "preferences_restored": true,
+  "default_block_gap_minutes": 10,
+  "theme_and_suggestions_unchanged": true,
+  "initial_cleanup_read_timeout": {
+    "operation": "GET Schedule before mutation",
+    "date": "2027-12-05",
+    "timeout_seconds": 150,
+    "recovery": "Fresh bounded GET, then continue cleanup with current revision"
+  },
+  "dates": [
+    {
+      "before": {
+        "revision": 5,
+        "date": "2027-12-01",
+        "blocks": [
+          {
+            "id": 1186,
+            "title": "Gap fixture A",
+            "category": "work",
+            "start_time": "06:00",
+            "end_time": "10:00",
+            "is_completed": false
+          },
+          {
+            "id": 1187,
+            "title": "Gap fixture B",
+            "category": "work",
+            "start_time": "10:45",
+            "end_time": "11:30",
+            "is_completed": false
+          },
+          {
+            "id": 1188,
+            "title": "Gap fixture C",
+            "category": "work",
+            "start_time": "12:35",
+            "end_time": "23:00",
+            "is_completed": false
+          }
+        ]
+      },
+      "after": {
+        "revision": 6,
+        "date": "2027-12-01",
+        "blocks": []
+      }
+    },
+    {
+      "before": {
+        "revision": 5,
+        "date": "2027-12-02",
+        "blocks": [
+          {
+            "id": 1190,
+            "title": "Gap fixture A",
+            "category": "work",
+            "start_time": "06:00",
+            "end_time": "10:00",
+            "is_completed": false
+          },
+          {
+            "id": 1191,
+            "title": "Gap fixture B",
+            "category": "work",
+            "start_time": "10:45",
+            "end_time": "11:30",
+            "is_completed": false
+          },
+          {
+            "id": 1192,
+            "title": "Gap fixture C",
+            "category": "work",
+            "start_time": "12:35",
+            "end_time": "23:00",
+            "is_completed": false
+          }
+        ]
+      },
+      "after": {
+        "revision": 6,
+        "date": "2027-12-02",
+        "blocks": []
+      }
+    },
+    {
+      "before": {
+        "revision": 7,
+        "date": "2027-12-03",
+        "blocks": [
+          {
+            "id": 1214,
+            "title": "Gap fixture A",
+            "category": "work",
+            "start_time": "06:00",
+            "end_time": "10:00",
+            "is_completed": false
+          },
+          {
+            "id": 1215,
+            "title": "Gap fixture B",
+            "category": "work",
+            "start_time": "10:45",
+            "end_time": "11:30",
+            "is_completed": false
+          },
+          {
+            "id": 1216,
+            "title": "Gap fixture C",
+            "category": "work",
+            "start_time": "12:35",
+            "end_time": "23:00",
+            "is_completed": false
+          }
+        ]
+      },
+      "after": {
+        "revision": 8,
+        "date": "2027-12-03",
+        "blocks": []
+      }
+    },
+    {
+      "before": {
+        "revision": 5,
+        "date": "2027-12-04",
+        "blocks": [
+          {
+            "id": 1198,
+            "title": "Gap fixture A",
+            "category": "work",
+            "start_time": "06:00",
+            "end_time": "10:00",
+            "is_completed": false
+          },
+          {
+            "id": 1199,
+            "title": "Gap fixture B",
+            "category": "work",
+            "start_time": "10:45",
+            "end_time": "11:30",
+            "is_completed": false
+          },
+          {
+            "id": 1200,
+            "title": "Gap fixture C",
+            "category": "work",
+            "start_time": "12:35",
+            "end_time": "23:00",
+            "is_completed": false
+          }
+        ]
+      },
+      "after": {
+        "revision": 6,
+        "date": "2027-12-04",
+        "blocks": []
+      }
+    },
+    {
+      "before": {
+        "revision": 5,
+        "date": "2027-12-05",
+        "blocks": [
+          {
+            "id": 1202,
+            "title": "Gap fixture A",
+            "category": "work",
+            "start_time": "06:00",
+            "end_time": "10:00",
+            "is_completed": false
+          },
+          {
+            "id": 1203,
+            "title": "Gap fixture B",
+            "category": "work",
+            "start_time": "10:45",
+            "end_time": "11:30",
+            "is_completed": false
+          },
+          {
+            "id": 1204,
+            "title": "Gap fixture C",
+            "category": "work",
+            "start_time": "12:35",
+            "end_time": "23:00",
+            "is_completed": false
+          }
+        ]
+      },
+      "after": {
+        "revision": 6,
+        "date": "2027-12-05",
+        "blocks": []
+      }
+    },
+    {
+      "before": {
+        "revision": 7,
+        "date": "2027-12-06",
+        "blocks": [
+          {
+            "id": 1210,
+            "title": "Gap fixture A",
+            "category": "work",
+            "start_time": "06:00",
+            "end_time": "10:00",
+            "is_completed": false
+          },
+          {
+            "id": 1211,
+            "title": "Gap fixture B",
+            "category": "work",
+            "start_time": "10:45",
+            "end_time": "11:30",
+            "is_completed": false
+          },
+          {
+            "id": 1212,
+            "title": "Gap fixture C",
+            "category": "work",
+            "start_time": "12:35",
+            "end_time": "23:00",
+            "is_completed": false
+          }
+        ]
+      },
+      "after": {
+        "revision": 8,
+        "date": "2027-12-06",
+        "blocks": []
+      }
+    }
+  ],
+  "independent_session_logged_out": true,
+  "protected_get_component": "Login"
+}

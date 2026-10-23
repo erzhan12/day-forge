@@ -1,0 +1,49 @@
+{
+  "source_sha": "a2e6133868294d02f6797bab480f6cd4bb72469a",
+  "runtime_changes": false,
+  "checks": [
+    {
+      "command": "make check",
+      "exit_code": 0,
+      "backend_passed": 2359,
+      "backend_skipped": 1,
+      "skip": "Existing opt-in R11 live comparison",
+      "frontend_passed": 1459,
+      "frontend_files": 105,
+      "ruff": "passed",
+      "typescript": "passed"
+    },
+    {
+      "command": "make frontend-build",
+      "exit_code": 0
+    },
+    {
+      "command": "uv run python backend/manage.py makemigrations --check --dry-run",
+      "exit_code": 0,
+      "result": "No changes detected"
+    },
+    {
+      "command": "uv run python backend/manage.py check",
+      "exit_code": 0,
+      "result": "System check identified no issues (0 silenced)."
+    },
+    {
+      "command": "cd frontend && npm audit --omit=dev --audit-level=high",
+      "exit_code": 0,
+      "vulnerabilities": 0
+    },
+    {
+      "command": "bash deployment/tests/test_image_retention.sh",
+      "exit_code": 0
+    },
+    {
+      "command": "Local equivalent of reusable CI SSH pinning invariant",
+      "exit_code": 0,
+      "strict_pinned_commands": 7
+    }
+  ],
+  "logs_sha256": {
+    "make_check": "6223f3d3946a5770d17131ba0c66089acd8bdc855c387b3f9ce03059f8193820",
+    "frontend_build": "646d6bda0dfc24a671b223ec7ec53debf4d021788c5e2d1794abe33b6a3110e5"
+  }
+}

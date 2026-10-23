@@ -1,0 +1,132 @@
+[
+  {
+    "url": "/admin/ai/aiinteraction/951/change/?_changelist_filters=schedule__id__exact%3D137",
+    "title": "GAP desktop 0",
+    "automatic": true,
+    "raw_actions": [
+      {
+        "type": "add",
+        "title": "GAP desktop 0",
+        "category": "work",
+        "duration_minutes": 25
+      }
+    ],
+    "ask": null,
+    "success": true,
+    "turn_count": 1
+  },
+  {
+    "url": "/admin/ai/aiinteraction/952/change/?_changelist_filters=schedule__id__exact%3D138",
+    "title": "GAP desktop 10",
+    "automatic": true,
+    "raw_actions": [
+      {
+        "type": "add",
+        "title": "GAP desktop 10",
+        "category": "work",
+        "duration_minutes": 25
+      }
+    ],
+    "ask": null,
+    "success": true,
+    "turn_count": 1
+  },
+  {
+    "url": "/admin/ai/aiinteraction/953/change/?_changelist_filters=schedule__id__exact%3D139",
+    "title": "GAP desktop 20",
+    "automatic": true,
+    "raw_actions": [
+      {
+        "type": "add",
+        "title": "GAP desktop 20",
+        "category": "work",
+        "duration_minutes": 25
+      }
+    ],
+    "ask": null,
+    "success": true,
+    "turn_count": 1
+  },
+  {
+    "url": "/admin/ai/aiinteraction/954/change/?_changelist_filters=schedule__id__exact%3D140",
+    "title": "GAP mobile 0",
+    "automatic": true,
+    "raw_actions": [
+      {
+        "type": "add",
+        "title": "GAP mobile 0",
+        "category": "work",
+        "duration_minutes": 25
+      }
+    ],
+    "ask": null,
+    "success": true,
+    "turn_count": 1
+  },
+  {
+    "url": "/admin/ai/aiinteraction/955/change/?_changelist_filters=schedule__id__exact%3D141",
+    "title": "GAP mobile 10",
+    "automatic": true,
+    "raw_actions": [
+      {
+        "type": "add",
+        "title": "GAP mobile 10",
+        "category": "work",
+        "duration_minutes": 25
+      }
+    ],
+    "ask": null,
+    "success": true,
+    "turn_count": 1
+  },
+  {
+    "url": "/admin/ai/aiinteraction/957/change/?_changelist_filters=schedule__id__exact%3D142",
+    "title": "GAP mobile explicit",
+    "automatic": false,
+    "raw_actions": [
+      {
+        "type": "add",
+        "title": "GAP mobile explicit",
+        "category": "work",
+        "start_time": "10:00",
+        "end_time": "10:25"
+      }
+    ],
+    "ask": null,
+    "success": true,
+    "turn_count": 1
+  },
+  {
+    "url": "/admin/ai/aiinteraction/956/change/?_changelist_filters=schedule__id__exact%3D142",
+    "title": "GAP mobile 20",
+    "automatic": true,
+    "raw_actions": [
+      {
+        "type": "add",
+        "title": "GAP mobile 20",
+        "category": "work",
+        "duration_minutes": 25
+      }
+    ],
+    "ask": null,
+    "success": true,
+    "turn_count": 1
+  },
+  {
+    "url": "/admin/ai/aiinteraction/958/change/?_changelist_filters=schedule__id__exact%3D139",
+    "title": "GAP desktop explicit",
+    "automatic": false,
+    "raw_actions": [
+      {
+        "type": "add",
+        "title": "GAP desktop explicit",
+        "category": "work",
+        "start_time": "10:00",
+        "end_time": "10:25"
+      }
+    ],
+    "ask": null,
+    "success": true,
+    "turn_count": 1
+  }
+]

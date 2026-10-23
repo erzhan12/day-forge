@@ -1,5 +1,7 @@
 # Feature 0087: Configurable default gap between blocks (#258)
 
+**Status, 23 October 2026:** implemented in PR #265. Full automated suites passed, and [production desktop/mobile verification](../BLOCK_GAP_PRODUCTION_VERIFICATION.md) on release `a2e6133` confirmed 0/10/20 across fresh sessions, real untimed AI placement, explicit-placement precedence, Undo and narrow-screen validation. Acceptance below combines automated contract coverage with those live scenarios; it does not claim every edge case was exercised in production.
+
 Add `default_block_gap_minutes` to the existing per-user preferences contract and expose it under Settings → Schedule. Pass the normalized value through chat context capture, prompt construction, and automatic placement. Preserve the initial-window gap shrinking implemented in feature 0086 and explicit-placement behavior related to #185.
 
 **Requirements retained verbatim**
@@ -218,13 +220,13 @@ Confirm the migration test uses the test database, all provider calls are mocked
 
 **Acceptance criteria — verbatim**
 
-- [ ] Users can view and change their default gap in Settings.
-- [ ] The saved value is isolated per user and survives reloads and new sessions.
-- [ ] Users without a saved customization retain the current 10-minute behavior.
-- [ ] Auto-placement respects the configured gap on both sides of a new block, including 0 minutes, while preserving overlap checks and day-window constraints.
-- [ ] Explicit non-overlapping placements are honored without a question or shift solely to restore the default gap.
-- [ ] Changing the preference leaves existing blocks unchanged.
-- [ ] Invalid values produce clear validation errors without changing the saved preference.
-- [ ] Tests cover persistence, validation, per-user isolation, default fallback, zero/custom gaps, and no available slot.
+- [x] Users can view and change their default gap in Settings.
+- [x] The saved value is isolated per user and survives reloads and new sessions.
+- [x] Users without a saved customization retain the current 10-minute behavior.
+- [x] Auto-placement respects the configured gap on both sides of a new block, including 0 minutes, while preserving overlap checks and day-window constraints.
+- [x] Explicit non-overlapping placements are honored without a question or shift solely to restore the default gap.
+- [x] Changing the preference leaves existing blocks unchanged.
+- [x] Invalid values produce clear validation errors without changing the saved preference.
+- [x] Tests cover persistence, validation, per-user isolation, default fallback, zero/custom gaps, and no available slot.
 
 **Note (rebased on main 560e03f):** PRs #263/#264 touched `prompts.py`, `service.py` (`run_chat` null `task_id` normalization), `pending_intents.py`, `relative_add_guard.py` and `docs/api.md`; they do not change the gap contract. Line anchors above are approximate; locate by function name. Keep #263/#264 behavior (null add target normalization, pending-sibling prompt wording) intact.
