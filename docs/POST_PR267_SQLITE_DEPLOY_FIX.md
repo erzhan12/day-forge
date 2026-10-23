@@ -33,11 +33,11 @@
 
 ```sh
 uv run pytest backend/tests/test_schedule_mutations_sqlite.py -q
-uv run python docs/evidence/post-pr267-sqlite-2026-10-23/probe_snapshot_test.py
+uv run python docs/evidence/post-pr267-sqlite-2026-10-23/probe_sqlite_snapshot.py
 make check
 ```
 
-Диагностический runner требует доступный Git commit `2354cde` для старого варианта. Он создаёт отдельный временный тестовый модуль, отказывается перезаписывать существующий файл и удаляет свой модуль в `finally`. В обычный CI runner не включён.
+Диагностический runner требует доступный Git commit `2354cde` для старого варианта. Он создаёт отдельный временный тестовый модуль, отказывается перезаписывать существующий файл и удаляет свой модуль в `finally`. Имя `probe_sqlite_snapshot.py` не совпадает с pytest-шаблонами тестовых файлов. Обычный `pytest --collect-only -q` нашёл 2360 штатных случаев, включая один opt-in skip, без запуска диагностического runner.
 
 ## Полный локальный прогон
 
@@ -45,4 +45,12 @@ make check
 
 ## Публикация
 
-На момент подготовки PR исправление ещё не опубликовано. Для закрытия задачи требуются успешные PR CI и ревью, merge в main, полный Deploy с health-check и проверка публичной версии. Итог публикации будет добавлен после завершения этого прогона.
+Исправление вошло в [PR #268](https://github.com/erzhan12/day-forge/pull/268), merge commit `2496bd770288593978631d37371f7d02fff201a5`. [PR CI](https://github.com/erzhan12/day-forge/actions/runs/39974051806) прошёл. [Claude Review](https://github.com/erzhan12/day-forge/pull/268#issuecomment-6367859419) одобрил PR. Единственное замечание об удалении `start` не применено: writer явно вызывает `start.wait(5)` перед `BEGIN IMMEDIATE`. Событие необходимо, чтобы запись началась после чтения старого Schedule.
+
+[Deploy #39974398612](https://github.com/erzhan12/day-forge/actions/runs/39974398612) успешно опубликовал `2496bd7`: повторная validation, build/push, deploy и health-check прошли. Таким образом, восстановлена публикация main после остановки Deploy PR #267. [Метаданные успешного запуска](evidence/post-pr267-sqlite-2026-10-23/successful-deploy.json).
+
+Независимый HTTPS-запрос после health-check подтвердил Login 200 с точной версией `2496bd770288593978631d37371f7d02fff201a5`; JS/CSS вернули 200 и immutable cache policy. [Публичная проверка](evidence/post-pr267-sqlite-2026-10-23/published-release.json).
+
+Первый публичный probe после `docker compose up -d`, во время stabilization wait, получил 502. После завершения health-check повторная проверка прошла. Этот переход сохранён в [startup probe](evidence/post-pr267-sqlite-2026-10-23/startup-probe.json); непрерывная доступность во время рестарта этим Deploy не установлена.
+
+В последующем обновлении отчёта runner переименован из `probe_snapshot_test.py` в `probe_sqlite_snapshot.py`, чтобы opt-in диагностика не попадала под автоматический pytest discovery. Его содержимое не менялось; обычный сбор всех тестов проверен отдельно. Новые production-записи, AI-вызовы, изменения конфигурации и миграции для этого исправления не выполнялись.
