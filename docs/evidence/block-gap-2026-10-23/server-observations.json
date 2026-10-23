@@ -1,0 +1,722 @@
+[
+  {
+    "phase": "ai-desktop-0",
+    "revision": 4,
+    "date": "2027-12-01",
+    "blocks": [
+      {
+        "id": 1167,
+        "title": "Gap fixture A",
+        "category": "work",
+        "start_time": "06:00",
+        "end_time": "10:00",
+        "is_completed": false
+      },
+      {
+        "id": 1185,
+        "title": "GAP desktop 0",
+        "category": "work",
+        "start_time": "10:00",
+        "end_time": "10:25",
+        "is_completed": false
+      },
+      {
+        "id": 1168,
+        "title": "Gap fixture B",
+        "category": "work",
+        "start_time": "10:45",
+        "end_time": "11:30",
+        "is_completed": false
+      },
+      {
+        "id": 1169,
+        "title": "Gap fixture C",
+        "category": "work",
+        "start_time": "12:35",
+        "end_time": "23:00",
+        "is_completed": false
+      }
+    ],
+    "preferences": {
+      "theme": "classic",
+      "default_block_gap_minutes": 0,
+      "chat_suggestions": [
+        "Plan my remaining day",
+        "Add a focused work block",
+        "Make room for a break"
+      ]
+    },
+    "cache_control": "private, no-store"
+  },
+  {
+    "phase": "undo-desktop-0",
+    "revision": 5,
+    "date": "2027-12-01",
+    "blocks": [
+      {
+        "id": 1186,
+        "title": "Gap fixture A",
+        "category": "work",
+        "start_time": "06:00",
+        "end_time": "10:00",
+        "is_completed": false
+      },
+      {
+        "id": 1187,
+        "title": "Gap fixture B",
+        "category": "work",
+        "start_time": "10:45",
+        "end_time": "11:30",
+        "is_completed": false
+      },
+      {
+        "id": 1188,
+        "title": "Gap fixture C",
+        "category": "work",
+        "start_time": "12:35",
+        "end_time": "23:00",
+        "is_completed": false
+      }
+    ],
+    "preferences": {
+      "theme": "classic",
+      "default_block_gap_minutes": 0,
+      "chat_suggestions": [
+        "Plan my remaining day",
+        "Add a focused work block",
+        "Make room for a break"
+      ]
+    },
+    "cache_control": "private, no-store"
+  },
+  {
+    "phase": "ai-desktop-10",
+    "revision": 4,
+    "date": "2027-12-02",
+    "blocks": [
+      {
+        "id": 1170,
+        "title": "Gap fixture A",
+        "category": "work",
+        "start_time": "06:00",
+        "end_time": "10:00",
+        "is_completed": false
+      },
+      {
+        "id": 1189,
+        "title": "GAP desktop 10",
+        "category": "work",
+        "start_time": "10:10",
+        "end_time": "10:35",
+        "is_completed": false
+      },
+      {
+        "id": 1171,
+        "title": "Gap fixture B",
+        "category": "work",
+        "start_time": "10:45",
+        "end_time": "11:30",
+        "is_completed": false
+      },
+      {
+        "id": 1172,
+        "title": "Gap fixture C",
+        "category": "work",
+        "start_time": "12:35",
+        "end_time": "23:00",
+        "is_completed": false
+      }
+    ],
+    "preferences": {
+      "theme": "classic",
+      "default_block_gap_minutes": 10,
+      "chat_suggestions": [
+        "Plan my remaining day",
+        "Add a focused work block",
+        "Make room for a break"
+      ]
+    },
+    "cache_control": "private, no-store"
+  },
+  {
+    "phase": "undo-desktop-10",
+    "revision": 5,
+    "date": "2027-12-02",
+    "blocks": [
+      {
+        "id": 1190,
+        "title": "Gap fixture A",
+        "category": "work",
+        "start_time": "06:00",
+        "end_time": "10:00",
+        "is_completed": false
+      },
+      {
+        "id": 1191,
+        "title": "Gap fixture B",
+        "category": "work",
+        "start_time": "10:45",
+        "end_time": "11:30",
+        "is_completed": false
+      },
+      {
+        "id": 1192,
+        "title": "Gap fixture C",
+        "category": "work",
+        "start_time": "12:35",
+        "end_time": "23:00",
+        "is_completed": false
+      }
+    ],
+    "preferences": {
+      "theme": "classic",
+      "default_block_gap_minutes": 20,
+      "chat_suggestions": [
+        "Plan my remaining day",
+        "Add a focused work block",
+        "Make room for a break"
+      ]
+    },
+    "cache_control": "private, no-store"
+  },
+  {
+    "phase": "ai-desktop-20",
+    "revision": 4,
+    "date": "2027-12-03",
+    "blocks": [
+      {
+        "id": 1173,
+        "title": "Gap fixture A",
+        "category": "work",
+        "start_time": "06:00",
+        "end_time": "10:00",
+        "is_completed": false
+      },
+      {
+        "id": 1174,
+        "title": "Gap fixture B",
+        "category": "work",
+        "start_time": "10:45",
+        "end_time": "11:30",
+        "is_completed": false
+      },
+      {
+        "id": 1193,
+        "title": "GAP desktop 20",
+        "category": "work",
+        "start_time": "11:50",
+        "end_time": "12:15",
+        "is_completed": false
+      },
+      {
+        "id": 1175,
+        "title": "Gap fixture C",
+        "category": "work",
+        "start_time": "12:35",
+        "end_time": "23:00",
+        "is_completed": false
+      }
+    ],
+    "preferences": {
+      "theme": "classic",
+      "default_block_gap_minutes": 20,
+      "chat_suggestions": [
+        "Plan my remaining day",
+        "Add a focused work block",
+        "Make room for a break"
+      ]
+    },
+    "cache_control": "private, no-store"
+  },
+  {
+    "phase": "undo-desktop-20",
+    "revision": 5,
+    "date": "2027-12-03",
+    "blocks": [
+      {
+        "id": 1194,
+        "title": "Gap fixture A",
+        "category": "work",
+        "start_time": "06:00",
+        "end_time": "10:00",
+        "is_completed": false
+      },
+      {
+        "id": 1195,
+        "title": "Gap fixture B",
+        "category": "work",
+        "start_time": "10:45",
+        "end_time": "11:30",
+        "is_completed": false
+      },
+      {
+        "id": 1196,
+        "title": "Gap fixture C",
+        "category": "work",
+        "start_time": "12:35",
+        "end_time": "23:00",
+        "is_completed": false
+      }
+    ],
+    "preferences": {
+      "theme": "classic",
+      "default_block_gap_minutes": 20,
+      "chat_suggestions": [
+        "Plan my remaining day",
+        "Add a focused work block",
+        "Make room for a break"
+      ]
+    },
+    "cache_control": "private, no-store"
+  },
+  {
+    "phase": "ai-mobile-0",
+    "revision": 4,
+    "date": "2027-12-04",
+    "blocks": [
+      {
+        "id": 1176,
+        "title": "Gap fixture A",
+        "category": "work",
+        "start_time": "06:00",
+        "end_time": "10:00",
+        "is_completed": false
+      },
+      {
+        "id": 1197,
+        "title": "GAP mobile 0",
+        "category": "work",
+        "start_time": "10:00",
+        "end_time": "10:25",
+        "is_completed": false
+      },
+      {
+        "id": 1177,
+        "title": "Gap fixture B",
+        "category": "work",
+        "start_time": "10:45",
+        "end_time": "11:30",
+        "is_completed": false
+      },
+      {
+        "id": 1178,
+        "title": "Gap fixture C",
+        "category": "work",
+        "start_time": "12:35",
+        "end_time": "23:00",
+        "is_completed": false
+      }
+    ],
+    "preferences": {
+      "theme": "classic",
+      "default_block_gap_minutes": 0,
+      "chat_suggestions": [
+        "Plan my remaining day",
+        "Add a focused work block",
+        "Make room for a break"
+      ]
+    },
+    "cache_control": "private, no-store"
+  },
+  {
+    "phase": "undo-mobile-0",
+    "revision": 5,
+    "date": "2027-12-04",
+    "blocks": [
+      {
+        "id": 1198,
+        "title": "Gap fixture A",
+        "category": "work",
+        "start_time": "06:00",
+        "end_time": "10:00",
+        "is_completed": false
+      },
+      {
+        "id": 1199,
+        "title": "Gap fixture B",
+        "category": "work",
+        "start_time": "10:45",
+        "end_time": "11:30",
+        "is_completed": false
+      },
+      {
+        "id": 1200,
+        "title": "Gap fixture C",
+        "category": "work",
+        "start_time": "12:35",
+        "end_time": "23:00",
+        "is_completed": false
+      }
+    ],
+    "preferences": {
+      "theme": "classic",
+      "default_block_gap_minutes": 10,
+      "chat_suggestions": [
+        "Plan my remaining day",
+        "Add a focused work block",
+        "Make room for a break"
+      ]
+    },
+    "cache_control": "private, no-store"
+  },
+  {
+    "phase": "ai-mobile-10",
+    "revision": 4,
+    "date": "2027-12-05",
+    "blocks": [
+      {
+        "id": 1179,
+        "title": "Gap fixture A",
+        "category": "work",
+        "start_time": "06:00",
+        "end_time": "10:00",
+        "is_completed": false
+      },
+      {
+        "id": 1201,
+        "title": "GAP mobile 10",
+        "category": "work",
+        "start_time": "10:10",
+        "end_time": "10:35",
+        "is_completed": false
+      },
+      {
+        "id": 1180,
+        "title": "Gap fixture B",
+        "category": "work",
+        "start_time": "10:45",
+        "end_time": "11:30",
+        "is_completed": false
+      },
+      {
+        "id": 1181,
+        "title": "Gap fixture C",
+        "category": "work",
+        "start_time": "12:35",
+        "end_time": "23:00",
+        "is_completed": false
+      }
+    ],
+    "preferences": {
+      "theme": "classic",
+      "default_block_gap_minutes": 10,
+      "chat_suggestions": [
+        "Plan my remaining day",
+        "Add a focused work block",
+        "Make room for a break"
+      ]
+    },
+    "cache_control": "private, no-store"
+  },
+  {
+    "phase": "undo-mobile-10",
+    "revision": 5,
+    "date": "2027-12-05",
+    "blocks": [
+      {
+        "id": 1202,
+        "title": "Gap fixture A",
+        "category": "work",
+        "start_time": "06:00",
+        "end_time": "10:00",
+        "is_completed": false
+      },
+      {
+        "id": 1203,
+        "title": "Gap fixture B",
+        "category": "work",
+        "start_time": "10:45",
+        "end_time": "11:30",
+        "is_completed": false
+      },
+      {
+        "id": 1204,
+        "title": "Gap fixture C",
+        "category": "work",
+        "start_time": "12:35",
+        "end_time": "23:00",
+        "is_completed": false
+      }
+    ],
+    "preferences": {
+      "theme": "classic",
+      "default_block_gap_minutes": 20,
+      "chat_suggestions": [
+        "Plan my remaining day",
+        "Add a focused work block",
+        "Make room for a break"
+      ]
+    },
+    "cache_control": "private, no-store"
+  },
+  {
+    "phase": "ai-mobile-20",
+    "revision": 4,
+    "date": "2027-12-06",
+    "blocks": [
+      {
+        "id": 1182,
+        "title": "Gap fixture A",
+        "category": "work",
+        "start_time": "06:00",
+        "end_time": "10:00",
+        "is_completed": false
+      },
+      {
+        "id": 1183,
+        "title": "Gap fixture B",
+        "category": "work",
+        "start_time": "10:45",
+        "end_time": "11:30",
+        "is_completed": false
+      },
+      {
+        "id": 1205,
+        "title": "GAP mobile 20",
+        "category": "work",
+        "start_time": "11:50",
+        "end_time": "12:15",
+        "is_completed": false
+      },
+      {
+        "id": 1184,
+        "title": "Gap fixture C",
+        "category": "work",
+        "start_time": "12:35",
+        "end_time": "23:00",
+        "is_completed": false
+      }
+    ],
+    "preferences": {
+      "theme": "classic",
+      "default_block_gap_minutes": 20,
+      "chat_suggestions": [
+        "Plan my remaining day",
+        "Add a focused work block",
+        "Make room for a break"
+      ]
+    },
+    "cache_control": "private, no-store"
+  },
+  {
+    "phase": "undo-mobile-20",
+    "revision": 5,
+    "date": "2027-12-06",
+    "blocks": [
+      {
+        "id": 1206,
+        "title": "Gap fixture A",
+        "category": "work",
+        "start_time": "06:00",
+        "end_time": "10:00",
+        "is_completed": false
+      },
+      {
+        "id": 1207,
+        "title": "Gap fixture B",
+        "category": "work",
+        "start_time": "10:45",
+        "end_time": "11:30",
+        "is_completed": false
+      },
+      {
+        "id": 1208,
+        "title": "Gap fixture C",
+        "category": "work",
+        "start_time": "12:35",
+        "end_time": "23:00",
+        "is_completed": false
+      }
+    ],
+    "preferences": {
+      "theme": "classic",
+      "default_block_gap_minutes": 20,
+      "chat_suggestions": [
+        "Plan my remaining day",
+        "Add a focused work block",
+        "Make room for a break"
+      ]
+    },
+    "cache_control": "private, no-store"
+  },
+  {
+    "phase": "ai-explicit-mobile",
+    "revision": 6,
+    "date": "2027-12-06",
+    "blocks": [
+      {
+        "id": 1206,
+        "title": "Gap fixture A",
+        "category": "work",
+        "start_time": "06:00",
+        "end_time": "10:00",
+        "is_completed": false
+      },
+      {
+        "id": 1209,
+        "title": "GAP mobile explicit",
+        "category": "work",
+        "start_time": "10:00",
+        "end_time": "10:25",
+        "is_completed": false
+      },
+      {
+        "id": 1207,
+        "title": "Gap fixture B",
+        "category": "work",
+        "start_time": "10:45",
+        "end_time": "11:30",
+        "is_completed": false
+      },
+      {
+        "id": 1208,
+        "title": "Gap fixture C",
+        "category": "work",
+        "start_time": "12:35",
+        "end_time": "23:00",
+        "is_completed": false
+      }
+    ],
+    "preferences": {
+      "theme": "classic",
+      "default_block_gap_minutes": 20,
+      "chat_suggestions": [
+        "Plan my remaining day",
+        "Add a focused work block",
+        "Make room for a break"
+      ]
+    },
+    "cache_control": "private, no-store"
+  },
+  {
+    "phase": "undo-mobile-explicit",
+    "revision": 7,
+    "date": "2027-12-06",
+    "blocks": [
+      {
+        "id": 1210,
+        "title": "Gap fixture A",
+        "category": "work",
+        "start_time": "06:00",
+        "end_time": "10:00",
+        "is_completed": false
+      },
+      {
+        "id": 1211,
+        "title": "Gap fixture B",
+        "category": "work",
+        "start_time": "10:45",
+        "end_time": "11:30",
+        "is_completed": false
+      },
+      {
+        "id": 1212,
+        "title": "Gap fixture C",
+        "category": "work",
+        "start_time": "12:35",
+        "end_time": "23:00",
+        "is_completed": false
+      }
+    ],
+    "preferences": {
+      "theme": "classic",
+      "default_block_gap_minutes": 20,
+      "chat_suggestions": [
+        "Plan my remaining day",
+        "Add a focused work block",
+        "Make room for a break"
+      ]
+    },
+    "cache_control": "private, no-store"
+  },
+  {
+    "phase": "ai-explicit-desktop",
+    "revision": 6,
+    "date": "2027-12-03",
+    "blocks": [
+      {
+        "id": 1194,
+        "title": "Gap fixture A",
+        "category": "work",
+        "start_time": "06:00",
+        "end_time": "10:00",
+        "is_completed": false
+      },
+      {
+        "id": 1213,
+        "title": "GAP desktop explicit",
+        "category": "work",
+        "start_time": "10:00",
+        "end_time": "10:25",
+        "is_completed": false
+      },
+      {
+        "id": 1195,
+        "title": "Gap fixture B",
+        "category": "work",
+        "start_time": "10:45",
+        "end_time": "11:30",
+        "is_completed": false
+      },
+      {
+        "id": 1196,
+        "title": "Gap fixture C",
+        "category": "work",
+        "start_time": "12:35",
+        "end_time": "23:00",
+        "is_completed": false
+      }
+    ],
+    "preferences": {
+      "theme": "classic",
+      "default_block_gap_minutes": 20,
+      "chat_suggestions": [
+        "Plan my remaining day",
+        "Add a focused work block",
+        "Make room for a break"
+      ]
+    },
+    "cache_control": "private, no-store"
+  },
+  {
+    "phase": "undo-desktop-explicit",
+    "revision": 7,
+    "date": "2027-12-03",
+    "blocks": [
+      {
+        "id": 1214,
+        "title": "Gap fixture A",
+        "category": "work",
+        "start_time": "06:00",
+        "end_time": "10:00",
+        "is_completed": false
+      },
+      {
+        "id": 1215,
+        "title": "Gap fixture B",
+        "category": "work",
+        "start_time": "10:45",
+        "end_time": "11:30",
+        "is_completed": false
+      },
+      {
+        "id": 1216,
+        "title": "Gap fixture C",
+        "category": "work",
+        "start_time": "12:35",
+        "end_time": "23:00",
+        "is_completed": false
+      }
+    ],
+    "preferences": {
+      "theme": "classic",
+      "default_block_gap_minutes": 20,
+      "chat_suggestions": [
+        "Plan my remaining day",
+        "Add a focused work block",
+        "Make room for a break"
+      ]
+    },
+    "cache_control": "private, no-store"
+  }
+]

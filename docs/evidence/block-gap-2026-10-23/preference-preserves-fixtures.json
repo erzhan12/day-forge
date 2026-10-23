@@ -1,0 +1,101 @@
+[
+  {
+    "date": "2027-12-04",
+    "revision": 3,
+    "blocks": [
+      {
+        "id": 1176,
+        "title": "Gap fixture A",
+        "category": "work",
+        "start_time": "06:00",
+        "end_time": "10:00",
+        "is_completed": false
+      },
+      {
+        "id": 1177,
+        "title": "Gap fixture B",
+        "category": "work",
+        "start_time": "10:45",
+        "end_time": "11:30",
+        "is_completed": false
+      },
+      {
+        "id": 1178,
+        "title": "Gap fixture C",
+        "category": "work",
+        "start_time": "12:35",
+        "end_time": "23:00",
+        "is_completed": false
+      }
+    ],
+    "asserted_schedule_unchanged": true,
+    "expected_status": "active",
+    "comparison": "Full block and schedule dictionaries compared before AI/Undo; assertions passed."
+  },
+  {
+    "date": "2027-12-05",
+    "revision": 3,
+    "blocks": [
+      {
+        "id": 1179,
+        "title": "Gap fixture A",
+        "category": "work",
+        "start_time": "06:00",
+        "end_time": "10:00",
+        "is_completed": false
+      },
+      {
+        "id": 1180,
+        "title": "Gap fixture B",
+        "category": "work",
+        "start_time": "10:45",
+        "end_time": "11:30",
+        "is_completed": false
+      },
+      {
+        "id": 1181,
+        "title": "Gap fixture C",
+        "category": "work",
+        "start_time": "12:35",
+        "end_time": "23:00",
+        "is_completed": false
+      }
+    ],
+    "asserted_schedule_unchanged": true,
+    "expected_status": "active",
+    "comparison": "Full block and schedule dictionaries compared before AI/Undo; assertions passed."
+  },
+  {
+    "date": "2027-12-06",
+    "revision": 3,
+    "blocks": [
+      {
+        "id": 1182,
+        "title": "Gap fixture A",
+        "category": "work",
+        "start_time": "06:00",
+        "end_time": "10:00",
+        "is_completed": false
+      },
+      {
+        "id": 1183,
+        "title": "Gap fixture B",
+        "category": "work",
+        "start_time": "10:45",
+        "end_time": "11:30",
+        "is_completed": false
+      },
+      {
+        "id": 1184,
+        "title": "Gap fixture C",
+        "category": "work",
+        "start_time": "12:35",
+        "end_time": "23:00",
+        "is_completed": false
+      }
+    ],
+    "asserted_schedule_unchanged": true,
+    "expected_status": "active",
+    "comparison": "Full block and schedule dictionaries compared before AI/Undo; assertions passed."
+  }
+]
