@@ -2,6 +2,8 @@
 
 **English summary.** Production verification of PR #265 on release `a2e6133` passed 0/10/20-minute persistence through fresh login, eight real AI operations and Undo on desktop/mobile. Original preferences were restored and six synthetic test days were left empty; actual iPhone/Safari and container rollback were outside this run.
 
+The documentation release after PR #270, `88771eb`, passed a separate public health/version/asset check on 24 October. See [the publication check](#публикация-после-pr-270).
+
 23 октября 2026 года. Проверен [production](https://dayforge.habitreward.org) на релизе `a2e6133868294d02f6797bab480f6cd4bb72469a`, опубликованном после PR #269. Он включает [PR #265](https://github.com/erzhan12/day-forge/pull/265). [Deploy #39975827721](https://github.com/erzhan12/day-forge/actions/runs/39975827721) завершился успешно. Точная версия подтверждена в метаданных страниц браузера; [метаданные Deploy](evidence/block-gap-2026-10-23/deploy.json) сохранены отдельно.
 
 ## Результат
@@ -102,3 +104,28 @@ without a start or end time. Use automatic placement.
 На ширине 320 px Logout проверен физическим кликом после прокрутки: центр кнопки не перекрыт чатом. После выхода браузер показал Login, Back сохранил Login без приватного расписания, reload защищённого URL вернул Login. Отдельная HTTP-сессия также завершена. Созданные для проверки вкладки закрыты, временный viewport сброшен. [Проверка доступности кнопки](evidence/block-gap-2026-10-23/mobile-320-logout-hit.json) и [снимок](evidence/block-gap-2026-10-23/mobile-320-logout-control.jpg).
 
 Это проверка responsive-интерфейса в Chromium. Она не закрывает отдельную задачу настоящего iPhone/Safari. В этом прогоне не выполнялись нагрузочные гонки, контейнерный upgrade/rollback, обращения к чужим аккаунтам или внешним OAuth-интеграциям.
+
+## Публикация после PR #270
+
+24 октября 2026 года, Asia/Almaty. [PR #270](https://github.com/erzhan12/day-forge/pull/270) опубликовал отчёт и evidence без изменений приложения. Проверен его merge-коммит `88771eb868cc6d64a4c41bf37f6e364f991c9ccc`. Восемь AI-запросов выше относятся к предыдущему релизу `a2e6133`; это дополнение фиксирует отдельную публичную проверку сборки `88771eb`.
+
+[Deploy #39990930469](https://github.com/erzhan12/day-forge/actions/runs/39990930469) завершился успешно 23 октября в 22:02 по Алматы. Validation, build-and-push, deploy и health-check прошли. HTTPS health-check после 30 секунд stabilization получил HTTP 200 с первой попытки на `/accounts/login/`. [Метаданные запуска](evidence/post-pr270-release-2026-10-24/deploy.json) и [результаты проверок](evidence/post-pr270-release-2026-10-24/checks.json).
+
+Независимые GET-запросы по HTTPS с проверкой TLS-сертификата подтвердили:
+
+| Проверка | Результат |
+| --- | --- |
+| Login и повторный Login с `Cache-Control: no-cache` | HTTP 200, компонент `Login` |
+| `meta[name="frontend-version"]` и Inertia version | точное совпадение с `88771eb868cc6d64a4c41bf37f6e364f991c9ccc` |
+| `/static/assets/app-CkDED3nT.js` | HTTP 200, `text/javascript`, 491966 байт; содержит точный SHA релиза |
+| `/static/assets/app-Cm2RWFvr.css` | HTTP 200, `text/css`, 72635 байт |
+| Кэширование обоих assets | `max-age=315360000, public, immutable` |
+| Повторный GET каждого asset с его `If-None-Match` | HTTP 304, без тела |
+
+SHA-256 JavaScript: `1e5dc09864dae391bc2c6d1fa4de69007bdd03cebe95e97f1aee461d90aa09bc`. SHA-256 CSS: `9b97392f05f343168a950d34e0e627931166bfe2a9174a7593ce4f7b86f8a132`. URL, размеры, типы, cache headers и результаты условных запросов сохранены в [public release evidence](evidence/post-pr270-release-2026-10-24/public-release.json).
+
+В отдельной вкладке встроенного браузера Vue отрисовал Login с полями Username/Password и доступной кнопкой Sign in. Метаданные и ссылки на assets совпали с HTTPS-проверкой. Применённые стили подтверждены снимком и DOM-измерениями: `display: flex`, заголовок 30 px, скругление карточки 12 px. [DOM evidence](evidence/post-pr270-release-2026-10-24/browser.json), [снимок](evidence/post-pr270-release-2026-10-24/login.jpg) и [пустой список предупреждений и ошибок консоли](evidence/post-pr270-release-2026-10-24/browser-logs.json). Созданные вкладки закрыты.
+
+В самом Deploy на опубликованном commit прошли 2359 backend-тестов, 1 существующий opt-in skip и 1459 frontend-тестов в 105 файлах; Ruff, TypeScript, production npm audit, image retention, SSH pinning и production build прошли. Дополнительная локальная сборка с тем же `RELEASE_VERSION` завершилась успешно: имена и SHA-256 обоих assets точно совпали с production. [Сравнение сборок](evidence/post-pr270-release-2026-10-24/local-build.json).
+
+Ошибок публикации не обнаружено, изменения runtime-кода не потребовались. Проверка ограничена публичной страницей и её сборкой: вход паролем, AI-вызовы, изменения расписания и конфигурации, миграции и rollback в этом дополнении не выполнялись. Исторические результаты полного gap smoke сохранены выше.

@@ -1,0 +1,18 @@
+{
+  "source_sha": "88771eb868cc6d64a4c41bf37f6e364f991c9ccc",
+  "command": "RELEASE_VERSION=88771eb868cc6d64a4c41bf37f6e364f991c9ccc make frontend-build",
+  "exit_code": 0,
+  "version_matches": true,
+  "assets": [
+    {
+      "path": "/static/assets/app-Cm2RWFvr.css",
+      "sha256": "9b97392f05f343168a950d34e0e627931166bfe2a9174a7593ce4f7b86f8a132",
+      "production_matches_local": true
+    },
+    {
+      "path": "/static/assets/app-CkDED3nT.js",
+      "sha256": "1e5dc09864dae391bc2c6d1fa4de69007bdd03cebe95e97f1aee461d90aa09bc",
+      "production_matches_local": true
+    }
+  ]
+}

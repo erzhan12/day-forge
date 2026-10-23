@@ -1,0 +1,19 @@
+{
+  "rendered": {
+    "buttonBackground": "rgb(90, 166, 255)",
+    "cardBorderRadius": "12px",
+    "pageDisplay": "flex",
+    "titleFontSize": "30px"
+  },
+  "scripts": [
+    "/static/assets/app-CkDED3nT.js"
+  ],
+  "signInButtonEnabled": true,
+  "styles": [
+    "/static/assets/app-Cm2RWFvr.css"
+  ],
+  "title": "Day Forge",
+  "url": "https://dayforge.habitreward.org/accounts/login/",
+  "version": "88771eb868cc6d64a4c41bf37f6e364f991c9ccc",
+  "visibleText": "Day Forge\n\nSign in to your schedule\n\nUsername\nPassword\nSign in\n\nPrivacy Policy·Terms of Service"
+}
