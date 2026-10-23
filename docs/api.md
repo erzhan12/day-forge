@@ -233,7 +233,7 @@ New envelope fields (feature 0054):
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `partial` | boolean | `true` when at least one action partially applied — some fields applied, some skipped. `false` when every action fully applied (or fully skipped). |
+| `partial` | boolean | `true` when this turn applied changes but left requested work unresolved: skipped fields/actions or further clarification in a saved `pending_intent`. `false` when no changes applied or all requested work completed. |
 | `outcomes` | array | One per-action outcome object. See below. |
 
 Each `outcomes[]` entry:

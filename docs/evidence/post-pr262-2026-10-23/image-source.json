@@ -19,5 +19,6 @@
     "backend/ai/prompts.py": "b490a0baa854674022140a573cc7f466c60f13d3554ed1bf9c8754a6699e75f1",
     "backend/ai/relative_add_guard.py": "c6c2e5ea70d2721561545118abb8d0f171237b8f780f974fe91ad6eac2270d90"
   },
-  "candidate_image_runtime_matches_worktree": true
+  "candidate_image_runtime_matches_worktree": true,
+  "source_commit": "ef6d5bd58724a56cda741095ca8f2bacec5fa168"
 }

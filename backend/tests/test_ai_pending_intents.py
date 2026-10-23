@@ -478,6 +478,8 @@ def test_answer_accepts_only_time_fields_derived_from_permitted_operand(
         ({"duration_minutes": 30}, {**add(), "duration_minutes": 45}),
         ({"start_time": "13:00"}, add()),
         ({"end_time": "15:00"}, add()),
+        ({"start_time": "14:00"}, add(end="13:30")),
+        ({"start_time": "14:00"}, add(end="14:00")),
         ({}, add()),
     ],
 )
@@ -574,8 +576,9 @@ def test_procedural_before_clause_does_not_block_a_concrete_continuation(
     assert response.json()["pending_intent"] is None and TimeBlock.objects.count() == 1
 
 
+@pytest.mark.parametrize("omit_outcomes", [False, True], ids=["empty-outcomes", "no-outcomes"])
 def test_relative_guard_rejection_preserves_permission_for_a_corrected_answer(
-    auth_client, user, monkeypatch
+    auth_client, user, monkeypatch, omit_outcomes
 ):
     schedule = Schedule.objects.create(user=user, date=DAY)
     TimeBlock.objects.create(schedule=schedule, title="Gym", category="health",
@@ -586,6 +589,20 @@ def test_relative_guard_rejection_preserves_permission_for_a_corrected_answer(
                                       intent_decision="new", pending_actions=[scope]))
     first, _ = send(auth_client, user, command)
     ref = first.json()["pending_intent"]
+    if omit_outcomes:
+        from ai import views
+
+        original = views._finish_chat_sync
+
+        def without_outcomes(*args, **kwargs):
+            response = original(*args, **kwargs)
+            payload = json.loads(response.content)
+            if payload.get("ask") and not payload.get("applied"):
+                assert payload.pop("outcomes") == []
+                response.content = json.dumps(payload)
+            return response
+
+        monkeypatch.setattr(views, "_finish_chat_sync", without_outcomes)
     history = [{"role": "user", "content": command},
                {"role": "assistant", "content": "When?", "is_ask": True}]
     for hour, applied in [("08", False), ("10", True)]:
@@ -597,6 +614,7 @@ def test_relative_guard_rejection_preserves_permission_for_a_corrected_answer(
                            messages=[*history, {"role": "user", "content": f"{hour}:00"}])
         assert response.status_code == 200 and response.json()["applied"] is applied
         if not applied:
+            assert ("outcomes" not in response.json()) is omit_outcomes
             row = PendingIntent.objects.get()
             assert row.items == [scope] and row.version == 2
             assert Schedule.objects.get(pk=schedule.pk).revision == 0

@@ -1,0 +1,15 @@
+{
+  "source_base": "ef6d5bd58724a56cda741095ca8f2bacec5fa168",
+  "runtime_followup": "Reject a nonpositive derived duration before matching a pending permission.",
+  "image_tag": "day-forge-rehearsal:pr263-reviewed",
+  "image_id": "sha256:fe296c248e1a24c05a2df089c12758032e99a1a1c3df113d26a4b01e675be60a",
+  "architecture": "arm64",
+  "release_version": "pr263-reviewed-candidate",
+  "runtime_files": {
+    "backend/ai/pending_intents.py": "53de827c923fab7be7078f2d0ea2e1295c7d0b897cc4081aa35c3fa4fc7ed11e",
+    "backend/ai/prompts.py": "b490a0baa854674022140a573cc7f466c60f13d3554ed1bf9c8754a6699e75f1",
+    "backend/ai/relative_add_guard.py": "c6c2e5ea70d2721561545118abb8d0f171237b8f780f974fe91ad6eac2270d90"
+  },
+  "image_runtime_verified": true,
+  "review_url": "https://github.com/erzhan12/day-forge/pull/263#issuecomment-6359762528"
+}

@@ -247,6 +247,8 @@ def matching_item(action, items):
             duration = (end.hour * 60 + end.minute) - (
                 start.hour * 60 + start.minute
             )
+            if duration <= 0:
+                continue
             if "duration_minutes" in fields and fields["duration_minutes"] != duration:
                 continue
             fields["duration_minutes"] = duration

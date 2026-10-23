@@ -1,6 +1,6 @@
 {
   "backend": {
-    "passed": 2245,
+    "passed": 2248,
     "skipped": 1,
     "skip_reason": "Existing paid R11 comparison is opt-in; real AI browser/API requests were exercised separately."
   },
@@ -16,5 +16,7 @@
   "production_dependency_audit": "0 vulnerabilities",
   "django_system_check": "passed",
   "migration_drift": "none",
-  "image_retention": "passed"
+  "image_retention": "passed",
+  "initial_backend_passed": 2245,
+  "review_focused_tests": 81
 }

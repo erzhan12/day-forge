@@ -60,7 +60,7 @@ HTTP-тест проходит через настоящий service/parser с �
 
 ## Исправленный кандидат: браузер с реальным AI
 
-Проверен тот же frontend и исправленный backend на изолированной локальной базе. OpenRouter был доступен; выполнены шесть реальных вызовов `x-ai/grok-4.3`, без заглушек. Это модель локальной конфигурации; ID модели production этим прогоном не подтверждается.
+Проверен тот же frontend и исправленный backend из `ef6d5bd` на изолированной локальной базе. OpenRouter был доступен; выполнены шесть реальных вызовов `x-ai/grok-4.3`, без заглушек. Это модель локальной конфигурации; ID модели production этим прогоном не подтверждается.
 
 | Проверка | Результат |
 | --- | --- |
@@ -101,6 +101,14 @@ HTTP-тест проходит через настоящий service/parser с �
 
 ## Проверки и оставшиеся границы
 
-`make check`: **2245 backend passed, 1 skipped; 1422 frontend passed в 104 файлах**. Ruff, TypeScript и production frontend build прошли. Отдельно прошли Ruff для deployment scripts, Django system check, migration drift check и image retention tests. Production dependency audit: 0 vulnerabilities. Единственный skip относится к платному opt-in R11 comparison; реальные provider calls выполнены через production и локальный browser smoke. Результаты: [checks.json](evidence/post-pr262-2026-10-23/checks.json).
+После замечаний ревью повторён `make check`: **2248 backend passed, 1 skipped; 1422 frontend passed в 104 файлах**. Первоначальный прогон `ef6d5bd` содержал 2245 backend tests. Ruff и TypeScript прошли повторно; production frontend build проверен ранее и не менялся. Отдельно прошли Ruff для deployment scripts, Django system check, migration drift check и image retention tests. Production dependency audit: 0 vulnerabilities. Единственный skip относится к платному opt-in R11 comparison; реальные provider calls выполнены через production и локальный browser smoke. Результаты: [checks.json](evidence/post-pr262-2026-10-23/checks.json).
+
+## Дополнение по ревью PR #263
+
+[Claude Review](https://github.com/erzhan12/day-forge/pull/263#issuecomment-6359762528) одобрил исходный PR и предложил три неблокирующих улучшения. Вычисленная длительность теперь явно проверяется на `> 0` до сопоставления scope; два новых HTTP-случая проверяют отрицательный и нулевой интервал, отсутствие записи и сохранность исходного намерения. Основной planner и ранее отклонял невалидные интервалы; теперь scope отклоняет их раньше.
+
+Тест relative guard дополнительно проходит с отсутствующим ключом `outcomes`: неприменённое разрешение сохраняется, исправленный ответ применяется один раз. В таблице API уточнён `partial`: он учитывает дальнейшее уточнение при успешной записи, а также пропущенные поля или действия.
+
+После этих изменений пересобран кандидат `pr263-reviewed-candidate` и повторена полная контейнерная репетиция обновления и двух rollback/reupgrade. [Результат](evidence/post-pr262-2026-10-23/container-reviewed.json): success и cleanup true, исходные данные не изменены. [Hashes образа и runtime-файлов](evidence/post-pr262-2026-10-23/image-source-reviewed.json) подтверждают соответствие проверенному коду. Частная копия базы удалена после экспорта обезличенных результатов.
 
 Production остаётся на `ac8b4a0` с найденными дефектами. После merge и Deploy исправлений нужно повторить точные start-only и partial-without-question сценарии на тестовом аккаунте. Реальный iOS Safari, живые OAuth-интеграции, нагрузочные границы и оценка качества модели на корпусе этим smoke не закрываются.
