@@ -4,6 +4,8 @@ This file tracks work that still needs a decision or implementation. The previou
 
 ## In progress
 
+- [x] **#258 configurable default block gap.** Implemented preferences/API and migration, captured chat policy and placement, Settings → Schedule control, and documentation with red–green tests.
+
 - [ ] **Publish the post-PR #263 continuation fixes.** Deploy `4076204` succeeded and production desktop/mobile passed start-only clarification, partial application without duplicates, Undo and Logout. Further retries exposed relation words inside quoted task titles and executable adds carrying `task_id: null`. Both are fixed locally with full suites and 11 successful real AI calls. After merge and Deploy, repeat quoted-title continuation, partial completion and request replay on the production test account. See [the current report](../docs/POST_PR263_PRODUCTION_VERIFICATION.md).
 - [x] **First PR CI run.** PR #237 passed the reusable CI workflow on GitHub Actions, and the post-merge deployment completed successfully.
 - [x] **npm dependency advisories.** Updated compatible lockfile versions for the reported development-tooling advisories; `npm audit` now reports zero vulnerabilities. See [the dependency audit report](../docs/DEPENDENCY_AUDIT.md).

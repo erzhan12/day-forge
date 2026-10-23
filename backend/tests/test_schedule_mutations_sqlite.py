@@ -553,3 +553,42 @@ finally:
 assert Schedule.objects.get(pk=schedule.pk).revision == 0
 assert not UserPreferences.objects.filter(user=user).exists()
 """)
+
+
+def test_preferences_patch_under_independent_writer_reservation(copied_database):
+    run_on_copy(copied_database, """
+import json
+import sqlite3
+from django.contrib.auth.models import User
+from django.test import Client
+from schedules.models import Schedule, TimeBlock
+from templates_mgr.models import UserPreferences
+user = User.objects.create_user(username='gap-contention')
+prefs = UserPreferences.objects.create(user=user, default_block_gap_minutes=20)
+schedule = Schedule.objects.create(user=user, date='2026-10-10')
+TimeBlock.objects.create(schedule=schedule, title='Keep', start_time='09:00', end_time='10:00')
+before = list(schedule.time_blocks.values())
+client = Client()
+client.force_login(user)
+writer = sqlite3.connect(sys.argv[1], timeout=0.1)
+try:
+    writer.execute('BEGIN IMMEDIATE')
+    response = client.patch('/api/user/preferences/', json.dumps({'default_block_gap_minutes': 5}),
+                            content_type='application/json')
+    assert response.status_code == 409, response.content
+    assert response.json()['code'] == 'schedule_changed'
+    assert response.headers['Cache-Control'] == 'private, no-store'
+    prefs.refresh_from_db()
+    assert prefs.default_block_gap_minutes == 20
+finally:
+    writer.rollback()
+    writer.close()
+response = client.patch('/api/user/preferences/', json.dumps({'default_block_gap_minutes': 5}),
+                        content_type='application/json')
+assert response.status_code == 200, response.content
+prefs.refresh_from_db()
+assert prefs.default_block_gap_minutes == 5
+schedule.refresh_from_db()
+assert schedule.revision == 0
+assert list(schedule.time_blocks.values()) == before
+""")

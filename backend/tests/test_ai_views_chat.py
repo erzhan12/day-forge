@@ -4114,3 +4114,82 @@ class TestImplicitAddAuditUnaffected:
         # rewritten "add Notes" sent to the provider.
         interaction = AIInteraction.objects.get(schedule=today_schedule)
         assert interaction.user_command == "Notes"
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("gap", [0, 5, 20, 120, 7])
+def test_chat_captures_gap_and_places_with_it(auth_client, user, today_schedule, monkeypatch, gap):
+    from templates_mgr.models import UserPreferences
+
+    UserPreferences.objects.create(user=user, default_block_gap_minutes=gap)
+    TimeBlock.objects.create(
+        schedule=today_schedule, title="Before", start_time="06:00", end_time="10:00",
+    )
+    accepted_gap = 10 if gap == 7 else gap
+
+    async def run(messages, schedule, blocks, rules, now):
+        assert schedule._default_block_gap_minutes == accepted_gap
+        return AIChatResult(raw_response_text="{}", parsed_actions=[
+            {"type": "add", "title": "New", "category": "work"},
+        ], explanation="Added", ask=None)
+
+    monkeypatch.setattr("ai.views.run_chat", run)
+    response = _post(auth_client, {"messages": [_user_turn("add New")]})
+    assert response.status_code == 200
+    added = today_schedule.time_blocks.get(title="New")
+    assert added.start_time == datetime.time(10 + accepted_gap // 60, accepted_gap % 60)
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("kind", ["action", "ask", "empty"])
+@pytest.mark.parametrize("change", ["own", "other", "same"])
+def test_chat_gap_context_changes(auth_client, user, today_schedule, monkeypatch, kind, change):
+    from templates_mgr.models import UserPreferences
+
+    owner = user if change != "other" else User.objects.create_user(username="other-gap")
+    row = UserPreferences.objects.create(user=owner, default_block_gap_minutes=20)
+
+    async def run(*args):
+        await sync_to_async(UserPreferences.objects.filter(pk=row.pk).update)(
+            default_block_gap_minutes=20 if change == "same" else 5,
+        )
+        return AIChatResult(raw_response_text="{}", parsed_actions=[
+            {"type": "add", "title": "New", "category": "work"},
+        ] if kind == "action" else [], explanation="Done", ask="When?" if kind == "ask" else None)
+
+    monkeypatch.setattr("ai.views.run_chat", run)
+    response = _post(auth_client, {"messages": [_user_turn("add New")]})
+    assert response.status_code == (409 if change == "own" else 200)
+    if change == "own":
+        assert response.json()["code"] == "schedule_changed"
+        assert not today_schedule.time_blocks.exists()
+    elif kind == "action":
+        assert today_schedule.time_blocks.filter(title="New").count() == 1
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("requested,actual,applied", [(0, 0, True), (5, 5, True), (5, 0, False)])
+def test_explicit_relative_gap_overrides_saved_default(
+    auth_client, user, today_schedule, monkeypatch, requested, actual, applied,
+):
+    from templates_mgr.models import UserPreferences
+
+    UserPreferences.objects.create(user=user, default_block_gap_minutes=20)
+    TimeBlock.objects.create(
+        schedule=today_schedule, title="Gym", start_time="09:00", end_time="10:00",
+    )
+    _patch_run_chat(monkeypatch, AIChatResult("{}", [
+        {"type": "add", "title": "Vocal", "category": "work",
+         "start_time": f"10:{actual:02d}", "end_time": f"10:{actual + 25:02d}"},
+    ], "Added", None))
+    response = _post(auth_client, {"messages": [_user_turn(
+        f"add Vocal after Gym with a {requested}-minute gap",
+    )]})
+    assert response.status_code == 200
+    assert response.json()["applied"] is applied
+    if applied:
+        assert response.json()["ask"] is None
+        assert today_schedule.time_blocks.get(title="Vocal").start_time == datetime.time(10, actual)
+    else:
+        assert response.json()["ask"]
+        assert not today_schedule.time_blocks.filter(title="Vocal").exists()

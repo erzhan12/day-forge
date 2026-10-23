@@ -21,6 +21,7 @@ from templates_mgr.preferences import (
     UserPreferencesDTO,
     get_user_preferences,
     normalize_chat_suggestions,
+    normalize_default_block_gap_minutes,
     normalize_theme,
     ui_preferences_payload,
 )
@@ -142,6 +143,9 @@ def _read_schedule_page(user, date, slot_type):
             ),
             "preferences": UserPreferencesDTO(
                 theme=normalize_theme(prefs_row.theme),
+                default_block_gap_minutes=normalize_default_block_gap_minutes(
+                    prefs_row.default_block_gap_minutes,
+                ),
                 chat_suggestions=tuple(normalize_chat_suggestions(prefs_row.chat_suggestions)),
             ),
             "template_exists": template_exists,

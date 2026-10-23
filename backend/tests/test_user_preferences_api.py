@@ -61,6 +61,7 @@ def test_ui_preferences_payload_serializes_dto_shape():
     assert ui_preferences_payload(dto) == {
         "theme": "strategic",
         "chat_suggestions": ["First", "Second"],
+        "default_block_gap_minutes": 10,
     }
 
 
@@ -299,6 +300,7 @@ def test_get_first_call_returns_default_classic(auth_client):
     assert resp.json() == {
         "theme": "classic",
         "chat_suggestions": DEFAULT_CHAT_SUGGESTIONS,
+        "default_block_gap_minutes": 10,
     }
     assert resp.headers["Cache-Control"] == "private, no-store"
 
@@ -310,6 +312,7 @@ def test_get_returns_saved_theme(auth_client, user):
     assert resp.json() == {
         "theme": "strategic",
         "chat_suggestions": DEFAULT_CHAT_SUGGESTIONS,
+        "default_block_gap_minutes": 10,
     }
     assert resp.headers["Cache-Control"] == "private, no-store"
 
@@ -324,6 +327,7 @@ def test_get_returns_saved_ordered_suggestions(auth_client, user):
     assert resp.json() == {
         "theme": "classic",
         "chat_suggestions": saved,
+        "default_block_gap_minutes": 10,
     }
 
 
@@ -342,6 +346,7 @@ def test_patch_sets_theme(auth_client, user):
     assert resp.json() == {
         "theme": "strategic",
         "chat_suggestions": DEFAULT_CHAT_SUGGESTIONS,
+        "default_block_gap_minutes": 10,
     }
     assert resp.headers["Cache-Control"] == "private, no-store"
     assert UserPreferences.objects.get(user=user).theme == "strategic"
@@ -357,6 +362,7 @@ def test_patch_sets_dark_4a_theme(auth_client, user):
     assert resp.json() == {
         "theme": "dark_4a",
         "chat_suggestions": DEFAULT_CHAT_SUGGESTIONS,
+        "default_block_gap_minutes": 10,
     }
     assert UserPreferences.objects.get(user=user).theme == "dark_4a"
 
@@ -374,6 +380,7 @@ def test_patch_same_value_is_valid_noop(auth_client, user):
     assert resp.json() == {
         "theme": "classic",
         "chat_suggestions": DEFAULT_CHAT_SUGGESTIONS,
+        "default_block_gap_minutes": 10,
     }
 
 
@@ -406,6 +413,7 @@ def test_patch_chat_suggestions_round_trip_trims_and_preserves_order(
     assert resp.json() == {
         "theme": "classic",
         "chat_suggestions": expected,
+        "default_block_gap_minutes": 10,
     }
     assert UserPreferences.objects.get(user=user).chat_suggestions == expected
     assert auth_client.get(reverse("user_preferences")).json()[
@@ -456,6 +464,7 @@ def test_patch_combined_theme_and_suggestions(auth_client, user):
     assert resp.json() == {
         "theme": "dark_4a",
         "chat_suggestions": ["Focus now"],
+        "default_block_gap_minutes": 10,
     }
 
 
@@ -699,6 +708,7 @@ def test_patch_unknown_field_alongside_valid_theme_is_accepted(auth_client):
     assert resp.json() == {
         "theme": "strategic",
         "chat_suggestions": DEFAULT_CHAT_SUGGESTIONS,
+        "default_block_gap_minutes": 10,
     }
 
 
@@ -719,6 +729,7 @@ def test_preferences_isolated_per_user(db):
     assert resp.json() == {
         "theme": "strategic",
         "chat_suggestions": DEFAULT_CHAT_SUGGESTIONS,
+        "default_block_gap_minutes": 10,
     }
 
     client2 = Client()
@@ -727,6 +738,7 @@ def test_preferences_isolated_per_user(db):
     assert resp.json() == {
         "theme": "light_premium",
         "chat_suggestions": DEFAULT_CHAT_SUGGESTIONS,
+        "default_block_gap_minutes": 10,
     }
 
 
@@ -799,6 +811,7 @@ def test_schedule_view_includes_ui_preferences_prop(auth_client, user):
     assert page["props"]["ui_preferences"] == {
         "theme": "strategic",
         "chat_suggestions": ["Schedule prompt"],
+        "default_block_gap_minutes": 10,
     }
 
 
@@ -814,6 +827,7 @@ def test_settings_view_includes_ui_preferences_prop(auth_client, user):
     assert page["props"]["ui_preferences"] == {
         "theme": "light_premium",
         "chat_suggestions": ["Settings prompt"],
+        "default_block_gap_minutes": 10,
     }
 
 
@@ -846,6 +860,7 @@ def test_analytics_view_includes_ui_preferences_prop(auth_client, user):
     assert page["props"]["ui_preferences"] == {
         "theme": "strategic",
         "chat_suggestions": ["Analytics prompt"],
+        "default_block_gap_minutes": 10,
     }
 
 
@@ -983,3 +998,84 @@ class ConcurrentFirstVisitRace(TransactionTestCase):
         get_user_preferences(user)
         rows = UserPreferences.objects.filter(user=user).count()
         assert rows == 1, f"Expected exactly 1 row, found {rows}"
+
+
+@pytest.mark.parametrize("gap", [0, 5, 20, 120])
+def test_gap_round_trip_sessions_pages_and_schedule_unchanged(auth_client, user, gap):
+    schedule = Schedule.objects.create(user=user, date="2026-04-18", revision=3, status="active")
+    TimeBlock.objects.create(schedule=schedule, title="Keep", start_time="09:00", end_time="10:00")
+    before = list(schedule.time_blocks.values())
+    other = User.objects.create_user(username="gap-other")
+    UserPreferences.objects.create(user=other, default_block_gap_minutes=120)
+    response = auth_client.patch(reverse("user_preferences"), json.dumps({
+        "default_block_gap_minutes": gap, "user_id": other.pk, "user": other.pk,
+    }), content_type="application/json")
+    assert response.status_code == 200
+    assert response.json()["default_block_gap_minutes"] == gap
+    for client in [auth_client, Client()]:
+        client.force_login(user)
+        assert client.get(reverse("user_preferences")).json()["default_block_gap_minutes"] == gap
+        for url in [reverse("settings"), "/schedule/2026-04-18/", "/analytics/2026-04-18/"]:
+            page = client.get(url, HTTP_X_INERTIA="true")
+            assert page.json()["props"]["ui_preferences"]["default_block_gap_minutes"] == gap
+    for patch in [{"theme": "strategic"}, {"chat_suggestions": ["Keep"]},
+                  {"default_block_gap_minutes": gap}]:
+        response = auth_client.patch(reverse("user_preferences"), json.dumps(patch),
+                                     content_type="application/json")
+        assert response.json()["default_block_gap_minutes"] == gap
+    assert UserPreferences.objects.get(user=other).default_block_gap_minutes == 120
+    assert get_user_preferences(user).default_block_gap_minutes == gap
+    schedule.refresh_from_db()
+    assert (schedule.status, schedule.revision) == ("active", 3)
+    assert list(schedule.time_blocks.values()) == before
+
+
+@pytest.mark.parametrize("invalid", [True, False, "5", 5.0, None, [], {}, -5, 125, 7])
+@pytest.mark.parametrize("existing", [False, True])
+def test_gap_strict_validation_is_atomic(auth_client, user, invalid, existing):
+    if existing:
+        UserPreferences.objects.create(user=user, theme="classic", chat_suggestions=["Keep"])
+    response = auth_client.patch(reverse("user_preferences"), json.dumps({
+        "theme": "strategic", "chat_suggestions": ["Replace"], "default_block_gap_minutes": invalid,
+    }), content_type="application/json")
+    assert response.status_code == 400
+    assert response.json() == {"errors": {"default_block_gap_minutes":
+        "Must be an integer from 0 to 120 minutes in 5-minute increments."}}
+    assert response.headers["Cache-Control"] == "private, no-store"
+    if existing:
+        row = UserPreferences.objects.get(user=user)
+        assert (row.theme, row.chat_suggestions, row.default_block_gap_minutes) == (
+            "classic", ["Keep"], 10,
+        )
+    else:
+        assert not UserPreferences.objects.filter(user=user).exists()
+
+
+@pytest.mark.parametrize("raw", [True, "5", 5.0, None, [], {}, -5, 125, 7])
+def test_gap_normalization_is_strict(raw):
+    assert preferences_module.normalize_default_block_gap_minutes(raw) == 10
+    assert not preferences_module.is_valid_default_block_gap_minutes(raw)
+
+
+def test_gap_default_and_corrupt_read_without_write(user):
+    assert get_user_preferences(user).default_block_gap_minutes == 10
+    UserPreferences.objects.filter(user=user).update(default_block_gap_minutes=7)
+    assert get_user_preferences(user).default_block_gap_minutes == 10
+    assert UserPreferences.objects.get(user=user).default_block_gap_minutes == 7
+
+
+def test_gap_lock_conflict_has_private_header(auth_client, monkeypatch):
+    from schedules.mutations import ScheduleChanged
+    from templates_mgr import api
+
+    def conflict(*args):
+        raise ScheduleChanged()
+
+    monkeypatch.setattr(api, "run_user_maintenance", conflict)
+    response = auth_client.patch(
+        reverse("user_preferences"), json.dumps({"default_block_gap_minutes": 5}),
+        content_type="application/json",
+    )
+    assert response.status_code == 409
+    assert response.json()["code"] == "schedule_changed"
+    assert response.headers["Cache-Control"] == "private, no-store"

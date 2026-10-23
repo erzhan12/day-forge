@@ -27,6 +27,7 @@ import json
 
 from analytics.services import compute_review_stats, is_review_snapshot_current
 from schedules.window import DEFAULT_WINDOW
+from templates_mgr.preference_defaults import DEFAULT_BLOCK_GAP_MINUTES
 
 # Mirror frontend/src/utils/scheduleTime.ts to avoid coupling the backend
 # to the TS module. Update both together if the visible day window changes.
@@ -46,8 +47,21 @@ def _category_text(categories):
     return ", ".join(f"{slug} ({label})" for slug, label in categories)
 
 
-def build_system_prompt_chat(window, categories=_DEFAULT_CATEGORIES, sink_slug="other") -> str:
+def build_system_prompt_chat(
+    window, categories=_DEFAULT_CATEGORIES, sink_slug="other", *,
+    default_block_gap_minutes=DEFAULT_BLOCK_GAP_MINUTES,
+) -> str:
     """Render chat instructions for the user's current schedule window."""
+    gap = default_block_gap_minutes
+    spacing = (
+        f"It prefers a symmetric {gap}-minute gap before and after the new block. "
+        f"It tries the full {gap}-minute gap first, decreasing in 5-minute steps to zero "
+        "only in the initial window when the full-gap placement would not fit before "
+        "the next block (or the day-window end when no block follows). Reduced-gap "
+        "placements align to that window's right edge. Later windows keep the full gap."
+        if gap else
+        "It uses a 0-minute gap before and after the new block, allowing back-to-back placement."
+    )
     # Rule 9b tells the model to re-emit the originally-requested interval from
     # the prior transcript. Those prior turns are injected as an *untrusted*
     # user-role message (see ``service.run_chat`` / ``serialise_prior_turns``) —
@@ -105,11 +119,9 @@ Valid action types and required fields:
        * automatic — the user gave no start time: OMIT both start_time and
          end_time. The backend places the block deterministically at the
          nearest free slot forward (25-minute default duration, aligned to the
-         5-minute grid, within the working-day window). It tries the full 10-minute gap first,
-         then 5-minute and then zero gaps only in the initial window when the full-gap
-         placement would not fit before the next block (or before the day-window end
-         when no block follows). Reduced-gap placements align to that window's right
-         edge. Later windows keep the full gap. You MAY add an optional duration_minutes (a
+         5-minute grid, within the working-day window). {spacing}
+         Explicit times and requested gaps take precedence.
+         You MAY add an optional duration_minutes (a
          positive multiple of 5) when the user or a rule implies a length,
          but NEVER invent a start_time. Supplying only one of the two time
          fields is invalid.

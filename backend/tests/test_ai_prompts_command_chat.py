@@ -14,6 +14,7 @@ section entirely) fails here.
 import datetime
 from types import SimpleNamespace
 
+import pytest
 from ai.prompts import (
     CHAT_TRANSCRIPT_HEADER,
     _format_rules_section,
@@ -154,11 +155,24 @@ class TestChatSystemPromptAutoPlacement:
         assert "10" in prompt  # default gap minutes
         assert "5-min" in prompt or "5 minute" in prompt.lower() or "5-minute" in prompt
 
-    def test_auto_placement_gap_is_a_bounded_preference(self):
-        prompt = self._prompt().lower()
-        assert "full 10-minute gap first" in prompt
-        assert "5-minute and then zero gaps only in the initial window" in prompt
-        assert "later windows keep the full gap" in prompt
+    @pytest.mark.parametrize("gap", [0, 5, 10, 20, 120])
+    def test_auto_placement_gap_is_a_bounded_preference(self, gap):
+        from ai.prompts import build_system_prompt_chat
+        from schedules.window import DEFAULT_WINDOW
+
+        prompt = build_system_prompt_chat(DEFAULT_WINDOW, default_block_gap_minutes=gap).lower()
+        assert f"{gap}-minute gap" in prompt
+        assert "before and after" in prompt
+        assert "explicit times and requested gaps take precedence" in prompt
+        if gap:
+            assert "5-minute steps" in prompt
+            assert "only in the initial window" in prompt
+            assert "later windows keep the full gap" in prompt
+        else:
+            assert "back-to-back" in prompt
+            assert "5-minute steps" not in prompt
+            assert "only in the initial window" not in prompt
+            assert "later windows keep the full gap" not in prompt
 
     def test_forbids_fabricated_start(self):
         low = self._prompt().lower()

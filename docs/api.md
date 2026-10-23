@@ -193,7 +193,7 @@ per-action result is reported via `outcomes`.
 
 `blocks` is the full schedule after apply.
 
-**Untimed (auto-placed) adds, chat only (features 0067, 0086).** A chat `add`
+**Untimed (auto-placed) adds, chat only (features 0067, 0086, 0087).** A chat `add`
 may omit **both** `start_time` and `end_time`; the backend then places the block
 on the 5-minute grid with a **25-minute default duration**. The forward floor
 is unchanged: current local time rounded up to the grid for today, or the
@@ -201,10 +201,12 @@ day-window start for another date. An optional `duration_minutes` (a positive
 multiple of 5) overrides the default length; supplying only one time field is
 rejected.
 
-The backend searches forward with a preferred **10-minute gap** on both sides
-of neighbouring blocks. If that result fits in the initial window,
+The backend searches forward with the captured per-user
+`default_block_gap_minutes` preference on both sides of neighbouring blocks
+(default **10**, supported integers **0–120** in **5-minute steps**). If that result fits in the initial window,
 it keeps the result unchanged. Otherwise it retries only that initial window
-with symmetric **5-minute, then zero-minute gaps**. Each retry checks one
+with symmetric gaps decreasing by **5 minutes** at a time down to **zero**.
+Zero allows touching half-open intervals and has no retry levels. Each retry checks one
 right-aligned placement: the latest grid-aligned end that is no later than the
 next block's start minus the trial gap (so with a zero gap the block may touch
 the next block), minus the full duration. Placement never starts before the
@@ -217,12 +219,14 @@ occupancy.
 For example, at **10:03**, with `Standup` at **10:30–10:55**, an untimed
 `Write report` uses **10:05–10:30**, touching `Standup` with zero gap. If no
 retry fits the initial window, the original full-gap forward-search result is
-used; later windows retain the full 10-minute gap. If neither the initial-window
+used; later windows retain the full configured gap. If neither the initial-window
 retries nor the full-gap fallback fit inside the day window, the create is
 **skipped** with `reason_code="no_slot"` (see the outcomes table), and the response
 carries a server-owned `ask` suggesting a shorter duration or a specific free
 time. Explicit adds (both times supplied) are unchanged and are never
-auto-relocated. **The `generate-draft` endpoint is unaffected: draft `add`s still
+auto-relocated. Explicit non-overlapping times and requested gaps take precedence
+over the preference, and changing it leaves existing blocks unchanged.
+**The `generate-draft` endpoint is unaffected: draft `add`s still
 require explicit HH:MM start/end for every block and are never auto-placed.**
 
 **Duration resize — chat only (feature 0068).** A `resize` action must use
@@ -570,17 +574,18 @@ they both commit or neither does.
 
 ## User Preferences
 
-Per-user UI preferences (theme and AI quick-input suggestions). Each user has exactly one account-scoped preferences row, created on first authenticated access. Distinct from `/api/templates/` (schedule templates) despite the shared `templates_mgr` app.
+Per-user preferences (theme, AI quick-input suggestions, and default spacing for untimed chat adds). Each user has exactly one account-scoped preferences row, created on first authenticated access. Distinct from `/api/templates/` (schedule templates) despite the shared `templates_mgr` app.
 
-All responses from `GET` and `PATCH` set `Cache-Control: private, no-store` — including 400/413 error responses, which is exercised by tests. Success bodies contain per-user state; error bodies contain fixed validation strings and do NOT echo client-supplied values. A misconfigured CDN/proxy must never cache any path regardless, so the helper applies the header uniformly. (The header is NOT attached to 405/302 responses produced by Django's `@require_http_methods` / `@login_required` decorators before the view runs; those bodies are empty or a redirect Location, with no per-user state leak surface.)
+All responses from `GET` and `PATCH` set `Cache-Control: private, no-store` — including 400/409/413 error responses, which is exercised by tests. Success bodies contain per-user state; error bodies contain fixed validation strings and do NOT echo client-supplied values. A misconfigured CDN/proxy must never cache any path regardless, so the helper applies the header uniformly. (The header is NOT attached to 405/302 responses produced by Django's `@require_http_methods` / `@login_required` decorators before the view runs; those bodies are empty or a redirect Location, with no per-user state leak surface.)
 
 ### `GET /api/user/preferences/`
 
-Returns the current user's preferences. Creates a default row (theme `"classic"`, unset suggestions) if none exists. Unset or structurally malformed persisted suggestions resolve to the three defaults shown below without rewriting the row; a saved empty array remains empty.
+Returns the current user's preferences. Creates a default row (theme `"classic"`, unset suggestions, gap `10`) if none exists. Unset or structurally malformed persisted suggestions resolve to the three defaults shown below without rewriting the row; a saved empty array remains empty.
 
 ```json
 {
   "theme": "classic",
+  "default_block_gap_minutes": 10,
   "chat_suggestions": [
     "Plan my remaining day",
     "Add a focused work block",
@@ -593,22 +598,41 @@ Returns the current user's preferences. Creates a default row (theme `"classic"`
 
 ### `PATCH /api/user/preferences/`
 
-Partially updates theme and/or AI quick-input suggestions.
+Partially updates any of the fields below. Success returns the complete preferences
+object shown above. Omitted fields retain their saved values.
 
 **Body**
 
 | Field | Type | Notes |
 |-------|------|-------|
+| `default_block_gap_minutes` | integer | 0–120 inclusive, divisible by 5. Default 10; 0 permits back-to-back untimed chat blocks. Booleans, strings, floats, null, arrays and objects are rejected without coercion. |
 | `theme` | string | `classic`, `strategic`, `light_premium`, or `dark_4a`. |
 | `chat_suggestions` | array of strings | At most 8 entries. Each entry is trimmed, must remain non-empty, and may contain at most 120 Unicode code points. Order and duplicates are preserved. `[]` intentionally hides all suggestions; `null` is rejected. |
 
 Unknown keys are silently ignored (forward-compatibility — matches the `/api/rules/{pk}/` PATCH pattern). A body containing zero recognized fields returns `400` with `errors.body = "No editable fields supplied."`; this is reserved for that case only — a PATCH with the same value as the persisted theme is a valid `200` no-op.
+
+All recognized fields are validated before any write, including on first use.
+Preference writes run under the shared User policy lock. Lock exhaustion returns
+HTTP 409 with `code: "schedule_changed"` and `Cache-Control: private, no-store`.
+Admin preferences views are inspection-only. Changing the gap never changes existing
+blocks, day status, or revisions. Malformed stored gap values resolve to 10 without
+write-on-read; valid zero stays zero. Settings → Schedule edits this preference.
+Chat captures it in both provider instructions and its policy fingerprint: a change
+during a provider call rejects application with `409 schedule_changed`, and a saved
+pending intent becomes stale. Draft policy is unchanged. Completed request receipt
+replays still return their original outcome.
+
+For example, `{"default_block_gap_minutes":5}` saves a five-minute preference.
+An invalid gap returns exactly:
+`{"errors":{"default_block_gap_minutes":"Must be an integer from 0 to 120 minutes in 5-minute increments."}}`.
 
 **Errors**
 
 | Status | `errors` key | Meaning |
 |--------|--------------|---------|
 | `400` | `body` | Invalid JSON, non-object body, or no recognized fields supplied. |
+| `400` | `default_block_gap_minutes` | Not an integer from 0 to 120 in 5-minute increments. |
+| `409` | `detail` | Policy lock contention; `code` is `schedule_changed`. |
 | `400` | `theme` | Value is not one of the allowed theme ids. |
 | `400` | `chat_suggestions` | Value is not an array, has more than 8 entries, or contains a non-string, empty-after-trim, or over-120-code-point entry. |
 | `413` | `body` | Request body exceeds 100 KB. |

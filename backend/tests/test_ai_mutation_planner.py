@@ -1312,12 +1312,13 @@ class TestAutoPlacement:
 class TestAutoPlacementGapPreference:
     @staticmethod
     def _plan(blocks, expected, *, base="10:05", day_start=DAY_START, day_end=DAY_END,
-              actions=None, date="2026-04-18", snapshot=None):
+              actions=None, date="2026-04-18", snapshot=None, gap=10):
         snap = snapshot if snapshot is not None else _schedule(blocks, date=date)
         actions = actions if actions is not None else [_auto_add("Write report")]
         result = plan_mutations(
             snap, actions, day_start=day_start, day_end=day_end,
             earliest_start=_t(base) if base is not None else None,
+            default_block_gap_minutes=gap,
         )
         assert isinstance(result, MutationPlan)
         assert _create_intervals(result) == expected
@@ -1385,24 +1386,22 @@ class TestAutoPlacementGapPreference:
     def test_reduced_gap_respects_off_grid_neighbour(self):
         self._plan([_block(1, "10:34", "10:55")], [("10:05", "10:30")])
 
-    def test_gap_retries_derive_from_default(self, monkeypatch):
-        monkeypatch.setattr(mutation_planner, "AUTO_PLACEMENT_GAP_MINUTES", 20)
+    def test_gap_retries_derive_from_default(self):
         self._plan([_block(1, "09:30", "10:00"), _block(2, "10:55", "11:20")],
-                   [("10:15", "10:40")], base="10:00")
+                   [("10:15", "10:40")], base="10:00", gap=20)
 
-    def test_zero_default_gap_has_no_retry_levels_and_keeps_fallback(self, monkeypatch):
+    def test_zero_default_gap_has_no_retry_levels_and_keeps_fallback(self):
         # Reachable only via a configured gap (#258): with a 0-minute default the
         # retry range is empty, so a fallback outside the initial window stands.
-        monkeypatch.setattr(mutation_planner, "AUTO_PLACEMENT_GAP_MINUTES", 0)
-        self._plan([_block(1, "10:25", "10:55")], [("10:55", "11:20")])
+        self._plan([_block(1, "10:25", "10:55")], [("10:55", "11:20")], gap=0)
 
-    def test_non_grid_default_gap_degrades_through_grid_multiples(self, monkeypatch):
-        # 7 → trial gaps 5, 0 (grid multiples below the default); padding of
-        # 7 minutes stays in minute space, so off-grid pads are fine.
-        monkeypatch.setattr(mutation_planner, "AUTO_PLACEMENT_GAP_MINUTES", 7)
-        self._plan([_block(1, "09:35", "10:05"),
-                    _block(2, "10:35", "10:55", title="Standup")],
-                   [("10:10", "10:35")])
+    def test_non_grid_helper_gap_degrades_through_grid_multiples(self):
+        # Private helper defense only; seven is not an accepted preference.
+
+        # The pure helper accepts snapshot values with the same timing attributes.
+        blocks = [_block(1, "09:35", "10:05"), _block(2, "10:35", "10:55")]
+        result = mutation_planner._find_auto_slot(blocks, 605, 25, DEFAULT_WINDOW, 7)
+        assert (result.start_time, result.end_time) == (_t("10:10"), _t("10:35"))
 
     def test_block_covering_base_keeps_full_gap_fallback(self):
         self._plan([_block(1, "10:00", "10:20"), _block(2, "10:50", "11:20")],
@@ -1766,3 +1765,38 @@ class TestDurationResizeEdges:
         assert outcome.action_index == 1
         assert outcome.status == ("partial" if overlap else "applied")
         assert outcome.reason_code == ("overlap" if overlap else None)
+
+
+@pytest.mark.parametrize("gap,base,blocks,expected", [
+    (5, "10:00", [_block(1, "09:30", "10:00"), _block(2, "10:35", "23:00")], [("10:05", "10:30")]),
+    (0, "10:00", [_block(1, "09:30", "10:00"), _block(2, "10:25", "23:00")], [("10:00", "10:25")]),
+    (120, "10:00", [_block(1, "09:30", "10:00"), _block(2, "15:00", "23:00")],
+     [("12:00", "12:25")]),
+])
+def test_configured_gap_on_both_sides(gap, base, blocks, expected):
+    TestAutoPlacementGapPreference._plan(blocks, expected, base=base, gap=gap)
+
+
+@pytest.mark.parametrize("gap", [0, 20, 120])
+def test_explicit_add_and_move_ignore_default_gap(gap):
+    result = plan_mutations(_schedule([_block(1, "09:00", "10:00"), _block(2, "12:00", "12:25")]),
+                            [_add("Exact", "10:00", "10:25"), _move(2, "10:25")],
+                            default_block_gap_minutes=gap)
+    assert isinstance(result, MutationPlan)
+    assert _create_intervals(result) == [("10:00", "10:25")]
+    assert all(outcome.status == "applied" for outcome in result.outcomes)
+
+
+@pytest.mark.parametrize("gap", [0, 5, 20, 120])
+def test_configured_gap_near_midnight_and_narrow_window(gap):
+    TestAutoPlacementGapPreference._plan(
+        [], [("23:30", "23:55")], base="23:30", day_start="23:30", day_end="23:55", gap=gap,
+    )
+
+
+@pytest.mark.parametrize("gap", [0, 20, 120])
+def test_configured_gap_fully_occupied_day_has_no_slot(gap):
+    result = plan_mutations(_schedule([_block(1, "06:00", "23:00")]), [_auto_add("New")],
+                            default_block_gap_minutes=gap)
+    assert result.diff.creates == ()
+    assert result.outcomes[0].reason_code == "no_slot"

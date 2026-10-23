@@ -35,6 +35,7 @@ from schedules.window import (
     resolve_time_zone,
 )
 from templates_mgr.models import Rule, Template
+from templates_mgr.preferences import get_user_preferences
 
 from ai import pending_intents
 from ai.category_resolution import UnresolvedCategory
@@ -418,7 +419,10 @@ def _persist_mutation_diff(
         ) from error
 
 
-def _ai_context_fingerprint(schedule, blocks, rules, schedule_settings, categories, template=None):
+def _ai_context_fingerprint(
+    schedule, blocks, rules, schedule_settings, categories, template=None,
+    *, default_block_gap_minutes=None,
+):
     """Include every mutable prompt policy in the stale-intent guard."""
     payload = {
         "schedule": compute_apply_context_fingerprint(
@@ -428,6 +432,8 @@ def _ai_context_fingerprint(schedule, blocks, rules, schedule_settings, categori
         "time_zone": schedule_settings.time_zone,
         "categories": [serialize_category(category) for category in categories],
     }
+    if default_block_gap_minutes is not None:
+        payload["default_block_gap_minutes"] = default_block_gap_minutes
     if template is not None:
         payload["template"] = {
             "id": template.id,
@@ -463,9 +469,13 @@ def _load_ai_context_sync(
             if draft
             else None
         )
+        gap = None if draft else get_user_preferences(locked_user).default_block_gap_minutes
         fingerprint = _ai_context_fingerprint(
-            schedule, blocks, rules, schedule_settings, categories, template
+            schedule, blocks, rules, schedule_settings, categories, template,
+            default_block_gap_minutes=gap,
         )
+        if not draft:
+            schedule._default_block_gap_minutes = gap
         schedule._schedule_window = schedule_settings.window
         schedule._categories = categories
         if intent_reference is not None:
@@ -504,8 +514,10 @@ def _apply_actions_sync(
         )
         categories = ordered_categories(locked_schedule.user)
         schedule_settings = get_schedule_settings(locked_schedule.user)
+        gap = get_user_preferences(locked_schedule.user).default_block_gap_minutes
         fingerprint = _ai_context_fingerprint(
-            locked_schedule, locked_blocks, locked_rules, schedule_settings, categories
+            locked_schedule, locked_blocks, locked_rules, schedule_settings, categories,
+            default_block_gap_minutes=gap,
         )
         if fingerprint != expected_fingerprint:
             logger.warning(
@@ -534,6 +546,7 @@ def _apply_actions_sync(
             day_start=window.start_str,
             day_end=window.end_str,
             earliest_start=_earliest_start(locked_schedule.date, window, now_local),
+            default_block_gap_minutes=gap,
         )
         if isinstance(plan_result, PlanError):
             return _action_error(plan_result.action_index, plan_result.detail)

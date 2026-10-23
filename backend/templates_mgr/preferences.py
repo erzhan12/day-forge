@@ -14,6 +14,25 @@ so that:
 from dataclasses import dataclass
 
 from templates_mgr.models import UserPreferences
+from templates_mgr.preference_defaults import (
+    BLOCK_GAP_STEP_MINUTES,
+    DEFAULT_BLOCK_GAP_MINUTES,
+    MAX_BLOCK_GAP_MINUTES,
+    MIN_BLOCK_GAP_MINUTES,
+)
+
+
+def is_valid_default_block_gap_minutes(raw) -> bool:
+    return (
+        type(raw) is int
+        and MIN_BLOCK_GAP_MINUTES <= raw <= MAX_BLOCK_GAP_MINUTES
+        and raw % BLOCK_GAP_STEP_MINUTES == 0
+    )
+
+
+def normalize_default_block_gap_minutes(raw) -> int:
+    return raw if is_valid_default_block_gap_minutes(raw) else DEFAULT_BLOCK_GAP_MINUTES
+
 
 # SYNC ALERT: mirror these defaults and limits in the Phase 2 frontend utility
 # `frontend/src/utils/chatSuggestions.ts`.
@@ -37,12 +56,14 @@ class UserPreferencesDTO:
 
     theme: str
     chat_suggestions: tuple[str, ...]
+    default_block_gap_minutes: int = DEFAULT_BLOCK_GAP_MINUTES
 
 
 def ui_preferences_payload(prefs: UserPreferencesDTO) -> dict:
     """Serialize the normalized read-side DTO for API and Inertia output."""
     return {
         "theme": prefs.theme,
+        "default_block_gap_minutes": prefs.default_block_gap_minutes,
         "chat_suggestions": list(prefs.chat_suggestions),
     }
 
@@ -90,5 +111,6 @@ def get_user_preferences(user) -> UserPreferencesDTO:
     )
     return UserPreferencesDTO(
         theme=normalize_theme(prefs.theme),
+        default_block_gap_minutes=normalize_default_block_gap_minutes(prefs.default_block_gap_minutes),
         chat_suggestions=tuple(normalize_chat_suggestions(prefs.chat_suggestions)),
     )

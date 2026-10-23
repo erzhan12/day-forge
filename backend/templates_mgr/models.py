@@ -1,13 +1,27 @@
 from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+
+from templates_mgr.preference_defaults import (
+    BLOCK_GAP_STEP_MINUTES,
+    DEFAULT_BLOCK_GAP_MINUTES,
+    MAX_BLOCK_GAP_MINUTES,
+    MIN_BLOCK_GAP_MINUTES,
+)
+
+
+def validate_block_gap_step(value):
+    if value % BLOCK_GAP_STEP_MINUTES:
+        raise ValidationError("Must be in 5-minute increments.")
 
 
 class UserPreferences(models.Model):
-    """Per-user UI preferences (theme and chat suggestions).
+    """Per-user display preferences and chat placement policy.
 
     Co-located in ``templates_mgr`` for v1 since there is no dedicated
     users/preferences app and `/settings/` already routes here. If
-    preferences grow beyond these bounded UI settings, split into a
+    preferences grow beyond these bounded settings, split into a
     dedicated app (see feature 0010 plan for the cleanup path).
 
     Schema notes:
@@ -38,6 +52,14 @@ class UserPreferences(models.Model):
     # `templates_mgr/preferences.py`; mirror them in the Phase 2 frontend
     # utility `frontend/src/utils/chatSuggestions.ts`.
     chat_suggestions = models.JSONField(null=True, blank=True, default=None)
+    default_block_gap_minutes = models.PositiveSmallIntegerField(
+        default=DEFAULT_BLOCK_GAP_MINUTES,
+        validators=[
+            MinValueValidator(MIN_BLOCK_GAP_MINUTES),
+            MaxValueValidator(MAX_BLOCK_GAP_MINUTES),
+            validate_block_gap_step,
+        ],
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
