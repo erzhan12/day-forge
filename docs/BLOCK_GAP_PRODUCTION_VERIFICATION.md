@@ -1,5 +1,7 @@
 # Production-проверка промежутка между блоками из PR #265
 
+**English summary.** Production verification of PR #265 on release `a2e6133` passed 0/10/20-minute persistence through fresh login, eight real AI operations and Undo on desktop/mobile. Original preferences were restored and six synthetic test days were left empty; actual iPhone/Safari and container rollback were outside this run.
+
 23 октября 2026 года. Проверен [production](https://dayforge.habitreward.org) на релизе `a2e6133868294d02f6797bab480f6cd4bb72469a`, опубликованном после PR #269. Он включает [PR #265](https://github.com/erzhan12/day-forge/pull/265). [Deploy #39975827721](https://github.com/erzhan12/day-forge/actions/runs/39975827721) завершился успешно. Точная версия подтверждена в метаданных страниц браузера; [метаданные Deploy](evidence/block-gap-2026-10-23/deploy.json) сохранены отдельно.
 
 ## Результат
@@ -59,7 +61,7 @@ without a start or end time. Use automatic placement.
 
 Оба запроса использовали восстановленные контрольные дни после предыдущего Undo. AI передал конкретное время, которое сервер применил без восстановления стандартного gap. Оба результата отменены кнопкой Undo, содержимое соседей совпало с исходным; revision в этих двух днях прошла 5→6→7.
 
-Всего получено восемь успешных production-записей AIInteraction, IDs 951–958. Заглушки, перехват запросов и изменение ответов провайдера не использовались. Аудит читался только с фильтром по шести контрольным Schedule ID. [Полные записи](evidence/block-gap-2026-10-23/ai-audit.json) и [разобранные действия](evidence/block-gap-2026-10-23/ai-summary.json).
+Всего получено восемь успешных production-записей AIInteraction, IDs 951–958. Заглушки, перехват запросов и изменение ответов провайдера не использовались. Аудит читался только с фильтром по шести контрольным Schedule ID. В двух AI JSON-файлах поля `url` нормализованы до относительных admin-путей; тексты ответов и действий сохранены без изменений. [Полные записи](evidence/block-gap-2026-10-23/ai-audit.json) и [разобранные действия](evidence/block-gap-2026-10-23/ai-summary.json).
 
 ## Валидация и мобильный интерфейс
 
