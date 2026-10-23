@@ -1,0 +1,17 @@
+{
+  "version": "ee8d914443d8b5f7141201bcca3b304e45989f05",
+  "assets": [
+    {
+      "path": "/static/assets/app-Cm2RWFvr.css",
+      "status": 200,
+      "sha256": "9b97392f05f343168a950d34e0e627931166bfe2a9174a7593ce4f7b86f8a132",
+      "cache_control": "max-age=315360000, public, immutable"
+    },
+    {
+      "path": "/static/assets/app-DQ02o_7x.js",
+      "status": 200,
+      "sha256": "bc837021923ee02a2b447a64f41ce2b697d4b3ef70aa3a1781b8616a2ca4e0ee",
+      "cache_control": "max-age=315360000, public, immutable"
+    }
+  ]
+}

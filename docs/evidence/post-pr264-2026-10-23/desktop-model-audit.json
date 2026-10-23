@@ -1,0 +1,56 @@
+{
+  "schedule_id": 134,
+  "list": {
+    "links": [
+      {
+        "href": "https://dayforge.habitreward.org/admin/ai/aiinteraction/945/change/?_changelist_filters=schedule__id__exact%3D134",
+        "text": "2027-11-10 (active)"
+      },
+      {
+        "href": "https://dayforge.habitreward.org/admin/ai/aiinteraction/944/change/?_changelist_filters=schedule__id__exact%3D134",
+        "text": "2027-11-10 (active)"
+      },
+      {
+        "href": "https://dayforge.habitreward.org/admin/ai/aiinteraction/941/change/?_changelist_filters=schedule__id__exact%3D134",
+        "text": "2027-11-10 (active)"
+      },
+      {
+        "href": "https://dayforge.habitreward.org/admin/ai/aiinteraction/939/change/?_changelist_filters=schedule__id__exact%3D134",
+        "text": "2027-11-10 (active)"
+      },
+      {
+        "href": "https://dayforge.habitreward.org/admin/ai/aiinteraction/937/change/?_changelist_filters=schedule__id__exact%3D134",
+        "text": "2027-11-10 (active)"
+      }
+    ],
+    "text": "SCHEDULE\n\t\nCOMMAND\n\t\nCREATED AT\n\n2027-11-10 (active)\t15:00 to 15:30\tOct. 23, 2026, 1:35 p.m.\n2027-11-10 (active)\tAdd a Work block titled \"R264 desktop accepted\" from 13:00 t\tOct. 23, 2026, 1:35 p.m.\n2027-11-10 (active)\t14:00\tOct. 23, 2026, 1:34 p.m.\n2027-11-10 (active)\t08:00\tOct. 23, 2026, 1:33 p.m.\n2027-11-10 (active)\tAdd a Work block titled \"R264 desktop after anchor\" after \"R\tOct. 23, 2026, 1:33 p.m.\n\n5 ai interactions",
+    "url": "https://dayforge.habitreward.org/admin/ai/aiinteraction/?schedule__id__exact=134"
+  },
+  "records": [
+    {
+      "success": "True",
+      "text": "HISTORY\nOutcomes json:\n[{\"action_index\": 0, \"task_id\": null, \"status\": \"applied\", \"applied_fields\": [\"title\", \"category\", \"start_time\", \"end_time\"], \"skipped_fields\": [], \"reason_code\": null, \"conflicting_task_ids\": [], \"attempted_direction\": null, \"suggestion\": null}]\nSuccess:\nKind:\nChat\nSchedule:\n2027-11-10 (active)\nUser command:\n15:00 to 15:30\nAi response:\n{\"transcript_sha256\": \"7e06e3393da3e14f3fcefc9204f9c19360bbdf99ed45e90d86ae6b7d17f44030\", \"turn_count\": 3, \"raw\": \"{\\n \\\"actions\\\": [{\\\"type\\\": \\\"add\\\", \\\"title\\\": \\\"R264 desktop unresolved\\\", \\\"category\\\": \\\"work\\\", \\\"start_time\\\": \\\"15:00\\\", \\\"end_time\\\": \\\"15:30\\\"}],\\n \\\"explanation\\\": \\\"Adding the unresolved block from 15:00 to 15:30.\\\",\\n \\\"ask\\\": null,\\n \\\"intent_decision\\\": \\\"continue\\\",\\n \\\"pending_actions\\\": []\\n}\"}\nActions json:\n[{\"type\": \"add\", \"title\": \"R264 desktop unresolved\", \"category\": \"work\", \"start_time\": \"15:00\", \"end_time\": \"15:30\"}]\nCreated at:\nOct. 23, 2026, 1:35 p.m.\nClose",
+      "url": "https://dayforge.habitreward.org/admin/ai/aiinteraction/945/change/?_changelist_filters=schedule__id__exact%3D134"
+    },
+    {
+      "success": "True",
+      "text": "HISTORY\nOutcomes json:\n[{\"action_index\": 0, \"task_id\": null, \"status\": \"applied\", \"applied_fields\": [\"title\", \"category\", \"start_time\", \"end_time\"], \"skipped_fields\": [], \"reason_code\": null, \"conflicting_task_ids\": [], \"attempted_direction\": null, \"suggestion\": null}]\nSuccess:\nKind:\nChat\nSchedule:\n2027-11-10 (active)\nUser command:\nAdd a Work block titled \"R264 desktop accepted\" from 13:00 to 13:30 NOW. Also plan a Work block titled \"R264 desktop unresolved\"; ask me for BOTH its start and end time. Do not choose a time or duration for the second block. Apply the first block now and keep only the second pending.\nAi response:\n{\"transcript_sha256\": \"14b356b11356068aa7a6efbd426d8ac2097819ceb8169fa80001eeed28eff4f4\", \"turn_count\": 1, \"raw\": \"{\\n \\\"actions\\\": [{\\\"type\\\":\\\"add\\\",\\\"title\\\":\\\"R264 desktop accepted\\\",\\\"category\\\":\\\"work\\\",\\\"start_time\\\":\\\"13:00\\\",\\\"end_time\\\":\\\"13:30\\\"}],\\n \\\"explanation\\\": \\\"Added the accepted Work block now; keeping the unresolved one pending.\\\",\\n \\\"ask\\\": null,\\n \\\"intent_decision\\\": \\\"new\\\",\\n \\\"pending_actions\\\": [{\\\"type\\\":\\\"add\\\",\\\"task_id\\\":null,\\\"target_ids\\\":[],\\\"known_fields\\\":{\\\"title\\\":\\\"R264 desktop unresolved\\\",\\\"category\\\":\\\"work\\\"},\\\"missing_fields\\\":[\\\"start_time\\\",\\\"end_time\\\"]}]\\n}\"}\nActions json:\n[{\"type\": \"add\", \"title\": \"R264 desktop accepted\", \"category\": \"work\", \"start_time\": \"13:00\", \"end_time\": \"13:30\"}]\nCreated at:\nOct. 23, 2026, 1:35 p.m.\nClose",
+      "url": "https://dayforge.habitreward.org/admin/ai/aiinteraction/944/change/?_changelist_filters=schedule__id__exact%3D134"
+    },
+    {
+      "success": "True",
+      "text": "HISTORY\nOutcomes json:\n[{\"action_index\": 0, \"task_id\": null, \"status\": \"applied\", \"applied_fields\": [\"title\", \"category\", \"start_time\", \"end_time\"], \"skipped_fields\": [], \"reason_code\": null, \"conflicting_task_ids\": [], \"attempted_direction\": null, \"suggestion\": null}]\nSuccess:\nKind:\nChat\nSchedule:\n2027-11-10 (active)\nUser command:\n14:00\nAi response:\n{\"transcript_sha256\": \"224a127521abc523afc5e929909a7d6c91b12219f7bb5f731a1c94693b48ab2c\", \"turn_count\": 5, \"raw\": \"{\\n \\\"actions\\\": [{\\\"type\\\": \\\"add\\\", \\\"title\\\": \\\"R264 desktop after anchor\\\", \\\"category\\\": \\\"work\\\", \\\"start_time\\\": \\\"14:00\\\", \\\"end_time\\\": \\\"14:30\\\"}],\\n \\\"explanation\\\": \\\"Adding the block at 14:00.\\\",\\n \\\"ask\\\": null,\\n \\\"intent_decision\\\": \\\"continue\\\",\\n \\\"pending_actions\\\": []\\n}\"}\nActions json:\n[{\"type\": \"add\", \"title\": \"R264 desktop after anchor\", \"category\": \"work\", \"start_time\": \"14:00\", \"end_time\": \"14:30\"}]\nCreated at:\nOct. 23, 2026, 1:34 p.m.\nClose",
+      "url": "https://dayforge.habitreward.org/admin/ai/aiinteraction/941/change/?_changelist_filters=schedule__id__exact%3D134"
+    },
+    {
+      "success": "True",
+      "text": "HISTORY\nOutcomes json:\n-\nSuccess:\nKind:\nChat\nSchedule:\n2027-11-10 (active)\nUser command:\n08:00\nAi response:\n{\"transcript_sha256\": \"618b48135e44255eaea0bddcfbf71635b792a140d006bcb1c27143d51272c6eb\", \"turn_count\": 3, \"raw\": \"{\\n \\\"actions\\\": [{\\\"type\\\": \\\"add\\\", \\\"title\\\": \\\"R264 desktop after anchor\\\", \\\"category\\\": \\\"work\\\", \\\"start_time\\\": \\\"08:00\\\", \\\"end_time\\\": \\\"08:30\\\"}],\\n \\\"explanation\\\": \\\"Adding the requested block starting at 08:00.\\\",\\n \\\"ask\\\": null,\\n \\\"intent_decision\\\": \\\"continue\\\",\\n \\\"pending_actions\\\": []\\n}\"}\nActions json:\n[{\"type\": \"add\", \"title\": \"R264 desktop after anchor\", \"category\": \"work\", \"start_time\": \"08:00\", \"end_time\": \"08:30\"}]\nCreated at:\nOct. 23, 2026, 1:33 p.m.\nClose",
+      "url": "https://dayforge.habitreward.org/admin/ai/aiinteraction/939/change/?_changelist_filters=schedule__id__exact%3D134"
+    },
+    {
+      "success": "True",
+      "text": "HISTORY\nOutcomes json:\n-\nSuccess:\nKind:\nChat\nSchedule:\n2027-11-10 (active)\nUser command:\nAdd a Work block titled \"R264 desktop after anchor\" after \"R264 desktop anchor\", lasting 30 minutes. Ask me for its start time first; do not choose a time.\nAi response:\n{\"transcript_sha256\": \"17e8c6e70cec95f4b3be2225488e9c06594b917af26b0152b1ff45f156da6b04\", \"turn_count\": 1, \"raw\": \"{\\n \\\"actions\\\": [],\\n \\\"explanation\\\": \\\"You want to add a 30-minute Work block titled 'R264 desktop after anchor' after the existing anchor block.\\\",\\n \\\"ask\\\": \\\"What start time should it have?\\\",\\n \\\"intent_decision\\\": \\\"new\\\",\\n \\\"pending_actions\\\": [{\\\"type\\\":\\\"add\\\", \\\"task_id\\\":null, \\\"target_ids\\\":[], \\\"known_fields\\\":{\\\"title\\\":\\\"R264 desktop after anchor\\\", \\\"category\\\":\\\"work\\\", \\\"duration_minutes\\\":30}, \\\"missing_fields\\\":[\\\"start_time\\\"]}]\\n}\"}\nActions json:\n-\nCreated at:\nOct. 23, 2026, 1:33 p.m.\nClose",
+      "url": "https://dayforge.habitreward.org/admin/ai/aiinteraction/937/change/?_changelist_filters=schedule__id__exact%3D134"
+    }
+  ]
+}

@@ -1,0 +1,805 @@
+{
+  "version": "ee8d914443d8b5f7141201bcca3b304e45989f05",
+  "date": "2027-11-12",
+  "success": true,
+  "events": [
+    {
+      "stage": "Add a Work block titled \"R264 HTTP pending\" lasting 30 minutes. Ask me for its start time before adding it; do not choose a time.",
+      "status": 200,
+      "response_sha256": "34e509a72a9d1d37a10bc0a66baf7f391186ca733a50d46e40a86ef1afb9bdee",
+      "response": {
+        "schedule": {
+          "id": 136,
+          "date": "2027-11-12",
+          "status": "draft",
+          "revision": 0
+        },
+        "blocks": null,
+        "revision": 0,
+        "explanation": "You want to add a 30-minute Work block titled 'R264 HTTP pending' but need its start time first.",
+        "ask": "What start time should 'R264 HTTP pending' use?",
+        "applied": false,
+        "partial": false,
+        "outcomes": [],
+        "pending_intent": {
+          "id": "13e3b1fe-4df4-41eb-b523-79e913d27795",
+          "version": 1,
+          "expires_at": "2026-10-23T13:48:32.897036+00:00",
+          "ask": "What start time should 'R264 HTTP pending' use?"
+        },
+        "request_id": "510d7bc3-309f-45aa-a671-0ea752af30ef",
+        "request_completed": true
+      },
+      "fresh_state": {
+        "revision": 0,
+        "date": "2027-11-12",
+        "blocks": []
+      }
+    },
+    {
+      "stage": "ask exact UUID replay",
+      "status": 200,
+      "response_sha256": "34e509a72a9d1d37a10bc0a66baf7f391186ca733a50d46e40a86ef1afb9bdee",
+      "response": {
+        "schedule": {
+          "id": 136,
+          "date": "2027-11-12",
+          "status": "draft",
+          "revision": 0
+        },
+        "blocks": null,
+        "revision": 0,
+        "explanation": "You want to add a 30-minute Work block titled 'R264 HTTP pending' but need its start time first.",
+        "ask": "What start time should 'R264 HTTP pending' use?",
+        "applied": false,
+        "partial": false,
+        "outcomes": [],
+        "pending_intent": {
+          "id": "13e3b1fe-4df4-41eb-b523-79e913d27795",
+          "version": 1,
+          "expires_at": "2026-10-23T13:48:32.897036+00:00",
+          "ask": "What start time should 'R264 HTTP pending' use?"
+        },
+        "request_id": "510d7bc3-309f-45aa-a671-0ea752af30ef",
+        "request_completed": true
+      },
+      "fresh_state": {
+        "revision": 0,
+        "date": "2027-11-12",
+        "blocks": []
+      }
+    },
+    {
+      "stage": "14:00",
+      "status": 200,
+      "response_sha256": "83bf94accc7c8ecf4a3c627c565ac7cb02a7fe58a0f713dfe2e84154a0eb482e",
+      "response": {
+        "schedule": {
+          "id": 136,
+          "date": "2027-11-12",
+          "status": "active",
+          "revision": 1
+        },
+        "blocks": [
+          {
+            "id": 1152,
+            "title": "R264 HTTP pending",
+            "start_time": "14:00",
+            "end_time": "14:30",
+            "category": "work",
+            "is_completed": false,
+            "sort_order": 0
+          }
+        ],
+        "revision": 1,
+        "explanation": "Adding the requested work block starting at 14:00.",
+        "ask": null,
+        "applied": true,
+        "partial": false,
+        "outcomes": [
+          {
+            "action_index": 0,
+            "task_id": null,
+            "status": "applied",
+            "applied_fields": [
+              "title",
+              "category",
+              "start_time",
+              "end_time"
+            ],
+            "skipped_fields": [],
+            "reason_code": null,
+            "conflicting_task_ids": [],
+            "attempted_direction": null,
+            "suggestion": null
+          }
+        ],
+        "pending_intent": null,
+        "request_id": "d8ddf1dc-227b-46a1-9979-452123ef9af1",
+        "request_completed": true
+      },
+      "fresh_state": {
+        "revision": 1,
+        "date": "2027-11-12",
+        "blocks": [
+          {
+            "id": 1152,
+            "title": "R264 HTTP pending",
+            "category": "work",
+            "start_time": "14:00",
+            "end_time": "14:30",
+            "is_completed": false
+          }
+        ]
+      }
+    },
+    {
+      "stage": "answer exact UUID replay",
+      "status": 200,
+      "response_sha256": "83bf94accc7c8ecf4a3c627c565ac7cb02a7fe58a0f713dfe2e84154a0eb482e",
+      "response": {
+        "schedule": {
+          "id": 136,
+          "date": "2027-11-12",
+          "status": "active",
+          "revision": 1
+        },
+        "blocks": [
+          {
+            "id": 1152,
+            "title": "R264 HTTP pending",
+            "start_time": "14:00",
+            "end_time": "14:30",
+            "category": "work",
+            "is_completed": false,
+            "sort_order": 0
+          }
+        ],
+        "revision": 1,
+        "explanation": "Adding the requested work block starting at 14:00.",
+        "ask": null,
+        "applied": true,
+        "partial": false,
+        "outcomes": [
+          {
+            "action_index": 0,
+            "task_id": null,
+            "status": "applied",
+            "applied_fields": [
+              "title",
+              "category",
+              "start_time",
+              "end_time"
+            ],
+            "skipped_fields": [],
+            "reason_code": null,
+            "conflicting_task_ids": [],
+            "attempted_direction": null,
+            "suggestion": null
+          }
+        ],
+        "pending_intent": null,
+        "request_id": "d8ddf1dc-227b-46a1-9979-452123ef9af1",
+        "request_completed": true
+      },
+      "fresh_state": {
+        "revision": 1,
+        "date": "2027-11-12",
+        "blocks": [
+          {
+            "id": 1152,
+            "title": "R264 HTTP pending",
+            "category": "work",
+            "start_time": "14:00",
+            "end_time": "14:30",
+            "is_completed": false
+          }
+        ]
+      }
+    },
+    {
+      "stage": "changed body conflict",
+      "status": 409,
+      "response_sha256": "4da42d6426d1f4da5bba75c553746e1bfa54107c2a7eafc5b5641e2bc00b7eaf",
+      "response": {
+        "code": "request_id_conflict",
+        "errors": {
+          "detail": "request_id was already used for a different request."
+        }
+      },
+      "fresh_state": {
+        "revision": 1,
+        "date": "2027-11-12",
+        "blocks": [
+          {
+            "id": 1152,
+            "title": "R264 HTTP pending",
+            "category": "work",
+            "start_time": "14:00",
+            "end_time": "14:30",
+            "is_completed": false
+          }
+        ]
+      }
+    },
+    {
+      "stage": "restore empty baseline",
+      "status": 200,
+      "response_sha256": "9f2ac12355e934e23153d5607fca2d0da5faf94b581ec19686bd261e6bafb7de",
+      "response": {
+        "schedule": {
+          "id": 136,
+          "date": "2027-11-12",
+          "status": "active",
+          "revision": 2
+        },
+        "blocks": [],
+        "revision": 2
+      },
+      "fresh_state": {
+        "revision": 2,
+        "date": "2027-11-12",
+        "blocks": []
+      }
+    },
+    {
+      "stage": "completed answer replay after Undo",
+      "status": 200,
+      "response_sha256": "83bf94accc7c8ecf4a3c627c565ac7cb02a7fe58a0f713dfe2e84154a0eb482e",
+      "response": {
+        "schedule": {
+          "id": 136,
+          "date": "2027-11-12",
+          "status": "active",
+          "revision": 1
+        },
+        "blocks": [
+          {
+            "id": 1152,
+            "title": "R264 HTTP pending",
+            "start_time": "14:00",
+            "end_time": "14:30",
+            "category": "work",
+            "is_completed": false,
+            "sort_order": 0
+          }
+        ],
+        "revision": 1,
+        "explanation": "Adding the requested work block starting at 14:00.",
+        "ask": null,
+        "applied": true,
+        "partial": false,
+        "outcomes": [
+          {
+            "action_index": 0,
+            "task_id": null,
+            "status": "applied",
+            "applied_fields": [
+              "title",
+              "category",
+              "start_time",
+              "end_time"
+            ],
+            "skipped_fields": [],
+            "reason_code": null,
+            "conflicting_task_ids": [],
+            "attempted_direction": null,
+            "suggestion": null
+          }
+        ],
+        "pending_intent": null,
+        "request_id": "d8ddf1dc-227b-46a1-9979-452123ef9af1",
+        "request_completed": true
+      },
+      "fresh_state": {
+        "revision": 2,
+        "date": "2027-11-12",
+        "blocks": []
+      }
+    },
+    {
+      "stage": "14:00",
+      "status": 409,
+      "response_sha256": "c1cf3c00ac060f5de6d5f2fbd82d2852deda28051a52e901123f3a2570d77427",
+      "response": {
+        "code": "pending_intent_stale",
+        "pending_intent": null,
+        "errors": {
+          "detail": "The pending request changed or expired. Please restate it."
+        },
+        "request_id": "837c8327-504d-4d83-a5b5-dcf0abdeecb2",
+        "request_completed": true
+      },
+      "fresh_state": {
+        "revision": 2,
+        "date": "2027-11-12",
+        "blocks": []
+      }
+    },
+    {
+      "stage": "Add a Work block titled \"R264 HTTP cancel\". Ask me for its start and end time first; do not add anything yet.",
+      "status": 200,
+      "response_sha256": "4461e7c12d06778d12a8385cfbfb3bfc8814eec949ef8e6f6e4622bdc9ee506e",
+      "response": {
+        "schedule": {
+          "id": 136,
+          "date": "2027-11-12",
+          "status": "active",
+          "revision": 2
+        },
+        "blocks": null,
+        "revision": 2,
+        "explanation": "You want to add a Work block titled 'R264 HTTP cancel' but need start/end times first.",
+        "ask": "What start and end times?",
+        "applied": false,
+        "partial": false,
+        "outcomes": [],
+        "pending_intent": {
+          "id": "617f518b-4683-4918-a04f-c01ec4d45ddf",
+          "version": 1,
+          "expires_at": "2026-10-23T13:49:08.017092+00:00",
+          "ask": "What start and end times?"
+        },
+        "request_id": "10e62cdc-ca53-4093-9686-11091176e435",
+        "request_completed": true
+      },
+      "fresh_state": {
+        "revision": 2,
+        "date": "2027-11-12",
+        "blocks": []
+      }
+    },
+    {
+      "stage": "Cancel pending request.",
+      "status": 200,
+      "response_sha256": "e33c6b71614e570edce2b4cc47a1f4fb014299df4f3d65dbbb5e8cb08804d243",
+      "response": {
+        "schedule": {
+          "id": 136,
+          "date": "2027-11-12",
+          "status": "active",
+          "revision": 2
+        },
+        "blocks": null,
+        "revision": 2,
+        "explanation": "Pending request cancelled.",
+        "ask": null,
+        "applied": false,
+        "partial": false,
+        "outcomes": [],
+        "pending_intent": null,
+        "request_id": "af712a55-74e4-4a2d-b75e-ed448bf90bea",
+        "request_completed": true
+      },
+      "fresh_state": {
+        "revision": 2,
+        "date": "2027-11-12",
+        "blocks": []
+      }
+    },
+    {
+      "stage": "cancel exact UUID replay",
+      "status": 200,
+      "response_sha256": "e33c6b71614e570edce2b4cc47a1f4fb014299df4f3d65dbbb5e8cb08804d243",
+      "response": {
+        "schedule": {
+          "id": 136,
+          "date": "2027-11-12",
+          "status": "active",
+          "revision": 2
+        },
+        "blocks": null,
+        "revision": 2,
+        "explanation": "Pending request cancelled.",
+        "ask": null,
+        "applied": false,
+        "partial": false,
+        "outcomes": [],
+        "pending_intent": null,
+        "request_id": "af712a55-74e4-4a2d-b75e-ed448bf90bea",
+        "request_completed": true
+      },
+      "fresh_state": {
+        "revision": 2,
+        "date": "2027-11-12",
+        "blocks": []
+      }
+    },
+    {
+      "stage": "Add a Work block titled \"R264 HTTP accepted\" from 13:00 to 13:30 NOW. Also plan a Work block titled \"R264 HTTP unresolved\"; ask me for BOTH its start and end time. Do not choose a time or duration for the second block. Apply the first block now and keep only the second pending.",
+      "status": 200,
+      "response_sha256": "b78a8f869f2d784bcd3f2a730b7d876ad694f84f9cc9fa6bda956e8f6b3ca691",
+      "response": {
+        "schedule": {
+          "id": 136,
+          "date": "2027-11-12",
+          "status": "active",
+          "revision": 3
+        },
+        "blocks": [
+          {
+            "id": 1154,
+            "title": "R264 HTTP accepted",
+            "start_time": "13:00",
+            "end_time": "13:30",
+            "category": "work",
+            "is_completed": false,
+            "sort_order": 0
+          }
+        ],
+        "revision": 3,
+        "explanation": "Added the accepted Work block now; pending the unresolved one.",
+        "ask": "Some requested changes are still pending. Please clarify the remaining request.",
+        "applied": true,
+        "partial": true,
+        "outcomes": [
+          {
+            "action_index": 0,
+            "task_id": null,
+            "status": "applied",
+            "applied_fields": [
+              "title",
+              "category",
+              "start_time",
+              "end_time"
+            ],
+            "skipped_fields": [],
+            "reason_code": null,
+            "conflicting_task_ids": [],
+            "attempted_direction": null,
+            "suggestion": null
+          }
+        ],
+        "pending_intent": {
+          "id": "5012dcc2-da42-4508-a05b-83de32b2befb",
+          "version": 1,
+          "expires_at": "2026-10-23T13:49:26.749506+00:00",
+          "ask": "Some requested changes are still pending. Please clarify the remaining request."
+        },
+        "request_id": "31d59f85-ba38-4862-931c-74d75c930efe",
+        "request_completed": true
+      },
+      "fresh_state": {
+        "revision": 3,
+        "date": "2027-11-12",
+        "blocks": [
+          {
+            "id": 1154,
+            "title": "R264 HTTP accepted",
+            "category": "work",
+            "start_time": "13:00",
+            "end_time": "13:30",
+            "is_completed": false
+          }
+        ]
+      }
+    },
+    {
+      "stage": "partial ask exact UUID replay",
+      "status": 200,
+      "response_sha256": "b78a8f869f2d784bcd3f2a730b7d876ad694f84f9cc9fa6bda956e8f6b3ca691",
+      "response": {
+        "schedule": {
+          "id": 136,
+          "date": "2027-11-12",
+          "status": "active",
+          "revision": 3
+        },
+        "blocks": [
+          {
+            "id": 1154,
+            "title": "R264 HTTP accepted",
+            "start_time": "13:00",
+            "end_time": "13:30",
+            "category": "work",
+            "is_completed": false,
+            "sort_order": 0
+          }
+        ],
+        "revision": 3,
+        "explanation": "Added the accepted Work block now; pending the unresolved one.",
+        "ask": "Some requested changes are still pending. Please clarify the remaining request.",
+        "applied": true,
+        "partial": true,
+        "outcomes": [
+          {
+            "action_index": 0,
+            "task_id": null,
+            "status": "applied",
+            "applied_fields": [
+              "title",
+              "category",
+              "start_time",
+              "end_time"
+            ],
+            "skipped_fields": [],
+            "reason_code": null,
+            "conflicting_task_ids": [],
+            "attempted_direction": null,
+            "suggestion": null
+          }
+        ],
+        "pending_intent": {
+          "id": "5012dcc2-da42-4508-a05b-83de32b2befb",
+          "version": 1,
+          "expires_at": "2026-10-23T13:49:26.749506+00:00",
+          "ask": "Some requested changes are still pending. Please clarify the remaining request."
+        },
+        "request_id": "31d59f85-ba38-4862-931c-74d75c930efe",
+        "request_completed": true
+      },
+      "fresh_state": {
+        "revision": 3,
+        "date": "2027-11-12",
+        "blocks": [
+          {
+            "id": 1154,
+            "title": "R264 HTTP accepted",
+            "category": "work",
+            "start_time": "13:00",
+            "end_time": "13:30",
+            "is_completed": false
+          }
+        ]
+      }
+    },
+    {
+      "stage": "15:00 to 15:30",
+      "status": 200,
+      "response_sha256": "901e8fe1592a28bdfd007b45b5d1421283496331cedf1524cafd5bdc9226fc7f",
+      "response": {
+        "schedule": {
+          "id": 136,
+          "date": "2027-11-12",
+          "status": "active",
+          "revision": 4
+        },
+        "blocks": [
+          {
+            "id": 1154,
+            "title": "R264 HTTP accepted",
+            "start_time": "13:00",
+            "end_time": "13:30",
+            "category": "work",
+            "is_completed": false,
+            "sort_order": 0
+          },
+          {
+            "id": 1155,
+            "title": "R264 HTTP unresolved",
+            "start_time": "15:00",
+            "end_time": "15:30",
+            "category": "work",
+            "is_completed": false,
+            "sort_order": 1
+          }
+        ],
+        "revision": 4,
+        "explanation": "Added the unresolved R264 HTTP block from 15:00 to 15:30.",
+        "ask": null,
+        "applied": true,
+        "partial": false,
+        "outcomes": [
+          {
+            "action_index": 0,
+            "task_id": null,
+            "status": "applied",
+            "applied_fields": [
+              "title",
+              "category",
+              "start_time",
+              "end_time"
+            ],
+            "skipped_fields": [],
+            "reason_code": null,
+            "conflicting_task_ids": [],
+            "attempted_direction": null,
+            "suggestion": null
+          }
+        ],
+        "pending_intent": null,
+        "request_id": "7fa9910b-3113-4973-9bd9-ad579f3a2ebd",
+        "request_completed": true
+      },
+      "fresh_state": {
+        "revision": 4,
+        "date": "2027-11-12",
+        "blocks": [
+          {
+            "id": 1154,
+            "title": "R264 HTTP accepted",
+            "category": "work",
+            "start_time": "13:00",
+            "end_time": "13:30",
+            "is_completed": false
+          },
+          {
+            "id": 1155,
+            "title": "R264 HTTP unresolved",
+            "category": "work",
+            "start_time": "15:00",
+            "end_time": "15:30",
+            "is_completed": false
+          }
+        ]
+      }
+    },
+    {
+      "stage": "partial completion exact UUID replay",
+      "status": 200,
+      "response_sha256": "901e8fe1592a28bdfd007b45b5d1421283496331cedf1524cafd5bdc9226fc7f",
+      "response": {
+        "schedule": {
+          "id": 136,
+          "date": "2027-11-12",
+          "status": "active",
+          "revision": 4
+        },
+        "blocks": [
+          {
+            "id": 1154,
+            "title": "R264 HTTP accepted",
+            "start_time": "13:00",
+            "end_time": "13:30",
+            "category": "work",
+            "is_completed": false,
+            "sort_order": 0
+          },
+          {
+            "id": 1155,
+            "title": "R264 HTTP unresolved",
+            "start_time": "15:00",
+            "end_time": "15:30",
+            "category": "work",
+            "is_completed": false,
+            "sort_order": 1
+          }
+        ],
+        "revision": 4,
+        "explanation": "Added the unresolved R264 HTTP block from 15:00 to 15:30.",
+        "ask": null,
+        "applied": true,
+        "partial": false,
+        "outcomes": [
+          {
+            "action_index": 0,
+            "task_id": null,
+            "status": "applied",
+            "applied_fields": [
+              "title",
+              "category",
+              "start_time",
+              "end_time"
+            ],
+            "skipped_fields": [],
+            "reason_code": null,
+            "conflicting_task_ids": [],
+            "attempted_direction": null,
+            "suggestion": null
+          }
+        ],
+        "pending_intent": null,
+        "request_id": "7fa9910b-3113-4973-9bd9-ad579f3a2ebd",
+        "request_completed": true
+      },
+      "fresh_state": {
+        "revision": 4,
+        "date": "2027-11-12",
+        "blocks": [
+          {
+            "id": 1154,
+            "title": "R264 HTTP accepted",
+            "category": "work",
+            "start_time": "13:00",
+            "end_time": "13:30",
+            "is_completed": false
+          },
+          {
+            "id": 1155,
+            "title": "R264 HTTP unresolved",
+            "category": "work",
+            "start_time": "15:00",
+            "end_time": "15:30",
+            "is_completed": false
+          }
+        ]
+      }
+    },
+    {
+      "stage": "restore empty baseline",
+      "status": 200,
+      "response_sha256": "d7b942bba97cb51c1b440a8d799c13dac7bb4768a5bdc56dea877d52d2e72fb2",
+      "response": {
+        "schedule": {
+          "id": 136,
+          "date": "2027-11-12",
+          "status": "active",
+          "revision": 5
+        },
+        "blocks": [],
+        "revision": 5
+      },
+      "fresh_state": {
+        "revision": 5,
+        "date": "2027-11-12",
+        "blocks": []
+      }
+    },
+    {
+      "stage": "partial completion replay after Undo",
+      "status": 200,
+      "response_sha256": "901e8fe1592a28bdfd007b45b5d1421283496331cedf1524cafd5bdc9226fc7f",
+      "response": {
+        "schedule": {
+          "id": 136,
+          "date": "2027-11-12",
+          "status": "active",
+          "revision": 4
+        },
+        "blocks": [
+          {
+            "id": 1154,
+            "title": "R264 HTTP accepted",
+            "start_time": "13:00",
+            "end_time": "13:30",
+            "category": "work",
+            "is_completed": false,
+            "sort_order": 0
+          },
+          {
+            "id": 1155,
+            "title": "R264 HTTP unresolved",
+            "start_time": "15:00",
+            "end_time": "15:30",
+            "category": "work",
+            "is_completed": false,
+            "sort_order": 1
+          }
+        ],
+        "revision": 4,
+        "explanation": "Added the unresolved R264 HTTP block from 15:00 to 15:30.",
+        "ask": null,
+        "applied": true,
+        "partial": false,
+        "outcomes": [
+          {
+            "action_index": 0,
+            "task_id": null,
+            "status": "applied",
+            "applied_fields": [
+              "title",
+              "category",
+              "start_time",
+              "end_time"
+            ],
+            "skipped_fields": [],
+            "reason_code": null,
+            "conflicting_task_ids": [],
+            "attempted_direction": null,
+            "suggestion": null
+          }
+        ],
+        "pending_intent": null,
+        "request_id": "7fa9910b-3113-4973-9bd9-ad579f3a2ebd",
+        "request_completed": true
+      },
+      "fresh_state": {
+        "revision": 5,
+        "date": "2027-11-12",
+        "blocks": []
+      }
+    }
+  ],
+  "final_state": {
+    "revision": 5,
+    "date": "2027-11-12",
+    "blocks": []
+  },
+  "logout_protected_get": "Login",
+  "transport_loss_injected": false,
+  "concurrent_load": false,
+  "provider_stubbed": false,
+  "environment": "production",
+  "site": "https://dayforge.habitreward.org",
+  "expected_ai_calls": 5
+}

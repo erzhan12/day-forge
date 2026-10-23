@@ -49,6 +49,27 @@ class TestScheduleAdmin:
         obj = qs.get(pk=schedule.pk)
         assert admin.block_count(obj) == 2
 
+    @pytest.mark.parametrize("with_block", [False, True])
+    def test_inspection_page_renders_without_allowing_writes(self, admin_client, user, with_block):
+        from django.urls import reverse
+
+        schedule = Schedule.objects.create(
+            user=user, date=datetime.date(2027, 11, 10), status="active", revision=8
+        )
+        if with_block:
+            schedule.time_blocks.create(
+                title="Inspection anchor", category="work", start_time="09:00", end_time="09:30"
+            )
+        url = reverse("admin:schedules_schedule_change", args=[schedule.pk])
+        response = admin_client.get(url)
+        assert response.status_code == 200
+        if with_block:
+            assert b"Inspection anchor" in response.content
+        assert admin_client.post(url, {"status": "draft", "_save": "Save"}).status_code == 403
+        schedule.refresh_from_db()
+        assert schedule.status == "active" and schedule.revision == 8
+        assert schedule.time_blocks.count() == int(with_block)
+
 
 @pytest.mark.django_db
 class TestAIInteractionAdmin:

@@ -1,0 +1,56 @@
+{
+  "schedule_id": 136,
+  "list": {
+    "links": [
+      {
+        "href": "https://dayforge.habitreward.org/admin/ai/aiinteraction/943/change/?_changelist_filters=schedule__id__exact%3D136",
+        "text": "2027-11-12 (active)"
+      },
+      {
+        "href": "https://dayforge.habitreward.org/admin/ai/aiinteraction/942/change/?_changelist_filters=schedule__id__exact%3D136",
+        "text": "2027-11-12 (active)"
+      },
+      {
+        "href": "https://dayforge.habitreward.org/admin/ai/aiinteraction/940/change/?_changelist_filters=schedule__id__exact%3D136",
+        "text": "2027-11-12 (active)"
+      },
+      {
+        "href": "https://dayforge.habitreward.org/admin/ai/aiinteraction/938/change/?_changelist_filters=schedule__id__exact%3D136",
+        "text": "2027-11-12 (active)"
+      },
+      {
+        "href": "https://dayforge.habitreward.org/admin/ai/aiinteraction/936/change/?_changelist_filters=schedule__id__exact%3D136",
+        "text": "2027-11-12 (active)"
+      }
+    ],
+    "text": "SCHEDULE\n\t\nCOMMAND\n\t\nCREATED AT\n\n2027-11-12 (active)\t15:00 to 15:30\tOct. 23, 2026, 1:34 p.m.\n2027-11-12 (active)\tAdd a Work block titled \"R264 HTTP accepted\" from 13:00 to 1\tOct. 23, 2026, 1:34 p.m.\n2027-11-12 (active)\tAdd a Work block titled \"R264 HTTP cancel\". Ask me for its s\tOct. 23, 2026, 1:34 p.m.\n2027-11-12 (active)\t14:00\tOct. 23, 2026, 1:33 p.m.\n2027-11-12 (active)\tAdd a Work block titled \"R264 HTTP pending\" lasting 30 minut\tOct. 23, 2026, 1:33 p.m.\n\n5 ai interactions",
+    "url": "https://dayforge.habitreward.org/admin/ai/aiinteraction/?schedule__id__exact=136"
+  },
+  "records": [
+    {
+      "success": "True",
+      "text": "HISTORY\nOutcomes json:\n[{\"action_index\": 0, \"task_id\": null, \"status\": \"applied\", \"applied_fields\": [\"title\", \"category\", \"start_time\", \"end_time\"], \"skipped_fields\": [], \"reason_code\": null, \"conflicting_task_ids\": [], \"attempted_direction\": null, \"suggestion\": null}]\nSuccess:\nKind:\nChat\nSchedule:\n2027-11-12 (active)\nUser command:\n15:00 to 15:30\nAi response:\n{\"transcript_sha256\": \"0839d68437e6f3627fcf9417f8d462d42c2f31c8d7e2386e3ae3ceeb22332f67\", \"turn_count\": 1, \"raw\": \"{\\n \\\"actions\\\": [{\\\"type\\\": \\\"add\\\", \\\"title\\\": \\\"R264 HTTP unresolved\\\", \\\"category\\\": \\\"work\\\", \\\"start_time\\\": \\\"15:00\\\", \\\"end_time\\\": \\\"15:30\\\"}],\\n \\\"explanation\\\": \\\"Added the unresolved R264 HTTP block from 15:00 to 15:30.\\\",\\n \\\"ask\\\": null,\\n \\\"intent_decision\\\": \\\"continue\\\",\\n \\\"pending_actions\\\": []\\n}\"}\nActions json:\n[{\"type\": \"add\", \"title\": \"R264 HTTP unresolved\", \"category\": \"work\", \"start_time\": \"15:00\", \"end_time\": \"15:30\"}]\nCreated at:\nOct. 23, 2026, 1:34 p.m.\nClose",
+      "url": "https://dayforge.habitreward.org/admin/ai/aiinteraction/943/change/?_changelist_filters=schedule__id__exact%3D136"
+    },
+    {
+      "success": "True",
+      "text": "HISTORY\nOutcomes json:\n[{\"action_index\": 0, \"task_id\": null, \"status\": \"applied\", \"applied_fields\": [\"title\", \"category\", \"start_time\", \"end_time\"], \"skipped_fields\": [], \"reason_code\": null, \"conflicting_task_ids\": [], \"attempted_direction\": null, \"suggestion\": null}]\nSuccess:\nKind:\nChat\nSchedule:\n2027-11-12 (active)\nUser command:\nAdd a Work block titled \"R264 HTTP accepted\" from 13:00 to 13:30 NOW. Also plan a Work block titled \"R264 HTTP unresolved\"; ask me for BOTH its start and end time. Do not choose a time or duration for the second block. Apply the first block now and keep only the second pending.\nAi response:\n{\"transcript_sha256\": \"33ecaf86e118db59e8c627590548ecabc2a0f9f1a7a6f7cbc57cb4998495a567\", \"turn_count\": 1, \"raw\": \"{\\n \\\"actions\\\": [\\n {\\n \\\"type\\\": \\\"add\\\",\\n \\\"title\\\": \\\"R264 HTTP accepted\\\",\\n \\\"category\\\": \\\"work\\\",\\n \\\"start_time\\\": \\\"13:00\\\",\\n \\\"end_time\\\": \\\"13:30\\\"\\n }\\n ],\\n \\\"explanation\\\": \\\"Added the accepted Work block now; pending the unresolved one.\\\",\\n \\\"ask\\\": null,\\n \\\"intent_decision\\\": \\\"new\\\",\\n \\\"pending_actions\\\": [\\n {\\n \\\"type\\\": \\\"add\\\",\\n \\\"task_id\\\": null,\\n \\\"target_ids\\\": [],\\n \\\"known_fields\\\": {\\n \\\"title\\\": \\\"R264 HTTP unresolved\\\",\\n \\\"category\\\": \\\"work\\\"\\n },\\n \\\"missing_fields\\\": [\\n \\\"start_time\\\",\\n \\\"end_time\\\"\\n ]\\n }\\n ]\\n}\"}\nActions json:\n[{\"type\": \"add\", \"title\": \"R264 HTTP accepted\", \"category\": \"work\", \"start_time\": \"13:00\", \"end_time\": \"13:30\"}]\nCreated at:\nOct. 23, 2026, 1:34 p.m.\nClose",
+      "url": "https://dayforge.habitreward.org/admin/ai/aiinteraction/942/change/?_changelist_filters=schedule__id__exact%3D136"
+    },
+    {
+      "success": "True",
+      "text": "HISTORY\nOutcomes json:\n-\nSuccess:\nKind:\nChat\nSchedule:\n2027-11-12 (active)\nUser command:\nAdd a Work block titled \"R264 HTTP cancel\". Ask me for its start and end time first; do not add anything yet.\nAi response:\n{\"transcript_sha256\": \"2f66ff7664a1883e9c59e134d68df88b2d65bb02a1a83338523cf7c02eeabe90\", \"turn_count\": 1, \"raw\": \"{\\n \\\"actions\\\": [],\\n \\\"explanation\\\": \\\"You want to add a Work block titled 'R264 HTTP cancel' but need start/end times first.\\\",\\n \\\"ask\\\": \\\"What start and end times?\\\",\\n \\\"intent_decision\\\": \\\"new\\\",\\n \\\"pending_actions\\\": [{\\\"type\\\":\\\"add\\\",\\\"task_id\\\":null,\\\"target_ids\\\":[],\\\"known_fields\\\":{\\\"title\\\":\\\"R264 HTTP cancel\\\",\\\"category\\\":\\\"work\\\"},\\\"missing_fields\\\":[\\\"start_time\\\",\\\"end_time\\\"]}]\\n}\"}\nActions json:\n-\nCreated at:\nOct. 23, 2026, 1:34 p.m.\nClose",
+      "url": "https://dayforge.habitreward.org/admin/ai/aiinteraction/940/change/?_changelist_filters=schedule__id__exact%3D136"
+    },
+    {
+      "success": "True",
+      "text": "HISTORY\nOutcomes json:\n[{\"action_index\": 0, \"task_id\": null, \"status\": \"applied\", \"applied_fields\": [\"title\", \"category\", \"start_time\", \"end_time\"], \"skipped_fields\": [], \"reason_code\": null, \"conflicting_task_ids\": [], \"attempted_direction\": null, \"suggestion\": null}]\nSuccess:\nKind:\nChat\nSchedule:\n2027-11-12 (active)\nUser command:\n14:00\nAi response:\n{\"transcript_sha256\": \"210c31d20020b23ab2b49c85d238b72b8707ccdae4d1ae216e9172a2308b5611\", \"turn_count\": 1, \"raw\": \"{\\n \\\"actions\\\": [{\\\"type\\\": \\\"add\\\", \\\"title\\\": \\\"R264 HTTP pending\\\", \\\"category\\\": \\\"work\\\", \\\"start_time\\\": \\\"14:00\\\", \\\"end_time\\\": \\\"14:30\\\"}],\\n \\\"explanation\\\": \\\"Adding the requested work block starting at 14:00.\\\",\\n \\\"ask\\\": null,\\n \\\"intent_decision\\\": \\\"continue\\\",\\n \\\"pending_actions\\\": []\\n}\"}\nActions json:\n[{\"type\": \"add\", \"title\": \"R264 HTTP pending\", \"category\": \"work\", \"start_time\": \"14:00\", \"end_time\": \"14:30\"}]\nCreated at:\nOct. 23, 2026, 1:33 p.m.\nClose",
+      "url": "https://dayforge.habitreward.org/admin/ai/aiinteraction/938/change/?_changelist_filters=schedule__id__exact%3D136"
+    },
+    {
+      "success": "True",
+      "text": "HISTORY\nOutcomes json:\n-\nSuccess:\nKind:\nChat\nSchedule:\n2027-11-12 (active)\nUser command:\nAdd a Work block titled \"R264 HTTP pending\" lasting 30 minutes. Ask me for its start time before adding it; do not choose a time.\nAi response:\n{\"transcript_sha256\": \"3aa127cebe015878d95e3a101d27d2fde340d488a3c8f835f709e83236473964\", \"turn_count\": 1, \"raw\": \"{\\n \\\"actions\\\": [],\\n \\\"explanation\\\": \\\"You want to add a 30-minute Work block titled 'R264 HTTP pending' but need its start time first.\\\",\\n \\\"ask\\\": \\\"What start time should 'R264 HTTP pending' use?\\\",\\n \\\"intent_decision\\\": \\\"new\\\",\\n \\\"pending_actions\\\": [{\\\"type\\\":\\\"add\\\", \\\"task_id\\\":null, \\\"target_ids\\\":[], \\\"known_fields\\\":{\\\"title\\\":\\\"R264 HTTP pending\\\", \\\"category\\\":\\\"work\\\", \\\"duration_minutes\\\":30}, \\\"missing_fields\\\":[\\\"start_time\\\"]}]\\n}\"}\nActions json:\n-\nCreated at:\nOct. 23, 2026, 1:33 p.m.\nClose",
+      "url": "https://dayforge.habitreward.org/admin/ai/aiinteraction/936/change/?_changelist_filters=schedule__id__exact%3D136"
+    }
+  ]
+}

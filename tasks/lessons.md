@@ -2,6 +2,15 @@
 
 Patterns and corrections discovered during development. Review at session start.
 
+## Shared admin permission mixins must accept inline arguments
+
+Django calls a model admin's `has_add_permission(request)` but passes
+`has_add_permission(request, obj)` for an inline. A shared inspection-only
+mixin must accept the optional object even when it always returns False.
+Direct permission-method tests missed the resulting schedule inspection 500.
+Render the real change page with empty and nonempty inlines, and verify that
+POST remains forbidden and leaves the schedule unchanged.
+
 ## Pending metadata and executable actions need distinct wording
 
 The prompt's unqualified "An add has task_id=null" referred to pending proposals,
