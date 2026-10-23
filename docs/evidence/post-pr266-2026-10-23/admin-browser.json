@@ -1,0 +1,62 @@
+[
+  {
+    "label": "empty-inline",
+    "date": "Date:\nNov. 10, 2027",
+    "editableFields": [],
+    "hasServerError": false,
+    "inlineDeleteControls": 0,
+    "inlineText": "TIME BLOCKS\n\tTITLE\tSTART TIME\tEND TIME\tCATEGORY\tIS COMPLETED\tSORT ORDER\t",
+    "status": "Status:\nActive",
+    "submitControls": [],
+    "submitLinks": [
+      {
+        "href": "/admin/schedules/schedule/",
+        "text": "Close"
+      }
+    ],
+    "title": "2027-11-10 (active) | View schedule | Django site admin",
+    "url": "https://dayforge.habitreward.org/admin/schedules/schedule/134/change/",
+    "inlineAddControlsInDom": 0,
+    "inlineAddControlsVisible": 0
+  },
+  {
+    "label": "nonempty-inline",
+    "date": "Date:\nNov. 10, 2027",
+    "editableFields": [],
+    "hasServerError": false,
+    "inlineDeleteControls": 0,
+    "inlineText": "TIME BLOCKS\n\tTITLE\tSTART TIME\tEND TIME\tCATEGORY\tIS COMPLETED\tSORT ORDER\t\n\n\nR266 admin inspection (09:00:00-09:30:00)\n\n\t\n\nR266 admin inspection\n\n\t\n\n9 a.m.\n\n\t\n\n9:30 a.m.\n\n\t\n\nwork\n\n\t\n\n\t\n\n0\n\n\t\n",
+    "status": "Status:\nActive",
+    "submitControls": [],
+    "submitLinks": [
+      {
+        "href": "/admin/schedules/schedule/",
+        "text": "Close"
+      }
+    ],
+    "title": "2027-11-10 (active) | View schedule | Django site admin",
+    "url": "https://dayforge.habitreward.org/admin/schedules/schedule/134/change/",
+    "inlineAddControlsInDom": 1,
+    "inlineAddControlsVisible": 0
+  },
+  {
+    "label": "final-empty-inline",
+    "date": "Date:\nNov. 10, 2027",
+    "editableFields": [],
+    "hasServerError": false,
+    "inlineDeleteControls": 0,
+    "inlineText": "TIME BLOCKS\n\tTITLE\tSTART TIME\tEND TIME\tCATEGORY\tIS COMPLETED\tSORT ORDER\t",
+    "status": "Status:\nActive",
+    "submitControls": [],
+    "submitLinks": [
+      {
+        "href": "/admin/schedules/schedule/",
+        "text": "Close"
+      }
+    ],
+    "title": "2027-11-10 (active) | View schedule | Django site admin",
+    "url": "https://dayforge.habitreward.org/admin/schedules/schedule/134/change/",
+    "inlineAddControlsInDom": 0,
+    "inlineAddControlsVisible": 0
+  }
+]

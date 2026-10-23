@@ -1,0 +1,17 @@
+{
+  "version": "2f78696d6ba9cc46b8588161ce873ecf51dd022a",
+  "revision": 9,
+  "date": "2027-11-10",
+  "blocks": [
+    {
+      "id": 1166,
+      "title": "R266 admin inspection",
+      "category": "work",
+      "start_time": "09:00",
+      "end_time": "09:30",
+      "is_completed": false
+    }
+  ],
+  "status": "active",
+  "capture_stage": "after_admin_inspection_and_forbidden_page_checks"
+}

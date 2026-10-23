@@ -1,0 +1,19 @@
+{
+  "release": "2f78696d6ba9cc46b8588161ce873ecf51dd022a",
+  "deploy": "https://github.com/erzhan12/day-forge/actions/runs/39964952164",
+  "deploy_full_validation": {
+    "backend_passed": 2359,
+    "backend_skipped": 1,
+    "frontend_passed": 1459,
+    "production_audit_vulnerabilities": 0,
+    "ruff": true,
+    "typescript": true,
+    "frontend_build": true
+  },
+  "local_admin_tests_passed": 9,
+  "staff_post_executed_in_production": false,
+  "staff_post_403_checked_by_local_regression_tests": true,
+  "production_admin_checks": "Read-only UI for empty/nonempty inline; direct GET add/delete routes show 403; independent API states unchanged",
+  "runtime_source_sha256": "05c86da86bd21b9039cc9e661b1c3b717587ef9ffeb54d2c4061e40b00390e1c",
+  "runtime_source_sha256_file": "backend/schedules/admin.py"
+}
