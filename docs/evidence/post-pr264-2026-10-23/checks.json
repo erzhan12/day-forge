@@ -1,0 +1,42 @@
+{
+  "tested_release": "ee8d914443d8b5f7141201bcca3b304e45989f05",
+  "includes_pr264_merge": "560e03fbdd7757eb872f0535710d24a1ea622c0e",
+  "make_check": {
+    "success": true,
+    "backend_passed": 2357,
+    "backend_skipped": 1,
+    "frontend_passed": 1459,
+    "frontend_files": 105,
+    "ruff": true,
+    "typescript": true
+  },
+  "runtime_source_sha256": {
+    "backend/ai/relative_add_guard.py": "55f921716fcfaa09c7e5c1107c3c33ded76cfff57414aa0ec5b67dfbb4c75719",
+    "backend/ai/service.py": "1cf0a10eacdaf7a2113e9c151b1b648825e85b8f54d24bb43b6a95cf57debdc4",
+    "backend/ai/prompts.py": "abe652f4bdf70772ba3bc927775c3cc6615317a683d8422ad75384d49a94ca4d"
+  },
+  "local_admin_fix": {
+    "make_check_success": true,
+    "backend_passed": 2359,
+    "backend_skipped": 1,
+    "frontend_passed": 1459,
+    "frontend_files": 105,
+    "admin_tests_passed": 9,
+    "source_sha256": {
+      "backend/schedules/admin.py": "05c86da86bd21b9039cc9e661b1c3b717587ef9ffeb54d2c4061e40b00390e1c",
+      "backend/tests/test_admin.py": "8cd2238c77611a89b9eefa22056046d542463f2efa67aa7bf7fdffae9fa77a3a"
+    },
+    "published": false,
+    "pre_review_source_sha256": {
+      "backend/schedules/admin.py": "05c86da86bd21b9039cc9e661b1c3b717587ef9ffeb54d2c4061e40b00390e1c",
+      "backend/tests/test_admin.py": "e40eb588f16873c58777c97dece04a45c3ac56add9b28bd9aac55d61d64f4a61"
+    }
+  },
+  "review_followup": {
+    "review_url": "https://github.com/erzhan12/day-forge/pull/266#issuecomment-6366398802",
+    "change": "Move reverse import to module scope in the test file; runtime fix unchanged",
+    "admin_tests_passed": 9,
+    "ruff": true,
+    "full_suite_counts_recorded_before_import_move": true
+  }
+}

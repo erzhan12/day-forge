@@ -1,0 +1,215 @@
+{
+  "version": "ee8d914443d8b5f7141201bcca3b304e45989f05",
+  "real_ai_interactions": 15,
+  "all_successful": true,
+  "records": [
+    {
+      "channel": "desktop",
+      "audit_url": "https://dayforge.habitreward.org/admin/ai/aiinteraction/945/change/?_changelist_filters=schedule__id__exact%3D134",
+      "success": true,
+      "raw_add_null_target_count": 0,
+      "normalized_actions": [
+        {
+          "type": "add",
+          "title": "R264 desktop unresolved",
+          "category": "work",
+          "start_time": "15:00",
+          "end_time": "15:30"
+        }
+      ],
+      "raw_response_sha256": "b67810e69651affd2fed98f7ce5c8ad70c36e8cd962e6d9a7aaadaeea8976f63"
+    },
+    {
+      "channel": "desktop",
+      "audit_url": "https://dayforge.habitreward.org/admin/ai/aiinteraction/944/change/?_changelist_filters=schedule__id__exact%3D134",
+      "success": true,
+      "raw_add_null_target_count": 0,
+      "normalized_actions": [
+        {
+          "type": "add",
+          "title": "R264 desktop accepted",
+          "category": "work",
+          "start_time": "13:00",
+          "end_time": "13:30"
+        }
+      ],
+      "raw_response_sha256": "59bc74d22ff3c63591dd8ad0479b753e573f58234e724c409e256e7d5f13e516"
+    },
+    {
+      "channel": "desktop",
+      "audit_url": "https://dayforge.habitreward.org/admin/ai/aiinteraction/941/change/?_changelist_filters=schedule__id__exact%3D134",
+      "success": true,
+      "raw_add_null_target_count": 0,
+      "normalized_actions": [
+        {
+          "type": "add",
+          "title": "R264 desktop after anchor",
+          "category": "work",
+          "start_time": "14:00",
+          "end_time": "14:30"
+        }
+      ],
+      "raw_response_sha256": "59d26757e3f92e888bfd6dcb326672a1e285d3194a23fb863cb7bb302506729e"
+    },
+    {
+      "channel": "desktop",
+      "audit_url": "https://dayforge.habitreward.org/admin/ai/aiinteraction/939/change/?_changelist_filters=schedule__id__exact%3D134",
+      "success": true,
+      "raw_add_null_target_count": 0,
+      "normalized_actions": [
+        {
+          "type": "add",
+          "title": "R264 desktop after anchor",
+          "category": "work",
+          "start_time": "08:00",
+          "end_time": "08:30"
+        }
+      ],
+      "raw_response_sha256": "69712480070b81390d81b7ac64bf6a5538842628f2e68d7e0bdb1ac51bbdfc89"
+    },
+    {
+      "channel": "desktop",
+      "audit_url": "https://dayforge.habitreward.org/admin/ai/aiinteraction/937/change/?_changelist_filters=schedule__id__exact%3D134",
+      "success": true,
+      "raw_add_null_target_count": 0,
+      "normalized_actions": [],
+      "raw_response_sha256": "7d7c906c02020fe25530fd7548ffae03fb03565ca69e2115c3d85240a7e34d25"
+    },
+    {
+      "channel": "mobile",
+      "audit_url": "https://dayforge.habitreward.org/admin/ai/aiinteraction/950/change/?_changelist_filters=schedule__id__exact%3D135",
+      "success": true,
+      "raw_add_null_target_count": 0,
+      "normalized_actions": [
+        {
+          "type": "add",
+          "title": "R264 mobile unresolved",
+          "category": "work",
+          "start_time": "15:00",
+          "end_time": "15:30"
+        }
+      ],
+      "raw_response_sha256": "13ae3c157d19c01240a74e7543f6edab611364a87169d48cfcc41308b701c4cc"
+    },
+    {
+      "channel": "mobile",
+      "audit_url": "https://dayforge.habitreward.org/admin/ai/aiinteraction/949/change/?_changelist_filters=schedule__id__exact%3D135",
+      "success": true,
+      "raw_add_null_target_count": 0,
+      "normalized_actions": [
+        {
+          "type": "add",
+          "title": "R264 mobile accepted",
+          "category": "work",
+          "start_time": "13:00",
+          "end_time": "13:30"
+        }
+      ],
+      "raw_response_sha256": "a5cc6736fa136ff8c3a4d4f974c2eea82c341b67ea92a11dd5fce8ff5ff19fcc"
+    },
+    {
+      "channel": "mobile",
+      "audit_url": "https://dayforge.habitreward.org/admin/ai/aiinteraction/948/change/?_changelist_filters=schedule__id__exact%3D135",
+      "success": true,
+      "raw_add_null_target_count": 0,
+      "normalized_actions": [
+        {
+          "type": "add",
+          "title": "R264 mobile after anchor",
+          "category": "work",
+          "start_time": "15:00",
+          "end_time": "15:30"
+        }
+      ],
+      "raw_response_sha256": "53fe6f0147974877c5beccb273971d84317b780f3c717a2094e134482247d4dd"
+    },
+    {
+      "channel": "mobile",
+      "audit_url": "https://dayforge.habitreward.org/admin/ai/aiinteraction/947/change/?_changelist_filters=schedule__id__exact%3D135",
+      "success": true,
+      "raw_add_null_target_count": 0,
+      "normalized_actions": [
+        {
+          "type": "add",
+          "title": "R264 mobile after anchor",
+          "category": "work",
+          "start_time": "08:00",
+          "end_time": "08:30"
+        }
+      ],
+      "raw_response_sha256": "f8fb1cae3230c1cda9fa0ab2c0ba62883410fdac5f7a7d482f67d6e00bfa0b6f"
+    },
+    {
+      "channel": "mobile",
+      "audit_url": "https://dayforge.habitreward.org/admin/ai/aiinteraction/946/change/?_changelist_filters=schedule__id__exact%3D135",
+      "success": true,
+      "raw_add_null_target_count": 0,
+      "normalized_actions": [],
+      "raw_response_sha256": "79f32e7fb1305a9b06b0ac8067f932130d5fd157df76d500fc5ccddf7ae121ee"
+    },
+    {
+      "channel": "http",
+      "audit_url": "https://dayforge.habitreward.org/admin/ai/aiinteraction/943/change/?_changelist_filters=schedule__id__exact%3D136",
+      "success": true,
+      "raw_add_null_target_count": 0,
+      "normalized_actions": [
+        {
+          "type": "add",
+          "title": "R264 HTTP unresolved",
+          "category": "work",
+          "start_time": "15:00",
+          "end_time": "15:30"
+        }
+      ],
+      "raw_response_sha256": "4efca820e3fed232459272e64b5a040aaf6e914b495c8652ca5016ec8113a927"
+    },
+    {
+      "channel": "http",
+      "audit_url": "https://dayforge.habitreward.org/admin/ai/aiinteraction/942/change/?_changelist_filters=schedule__id__exact%3D136",
+      "success": true,
+      "raw_add_null_target_count": 0,
+      "normalized_actions": [
+        {
+          "type": "add",
+          "title": "R264 HTTP accepted",
+          "category": "work",
+          "start_time": "13:00",
+          "end_time": "13:30"
+        }
+      ],
+      "raw_response_sha256": "4558d3a496a4834a071494896326c8eca78973c2d5d11483249f95efc6368745"
+    },
+    {
+      "channel": "http",
+      "audit_url": "https://dayforge.habitreward.org/admin/ai/aiinteraction/940/change/?_changelist_filters=schedule__id__exact%3D136",
+      "success": true,
+      "raw_add_null_target_count": 0,
+      "normalized_actions": [],
+      "raw_response_sha256": "a5731f8c26cfbdf4f364ec27028671130b0d7506c3e905bfeaeb7ec37e6dc57f"
+    },
+    {
+      "channel": "http",
+      "audit_url": "https://dayforge.habitreward.org/admin/ai/aiinteraction/938/change/?_changelist_filters=schedule__id__exact%3D136",
+      "success": true,
+      "raw_add_null_target_count": 0,
+      "normalized_actions": [
+        {
+          "type": "add",
+          "title": "R264 HTTP pending",
+          "category": "work",
+          "start_time": "14:00",
+          "end_time": "14:30"
+        }
+      ],
+      "raw_response_sha256": "b00a9fc58318f5711eda9b04733d986e64a175f7c3d1fa2ffb20e510254f55c3"
+    },
+    {
+      "channel": "http",
+      "audit_url": "https://dayforge.habitreward.org/admin/ai/aiinteraction/936/change/?_changelist_filters=schedule__id__exact%3D136",
+      "success": true,
+      "raw_add_null_target_count": 0,
+      "normalized_actions": [],
+      "raw_response_sha256": "52489584e578a94cb59d9370e61931d0d026bf166e054ab1b961c463f5e0a588"
+    }
+  ]
+}

@@ -7,7 +7,7 @@ from schedules.models import Schedule, TimeBlock, UserScheduleSettings
 class ScheduleInspectionOnly:
     """Day writes require revision validation through the scheduling API."""
 
-    def has_add_permission(self, request):
+    def has_add_permission(self, request, obj=None):
         return False
 
     def has_change_permission(self, request, obj=None):

@@ -1,0 +1,16 @@
+{
+  "environment": "production",
+  "version": "ee8d914443d8b5f7141201bcca3b304e45989f05",
+  "url": "https://dayforge.habitreward.org/admin/schedules/schedule/134/change/",
+  "browser": "Chrome existing staff session, separate owned tab",
+  "rendered_text": "Server Error (500)",
+  "read_only": true,
+  "normal_scheduling_flows_affected": false,
+  "root_cause": "ScheduleInspectionOnly.has_add_permission lacked optional obj argument passed by Django InlineModelAdmin",
+  "note": "No production settings or database changes. The owned inspection tab was closed.",
+  "local_negative_control": "2 of 2 real admin page renders failed with TypeError, empty and nonempty inline",
+  "local_fix": "accept obj=None; keep returning False",
+  "local_verification": "2 real page renders pass; POST remains 403 and schedule unchanged",
+  "published_fix": false,
+  "ai_interaction_admin_available": true
+}

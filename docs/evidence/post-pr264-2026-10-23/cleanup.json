@@ -1,0 +1,10 @@
+{
+  "browser_owned_tabs_closed": 3,
+  "browser_viewport_reset": true,
+  "browser_dedicated_account_logged_out_desktop_mobile": true,
+  "api_sessions_logged_out": true,
+  "private_http_scratch_removed": true,
+  "original_credentials_preserved": true,
+  "user_tabs_and_sessions_preserved": true,
+  "local_servers_started": false
+}

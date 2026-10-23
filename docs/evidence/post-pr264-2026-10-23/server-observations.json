@@ -1,0 +1,136 @@
+[
+  {
+    "label": "desktop-anchor",
+    "revision": 1,
+    "date": "2027-11-10",
+    "blocks": [
+      {
+        "id": 1151,
+        "title": "R264 desktop anchor",
+        "category": "work",
+        "start_time": "09:00",
+        "end_time": "09:30",
+        "is_completed": false
+      }
+    ]
+  },
+  {
+    "label": "desktop-corrected-applied",
+    "revision": 2,
+    "date": "2027-11-10",
+    "blocks": [
+      {
+        "id": 1151,
+        "title": "R264 desktop anchor",
+        "category": "work",
+        "start_time": "09:00",
+        "end_time": "09:30",
+        "is_completed": false
+      },
+      {
+        "id": 1153,
+        "title": "R264 desktop after anchor",
+        "category": "work",
+        "start_time": "14:00",
+        "end_time": "14:30",
+        "is_completed": false
+      }
+    ]
+  },
+  {
+    "label": "desktop-partial-request-in-flight",
+    "revision": 4,
+    "date": "2027-11-10",
+    "blocks": []
+  },
+  {
+    "label": "desktop-partial-completed",
+    "revision": 6,
+    "date": "2027-11-10",
+    "blocks": [
+      {
+        "id": 1157,
+        "title": "R264 desktop accepted",
+        "category": "work",
+        "start_time": "13:00",
+        "end_time": "13:30",
+        "is_completed": false
+      },
+      {
+        "id": 1158,
+        "title": "R264 desktop unresolved",
+        "category": "work",
+        "start_time": "15:00",
+        "end_time": "15:30",
+        "is_completed": false
+      }
+    ]
+  },
+  {
+    "label": "desktop-final-empty",
+    "revision": 8,
+    "date": "2027-11-10",
+    "blocks": []
+  },
+  {
+    "label": "mobile-corrected-applied",
+    "revision": 2,
+    "date": "2027-11-11",
+    "blocks": [
+      {
+        "id": 1160,
+        "title": "R264 mobile anchor",
+        "category": "work",
+        "start_time": "09:00",
+        "end_time": "09:30",
+        "is_completed": false
+      },
+      {
+        "id": 1161,
+        "title": "R264 mobile after anchor",
+        "category": "work",
+        "start_time": "15:00",
+        "end_time": "15:30",
+        "is_completed": false
+      }
+    ]
+  },
+  {
+    "label": "mobile-partial-accepted",
+    "revision": 5,
+    "date": "2027-11-11",
+    "blocks": [
+      {
+        "id": 1163,
+        "title": "R264 mobile accepted",
+        "category": "work",
+        "start_time": "13:00",
+        "end_time": "13:30",
+        "is_completed": false
+      }
+    ]
+  },
+  {
+    "label": "mobile-partial-completed",
+    "revision": 6,
+    "date": "2027-11-11",
+    "blocks": [
+      {
+        "id": 1163,
+        "title": "R264 mobile accepted",
+        "category": "work",
+        "start_time": "13:00",
+        "end_time": "13:30",
+        "is_completed": false
+      },
+      {
+        "id": 1164,
+        "title": "R264 mobile unresolved",
+        "category": "work",
+        "start_time": "15:00",
+        "end_time": "15:30",
+        "is_completed": false
+      }
+    ]
+  }
+]
