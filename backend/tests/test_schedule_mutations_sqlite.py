@@ -380,7 +380,6 @@ finally:
 def test_schedule_get_snapshot_stays_coherent_across_concurrent_commit(copied_database):
     run_on_copy(copied_database, """
 import sqlite3
-import time
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event
 from django.contrib.auth.models import User
@@ -405,9 +404,6 @@ get_user_preferences(user)
 client = Client()
 client.force_login(user)
 start = Event()
-prepared = Event()
-commit_started = Event()
-committed = Event()
 def writer():
     db = sqlite3.connect(sys.argv[1], timeout=2, isolation_level=None)
     try:
@@ -418,10 +414,7 @@ def writer():
             'UPDATE schedules_timeblock SET title = ? WHERE schedule_id = ?',
             ('New', schedule.pk),
         )
-        prepared.set()
-        commit_started.set()
         db.commit()
-        committed.set()
     finally:
         db.close()
 seen = False
@@ -432,10 +425,8 @@ def pause_after_schedule(self):
     if not seen and self.model is Schedule:
         seen = True
         start.set()
-        assert prepared.wait(5)
-        assert commit_started.wait(5)
-        time.sleep(0.1)
-        assert committed.is_set()
+        # Finish the real commit before reading blocks, propagating writer errors.
+        future.result(timeout=5)
     return result
 with ThreadPoolExecutor(max_workers=1) as pool:
     future = pool.submit(writer)
@@ -445,8 +436,7 @@ with ThreadPoolExecutor(max_workers=1) as pool:
     props = response.json()['props']
     assert props['schedule']['revision'] == 0, props
     assert [block['title'] for block in props['blocks']] == ['Old'], props
-    future.result(timeout=5)
-assert committed.is_set()
+assert seen
 schedule.refresh_from_db()
 assert schedule.revision == 1
 assert list(schedule.time_blocks.values_list('title', flat=True)) == ['New']

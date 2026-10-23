@@ -1,0 +1,39 @@
+{
+  "published_base": "2354cde35a9e28f611600caa7149c9416acfe9c2",
+  "published_test_file_sha256": "55b05f604b4b7eb753385e71d53da7e56f02ff85705c2ec604079de8eca7d05c",
+  "candidate_test_file_sha256": "d8643120e61d4c2cd615801dc37ace513e9f85ae088e0a6f9ee00a32d7afb516",
+  "test_file": "backend/tests/test_schedule_mutations_sqlite.py",
+  "sqlite_module_passed": 16,
+  "repetitions": 30,
+  "controls": [
+    {
+      "case": "published_slow_commit",
+      "writer_delay_seconds": 1,
+      "expected": "failure at the fixed 100 ms assertion",
+      "observed": "failure"
+    },
+    {
+      "case": "fixed_slow_commit",
+      "writer_delay_seconds": 1,
+      "expected": "success after commit",
+      "observed": "success"
+    },
+    {
+      "case": "missing_snapshot",
+      "change": "Replace transaction.atomic with nullcontext only in the isolated subprocess",
+      "expected": "failure: revision 0 with New block title",
+      "observed": "failure with New title"
+    },
+    {
+      "case": "writer_failure",
+      "change": "Raise RuntimeError immediately before commit in the isolated writer",
+      "expected": "original RuntimeError propagates",
+      "observed": "original RuntimeError propagates"
+    }
+  ],
+  "control_and_repeat_checks_passed": 34,
+  "runner": "docs/evidence/post-pr267-sqlite-2026-10-23/probe_snapshot_test.py",
+  "reproduce": "uv run python docs/evidence/post-pr267-sqlite-2026-10-23/probe_snapshot_test.py",
+  "production_database_accessed": false,
+  "runtime_code_changed": false
+}

@@ -1,0 +1,20 @@
+{
+  "base_release": "2354cde35a9e28f611600caa7149c9416acfe9c2",
+  "make_check": {
+    "backend_passed": 2359,
+    "backend_skipped": 1,
+    "frontend_passed": 1459,
+    "frontend_files": 105,
+    "ruff": true,
+    "typescript": true
+  },
+  "sqlite_concurrency_passed": 16,
+  "repeat_and_control_checks_passed": 34,
+  "image_retention_tests": true,
+  "production_npm_vulnerabilities": 0,
+  "django_check": true,
+  "makemigrations_dry_run": "No changes detected",
+  "test_file": "backend/tests/test_schedule_mutations_sqlite.py",
+  "test_file_sha256": "d8643120e61d4c2cd615801dc37ace513e9f85ae088e0a6f9ee00a32d7afb516",
+  "runtime_code_changed": false
+}

@@ -2,6 +2,15 @@
 
 Patterns and corrections discovered during development. Review at session start.
 
+## Concurrency tests must wait for completion, not elapsed time
+
+The SQLite snapshot test assumed a writer commit finished within a 100 ms sleep.
+Slow commits can therefore fail the test without violating the snapshot contract.
+After the reader captures the old Schedule, start the independent writer and
+join its Future with a bounded timeout before reading blocks. This preserves
+the required ordering and propagates writer failures. Check a deliberately
+slow commit and verify that removing the read snapshot still fails the test.
+
 ## Shared admin permission mixins must accept inline arguments
 
 Django calls a model admin's `has_add_permission(request)` but passes
