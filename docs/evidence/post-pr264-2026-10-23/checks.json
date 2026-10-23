@@ -24,8 +24,19 @@
     "admin_tests_passed": 9,
     "source_sha256": {
       "backend/schedules/admin.py": "05c86da86bd21b9039cc9e661b1c3b717587ef9ffeb54d2c4061e40b00390e1c",
-      "backend/tests/test_admin.py": "e40eb588f16873c58777c97dece04a45c3ac56add9b28bd9aac55d61d64f4a61"
+      "backend/tests/test_admin.py": "8cd2238c77611a89b9eefa22056046d542463f2efa67aa7bf7fdffae9fa77a3a"
     },
-    "published": false
+    "published": false,
+    "pre_review_source_sha256": {
+      "backend/schedules/admin.py": "05c86da86bd21b9039cc9e661b1c3b717587ef9ffeb54d2c4061e40b00390e1c",
+      "backend/tests/test_admin.py": "e40eb588f16873c58777c97dece04a45c3ac56add9b28bd9aac55d61d64f4a61"
+    }
+  },
+  "review_followup": {
+    "review_url": "https://github.com/erzhan12/day-forge/pull/266#issuecomment-6366398802",
+    "change": "Move reverse import to module scope in the test file; runtime fix unchanged",
+    "admin_tests_passed": 9,
+    "ruff": true,
+    "full_suite_counts_recorded_before_import_move": true
   }
 }

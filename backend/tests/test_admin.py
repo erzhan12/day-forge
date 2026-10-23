@@ -6,6 +6,7 @@ from ai.models import AIInteraction
 from analytics.admin import DailyReviewAdmin
 from django.contrib.admin.sites import AdminSite
 from django.test import RequestFactory
+from django.urls import reverse
 from schedules.admin import ScheduleAdmin, TimeBlockAdmin, UserScheduleSettingsAdmin
 from schedules.models import Schedule, TimeBlock, UserScheduleSettings
 from templates_mgr.admin import RuleAdmin, TemplateAdmin
@@ -51,8 +52,6 @@ class TestScheduleAdmin:
 
     @pytest.mark.parametrize("with_block", [False, True])
     def test_inspection_page_renders_without_allowing_writes(self, admin_client, user, with_block):
-        from django.urls import reverse
-
         schedule = Schedule.objects.create(
             user=user, date=datetime.date(2027, 11, 10), status="active", revision=8
         )
