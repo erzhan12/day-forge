@@ -1,0 +1,20 @@
+{
+  "backend": {
+    "passed": 2245,
+    "skipped": 1,
+    "skip_reason": "Existing paid R11 comparison is opt-in; real AI browser/API requests were exercised separately."
+  },
+  "frontend": {
+    "passed": 1422,
+    "files": 104
+  },
+  "ruff": "passed",
+  "typescript": "passed",
+  "build": "passed",
+  "container_candidate": "pr262-pending-final-candidate",
+  "production_release": "ac8b4a04c9ba9bb485478fe504343477eb40b8e2",
+  "production_dependency_audit": "0 vulnerabilities",
+  "django_system_check": "passed",
+  "migration_drift": "none",
+  "image_retention": "passed"
+}

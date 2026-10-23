@@ -240,12 +240,20 @@ def matching_item(action, items):
             continue
         fields = candidate["fields"]
         known = item["known_fields"]
-        if "duration_minutes" in known and "start_time" in fields and "end_time" in fields:
+        permitted = set(known) | set(item["missing_fields"])
+        if "duration_minutes" in permitted and "start_time" in fields and "end_time" in fields:
             start = datetime.time.fromisoformat(fields["start_time"])
             end = datetime.time.fromisoformat(fields["end_time"])
-            fields["duration_minutes"] = (end.hour * 60 + end.minute) - (
+            duration = (end.hour * 60 + end.minute) - (
                 start.hour * 60 + start.minute
             )
+            if "duration_minutes" in fields and fields["duration_minutes"] != duration:
+                continue
+            fields["duration_minutes"] = duration
+            # An allowed endpoint and duration determine the other endpoint.
+            # This grants no independent choice of time or change to locked values.
+            if "start_time" in permitted or "end_time" in permitted:
+                permitted.update({"start_time", "end_time"})
         elif (
             "duration_minutes" in known
             and "end_time" in fields
@@ -253,7 +261,7 @@ def matching_item(action, items):
         ):
             # An end-only resize cannot prove that a locked duration is preserved.
             continue
-        if any(key not in known and key not in item["missing_fields"] for key in fields):
+        if any(key not in permitted for key in fields):
             continue
         if any(key in fields and fields[key] != value for key, value in known.items()):
             continue
@@ -428,11 +436,25 @@ def finish(context, schedule, result, build_response, reload_context):
     payload = json.loads(response.content)
     cancelled = context.reference.action == "cancel" or decision == "cancel"
     next_items = unresolved_items(result, payload) if payload.get("ask") else []
+    # Structured remaining work survives a missing prose question. Add it after
+    # execution so the legacy "ask means no writes" contract stays intact.
+    model_items = (
+        result.pending_actions or []
+        if result.ask is None and decision in {"new", "continue"}
+        else []
+    )
     if continuing and not cancelled:
         remaining = list(context.row.items)
         attempted = []
         leftovers = []
-        for action_index, action in enumerate(result.parsed_actions):
+        outcomes = payload.get("outcomes", [])
+        guard_blocked = (
+            payload.get("ask") and not payload.get("applied")
+            and (not outcomes or all(o.get("reason_code") == "replay_guard" for o in outcomes))
+        )
+        # A guard question is not evidence that an action consumed its permission.
+        actions_to_resolve = [] if guard_blocked else result.parsed_actions
+        for action_index, action in enumerate(actions_to_resolve):
             index = matching_item(action, remaining)
             if index is not None:
                 original = remaining.pop(index)
@@ -471,11 +493,16 @@ def finish(context, schedule, result, build_response, reload_context):
         next_items = [
             refine_question(item, pool, derived=result.ask is None) for item in next_items
         ]
-        next_items = [*next_items, *remaining, *leftovers]
-        if next_items and not payload.get("ask"):
-            payload["ask"] = (
-                "Some requested changes are still pending. Please clarify the remaining request."
-            )
+        model_items = [refine_question(item, remaining) for item in model_items]
+        next_items = [*next_items, *model_items, *remaining, *leftovers]
+    else:
+        next_items.extend(model_items)
+    if next_items and not payload.get("ask"):
+        payload["ask"] = (
+            "Some requested changes are still pending. Please clarify the remaining request."
+        )
+    if next_items:
+        payload["partial"] = bool(payload.get("applied"))
     if cancelled:
         payload.update(
             explanation="Pending request cancelled.",

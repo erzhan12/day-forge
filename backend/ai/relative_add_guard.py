@@ -126,6 +126,16 @@ def relative_add_guard_ask(
     if len(anchors) != 1:
         if _CLOCK_REF_RE.match(tail):
             return None
+        latest_clock = _CLOCK_REF_RE.match(messages[-1]["content"])
+        if (
+            not anchors and request_index < len(messages) - 1
+            and latest_clock and ":" in latest_clock.group()
+            and all("start_time" in action and "end_time" in action
+                    for action in actions if action.get("type") == "add")
+        ):
+            # A concrete follow-up resolves an unbound reference, including
+            # procedural "before adding it". Existing anchors still constrain it.
+            return None
         return f"Which existing block should the new block be placed {direction}?"
 
     anchor = anchors[0]

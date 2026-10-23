@@ -1,0 +1,1242 @@
+[
+  {
+    "label": "production-desktop-move-applied",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today"
+      },
+      {
+        "disabled": false,
+        "label": "Undo last change",
+        "text": "Undo"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block"
+      },
+      {
+        "disabled": false,
+        "label": "Delete R262 desktop baseline",
+        "text": "×"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout"
+      },
+      {
+        "disabled": false,
+        "label": "Collapse AI chat panel",
+        "text": "›"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear"
+      }
+    ],
+    "height": 900,
+    "scrollWidth": 1440,
+    "text": "‹\nSaturday, October 23, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 8h earlier\n06:00 – 14:00\n⠇\n14:00–14:30\nR262 desktop baseline\n×\nFree — 8h 30m later\n14:30 – 23:00\nLogout\nAI Chat\n›\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\nMove R262 desktop baseline to a different clock time. Ask me what the new clock time is. Keep its duration. \nWhat new clock time should it start? \n14:00 \nMoving R262 desktop baseline to start at 14:00. \n›\nclear",
+    "url": "https://dayforge.habitreward.org/schedule/2027-10-23/",
+    "version": "ac8b4a04c9ba9bb485478fe504343477eb40b8e2",
+    "width": 1440
+  },
+  {
+    "label": "production-desktop-Undo-move",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today"
+      },
+      {
+        "disabled": false,
+        "label": "Undo last change",
+        "text": "Undo"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block"
+      },
+      {
+        "disabled": false,
+        "label": "Delete R262 desktop baseline",
+        "text": "×"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout"
+      },
+      {
+        "disabled": false,
+        "label": "Collapse AI chat panel",
+        "text": "›"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear"
+      }
+    ],
+    "height": 900,
+    "scrollWidth": 1440,
+    "text": "‹\nSaturday, October 23, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 3h earlier\n06:00 – 09:00\n⠇\n09:00–09:30\nR262 desktop baseline\n×\nFree — 13h 30m later\n09:30 – 23:00\nLogout\nAI Chat\n›\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\nMove R262 desktop baseline to a different clock time. Ask me what the new clock time is. Keep its duration. \nWhat new clock time should it start? \n14:00 \nMoving R262 desktop baseline to start at 14:00. \n›\nclear",
+    "url": "https://dayforge.habitreward.org/schedule/2027-10-23/",
+    "version": "ac8b4a04c9ba9bb485478fe504343477eb40b8e2",
+    "width": 1440
+  },
+  {
+    "label": "production-desktop-empty-after-Undo",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today"
+      },
+      {
+        "disabled": true,
+        "label": "Undo last change",
+        "text": "Undo"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout"
+      },
+      {
+        "disabled": false,
+        "label": "Collapse AI chat panel",
+        "text": "›"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear"
+      }
+    ],
+    "height": 900,
+    "scrollWidth": 1440,
+    "text": "‹\nSaturday, October 23, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 17h\n06:00 – 23:00\nLogout\nAI Chat\n›\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\nMove R262 desktop baseline to a different clock time. Ask me what the new clock time is. Keep its duration. \nWhat new clock time should it start? \n14:00 \nMoving R262 desktop baseline to start at 14:00. \n›\nclear",
+    "url": "https://dayforge.habitreward.org/schedule/2027-10-23/",
+    "version": "ac8b4a04c9ba9bb485478fe504343477eb40b8e2",
+    "width": 1440
+  },
+  {
+    "label": "production-desktop-Logout",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Sign in"
+      }
+    ],
+    "height": 900,
+    "scrollWidth": 1440,
+    "text": "Day Forge\n\nSign in to your schedule\n\nUsername\nPassword\nSign in\n\nPrivacy Policy·Terms of Service",
+    "url": "https://dayforge.habitreward.org/accounts/login/",
+    "version": "ac8b4a04c9ba9bb485478fe504343477eb40b8e2",
+    "width": 1440
+  },
+  {
+    "label": "production-desktop-Back-shows-Login",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Sign in"
+      }
+    ],
+    "height": 900,
+    "scrollWidth": 1440,
+    "text": "Day Forge\n\nSign in to your schedule\n\nUsername\nPassword\nSign in\n\nPrivacy Policy·Terms of Service",
+    "url": "https://dayforge.habitreward.org/accounts/login/?next=/schedule/2027-10-23/",
+    "version": "ac8b4a04c9ba9bb485478fe504343477eb40b8e2",
+    "width": 1440
+  },
+  {
+    "label": "production-mobile-fresh-login",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today"
+      },
+      {
+        "disabled": true,
+        "label": "Undo last change",
+        "text": "Undo"
+      },
+      {
+        "disabled": true,
+        "label": null,
+        "text": "Regenerate draft"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout"
+      },
+      {
+        "disabled": false,
+        "label": "Collapse AI chat panel",
+        "text": "›"
+      }
+    ],
+    "height": 900,
+    "scrollWidth": 1440,
+    "text": "‹\nSunday, October 24, 2027\nToday\nUndo\nRegenerate draft\n\nNo weekend template configured.\n\nShow indicator\n⚙\n›\n+ Add Block\nFree — 17h\n06:00 – 23:00\nLogout\nAI Chat\n›\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\n›",
+    "url": "https://dayforge.habitreward.org/schedule/2027-10-24/",
+    "version": "ac8b4a04c9ba9bb485478fe504343477eb40b8e2",
+    "width": 1440
+  },
+  {
+    "label": "production-mobile-Login-390",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Sign in"
+      }
+    ],
+    "height": 844,
+    "scrollWidth": 390,
+    "text": "Day Forge\n\nSign in to your schedule\n\nUsername\nPassword\nSign in\n\nPrivacy Policy·Terms of Service",
+    "url": "https://dayforge.habitreward.org/accounts/login/",
+    "version": "ac8b4a04c9ba9bb485478fe504343477eb40b8e2",
+    "width": 390
+  },
+  {
+    "label": "production-mobile-schedule-390",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today"
+      },
+      {
+        "disabled": true,
+        "label": "Undo last change",
+        "text": "Undo"
+      },
+      {
+        "disabled": true,
+        "label": null,
+        "text": "Regenerate draft"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout"
+      }
+    ],
+    "height": 844,
+    "scrollWidth": 390,
+    "text": "‹\nSunday, October 24, 2027\nToday\nUndo\nRegenerate draft\n\nNo weekend template configured.\n\nShow indicator\n⚙\n›\n+ Add Block\nFree — 17h\n06:00 – 23:00\nLogout\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\n›",
+    "url": "https://dayforge.habitreward.org/schedule/2027-10-24/",
+    "version": "ac8b4a04c9ba9bb485478fe504343477eb40b8e2",
+    "width": 390
+  },
+  {
+    "label": "production-mobile-pending-390",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today"
+      },
+      {
+        "disabled": false,
+        "label": "Undo last change",
+        "text": "Undo"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block"
+      },
+      {
+        "disabled": false,
+        "label": "Delete R262 mobile baseline",
+        "text": "×"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Cancel pending request"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear"
+      }
+    ],
+    "height": 844,
+    "scrollWidth": 390,
+    "text": "‹\nSunday, October 24, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 3h earlier\n06:00 – 09:00\n⠇\n09:00–09:30\nR262 mobile baseline\n×\nFree — 13h 30m later\n09:30 – 23:00\nLogout\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\nMove R262 mobile baseline to a different clock time. Ask me what the new clock time is. Keep its duration. \nWhat time should R262 mobile baseline start? \nCancel pending request\n›\nclear",
+    "url": "https://dayforge.habitreward.org/schedule/2027-10-24/",
+    "version": "ac8b4a04c9ba9bb485478fe504343477eb40b8e2",
+    "width": 390
+  },
+  {
+    "label": "production-mobile-move-applied-390",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today"
+      },
+      {
+        "disabled": false,
+        "label": "Undo last change",
+        "text": "Undo"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block"
+      },
+      {
+        "disabled": false,
+        "label": "Delete R262 mobile baseline",
+        "text": "×"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear"
+      }
+    ],
+    "height": 844,
+    "scrollWidth": 390,
+    "text": "‹\nSunday, October 24, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 9h earlier\n06:00 – 15:00\n⠇\n15:00–15:30\nR262 mobile baseline\n×\nFree — 7h 30m later\n15:30 – 23:00\nLogout\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\nMove R262 mobile baseline to a different clock time. Ask me what the new clock time is. Keep its duration. \nWhat time should R262 mobile baseline start? \n15:00 \nMoving R262 mobile baseline to start at 15:00. \n›\nclear",
+    "url": "https://dayforge.habitreward.org/schedule/2027-10-24/",
+    "version": "ac8b4a04c9ba9bb485478fe504343477eb40b8e2",
+    "width": 390
+  },
+  {
+    "label": "production-mobile-Undo-restored-baseline",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today"
+      },
+      {
+        "disabled": false,
+        "label": "Undo last change",
+        "text": "Undo"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block"
+      },
+      {
+        "disabled": false,
+        "label": "Delete R262 mobile baseline",
+        "text": "×"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear"
+      }
+    ],
+    "height": 844,
+    "scrollWidth": 390,
+    "text": "‹\nSunday, October 24, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 3h earlier\n06:00 – 09:00\n⠇\n09:00–09:30\nR262 mobile baseline\n×\nFree — 13h 30m later\n09:30 – 23:00\nLogout\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\nMove R262 mobile baseline to a different clock time. Ask me what the new clock time is. Keep its duration. \nWhat time should R262 mobile baseline start? \n15:00 \nMoving R262 mobile baseline to start at 15:00. \n›\nclear",
+    "url": "https://dayforge.habitreward.org/schedule/2027-10-24/",
+    "version": "ac8b4a04c9ba9bb485478fe504343477eb40b8e2",
+    "width": 390
+  },
+  {
+    "label": "production-mobile-Cancel-available-320",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today"
+      },
+      {
+        "disabled": false,
+        "label": "Undo last change",
+        "text": "Undo"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block"
+      },
+      {
+        "disabled": false,
+        "label": "Delete R262 mobile baseline",
+        "text": "×"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Cancel pending request"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear"
+      }
+    ],
+    "height": 740,
+    "scrollWidth": 320,
+    "text": "‹\nSunday, October 24, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 3h earlier\n06:00 – 09:00\n⠇\n09:00–09:30\nR262 mobile baseline\n×\nFree — 13h 30m later\n09:30 – 23:00\nLogout\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\n15:00 \nMoving R262 mobile baseline to start at 15:00. \nMove R262 mobile baseline again. Ask me for the new clock time and keep its duration. \nWhat time should R262 mobile baseline start? \nCancel pending request\n›\nclear",
+    "url": "https://dayforge.habitreward.org/schedule/2027-10-24/",
+    "version": "ac8b4a04c9ba9bb485478fe504343477eb40b8e2",
+    "width": 320
+  },
+  {
+    "label": "production-mobile-Cancel-completed-320",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today"
+      },
+      {
+        "disabled": false,
+        "label": "Undo last change",
+        "text": "Undo"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block"
+      },
+      {
+        "disabled": false,
+        "label": "Delete R262 mobile baseline",
+        "text": "×"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear"
+      }
+    ],
+    "height": 740,
+    "scrollWidth": 320,
+    "text": "‹\nSunday, October 24, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 3h earlier\n06:00 – 09:00\n⠇\n09:00–09:30\nR262 mobile baseline\n×\nFree — 13h 30m later\n09:30 – 23:00\nLogout\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\nMove R262 mobile baseline again. Ask me for the new clock time and keep its duration. \nWhat time should R262 mobile baseline start? \nCancel pending request. \nPending request cancelled. \n›\nclear",
+    "url": "https://dayforge.habitreward.org/schedule/2027-10-24/",
+    "version": "ac8b4a04c9ba9bb485478fe504343477eb40b8e2",
+    "width": 320
+  },
+  {
+    "label": "production-mobile-empty-before-Logout-320",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today"
+      },
+      {
+        "disabled": true,
+        "label": "Undo last change",
+        "text": "Undo"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear"
+      }
+    ],
+    "height": 740,
+    "scrollWidth": 320,
+    "text": "‹\nSunday, October 24, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 17h\n06:00 – 23:00\nLogout\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\nMove R262 mobile baseline again. Ask me for the new clock time and keep its duration. \nWhat time should R262 mobile baseline start? \nCancel pending request. \nPending request cancelled. \n›\nclear",
+    "url": "https://dayforge.habitreward.org/schedule/2027-10-24/",
+    "version": "ac8b4a04c9ba9bb485478fe504343477eb40b8e2",
+    "width": 320
+  },
+  {
+    "label": "production-mobile-Logout-320",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Sign in"
+      }
+    ],
+    "height": 740,
+    "scrollWidth": 320,
+    "text": "Day Forge\n\nSign in to your schedule\n\nUsername\nPassword\nSign in\n\nPrivacy Policy·Terms of Service",
+    "url": "https://dayforge.habitreward.org/accounts/login/",
+    "version": "ac8b4a04c9ba9bb485478fe504343477eb40b8e2",
+    "width": 320
+  },
+  {
+    "label": "production-mobile-Back-shows-Login-320",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Sign in"
+      }
+    ],
+    "height": 740,
+    "scrollWidth": 320,
+    "text": "Day Forge\n\nSign in to your schedule\n\nUsername\nPassword\nSign in\n\nPrivacy Policy·Terms of Service",
+    "url": "https://dayforge.habitreward.org/schedule/2027-10-24/",
+    "version": "ac8b4a04c9ba9bb485478fe504343477eb40b8e2",
+    "width": 320
+  },
+  {
+    "label": "candidate-desktop-real-ask",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today"
+      },
+      {
+        "disabled": true,
+        "label": "Undo last change",
+        "text": "Undo"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block"
+      },
+      {
+        "disabled": false,
+        "label": "Delete Gym",
+        "text": "×"
+      },
+      {
+        "disabled": false,
+        "label": "Delete Focus",
+        "text": "×"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout"
+      },
+      {
+        "disabled": false,
+        "label": "Collapse AI chat panel",
+        "text": "›"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Cancel pending request"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear"
+      }
+    ],
+    "height": 900,
+    "scrollWidth": 1440,
+    "text": "‹\nWednesday, September 1, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 3h earlier\n06:00 – 09:00\n⠇\n09:00–09:30\nGym\n×\nFree — 30m\n09:30 – 10:00\n⠇\n10:00 – 11:00\n1h\n×\nFocus\nFree — 12h later\n11:00 – 23:00\nLogout\nAI Chat\n›\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\nAdd a Work block titled \"R262 desktop pending\" lasting 30 minutes. Ask me for its start time before adding it; do not choose a time. \nWhat time should the Work block start? \nCancel pending request\n›\nclear",
+    "url": "http://localhost:8012/schedule/2027-09-01/",
+    "version": "build:614860e4dd15890f33b4",
+    "width": 1440
+  },
+  {
+    "label": "candidate-desktop-start-only-applied",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today"
+      },
+      {
+        "disabled": false,
+        "label": "Undo last change",
+        "text": "Undo"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block"
+      },
+      {
+        "disabled": false,
+        "label": "Delete Gym",
+        "text": "×"
+      },
+      {
+        "disabled": false,
+        "label": "Delete Focus",
+        "text": "×"
+      },
+      {
+        "disabled": false,
+        "label": "Delete R262 desktop pending",
+        "text": "×"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout"
+      },
+      {
+        "disabled": false,
+        "label": "Collapse AI chat panel",
+        "text": "›"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear"
+      }
+    ],
+    "height": 900,
+    "scrollWidth": 1440,
+    "text": "‹\nWednesday, September 1, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 3h earlier\n06:00 – 09:00\n⠇\n09:00–09:30\nGym\n×\nFree — 30m\n09:30 – 10:00\n⠇\n10:00 – 11:00\n1h\n×\nFocus\nFree — 3h\n11:00 – 14:00\n⠇\n14:00–14:30\nR262 desktop pending\n×\nFree — 8h 30m later\n14:30 – 23:00\nLogout\nAI Chat\n›\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\nAdd a Work block titled \"R262 desktop pending\" lasting 30 minutes. Ask me for its start time before adding it; do not choose a time. \nWhat time should the Work block start? \n14:00 \nAdding the Work block at 14:00. \n›\nclear",
+    "url": "http://localhost:8012/schedule/2027-09-01/",
+    "version": "build:614860e4dd15890f33b4",
+    "width": 1440
+  },
+  {
+    "label": "candidate-desktop-partial-retained",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today"
+      },
+      {
+        "disabled": false,
+        "label": "Undo last change",
+        "text": "Undo"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block"
+      },
+      {
+        "disabled": false,
+        "label": "Delete Gym",
+        "text": "×"
+      },
+      {
+        "disabled": false,
+        "label": "Delete Focus",
+        "text": "×"
+      },
+      {
+        "disabled": false,
+        "label": "Delete R262 accepted",
+        "text": "×"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout"
+      },
+      {
+        "disabled": false,
+        "label": "Collapse AI chat panel",
+        "text": "›"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Cancel pending request"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear"
+      }
+    ],
+    "height": 900,
+    "scrollWidth": 1440,
+    "text": "‹\nWednesday, September 1, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 3h earlier\n06:00 – 09:00\n⠇\n09:00–09:30\nGym\n×\nFree — 30m\n09:30 – 10:00\n⠇\n10:00 – 11:00\n1h\n×\nFocus\nFree — 2h\n11:00 – 13:00\n⠇\n13:00–13:30\nR262 accepted\n×\nFree — 9h 30m later\n13:30 – 23:00\nLogout\nAI Chat\n›\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\nAdd a Work block titled \"R262 accepted\" from 13:00 to 13:30 NOW. Also plan a Work block titled \"R262 unresolved\"; ask me for BOTH its start and end time. Do not choose a time or duration for the second block. Apply the first block now and keep only the second pending. \nSome requested changes are still pending. Please clarify the remaining request. \nCancel pending request\n›\nclear",
+    "url": "http://localhost:8012/schedule/2027-09-01/",
+    "version": "build:614860e4dd15890f33b4",
+    "width": 1440
+  },
+  {
+    "label": "candidate-desktop-partial-completed-once",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today"
+      },
+      {
+        "disabled": false,
+        "label": "Undo last change",
+        "text": "Undo"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block"
+      },
+      {
+        "disabled": false,
+        "label": "Delete Gym",
+        "text": "×"
+      },
+      {
+        "disabled": false,
+        "label": "Delete Focus",
+        "text": "×"
+      },
+      {
+        "disabled": false,
+        "label": "Delete R262 accepted",
+        "text": "×"
+      },
+      {
+        "disabled": false,
+        "label": "Delete R262 unresolved",
+        "text": "×"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout"
+      },
+      {
+        "disabled": false,
+        "label": "Collapse AI chat panel",
+        "text": "›"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear"
+      }
+    ],
+    "height": 900,
+    "scrollWidth": 1440,
+    "text": "‹\nWednesday, September 1, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 3h earlier\n06:00 – 09:00\n⠇\n09:00–09:30\nGym\n×\nFree — 30m\n09:30 – 10:00\n⠇\n10:00 – 11:00\n1h\n×\nFocus\nFree — 2h\n11:00 – 13:00\n⠇\n13:00–13:30\nR262 accepted\n×\nFree — 1h 30m\n13:30 – 15:00\n⠇\n15:00–15:30\nR262 unresolved\n×\nFree — 7h 30m later\n15:30 – 23:00\nLogout\nAI Chat\n›\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\nAdd a Work block titled \"R262 accepted\" from 13:00 to 13:30 NOW. Also plan a Work block titled \"R262 unresolved\"; ask me for BOTH its start and end time. Do not choose a time or duration for the second block. Apply the first block now and keep only the second pending. \nSome requested changes are still pending. Please clarify the remaining request. \n15:00 to 15:30 \nAdded R262 unresolved from 15:00 to 15:30. \n›\nclear",
+    "url": "http://localhost:8012/schedule/2027-09-01/",
+    "version": "build:614860e4dd15890f33b4",
+    "width": 1440
+  },
+  {
+    "label": "candidate-mobile-start-only-asked",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today"
+      },
+      {
+        "disabled": true,
+        "label": "Undo last change",
+        "text": "Undo"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block"
+      },
+      {
+        "disabled": false,
+        "label": "Delete Gym",
+        "text": "×"
+      },
+      {
+        "disabled": false,
+        "label": "Delete Focus",
+        "text": "×"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Cancel pending request"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear"
+      }
+    ],
+    "height": 740,
+    "scrollWidth": 320,
+    "text": "‹\nThursday, September 2, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 3h earlier\n06:00 – 09:00\n⠇\n09:00–09:30\nGym\n×\nFree — 30m\n09:30 – 10:00\n⠇\n10:00 – 11:00\n1h\n×\nFocus\nFree — 12h later\n11:00 – 23:00\nLogout\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\nAdd a Work block titled \"R262 mobile pending\" lasting 30 minutes. Ask me for its start time before adding it; do not choose a time. \nWhat start time should the 'R262 mobile pending' block have? \nCancel pending request\n›\nclear",
+    "url": "http://localhost:8012/schedule/2027-09-02/",
+    "version": "build:614860e4dd15890f33b4",
+    "width": 320
+  },
+  {
+    "label": "candidate-mobile-start-only-applied",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today"
+      },
+      {
+        "disabled": false,
+        "label": "Undo last change",
+        "text": "Undo"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block"
+      },
+      {
+        "disabled": false,
+        "label": "Delete Gym",
+        "text": "×"
+      },
+      {
+        "disabled": false,
+        "label": "Delete Focus",
+        "text": "×"
+      },
+      {
+        "disabled": false,
+        "label": "Delete R262 mobile pending",
+        "text": "×"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear"
+      }
+    ],
+    "height": 740,
+    "scrollWidth": 320,
+    "text": "‹\nThursday, September 2, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 3h earlier\n06:00 – 09:00\n⠇\n09:00–09:30\nGym\n×\nFree — 30m\n09:30 – 10:00\n⠇\n10:00 – 11:00\n1h\n×\nFocus\nFree — 5h\n11:00 – 16:00\n⠇\n16:00–16:30\nR262 mobile pending\n×\nFree — 6h 30m later\n16:30 – 23:00\nLogout\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\nAdd a Work block titled \"R262 mobile pending\" lasting 30 minutes. Ask me for its start time before adding it; do not choose a time. \nWhat start time should the 'R262 mobile pending' block have? \n16:00 \nAdding the R262 mobile pending block at 16:00. \n›\nclear",
+    "url": "http://localhost:8012/schedule/2027-09-02/",
+    "version": "build:614860e4dd15890f33b4",
+    "width": 320
+  },
+  {
+    "label": "candidate-mobile-after-Undo",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today"
+      },
+      {
+        "disabled": true,
+        "label": "Undo last change",
+        "text": "Undo"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block"
+      },
+      {
+        "disabled": false,
+        "label": "Delete Gym",
+        "text": "×"
+      },
+      {
+        "disabled": false,
+        "label": "Delete Focus",
+        "text": "×"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "×"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear"
+      }
+    ],
+    "height": 740,
+    "scrollWidth": 320,
+    "text": "‹\nThursday, September 2, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 3h earlier\n06:00 – 09:00\n⠇\n09:00–09:30\nGym\n×\nFree — 30m\n09:30 – 10:00\n⠇\n10:00 – 11:00\n1h\n×\nFocus\nFree — 12h later\n11:00 – 23:00\nLogout\nUndone: Adding the R262 mobile pending block at 16:00.\n×\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\nAdd a Work block titled \"R262 mobile pending\" lasting 30 minutes. Ask me for its start time before adding it; do not choose a time. \nWhat start time should the 'R262 mobile pending' block have? \n16:00 \nAdding the R262 mobile pending block at 16:00. \n›\nclear",
+    "url": "http://localhost:8012/schedule/2027-09-02/",
+    "version": "build:614860e4dd15890f33b4",
+    "width": 320
+  },
+  {
+    "label": "candidate-mobile-physical-Logout",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Sign in"
+      }
+    ],
+    "height": 740,
+    "scrollWidth": 320,
+    "text": "Day Forge\n\nSign in to your schedule\n\nUsername\nPassword\nSign in\n\nPrivacy Policy·Terms of Service",
+    "url": "http://localhost:8012/accounts/login/",
+    "version": "build:614860e4dd15890f33b4",
+    "width": 320
+  },
+  {
+    "label": "candidate-mobile-protected-history",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Sign in"
+      }
+    ],
+    "height": 740,
+    "scrollWidth": 320,
+    "text": "Day Forge\n\nSign in to your schedule\n\nUsername\nPassword\nSign in\n\nPrivacy Policy·Terms of Service",
+    "url": "http://localhost:8012/accounts/login/?next=/schedule/2027-09-02/",
+    "version": "build:614860e4dd15890f33b4",
+    "width": 320
+  },
+  {
+    "label": "candidate-mobile-Logout-hit-test",
+    "hit": true,
+    "viewport": {
+      "height": 740,
+      "width": 320
+    },
+    "x": 271.3125,
+    "y": 290
+  }
+]

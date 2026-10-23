@@ -92,6 +92,10 @@ ambiguous time for Gym can retain title/category and mark start_time/end_time
 missing. Keep ALL unresolved siblings, including ones not in this turn's first
 question. Never put already accepted work in pending_actions. If asking what to
 add, a missing title is allowed. If nothing is pending, pending_actions is [].
+For a partially executable request, return the ready actions with ask=null and
+put only the unresolved work in pending_actions. The server will ask for those
+missing details after committing the ready actions. Never drop a pending sibling
+just because another action can be applied now.
 
 Valid action types and required fields:
 - add: type=add, title=str, category=one of {_category_text(categories)}.

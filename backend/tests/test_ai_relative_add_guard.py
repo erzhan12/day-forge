@@ -3,6 +3,7 @@
 import datetime
 from types import SimpleNamespace
 
+import pytest
 from ai.relative_add_guard import relative_add_guard_ask
 
 
@@ -180,3 +181,38 @@ def test_clock_reference_is_not_treated_as_a_block():
         [_add(start_time="09:00", end_time="09:25")],
         [_block()],
     ) is None
+
+
+def test_concrete_answer_resolves_procedural_before_without_block_anchor():
+    messages = [
+        _user("Add Vocal for 30 minutes. Ask for its start time before adding it."),
+        {"role": "assistant", "content": "What start time?", "is_ask": True},
+        _user("14:00"),
+    ]
+    assert relative_add_guard_ask(
+        messages, [_add(start_time="14:00", end_time="14:30")], []
+    ) is None
+
+
+def test_concrete_answer_cannot_override_existing_relative_anchor():
+    messages = [
+        _user("Add Vocal after Gym"),
+        {"role": "assistant", "content": "What start time?", "is_ask": True},
+        _user("08:00"),
+    ]
+    assert relative_add_guard_ask(
+        messages, [_add(start_time="08:00", end_time="08:30")], [_block()]
+    ) == "What start time should the new block have after Gym?"
+
+
+@pytest.mark.parametrize("answer,action", [
+    ("30 minutes", _add(start_time="14:00", end_time="14:30")),
+    ("14:00", _add(duration_minutes=30)),
+])
+def test_unbound_relation_still_rejects_non_clock_or_untimed_answers(answer, action):
+    messages = [
+        _user("Add Vocal after Lunch"),
+        {"role": "assistant", "content": "What time?", "is_ask": True},
+        _user(answer),
+    ]
+    assert relative_add_guard_ask(messages, [action], []) is not None

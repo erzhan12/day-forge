@@ -1,0 +1,174 @@
+{
+  "success": false,
+  "source_snapshot_sha256": "a50969fd1c0c6d2dd41b43fe97fa927887387b3fcaba5ac2acce4d987ff7c575",
+  "source_tables": 26,
+  "source_rows": 1204,
+  "old_version": "3b2820e18770b1d35aedeffcabc0929a8d5b5045",
+  "new_version": "ac8b4a04c9ba9bb485478fe504343477eb40b8e2",
+  "provider": "isolated fixture; no paid calls",
+  "events": [
+    {
+      "stage": "start",
+      "image": "day-forge-rehearsal:pr262-old",
+      "version": "3b2820e18770b1d35aedeffcabc0929a8d5b5045",
+      "assets": [
+        "/static/assets/app-B90Hntot.css",
+        "/static/assets/app-C5e9QtYK.js"
+      ],
+      "status": 200
+    },
+    {
+      "stage": "start",
+      "image": "day-forge-rehearsal:pr262-new",
+      "version": "ac8b4a04c9ba9bb485478fe504343477eb40b8e2",
+      "assets": [
+        "/static/assets/app-o0LiMoO7.css",
+        "/static/assets/app-LqgJbHza.js"
+      ],
+      "status": 200
+    },
+    {
+      "stage": "ai_0007_to_0008",
+      "existing_rows_preserved": true
+    },
+    {
+      "stage": "chat",
+      "message": "Add Container pending; ask time",
+      "status": 200,
+      "code": null
+    },
+    {
+      "stage": "start",
+      "image": "day-forge-rehearsal:pr262-new",
+      "version": "ac8b4a04c9ba9bb485478fe504343477eb40b8e2",
+      "assets": [
+        "/static/assets/app-o0LiMoO7.css",
+        "/static/assets/app-LqgJbHza.js"
+      ],
+      "status": 200
+    },
+    {
+      "stage": "start",
+      "image": "day-forge-rehearsal:pr262-old",
+      "version": "3b2820e18770b1d35aedeffcabc0929a8d5b5045",
+      "assets": [
+        "/static/assets/app-B90Hntot.css",
+        "/static/assets/app-C5e9QtYK.js"
+      ],
+      "status": 200
+    },
+    {
+      "stage": "rollback",
+      "intents_and_receipts_retained": true,
+      "ai_paused_status": 503,
+      "paused_request_receipted": true
+    },
+    {
+      "stage": "start",
+      "image": "day-forge-rehearsal:pr262-new",
+      "version": "ac8b4a04c9ba9bb485478fe504343477eb40b8e2",
+      "assets": [
+        "/static/assets/app-o0LiMoO7.css",
+        "/static/assets/app-LqgJbHza.js"
+      ],
+      "status": 200
+    },
+    {
+      "stage": "chat",
+      "message": "14:00",
+      "status": 200,
+      "code": null
+    },
+    {
+      "stage": "restart_and_reupgrade",
+      "open_scope_retained": true,
+      "continuation_and_exact_replay": true
+    },
+    {
+      "stage": "chat",
+      "message": "Add Container partial; apply accepted and ask unresolved time",
+      "status": 200,
+      "code": null
+    },
+    {
+      "stage": "start",
+      "image": "day-forge-rehearsal:pr262-old",
+      "version": "3b2820e18770b1d35aedeffcabc0929a8d5b5045",
+      "assets": [
+        "/static/assets/app-B90Hntot.css",
+        "/static/assets/app-C5e9QtYK.js"
+      ],
+      "status": 200
+    },
+    {
+      "stage": "rollback",
+      "intents_and_receipts_retained": true,
+      "ai_paused_status": 503,
+      "paused_request_receipted": true
+    },
+    {
+      "stage": "start",
+      "image": "day-forge-rehearsal:pr262-new",
+      "version": "ac8b4a04c9ba9bb485478fe504343477eb40b8e2",
+      "assets": [
+        "/static/assets/app-o0LiMoO7.css",
+        "/static/assets/app-LqgJbHza.js"
+      ],
+      "status": 200
+    },
+    {
+      "stage": "chat",
+      "message": "15:00",
+      "status": 409,
+      "code": "pending_intent_stale"
+    },
+    {
+      "stage": "chat",
+      "message": "Add Container unresolved; ask time",
+      "status": 200,
+      "code": null
+    },
+    {
+      "stage": "chat",
+      "message": "15:00",
+      "status": 200,
+      "code": null
+    },
+    {
+      "stage": "partial_rollback_write",
+      "accepted_id_preserved": true,
+      "stale_without_provider": true,
+      "no_sibling_replay": true
+    },
+    {
+      "stage": "chat",
+      "message": "Add Container cancel; ask time",
+      "status": 200,
+      "code": null
+    },
+    {
+      "stage": "chat",
+      "message": "Cancel pending request.",
+      "status": 200,
+      "code": null
+    },
+    {
+      "stage": "chat",
+      "message": "Add Container narrow; ask start only",
+      "status": 200,
+      "code": null
+    },
+    {
+      "stage": "chat",
+      "message": "20:00",
+      "status": 409,
+      "code": "pending_intent_scope"
+    },
+    {
+      "stage": "start_only_derived_end",
+      "status": 409,
+      "applied": false
+    }
+  ],
+  "cleanup_completed": true
+}

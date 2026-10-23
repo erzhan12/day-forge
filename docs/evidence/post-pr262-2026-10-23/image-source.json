@@ -1,0 +1,23 @@
+{
+  "images": {
+    "pr262-old": {
+      "id": "sha256:83840f36c16854795ea0d1d67dafd1b6fe477a83946d9e5bd52c776025235095",
+      "architecture": "arm64"
+    },
+    "pr262-new": {
+      "id": "sha256:72caa237dacff1e56eaab8784546a776d85f05a919e3a976eb253fab90fddb21",
+      "architecture": "arm64"
+    },
+    "pr262-final": {
+      "id": "sha256:0a027f4cd660998b9ebe8d3ebcd9b0c6320e8e1bd853089a15e5f6c4ac4a5e0f",
+      "architecture": "arm64"
+    }
+  },
+  "published_frontend_matches_local_source_build": true,
+  "candidate_files": {
+    "backend/ai/pending_intents.py": "57346bcf1130229abcbb10a26b930b43a9aef735df00a7722b4f046300a564c2",
+    "backend/ai/prompts.py": "b490a0baa854674022140a573cc7f466c60f13d3554ed1bf9c8754a6699e75f1",
+    "backend/ai/relative_add_guard.py": "c6c2e5ea70d2721561545118abb8d0f171237b8f780f974fe91ad6eac2270d90"
+  },
+  "candidate_image_runtime_matches_worktree": true
+}
