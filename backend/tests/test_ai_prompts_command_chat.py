@@ -170,7 +170,9 @@ class TestChatSystemPromptAutoPlacement:
             assert "later windows keep the full gap" in prompt
         else:
             assert "back-to-back" in prompt
-            assert "retry" not in prompt.split("two modes:")[1].split("- move:")[0]
+            assert "5-minute steps" not in prompt
+            assert "only in the initial window" not in prompt
+            assert "later windows keep the full gap" not in prompt
 
     def test_forbids_fabricated_start(self):
         low = self._prompt().lower()
