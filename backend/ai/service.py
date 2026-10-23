@@ -564,6 +564,15 @@ async def run_chat(messages, schedule, blocks, rules, now, categories=None) -> A
     # the chat failure audit row actually shows — instead of drifting once
     # a drop has happened.
     for idx, action in zip(normalize_result.original_indices, normalized_actions, strict=True):
+        # Pending add metadata has a null target; some providers copy it into
+        # actions. It has no target authority. Non-null IDs remain invalid.
+        if (
+            isinstance(action, dict)
+            and action.get("type") == "add"
+            and "task_id" in action
+            and action["task_id"] is None
+        ):
+            action.pop("task_id")
         # Feature 0067: chat allows an untimed add (both times omitted → backend
         # deterministic placement). The draft path uses ``validate_draft_response``
         # with the ``False`` default, so draft adds still require both times.

@@ -1,0 +1,105 @@
+[
+  {
+    "label": "desktop-start-only-applied",
+    "revision": 1,
+    "date": "2027-11-01",
+    "blocks": [
+      {
+        "id": 1136,
+        "title": "R263 desktop pending",
+        "category": "work",
+        "start_time": "14:00",
+        "end_time": "14:30",
+        "is_completed": false
+      }
+    ]
+  },
+  {
+    "label": "desktop-partial-completed",
+    "revision": 4,
+    "date": "2027-11-01",
+    "blocks": [
+      {
+        "id": 1137,
+        "title": "R263 desktop accepted",
+        "category": "work",
+        "start_time": "13:00",
+        "end_time": "13:30",
+        "is_completed": false
+      },
+      {
+        "id": 1138,
+        "title": "R263 desktop unresolved",
+        "category": "work",
+        "start_time": "15:00",
+        "end_time": "15:30",
+        "is_completed": false
+      }
+    ]
+  },
+  {
+    "label": "desktop-negative-before-correction",
+    "revision": 7,
+    "date": "2027-11-01",
+    "blocks": [
+      {
+        "id": 1140,
+        "title": "R263 desktop anchor",
+        "category": "work",
+        "start_time": "09:00",
+        "end_time": "09:30",
+        "is_completed": false
+      }
+    ]
+  },
+  {
+    "label": "desktop-cleanup-confirmed",
+    "revision": 8,
+    "date": "2027-11-01",
+    "blocks": []
+  },
+  {
+    "label": "mobile-start-only-applied",
+    "revision": 1,
+    "date": "2027-11-02",
+    "blocks": [
+      {
+        "id": 1141,
+        "title": "R263 mobile pending",
+        "category": "work",
+        "start_time": "16:00",
+        "end_time": "16:30",
+        "is_completed": false
+      }
+    ]
+  },
+  {
+    "label": "mobile-start-only-Undo",
+    "revision": 2,
+    "date": "2027-11-02",
+    "blocks": []
+  },
+  {
+    "label": "mobile-full-interval-retry-applied",
+    "revision": 8,
+    "date": "2027-11-02",
+    "blocks": [
+      {
+        "id": 1147,
+        "title": "R263 mobile anchor",
+        "category": "work",
+        "start_time": "09:00",
+        "end_time": "09:30",
+        "is_completed": false
+      },
+      {
+        "id": 1148,
+        "title": "R263 mobile followup",
+        "category": "work",
+        "start_time": "10:00",
+        "end_time": "10:30",
+        "is_completed": false
+      }
+    ]
+  }
+]

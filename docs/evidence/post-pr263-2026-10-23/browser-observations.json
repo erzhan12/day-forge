@@ -1,0 +1,3111 @@
+[
+  {
+    "label": "desktop-fresh-Login",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Sign in",
+        "title": ""
+      }
+    ],
+    "height": 900,
+    "scrollWidth": 1440,
+    "text": "Day Forge\n\nSign in to your schedule\n\nUsername\nPassword\nSign in\n\nPrivacy Policy·Terms of Service",
+    "url": "https://dayforge.habitreward.org/accounts/login/?next=/schedule/2027-11-01/",
+    "version": "407620494de979f2e577808b944e25d8dbe1de4f",
+    "width": 1440
+  },
+  {
+    "label": "desktop-authenticated-new-release",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹",
+        "title": ""
+      },
+      {
+        "disabled": true,
+        "label": "Undo last change",
+        "text": "Undo",
+        "title": "Undo last change (⌘Z / Ctrl+Z)"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Collapse AI chat panel",
+        "text": "›",
+        "title": ""
+      }
+    ],
+    "height": 900,
+    "scrollWidth": 1440,
+    "text": "‹\nFriday, October 23, 2026\nUndo\nShow indicator\nView analytics\n⚙\n›\n+ Add Block\nFree — 2h 25m\n06:00 – 08:25\nFree — 14h 35m later\n08:25 – 23:00\n08:25\nLogout\nAI Chat\n›\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\n›",
+    "url": "https://dayforge.habitreward.org/schedule/2026-10-23/",
+    "version": "407620494de979f2e577808b944e25d8dbe1de4f",
+    "width": 1440
+  },
+  {
+    "label": "desktop-baseline-empty",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today",
+        "title": ""
+      },
+      {
+        "disabled": true,
+        "label": "Undo last change",
+        "text": "Undo",
+        "title": "Undo last change (⌘Z / Ctrl+Z)"
+      },
+      {
+        "disabled": true,
+        "label": null,
+        "text": "Regenerate draft",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Collapse AI chat panel",
+        "text": "›",
+        "title": ""
+      }
+    ],
+    "height": 900,
+    "scrollWidth": 1425,
+    "text": "‹\nMonday, November 1, 2027\nToday\nUndo\nRegenerate draft\n\nNo weekday template configured.\n\nShow indicator\n⚙\n›\n+ Add Block\nFree — 17h\n06:00 – 23:00\nLogout\nAI Chat\n›\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\n›",
+    "url": "https://dayforge.habitreward.org/schedule/2027-11-01/",
+    "version": "407620494de979f2e577808b944e25d8dbe1de4f",
+    "width": 1440
+  },
+  {
+    "label": "desktop-start-only-asked",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today",
+        "title": ""
+      },
+      {
+        "disabled": true,
+        "label": "Undo last change",
+        "text": "Undo",
+        "title": "Undo last change (⌘Z / Ctrl+Z)"
+      },
+      {
+        "disabled": true,
+        "label": null,
+        "text": "Regenerate draft",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Collapse AI chat panel",
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Cancel pending request",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear",
+        "title": "Clear thread"
+      }
+    ],
+    "height": 900,
+    "scrollWidth": 1425,
+    "text": "‹\nMonday, November 1, 2027\nToday\nUndo\nRegenerate draft\n\nNo weekday template configured.\n\nShow indicator\n⚙\n›\n+ Add Block\nFree — 17h\n06:00 – 23:00\nLogout\nAI Chat\n›\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\nAdd a Work block titled \"R263 desktop pending\" lasting 30 minutes. Ask me for its start time before adding it; do not choose a time. \nWhat time should it start? \nCancel pending request\n›\nclear",
+    "url": "https://dayforge.habitreward.org/schedule/2027-11-01/",
+    "version": "407620494de979f2e577808b944e25d8dbe1de4f",
+    "width": 1440
+  },
+  {
+    "label": "desktop-start-only-result",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Undo last change",
+        "text": "Undo",
+        "title": "Undo last change (⌘Z / Ctrl+Z)"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Delete R263 desktop pending",
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Collapse AI chat panel",
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear",
+        "title": "Clear thread"
+      }
+    ],
+    "height": 900,
+    "scrollWidth": 1440,
+    "text": "‹\nMonday, November 1, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 8h earlier\n06:00 – 14:00\n⠇\n14:00–14:30\nR263 desktop pending\n×\nFree — 8h 30m later\n14:30 – 23:00\nLogout\nAI Chat\n›\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\nAdd a Work block titled \"R263 desktop pending\" lasting 30 minutes. Ask me for its start time before adding it; do not choose a time. \nWhat time should it start? \n14:00 \nAdding the Work block at 14:00. \n›\nclear",
+    "url": "https://dayforge.habitreward.org/schedule/2027-11-01/",
+    "version": "407620494de979f2e577808b944e25d8dbe1de4f",
+    "width": 1440
+  },
+  {
+    "label": "desktop-start-only-Undo",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today",
+        "title": ""
+      },
+      {
+        "disabled": true,
+        "label": "Undo last change",
+        "text": "Undo",
+        "title": "Undo last change (⌘Z / Ctrl+Z)"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Collapse AI chat panel",
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear",
+        "title": "Clear thread"
+      }
+    ],
+    "height": 900,
+    "scrollWidth": 1425,
+    "text": "‹\nMonday, November 1, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 17h\n06:00 – 23:00\nLogout\nAI Chat\n›\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\nAdd a Work block titled \"R263 desktop pending\" lasting 30 minutes. Ask me for its start time before adding it; do not choose a time. \nWhat time should it start? \n14:00 \nAdding the Work block at 14:00. \n›\nclear",
+    "url": "https://dayforge.habitreward.org/schedule/2027-11-01/",
+    "version": "407620494de979f2e577808b944e25d8dbe1de4f",
+    "width": 1440
+  },
+  {
+    "label": "desktop-partial-ready-and-pending",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Undo last change",
+        "text": "Undo",
+        "title": "Undo last change (⌘Z / Ctrl+Z)"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Delete R263 desktop accepted",
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Collapse AI chat panel",
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Cancel pending request",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear",
+        "title": "Clear thread"
+      }
+    ],
+    "height": 900,
+    "scrollWidth": 1440,
+    "text": "‹\nMonday, November 1, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 7h earlier\n06:00 – 13:00\n⠇\n13:00–13:30\nR263 desktop accepted\n×\nFree — 9h 30m later\n13:30 – 23:00\nLogout\nAI Chat\n›\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\nAdd a Work block titled \"R263 desktop accepted\" from 13:00 to 13:30 NOW. Also plan a Work block titled \"R263 desktop unresolved\"; ask me for BOTH its start and end time. Do not choose a time or duration for the second block. Apply the first block now and keep only the second pending. \nSome requested changes are still pending. Please clarify the remaining request. \nCancel pending request\n›\nclear",
+    "url": "https://dayforge.habitreward.org/schedule/2027-11-01/",
+    "version": "407620494de979f2e577808b944e25d8dbe1de4f",
+    "width": 1440
+  },
+  {
+    "label": "desktop-partial-completion-in-flight",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today",
+        "title": ""
+      },
+      {
+        "disabled": true,
+        "label": "Undo last change",
+        "text": "Undo",
+        "title": "Undo last change (⌘Z / Ctrl+Z)"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": true,
+        "label": null,
+        "text": "+ Add Block",
+        "title": ""
+      },
+      {
+        "disabled": true,
+        "label": "Delete R263 desktop accepted",
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Collapse AI chat panel",
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": true,
+        "label": null,
+        "text": "Recover previous AI request",
+        "title": "Return the saved result, or finish the original request if needed."
+      },
+      {
+        "disabled": true,
+        "label": null,
+        "text": "Cancel pending request",
+        "title": ""
+      },
+      {
+        "disabled": true,
+        "label": null,
+        "text": "clear",
+        "title": "Clear thread"
+      }
+    ],
+    "height": 900,
+    "scrollWidth": 1440,
+    "text": "‹\nMonday, November 1, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 7h earlier\n06:00 – 13:00\n⠇\n13:00–13:30\nR263 desktop accepted\n×\nFree — 9h 30m later\n13:30 – 23:00\nLogout\nAI Chat\n›\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\nAdd a Work block titled \"R263 desktop accepted\" from 13:00 to 13:30 NOW. Also plan a Work block titled \"R263 desktop unresolved\"; ask me for BOTH its start and end time. Do not choose a time or duration for the second block. Apply the first block now and keep only the second pending. \nSome requested changes are still pending. Please clarify the remaining request. \n15:00 to 15:30 \nRecover previous AI request\nCancel pending request\n›\nclear",
+    "url": "https://dayforge.habitreward.org/schedule/2027-11-01/",
+    "version": "407620494de979f2e577808b944e25d8dbe1de4f",
+    "width": 1440
+  },
+  {
+    "label": "desktop-partial-completed-final",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Undo last change",
+        "text": "Undo",
+        "title": "Undo last change (⌘Z / Ctrl+Z)"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Delete R263 desktop accepted",
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Delete R263 desktop unresolved",
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Collapse AI chat panel",
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear",
+        "title": "Clear thread"
+      }
+    ],
+    "height": 900,
+    "scrollWidth": 1440,
+    "text": "‹\nMonday, November 1, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 7h earlier\n06:00 – 13:00\n⠇\n13:00–13:30\nR263 desktop accepted\n×\nFree — 1h 30m\n13:30 – 15:00\n⠇\n15:00–15:30\nR263 desktop unresolved\n×\nFree — 7h 30m later\n15:30 – 23:00\nLogout\nAI Chat\n›\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\nAdd a Work block titled \"R263 desktop accepted\" from 13:00 to 13:30 NOW. Also plan a Work block titled \"R263 desktop unresolved\"; ask me for BOTH its start and end time. Do not choose a time or duration for the second block. Apply the first block now and keep only the second pending. \nSome requested changes are still pending. Please clarify the remaining request. \n15:00 to 15:30 \nAdded the unresolved block from 15:00 to 15:30. \n›\nclear",
+    "url": "https://dayforge.habitreward.org/schedule/2027-11-01/",
+    "version": "407620494de979f2e577808b944e25d8dbe1de4f",
+    "width": 1440
+  },
+  {
+    "label": "desktop-partial-Undo-completion",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Undo last change",
+        "text": "Undo",
+        "title": "Undo last change (⌘Z / Ctrl+Z)"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Delete R263 desktop accepted",
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Collapse AI chat panel",
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear",
+        "title": "Clear thread"
+      }
+    ],
+    "height": 900,
+    "scrollWidth": 1440,
+    "text": "‹\nMonday, November 1, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 7h earlier\n06:00 – 13:00\n⠇\n13:00–13:30\nR263 desktop accepted\n×\nFree — 9h 30m later\n13:30 – 23:00\nLogout\nUndone: Added the unresolved block from 15:00 to 15:30.\n×\nAI Chat\n›\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\nAdd a Work block titled \"R263 desktop accepted\" from 13:00 to 13:30 NOW. Also plan a Work block titled \"R263 desktop unresolved\"; ask me for BOTH its start and end time. Do not choose a time or duration for the second block. Apply the first block now and keep only the second pending. \nSome requested changes are still pending. Please clarify the remaining request. \n15:00 to 15:30 \nAdded the unresolved block from 15:00 to 15:30. \n›\nclear",
+    "url": "https://dayforge.habitreward.org/schedule/2027-11-01/",
+    "version": "407620494de979f2e577808b944e25d8dbe1de4f",
+    "width": 1440
+  },
+  {
+    "label": "desktop-partial-Undo-ready",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today",
+        "title": ""
+      },
+      {
+        "disabled": true,
+        "label": "Undo last change",
+        "text": "Undo",
+        "title": "Undo last change (⌘Z / Ctrl+Z)"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Collapse AI chat panel",
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear",
+        "title": "Clear thread"
+      }
+    ],
+    "height": 900,
+    "scrollWidth": 1425,
+    "text": "‹\nMonday, November 1, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 17h\n06:00 – 23:00\nLogout\nUndone: Added the accepted Work block; keeping the unresolved one pending.\n×\nAI Chat\n›\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\nAdd a Work block titled \"R263 desktop accepted\" from 13:00 to 13:30 NOW. Also plan a Work block titled \"R263 desktop unresolved\"; ask me for BOTH its start and end time. Do not choose a time or duration for the second block. Apply the first block now and keep only the second pending. \nSome requested changes are still pending. Please clarify the remaining request. \n15:00 to 15:30 \nAdded the unresolved block from 15:00 to 15:30. \n›\nclear",
+    "url": "https://dayforge.habitreward.org/schedule/2027-11-01/",
+    "version": "407620494de979f2e577808b944e25d8dbe1de4f",
+    "width": 1440
+  },
+  {
+    "label": "desktop-refusal-baseline",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Undo last change",
+        "text": "Undo",
+        "title": "Undo last change (⌘Z / Ctrl+Z)"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Delete R263 desktop anchor",
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Collapse AI chat panel",
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear",
+        "title": "Clear thread"
+      }
+    ],
+    "height": 900,
+    "scrollWidth": 1440,
+    "text": "‹\nMonday, November 1, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 3h earlier\n06:00 – 09:00\n⠇\n09:00–09:30\nR263 desktop anchor\n×\nFree — 13h 30m later\n09:30 – 23:00\nLogout\nAI Chat\n›\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\nAdd a Work block titled \"R263 desktop accepted\" from 13:00 to 13:30 NOW. Also plan a Work block titled \"R263 desktop unresolved\"; ask me for BOTH its start and end time. Do not choose a time or duration for the second block. Apply the first block now and keep only the second pending. \nSome requested changes are still pending. Please clarify the remaining request. \n15:00 to 15:30 \nAdded the unresolved block from 15:00 to 15:30. \n›\nclear",
+    "url": "https://dayforge.habitreward.org/schedule/2027-11-01/",
+    "version": "407620494de979f2e577808b944e25d8dbe1de4f",
+    "width": 1440
+  },
+  {
+    "label": "desktop-relative-asked",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Undo last change",
+        "text": "Undo",
+        "title": "Undo last change (⌘Z / Ctrl+Z)"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Delete R263 desktop anchor",
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Collapse AI chat panel",
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Cancel pending request",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear",
+        "title": "Clear thread"
+      }
+    ],
+    "height": 900,
+    "scrollWidth": 1440,
+    "text": "‹\nMonday, November 1, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 3h earlier\n06:00 – 09:00\n⠇\n09:00–09:30\nR263 desktop anchor\n×\nFree — 13h 30m later\n09:30 – 23:00\nLogout\nAI Chat\n›\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\nAdd a Work block titled \"R263 desktop accepted\" from 13:00 to 13:30 NOW. Also plan a Work block titled \"R263 desktop unresolved\"; ask me for BOTH its start and end time. Do not choose a time or duration for the second block. Apply the first block now and keep only the second pending. \nSome requested changes are still pending. Please clarify the remaining request. \n15:00 to 15:30 \nAdded the unresolved block from 15:00 to 15:30. \nAdd a Work block titled \"R263 desktop after anchor\" after \"R263 desktop anchor\", lasting 30 minutes. Ask me for its start time first; do not choose a time. \nWhat start time? \nCancel pending request\n›\nclear",
+    "url": "https://dayforge.habitreward.org/schedule/2027-11-01/",
+    "version": "407620494de979f2e577808b944e25d8dbe1de4f",
+    "width": 1440
+  },
+  {
+    "label": "desktop-refusal-before-anchor",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today",
+        "title": ""
+      },
+      {
+        "disabled": true,
+        "label": "Undo last change",
+        "text": "Undo",
+        "title": "Undo last change (⌘Z / Ctrl+Z)"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Delete R263 desktop anchor",
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Collapse AI chat panel",
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Cancel pending request",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear",
+        "title": "Clear thread"
+      }
+    ],
+    "height": 900,
+    "scrollWidth": 1440,
+    "text": "‹\nMonday, November 1, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 3h earlier\n06:00 – 09:00\n⠇\n09:00–09:30\nR263 desktop anchor\n×\nFree — 13h 30m later\n09:30 – 23:00\nLogout\nAI Chat\n›\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\nAdd a Work block titled \"R263 desktop accepted\" from 13:00 to 13:30 NOW. Also plan a Work block titled \"R263 desktop unresolved\"; ask me for BOTH its start and end time. Do not choose a time or duration for the second block. Apply the first block now and keep only the second pending. \nSome requested changes are still pending. Please clarify the remaining request. \n15:00 to 15:30 \nAdded the unresolved block from 15:00 to 15:30. \nAdd a Work block titled \"R263 desktop after anchor\" after \"R263 desktop anchor\", lasting 30 minutes. Ask me for its start time first; do not choose a time. \nWhat start time? \n08:00 \nThe assistant's reply couldn't be applied. Try rephrasing. \nCancel pending request\n›\nclear\nThe assistant's reply couldn't be applied. Try rephrasing.",
+    "url": "https://dayforge.habitreward.org/schedule/2027-11-01/",
+    "version": "407620494de979f2e577808b944e25d8dbe1de4f",
+    "width": 1440
+  },
+  {
+    "label": "desktop-corrected-after-refusal-result",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today",
+        "title": ""
+      },
+      {
+        "disabled": true,
+        "label": "Undo last change",
+        "text": "Undo",
+        "title": "Undo last change (⌘Z / Ctrl+Z)"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Delete R263 desktop anchor",
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Collapse AI chat panel",
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Cancel pending request",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear",
+        "title": "Clear thread"
+      }
+    ],
+    "height": 900,
+    "scrollWidth": 1440,
+    "text": "‹\nMonday, November 1, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 3h earlier\n06:00 – 09:00\n⠇\n09:00–09:30\nR263 desktop anchor\n×\nFree — 13h 30m later\n09:30 – 23:00\nLogout\nAI Chat\n›\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\nAdd a Work block titled \"R263 desktop accepted\" from 13:00 to 13:30 NOW. Also plan a Work block titled \"R263 desktop unresolved\"; ask me for BOTH its start and end time. Do not choose a time or duration for the second block. Apply the first block now and keep only the second pending. \nSome requested changes are still pending. Please clarify the remaining request. \n15:00 to 15:30 \nAdded the unresolved block from 15:00 to 15:30. \nAdd a Work block titled \"R263 desktop after anchor\" after \"R263 desktop anchor\", lasting 30 minutes. Ask me for its start time first; do not choose a time. \nWhat start time? \n08:00 \nThe assistant's reply couldn't be applied. Try rephrasing. \n10:00 \nWhat start time should the new block have? \nCancel pending request\n›\nclear",
+    "url": "https://dayforge.habitreward.org/schedule/2027-11-01/",
+    "version": "407620494de979f2e577808b944e25d8dbe1de4f",
+    "width": 1440
+  },
+  {
+    "label": "desktop-cancel-after-quoted-title-loop",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today",
+        "title": ""
+      },
+      {
+        "disabled": true,
+        "label": "Undo last change",
+        "text": "Undo",
+        "title": "Undo last change (⌘Z / Ctrl+Z)"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Delete R263 desktop anchor",
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Collapse AI chat panel",
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear",
+        "title": "Clear thread"
+      }
+    ],
+    "height": 900,
+    "scrollWidth": 1440,
+    "text": "‹\nMonday, November 1, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 3h earlier\n06:00 – 09:00\n⠇\n09:00–09:30\nR263 desktop anchor\n×\nFree — 13h 30m later\n09:30 – 23:00\nLogout\nAI Chat\n›\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\nAdd a Work block titled \"R263 desktop accepted\" from 13:00 to 13:30 NOW. Also plan a Work block titled \"R263 desktop unresolved\"; ask me for BOTH its start and end time. Do not choose a time or duration for the second block. Apply the first block now and keep only the second pending. \nSome requested changes are still pending. Please clarify the remaining request. \n15:00 to 15:30 \nAdded the unresolved block from 15:00 to 15:30. \nAdd a Work block titled \"R263 desktop after anchor\" after \"R263 desktop anchor\", lasting 30 minutes. Ask me for its start time first; do not choose a time. \nWhat start time? \n08:00 \nThe assistant's reply couldn't be applied. Try rephrasing. \n10:00 \nWhat start time should the new block have? \nCancel pending request. \nPending request cancelled. \n›\nclear",
+    "url": "https://dayforge.habitreward.org/schedule/2027-11-01/",
+    "version": "407620494de979f2e577808b944e25d8dbe1de4f",
+    "width": 1440
+  },
+  {
+    "label": "desktop-final-empty",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Undo last change",
+        "text": "Undo",
+        "title": "Undo last change (⌘Z / Ctrl+Z)"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Collapse AI chat panel",
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear",
+        "title": "Clear thread"
+      }
+    ],
+    "height": 900,
+    "scrollWidth": 1425,
+    "text": "‹\nMonday, November 1, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 17h\n06:00 – 23:00\nLogout\nAI Chat\n›\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\nAdd a Work block titled \"R263 desktop accepted\" from 13:00 to 13:30 NOW. Also plan a Work block titled \"R263 desktop unresolved\"; ask me for BOTH its start and end time. Do not choose a time or duration for the second block. Apply the first block now and keep only the second pending. \nSome requested changes are still pending. Please clarify the remaining request. \n15:00 to 15:30 \nAdded the unresolved block from 15:00 to 15:30. \nAdd a Work block titled \"R263 desktop after anchor\" after \"R263 desktop anchor\", lasting 30 minutes. Ask me for its start time first; do not choose a time. \nWhat start time? \n08:00 \nThe assistant's reply couldn't be applied. Try rephrasing. \n10:00 \nWhat start time should the new block have? \nCancel pending request. \nPending request cancelled. \n›\nclear",
+    "url": "https://dayforge.habitreward.org/schedule/2027-11-01/",
+    "version": "407620494de979f2e577808b944e25d8dbe1de4f",
+    "width": 1440
+  },
+  {
+    "label": "desktop-Logout-hit-test",
+    "height": 900,
+    "hit": true,
+    "width": 1440,
+    "x": 793.8125,
+    "y": 862
+  },
+  {
+    "label": "desktop-logged-out",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Sign in",
+        "title": ""
+      }
+    ],
+    "height": 900,
+    "scrollWidth": 1440,
+    "text": "Day Forge\n\nSign in to your schedule\n\nUsername\nPassword\nSign in\n\nPrivacy Policy·Terms of Service",
+    "url": "https://dayforge.habitreward.org/accounts/login/",
+    "version": "407620494de979f2e577808b944e25d8dbe1de4f",
+    "width": 1440
+  },
+  {
+    "label": "desktop-protected-history",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Sign in",
+        "title": ""
+      }
+    ],
+    "height": 900,
+    "scrollWidth": 1440,
+    "text": "Day Forge\n\nSign in to your schedule\n\nUsername\nPassword\nSign in\n\nPrivacy Policy·Terms of Service",
+    "url": "https://dayforge.habitreward.org/accounts/login/?next=/schedule/2027-11-01/",
+    "version": "407620494de979f2e577808b944e25d8dbe1de4f",
+    "width": 1440
+  },
+  {
+    "label": "mobile-fresh-Login",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Sign in",
+        "title": ""
+      }
+    ],
+    "height": 844,
+    "scrollWidth": 390,
+    "text": "Day Forge\n\nSign in to your schedule\n\nUsername\nPassword\nSign in\n\nPrivacy Policy·Terms of Service",
+    "url": "https://dayforge.habitreward.org/accounts/login/?next=/schedule/2027-11-02/",
+    "version": "407620494de979f2e577808b944e25d8dbe1de4f",
+    "width": 390
+  },
+  {
+    "label": "mobile-baseline-empty",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today",
+        "title": ""
+      },
+      {
+        "disabled": true,
+        "label": "Undo last change",
+        "text": "Undo",
+        "title": "Undo last change (⌘Z / Ctrl+Z)"
+      },
+      {
+        "disabled": true,
+        "label": null,
+        "text": "Regenerate draft",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout",
+        "title": ""
+      }
+    ],
+    "height": 844,
+    "scrollWidth": 375,
+    "text": "‹\nTuesday, November 2, 2027\nToday\nUndo\nRegenerate draft\n\nNo weekday template configured.\n\nShow indicator\n⚙\n›\n+ Add Block\nFree — 17h\n06:00 – 23:00\nLogout\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\n›",
+    "url": "https://dayforge.habitreward.org/schedule/2027-11-02/",
+    "version": "407620494de979f2e577808b944e25d8dbe1de4f",
+    "width": 390
+  },
+  {
+    "label": "mobile-start-only-asked",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today",
+        "title": ""
+      },
+      {
+        "disabled": true,
+        "label": "Undo last change",
+        "text": "Undo",
+        "title": "Undo last change (⌘Z / Ctrl+Z)"
+      },
+      {
+        "disabled": true,
+        "label": null,
+        "text": "Regenerate draft",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Cancel pending request",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear",
+        "title": "Clear thread"
+      }
+    ],
+    "height": 844,
+    "scrollWidth": 375,
+    "text": "‹\nTuesday, November 2, 2027\nToday\nUndo\nRegenerate draft\n\nNo weekday template configured.\n\nShow indicator\n⚙\n›\n+ Add Block\nFree — 17h\n06:00 – 23:00\nLogout\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\nAdd a Work block titled \"R263 mobile pending\" lasting 30 minutes. Ask me for its start time before adding it; do not choose a time. \nWhat time should \"R263 mobile pending\" start? \nCancel pending request\n›\nclear",
+    "url": "https://dayforge.habitreward.org/schedule/2027-11-02/",
+    "version": "407620494de979f2e577808b944e25d8dbe1de4f",
+    "width": 390
+  },
+  {
+    "label": "mobile-start-only-applied",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Undo last change",
+        "text": "Undo",
+        "title": "Undo last change (⌘Z / Ctrl+Z)"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Delete R263 mobile pending",
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear",
+        "title": "Clear thread"
+      }
+    ],
+    "height": 844,
+    "scrollWidth": 375,
+    "text": "‹\nTuesday, November 2, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 10h earlier\n06:00 – 16:00\n⠇\n16:00–16:30\nR263 mobile pending\n×\nFree — 6h 30m later\n16:30 – 23:00\nLogout\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\nAdd a Work block titled \"R263 mobile pending\" lasting 30 minutes. Ask me for its start time before adding it; do not choose a time. \nWhat time should \"R263 mobile pending\" start? \n16:00 \nAdding the 30-minute Work block at 16:00. \n›\nclear",
+    "url": "https://dayforge.habitreward.org/schedule/2027-11-02/",
+    "version": "407620494de979f2e577808b944e25d8dbe1de4f",
+    "width": 390
+  },
+  {
+    "label": "mobile-start-only-Undo",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today",
+        "title": ""
+      },
+      {
+        "disabled": true,
+        "label": "Undo last change",
+        "text": "Undo",
+        "title": "Undo last change (⌘Z / Ctrl+Z)"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear",
+        "title": "Clear thread"
+      }
+    ],
+    "height": 844,
+    "scrollWidth": 375,
+    "text": "‹\nTuesday, November 2, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 17h\n06:00 – 23:00\nLogout\nUndone: Adding the 30-minute Work block at 16:00.\n×\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\nAdd a Work block titled \"R263 mobile pending\" lasting 30 minutes. Ask me for its start time before adding it; do not choose a time. \nWhat time should \"R263 mobile pending\" start? \n16:00 \nAdding the 30-minute Work block at 16:00. \n›\nclear",
+    "url": "https://dayforge.habitreward.org/schedule/2027-11-02/",
+    "version": "407620494de979f2e577808b944e25d8dbe1de4f",
+    "width": 390
+  },
+  {
+    "label": "mobile-partial-ready-and-pending",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Undo last change",
+        "text": "Undo",
+        "title": "Undo last change (⌘Z / Ctrl+Z)"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Delete R263 mobile accepted",
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Cancel pending request",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear",
+        "title": "Clear thread"
+      }
+    ],
+    "height": 844,
+    "scrollWidth": 375,
+    "text": "‹\nTuesday, November 2, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 7h earlier\n06:00 – 13:00\n⠇\n13:00–13:30\nR263 mobile accepted\n×\nFree — 9h 30m later\n13:30 – 23:00\nLogout\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\nAdd a Work block titled \"R263 mobile accepted\" from 13:00 to 13:30 NOW. Also plan a Work block titled \"R263 mobile unresolved\"; ask me for BOTH its start and end time. Do not choose a time or duration for the second block. Apply the first block now and keep only the second pending. \nSome requested changes are still pending. Please clarify the remaining request. \nCancel pending request\n›\nclear",
+    "url": "https://dayforge.habitreward.org/schedule/2027-11-02/",
+    "version": "407620494de979f2e577808b944e25d8dbe1de4f",
+    "width": 390
+  },
+  {
+    "label": "mobile-partial-completed",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Undo last change",
+        "text": "Undo",
+        "title": "Undo last change (⌘Z / Ctrl+Z)"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Delete R263 mobile accepted",
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Delete R263 mobile unresolved",
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear",
+        "title": "Clear thread"
+      }
+    ],
+    "height": 844,
+    "scrollWidth": 375,
+    "text": "‹\nTuesday, November 2, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 7h earlier\n06:00 – 13:00\n⠇\n13:00–13:30\nR263 mobile accepted\n×\nFree — 1h 30m\n13:30 – 15:00\n⠇\n15:00–15:30\nR263 mobile unresolved\n×\nFree — 7h 30m later\n15:30 – 23:00\nLogout\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\nAdd a Work block titled \"R263 mobile accepted\" from 13:00 to 13:30 NOW. Also plan a Work block titled \"R263 mobile unresolved\"; ask me for BOTH its start and end time. Do not choose a time or duration for the second block. Apply the first block now and keep only the second pending. \nSome requested changes are still pending. Please clarify the remaining request. \n15:00 to 15:30 \nAdding the unresolved block from 15:00 to 15:30. \n›\nclear",
+    "url": "https://dayforge.habitreward.org/schedule/2027-11-02/",
+    "version": "407620494de979f2e577808b944e25d8dbe1de4f",
+    "width": 390
+  },
+  {
+    "label": "mobile-partial-Undo-completion",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Undo last change",
+        "text": "Undo",
+        "title": "Undo last change (⌘Z / Ctrl+Z)"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Delete R263 mobile accepted",
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear",
+        "title": "Clear thread"
+      }
+    ],
+    "height": 844,
+    "scrollWidth": 375,
+    "text": "‹\nTuesday, November 2, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 7h earlier\n06:00 – 13:00\n⠇\n13:00–13:30\nR263 mobile accepted\n×\nFree — 9h 30m later\n13:30 – 23:00\nLogout\nUndone: Adding the unresolved block from 15:00 to 15:30.\n×\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\nAdd a Work block titled \"R263 mobile accepted\" from 13:00 to 13:30 NOW. Also plan a Work block titled \"R263 mobile unresolved\"; ask me for BOTH its start and end time. Do not choose a time or duration for the second block. Apply the first block now and keep only the second pending. \nSome requested changes are still pending. Please clarify the remaining request. \n15:00 to 15:30 \nAdding the unresolved block from 15:00 to 15:30. \n›\nclear",
+    "url": "https://dayforge.habitreward.org/schedule/2027-11-02/",
+    "version": "407620494de979f2e577808b944e25d8dbe1de4f",
+    "width": 390
+  },
+  {
+    "label": "mobile-partial-Undo-ready",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today",
+        "title": ""
+      },
+      {
+        "disabled": true,
+        "label": "Undo last change",
+        "text": "Undo",
+        "title": "Undo last change (⌘Z / Ctrl+Z)"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear",
+        "title": "Clear thread"
+      }
+    ],
+    "height": 844,
+    "scrollWidth": 375,
+    "text": "‹\nTuesday, November 2, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 17h\n06:00 – 23:00\nLogout\nUndone: Added the accepted block; keeping the unresolved one pending.\n×\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\nAdd a Work block titled \"R263 mobile accepted\" from 13:00 to 13:30 NOW. Also plan a Work block titled \"R263 mobile unresolved\"; ask me for BOTH its start and end time. Do not choose a time or duration for the second block. Apply the first block now and keep only the second pending. \nSome requested changes are still pending. Please clarify the remaining request. \n15:00 to 15:30 \nAdding the unresolved block from 15:00 to 15:30. \n›\nclear",
+    "url": "https://dayforge.habitreward.org/schedule/2027-11-02/",
+    "version": "407620494de979f2e577808b944e25d8dbe1de4f",
+    "width": 390
+  },
+  {
+    "label": "mobile-relative-asked",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Undo last change",
+        "text": "Undo",
+        "title": "Undo last change (⌘Z / Ctrl+Z)"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Delete R263 mobile anchor",
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Cancel pending request",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear",
+        "title": "Clear thread"
+      }
+    ],
+    "height": 844,
+    "scrollWidth": 375,
+    "text": "‹\nTuesday, November 2, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 3h earlier\n06:00 – 09:00\n⠇\n09:00–09:30\nR263 mobile anchor\n×\nFree — 13h 30m later\n09:30 – 23:00\nLogout\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\nAdd a Work block titled \"R263 mobile followup\" after \"R263 mobile anchor\", lasting 30 minutes. Ask me for its start time first; do not choose a time. \nWhat start time should \"R263 mobile followup\" have? \nCancel pending request\n›\nclear",
+    "url": "https://dayforge.habitreward.org/schedule/2027-11-02/",
+    "version": "407620494de979f2e577808b944e25d8dbe1de4f",
+    "width": 390
+  },
+  {
+    "label": "mobile-refusal-before-anchor",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Undo last change",
+        "text": "Undo",
+        "title": "Undo last change (⌘Z / Ctrl+Z)"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Delete R263 mobile anchor",
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Cancel pending request",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear",
+        "title": "Clear thread"
+      }
+    ],
+    "height": 844,
+    "scrollWidth": 375,
+    "text": "‹\nTuesday, November 2, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 3h earlier\n06:00 – 09:00\n⠇\n09:00–09:30\nR263 mobile anchor\n×\nFree — 13h 30m later\n09:30 – 23:00\nLogout\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\nAdd a Work block titled \"R263 mobile followup\" after \"R263 mobile anchor\", lasting 30 minutes. Ask me for its start time first; do not choose a time. \nWhat start time should \"R263 mobile followup\" have? \n08:00 \nWhat start time should the new block have after R263 mobile anchor? \nCancel pending request\n›\nclear",
+    "url": "https://dayforge.habitreward.org/schedule/2027-11-02/",
+    "version": "407620494de979f2e577808b944e25d8dbe1de4f",
+    "width": 390
+  },
+  {
+    "label": "mobile-corrected-after-refusal",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today",
+        "title": ""
+      },
+      {
+        "disabled": true,
+        "label": "Undo last change",
+        "text": "Undo",
+        "title": "Undo last change (⌘Z / Ctrl+Z)"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Delete R263 mobile anchor",
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Cancel pending request",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear",
+        "title": "Clear thread"
+      }
+    ],
+    "height": 844,
+    "scrollWidth": 375,
+    "text": "‹\nTuesday, November 2, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 3h earlier\n06:00 – 09:00\n⠇\n09:00–09:30\nR263 mobile anchor\n×\nFree — 13h 30m later\n09:30 – 23:00\nLogout\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\n08:00 \nWhat start time should the new block have after R263 mobile anchor? \n10:00 \nThe assistant's reply couldn't be applied. Try rephrasing. \nCancel pending request\n›\nclear\nThe assistant's reply couldn't be applied. Try rephrasing.",
+    "url": "https://dayforge.habitreward.org/schedule/2027-11-02/",
+    "version": "407620494de979f2e577808b944e25d8dbe1de4f",
+    "width": 390
+  },
+  {
+    "label": "mobile-full-interval-retry-result",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Undo last change",
+        "text": "Undo",
+        "title": "Undo last change (⌘Z / Ctrl+Z)"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Delete R263 mobile anchor",
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Delete R263 mobile followup",
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear",
+        "title": "Clear thread"
+      }
+    ],
+    "height": 844,
+    "scrollWidth": 375,
+    "text": "‹\nTuesday, November 2, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 3h earlier\n06:00 – 09:00\n⠇\n09:00–09:30\nR263 mobile anchor\n×\nFree — 30m\n09:30 – 10:00\n⠇\n10:00–10:30\nR263 mobile followup\n×\nFree — 12h 30m later\n10:30 – 23:00\nLogout\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\n10:00 \nThe assistant's reply couldn't be applied. Try rephrasing. \n10:00 to 10:30 \nAdded R263 mobile followup at 10:00-10:30. \n›\nclear",
+    "url": "https://dayforge.habitreward.org/schedule/2027-11-02/",
+    "version": "407620494de979f2e577808b944e25d8dbe1de4f",
+    "width": 390
+  },
+  {
+    "label": "mobile-320-before-Undo",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Undo last change",
+        "text": "Undo",
+        "title": "Undo last change (⌘Z / Ctrl+Z)"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Delete R263 mobile anchor",
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Delete R263 mobile followup",
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear",
+        "title": "Clear thread"
+      }
+    ],
+    "height": 740,
+    "scrollWidth": 305,
+    "text": "‹\nTuesday, November 2, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 3h earlier\n06:00 – 09:00\n⠇\n09:00–09:30\nR263 mobile anchor\n×\nFree — 30m\n09:30 – 10:00\n⠇\n10:00–10:30\nR263 mobile followup\n×\nFree — 12h 30m later\n10:30 – 23:00\nLogout\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\n10:00 \nThe assistant's reply couldn't be applied. Try rephrasing. \n10:00 to 10:30 \nAdded R263 mobile followup at 10:00-10:30. \n›\nclear",
+    "url": "https://dayforge.habitreward.org/schedule/2027-11-02/",
+    "version": "407620494de979f2e577808b944e25d8dbe1de4f",
+    "width": 320,
+    "bodyScrollWidth": 305,
+    "clientWidth": 305
+  },
+  {
+    "label": "mobile-320-Undo-corrected-reply",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today",
+        "title": ""
+      },
+      {
+        "disabled": true,
+        "label": "Undo last change",
+        "text": "Undo",
+        "title": "Undo last change (⌘Z / Ctrl+Z)"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Delete R263 mobile anchor",
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear",
+        "title": "Clear thread"
+      }
+    ],
+    "height": 740,
+    "scrollWidth": 305,
+    "text": "‹\nTuesday, November 2, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 3h earlier\n06:00 – 09:00\n⠇\n09:00–09:30\nR263 mobile anchor\n×\nFree — 13h 30m later\n09:30 – 23:00\nLogout\nUndone: Added R263 mobile followup at 10:00-10:30.\n×\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\n10:00 \nThe assistant's reply couldn't be applied. Try rephrasing. \n10:00 to 10:30 \nAdded R263 mobile followup at 10:00-10:30. \n›\nclear",
+    "url": "https://dayforge.habitreward.org/schedule/2027-11-02/",
+    "version": "407620494de979f2e577808b944e25d8dbe1de4f",
+    "width": 320
+  },
+  {
+    "label": "mobile-final-empty",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Undo last change",
+        "text": "Undo",
+        "title": "Undo last change (⌘Z / Ctrl+Z)"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear",
+        "title": "Clear thread"
+      }
+    ],
+    "height": 740,
+    "scrollWidth": 305,
+    "text": "‹\nTuesday, November 2, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 17h\n06:00 – 23:00\nLogout\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\n10:00 \nThe assistant's reply couldn't be applied. Try rephrasing. \n10:00 to 10:30 \nAdded R263 mobile followup at 10:00-10:30. \n›\nclear",
+    "url": "https://dayforge.habitreward.org/schedule/2027-11-02/",
+    "version": "407620494de979f2e577808b944e25d8dbe1de4f",
+    "width": 320
+  },
+  {
+    "label": "mobile-320-Logout-hit-test",
+    "clientWidth": 305,
+    "height": 740,
+    "hit": true,
+    "scrollWidth": 305,
+    "width": 320,
+    "x": 256.3125,
+    "y": 372
+  },
+  {
+    "label": "mobile-320-logged-out",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Sign in",
+        "title": ""
+      }
+    ],
+    "height": 740,
+    "scrollWidth": 320,
+    "text": "Day Forge\n\nSign in to your schedule\n\nUsername\nPassword\nSign in\n\nPrivacy Policy·Terms of Service",
+    "url": "https://dayforge.habitreward.org/accounts/login/",
+    "version": "407620494de979f2e577808b944e25d8dbe1de4f",
+    "width": 320
+  },
+  {
+    "label": "mobile-320-protected-history",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Sign in",
+        "title": ""
+      }
+    ],
+    "height": 740,
+    "scrollWidth": 320,
+    "text": "Day Forge\n\nSign in to your schedule\n\nUsername\nPassword\nSign in\n\nPrivacy Policy·Terms of Service",
+    "url": "https://dayforge.habitreward.org/accounts/login/?next=/schedule/2027-11-02/",
+    "version": "407620494de979f2e577808b944e25d8dbe1de4f",
+    "width": 320
+  },
+  {
+    "label": "candidate-desktop-baseline",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today",
+        "title": ""
+      },
+      {
+        "disabled": true,
+        "label": "Undo last change",
+        "text": "Undo",
+        "title": "Undo last change (⌘Z / Ctrl+Z)"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Delete Gym",
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Delete Focus",
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Collapse AI chat panel",
+        "text": "›",
+        "title": ""
+      }
+    ],
+    "height": 900,
+    "scrollWidth": 1440,
+    "text": "‹\nWednesday, September 1, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 3h earlier\n06:00 – 09:00\n⠇\n09:00–09:30\nGym\n×\nFree — 30m\n09:30 – 10:00\n⠇\n10:00 – 11:00\n1h\n×\nFocus\nFree — 12h later\n11:00 – 23:00\nLogout\nAI Chat\n›\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\n›",
+    "url": "http://127.0.0.1:8012/schedule/2027-09-01/",
+    "version": "build:614860e4dd15890f33b4",
+    "width": 1440
+  },
+  {
+    "label": "candidate-desktop-quoted-title-asked",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today",
+        "title": ""
+      },
+      {
+        "disabled": true,
+        "label": "Undo last change",
+        "text": "Undo",
+        "title": "Undo last change (⌘Z / Ctrl+Z)"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Delete Gym",
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Delete Focus",
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Collapse AI chat panel",
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Cancel pending request",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear",
+        "title": "Clear thread"
+      }
+    ],
+    "height": 900,
+    "scrollWidth": 1440,
+    "text": "‹\nWednesday, September 1, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 3h earlier\n06:00 – 09:00\n⠇\n09:00–09:30\nGym\n×\nFree — 30m\n09:30 – 10:00\n⠇\n10:00 – 11:00\n1h\n×\nFocus\nFree — 12h later\n11:00 – 23:00\nLogout\nAI Chat\n›\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\nAdd a Work block titled \"R263 desktop after anchor\" after \"Gym\", lasting 30 minutes. Ask me for its start time first; do not choose a time. \nWhat start time should it have? \nCancel pending request\n›\nclear",
+    "url": "http://127.0.0.1:8012/schedule/2027-09-01/",
+    "version": "build:614860e4dd15890f33b4",
+    "width": 1440
+  },
+  {
+    "label": "candidate-desktop-refusal-retained",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today",
+        "title": ""
+      },
+      {
+        "disabled": true,
+        "label": "Undo last change",
+        "text": "Undo",
+        "title": "Undo last change (⌘Z / Ctrl+Z)"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Delete Gym",
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Delete Focus",
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Collapse AI chat panel",
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Cancel pending request",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear",
+        "title": "Clear thread"
+      }
+    ],
+    "height": 900,
+    "scrollWidth": 1440,
+    "text": "‹\nWednesday, September 1, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 3h earlier\n06:00 – 09:00\n⠇\n09:00–09:30\nGym\n×\nFree — 30m\n09:30 – 10:00\n⠇\n10:00 – 11:00\n1h\n×\nFocus\nFree — 12h later\n11:00 – 23:00\nLogout\nAI Chat\n›\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\nAdd a Work block titled \"R263 desktop after anchor\" after \"Gym\", lasting 30 minutes. Ask me for its start time first; do not choose a time. \nWhat start time should it have? \n08:00 \nWhat start time should the new block have after Gym? \nCancel pending request\n›\nclear",
+    "url": "http://127.0.0.1:8012/schedule/2027-09-01/",
+    "version": "build:614860e4dd15890f33b4",
+    "width": 1440
+  },
+  {
+    "label": "candidate-desktop-corrected-applied",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Undo last change",
+        "text": "Undo",
+        "title": "Undo last change (⌘Z / Ctrl+Z)"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Delete Gym",
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Delete Focus",
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Delete R263 desktop after anchor",
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Collapse AI chat panel",
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear",
+        "title": "Clear thread"
+      }
+    ],
+    "height": 900,
+    "scrollWidth": 1425,
+    "text": "‹\nWednesday, September 1, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 3h earlier\n06:00 – 09:00\n⠇\n09:00–09:30\nGym\n×\nFree — 30m\n09:30 – 10:00\n⠇\n10:00 – 11:00\n1h\n×\nFocus\nFree — 3h\n11:00 – 14:00\n⠇\n14:00–14:30\nR263 desktop after anchor\n×\nFree — 8h 30m later\n14:30 – 23:00\nLogout\nAI Chat\n›\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\nAdd a Work block titled \"R263 desktop after anchor\" after \"Gym\", lasting 30 minutes. Ask me for its start time first; do not choose a time. \nWhat start time should it have? \n08:00 \nWhat start time should the new block have after Gym? \n14:00 \nAdding the block at 14:00-14:30. \n›\nclear",
+    "url": "http://127.0.0.1:8012/schedule/2027-09-01/",
+    "version": "build:614860e4dd15890f33b4",
+    "width": 1440
+  },
+  {
+    "label": "candidate-desktop-Undo",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today",
+        "title": ""
+      },
+      {
+        "disabled": true,
+        "label": "Undo last change",
+        "text": "Undo",
+        "title": "Undo last change (⌘Z / Ctrl+Z)"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Delete Gym",
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Delete Focus",
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Collapse AI chat panel",
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear",
+        "title": "Clear thread"
+      }
+    ],
+    "height": 900,
+    "scrollWidth": 1440,
+    "text": "‹\nWednesday, September 1, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 3h earlier\n06:00 – 09:00\n⠇\n09:00–09:30\nGym\n×\nFree — 30m\n09:30 – 10:00\n⠇\n10:00 – 11:00\n1h\n×\nFocus\nFree — 12h later\n11:00 – 23:00\nLogout\nUndone: Adding the block at 14:00-14:30.\n×\nAI Chat\n›\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\nAdd a Work block titled \"R263 desktop after anchor\" after \"Gym\", lasting 30 minutes. Ask me for its start time first; do not choose a time. \nWhat start time should it have? \n08:00 \nWhat start time should the new block have after Gym? \n14:00 \nAdding the block at 14:00-14:30. \n›\nclear",
+    "url": "http://127.0.0.1:8012/schedule/2027-09-01/",
+    "version": "build:614860e4dd15890f33b4",
+    "width": 1440
+  },
+  {
+    "label": "candidate-mobile-baseline",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today",
+        "title": ""
+      },
+      {
+        "disabled": true,
+        "label": "Undo last change",
+        "text": "Undo",
+        "title": "Undo last change (⌘Z / Ctrl+Z)"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Delete Gym",
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Delete Focus",
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout",
+        "title": ""
+      }
+    ],
+    "height": 740,
+    "scrollWidth": 305,
+    "text": "‹\nThursday, September 2, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 3h earlier\n06:00 – 09:00\n⠇\n09:00–09:30\nGym\n×\nFree — 30m\n09:30 – 10:00\n⠇\n10:00 – 11:00\n1h\n×\nFocus\nFree — 12h later\n11:00 – 23:00\nLogout\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\n›",
+    "url": "http://127.0.0.1:8012/schedule/2027-09-02/",
+    "version": "build:614860e4dd15890f33b4",
+    "width": 320
+  },
+  {
+    "label": "candidate-mobile-quoted-title-asked",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today",
+        "title": ""
+      },
+      {
+        "disabled": true,
+        "label": "Undo last change",
+        "text": "Undo",
+        "title": "Undo last change (⌘Z / Ctrl+Z)"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Delete Gym",
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Delete Focus",
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Cancel pending request",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear",
+        "title": "Clear thread"
+      }
+    ],
+    "height": 740,
+    "scrollWidth": 305,
+    "text": "‹\nThursday, September 2, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 3h earlier\n06:00 – 09:00\n⠇\n09:00–09:30\nGym\n×\nFree — 30m\n09:30 – 10:00\n⠇\n10:00 – 11:00\n1h\n×\nFocus\nFree — 12h later\n11:00 – 23:00\nLogout\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\nAdd a Work block titled \"R263 mobile after anchor\" after \"Gym\", lasting 30 minutes. Ask me for its start time first; do not choose a time. \nWhat start time should the new block have? \nCancel pending request\n›\nclear",
+    "url": "http://127.0.0.1:8012/schedule/2027-09-02/",
+    "version": "build:614860e4dd15890f33b4",
+    "width": 320
+  },
+  {
+    "label": "candidate-mobile-refusal-retained",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today",
+        "title": ""
+      },
+      {
+        "disabled": true,
+        "label": "Undo last change",
+        "text": "Undo",
+        "title": "Undo last change (⌘Z / Ctrl+Z)"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Delete Gym",
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Delete Focus",
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Cancel pending request",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear",
+        "title": "Clear thread"
+      }
+    ],
+    "height": 740,
+    "scrollWidth": 305,
+    "text": "‹\nThursday, September 2, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 3h earlier\n06:00 – 09:00\n⠇\n09:00–09:30\nGym\n×\nFree — 30m\n09:30 – 10:00\n⠇\n10:00 – 11:00\n1h\n×\nFocus\nFree — 12h later\n11:00 – 23:00\nLogout\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\nAdd a Work block titled \"R263 mobile after anchor\" after \"Gym\", lasting 30 minutes. Ask me for its start time first; do not choose a time. \nWhat start time should the new block have? \n08:00 \nWhat start time should the new block have after Gym? \nCancel pending request\n›\nclear",
+    "url": "http://127.0.0.1:8012/schedule/2027-09-02/",
+    "version": "build:614860e4dd15890f33b4",
+    "width": 320
+  },
+  {
+    "label": "candidate-mobile-corrected-applied",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Undo last change",
+        "text": "Undo",
+        "title": "Undo last change (⌘Z / Ctrl+Z)"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Delete Gym",
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Delete Focus",
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Delete R263 mobile after anchor",
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear",
+        "title": "Clear thread"
+      }
+    ],
+    "height": 740,
+    "scrollWidth": 305,
+    "text": "‹\nThursday, September 2, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 3h earlier\n06:00 – 09:00\n⠇\n09:00–09:30\nGym\n×\nFree — 30m\n09:30 – 10:00\n⠇\n10:00 – 11:00\n1h\n×\nFocus\nFree — 4h\n11:00 – 15:00\n⠇\n15:00–15:30\nR263 mobile after anchor\n×\nFree — 7h 30m later\n15:30 – 23:00\nLogout\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\n08:00 \nWhat start time should the new block have after Gym? \n15:00 \nAdding the requested block at 15:00. \n›\nclear",
+    "url": "http://127.0.0.1:8012/schedule/2027-09-02/",
+    "version": "build:614860e4dd15890f33b4",
+    "width": 320
+  },
+  {
+    "label": "candidate-mobile-undo-baseline",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "‹",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Today",
+        "title": ""
+      },
+      {
+        "disabled": true,
+        "label": "Undo last change",
+        "text": "Undo",
+        "title": "Undo last change (⌘Z / Ctrl+Z)"
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Show indicator",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "›",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "+ Add Block",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Delete Gym",
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": "Delete Focus",
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Logout",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "×",
+        "title": ""
+      },
+      {
+        "disabled": false,
+        "label": null,
+        "text": "clear",
+        "title": "Clear thread"
+      }
+    ],
+    "height": 740,
+    "scrollWidth": 305,
+    "text": "‹\nThursday, September 2, 2027\nToday\nUndo\nShow indicator\n⚙\n›\n+ Add Block\nFree — 3h earlier\n06:00 – 09:00\n⠇\n09:00–09:30\nGym\n×\nFree — 30m\n09:30 – 10:00\n⠇\n10:00 – 11:00\n1h\n×\nFocus\nFree — 12h later\n11:00 – 23:00\nLogout\nUndone: Adding the requested block at 15:00.\n×\nMessages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.\n08:00 \nWhat start time should the new block have after Gym? \n15:00 \nAdding the requested block at 15:00. \n›\nclear",
+    "url": "http://127.0.0.1:8012/schedule/2027-09-02/",
+    "version": "build:614860e4dd15890f33b4",
+    "width": 320
+  },
+  {
+    "label": "candidate-mobile-logout",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Sign in",
+        "title": ""
+      }
+    ],
+    "height": 740,
+    "scrollWidth": 320,
+    "text": "Day Forge\n\nSign in to your schedule\n\nUsername\nPassword\nSign in\n\nPrivacy Policy·Terms of Service",
+    "url": "http://127.0.0.1:8012/accounts/login/",
+    "version": "build:614860e4dd15890f33b4",
+    "width": 320
+  },
+  {
+    "label": "candidate-mobile-protected-history",
+    "buttons": [
+      {
+        "disabled": false,
+        "label": null,
+        "text": "Sign in",
+        "title": ""
+      }
+    ],
+    "height": 740,
+    "scrollWidth": 320,
+    "text": "Day Forge\n\nSign in to your schedule\n\nUsername\nPassword\nSign in\n\nPrivacy Policy·Terms of Service",
+    "url": "http://127.0.0.1:8012/accounts/login/?next=/schedule/2027-09-02/",
+    "version": "build:614860e4dd15890f33b4",
+    "width": 320
+  }
+]

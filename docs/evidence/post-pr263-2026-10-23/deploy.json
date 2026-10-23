@@ -1,0 +1,388 @@
+{
+  "conclusion": "success",
+  "headSha": "407620494de979f2e577808b944e25d8dbe1de4f",
+  "jobs": [
+    {
+      "completedAt": "2026-10-23T08:21:50Z",
+      "conclusion": "success",
+      "databaseId": 120315497924,
+      "name": "test / validate",
+      "startedAt": "2026-10-23T08:20:10Z",
+      "status": "completed",
+      "steps": [
+        {
+          "completedAt": "2026-10-23T08:20:13Z",
+          "conclusion": "success",
+          "name": "Set up job",
+          "number": 1,
+          "startedAt": "2026-10-23T08:20:11Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-23T08:20:15Z",
+          "conclusion": "success",
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "number": 2,
+          "startedAt": "2026-10-23T08:20:13Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-23T08:20:15Z",
+          "conclusion": "success",
+          "name": "Verify deploy SSH host-key pinning invariant",
+          "number": 3,
+          "startedAt": "2026-10-23T08:20:15Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-23T08:20:18Z",
+          "conclusion": "success",
+          "name": "Install uv",
+          "number": 4,
+          "startedAt": "2026-10-23T08:20:15Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-23T08:20:18Z",
+          "conclusion": "success",
+          "name": "Set up Python",
+          "number": 5,
+          "startedAt": "2026-10-23T08:20:18Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-23T08:20:19Z",
+          "conclusion": "success",
+          "name": "Install backend deps",
+          "number": 6,
+          "startedAt": "2026-10-23T08:20:18Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-23T08:20:19Z",
+          "conclusion": "success",
+          "name": "Run backend lint",
+          "number": 7,
+          "startedAt": "2026-10-23T08:20:19Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-23T08:20:57Z",
+          "conclusion": "success",
+          "name": "Run backend tests",
+          "number": 8,
+          "startedAt": "2026-10-23T08:20:19Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-23T08:20:57Z",
+          "conclusion": "success",
+          "name": "Test deployment image retention",
+          "number": 9,
+          "startedAt": "2026-10-23T08:20:57Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-23T08:20:59Z",
+          "conclusion": "success",
+          "name": "Set up Node",
+          "number": 10,
+          "startedAt": "2026-10-23T08:20:57Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-23T08:21:01Z",
+          "conclusion": "success",
+          "name": "Install frontend deps",
+          "number": 11,
+          "startedAt": "2026-10-23T08:20:59Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-23T08:21:01Z",
+          "conclusion": "success",
+          "name": "Frontend prod audit",
+          "number": 12,
+          "startedAt": "2026-10-23T08:21:01Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-23T08:21:42Z",
+          "conclusion": "success",
+          "name": "Frontend type-check + tests",
+          "number": 13,
+          "startedAt": "2026-10-23T08:21:01Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-23T08:21:47Z",
+          "conclusion": "success",
+          "name": "Frontend production build",
+          "number": 14,
+          "startedAt": "2026-10-23T08:21:42Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-23T08:21:47Z",
+          "conclusion": "success",
+          "name": "Post Set up Node",
+          "number": 26,
+          "startedAt": "2026-10-23T08:21:47Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-23T08:21:48Z",
+          "conclusion": "success",
+          "name": "Post Install uv",
+          "number": 27,
+          "startedAt": "2026-10-23T08:21:47Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-23T08:21:48Z",
+          "conclusion": "success",
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "number": 28,
+          "startedAt": "2026-10-23T08:21:48Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-23T08:21:48Z",
+          "conclusion": "success",
+          "name": "Complete job",
+          "number": 29,
+          "startedAt": "2026-10-23T08:21:48Z",
+          "status": "completed"
+        }
+      ],
+      "url": "https://github.com/erzhan12/day-forge/actions/runs/39923902893/job/120315497924"
+    },
+    {
+      "completedAt": "2026-10-23T08:22:43Z",
+      "conclusion": "success",
+      "databaseId": 120316154538,
+      "name": "build-and-push",
+      "startedAt": "2026-10-23T08:21:52Z",
+      "status": "completed",
+      "steps": [
+        {
+          "completedAt": "2026-10-23T08:21:55Z",
+          "conclusion": "success",
+          "name": "Set up job",
+          "number": 1,
+          "startedAt": "2026-10-23T08:21:53Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-23T08:21:56Z",
+          "conclusion": "success",
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "number": 2,
+          "startedAt": "2026-10-23T08:21:55Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-23T08:21:57Z",
+          "conclusion": "success",
+          "name": "Log in to GHCR",
+          "number": 3,
+          "startedAt": "2026-10-23T08:21:56Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-23T08:22:01Z",
+          "conclusion": "success",
+          "name": "Set up Buildx",
+          "number": 4,
+          "startedAt": "2026-10-23T08:21:57Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-23T08:22:01Z",
+          "conclusion": "success",
+          "name": "Compute tags",
+          "number": 5,
+          "startedAt": "2026-10-23T08:22:01Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-23T08:22:35Z",
+          "conclusion": "success",
+          "name": "Build and push",
+          "number": 6,
+          "startedAt": "2026-10-23T08:22:01Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-23T08:22:37Z",
+          "conclusion": "success",
+          "name": "Post Build and push",
+          "number": 9,
+          "startedAt": "2026-10-23T08:22:35Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-23T08:22:41Z",
+          "conclusion": "success",
+          "name": "Post Set up Buildx",
+          "number": 10,
+          "startedAt": "2026-10-23T08:22:37Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-23T08:22:41Z",
+          "conclusion": "success",
+          "name": "Post Log in to GHCR",
+          "number": 11,
+          "startedAt": "2026-10-23T08:22:41Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-23T08:22:41Z",
+          "conclusion": "success",
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "number": 12,
+          "startedAt": "2026-10-23T08:22:41Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-23T08:22:41Z",
+          "conclusion": "success",
+          "name": "Complete job",
+          "number": 13,
+          "startedAt": "2026-10-23T08:22:41Z",
+          "status": "completed"
+        }
+      ],
+      "url": "https://github.com/erzhan12/day-forge/actions/runs/39923902893/job/120316154538"
+    },
+    {
+      "completedAt": "2026-10-23T08:23:47Z",
+      "conclusion": "success",
+      "databaseId": 120316490615,
+      "name": "deploy",
+      "startedAt": "2026-10-23T08:22:45Z",
+      "status": "completed",
+      "steps": [
+        {
+          "completedAt": "2026-10-23T08:22:46Z",
+          "conclusion": "success",
+          "name": "Set up job",
+          "number": 1,
+          "startedAt": "2026-10-23T08:22:45Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-23T08:22:47Z",
+          "conclusion": "success",
+          "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "number": 2,
+          "startedAt": "2026-10-23T08:22:46Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-23T08:22:47Z",
+          "conclusion": "success",
+          "name": "Install SSH key",
+          "number": 3,
+          "startedAt": "2026-10-23T08:22:47Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-23T08:22:47Z",
+          "conclusion": "success",
+          "name": "Pin SSH host key",
+          "number": 4,
+          "startedAt": "2026-10-23T08:22:47Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-23T08:23:06Z",
+          "conclusion": "success",
+          "name": "Copy ***ment files to droplet",
+          "number": 5,
+          "startedAt": "2026-10-23T08:22:47Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-23T08:23:45Z",
+          "conclusion": "success",
+          "name": "Write .env, pull image, restart stack",
+          "number": 6,
+          "startedAt": "2026-10-23T08:23:06Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-23T08:23:45Z",
+          "conclusion": "success",
+          "name": "Post Install SSH key",
+          "number": 11,
+          "startedAt": "2026-10-23T08:23:45Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-23T08:23:46Z",
+          "conclusion": "success",
+          "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "number": 12,
+          "startedAt": "2026-10-23T08:23:45Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-23T08:23:46Z",
+          "conclusion": "success",
+          "name": "Complete job",
+          "number": 13,
+          "startedAt": "2026-10-23T08:23:46Z",
+          "status": "completed"
+        }
+      ],
+      "url": "https://github.com/erzhan12/day-forge/actions/runs/39923902893/job/120316490615"
+    },
+    {
+      "completedAt": "2026-10-23T08:24:24Z",
+      "conclusion": "success",
+      "databaseId": 120316905668,
+      "name": "health-check",
+      "startedAt": "2026-10-23T08:23:50Z",
+      "status": "completed",
+      "steps": [
+        {
+          "completedAt": "2026-10-23T08:23:51Z",
+          "conclusion": "success",
+          "name": "Set up job",
+          "number": 1,
+          "startedAt": "2026-10-23T08:23:51Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-23T08:24:21Z",
+          "conclusion": "success",
+          "name": "Wait for stabilization",
+          "number": 2,
+          "startedAt": "2026-10-23T08:23:51Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-23T08:24:21Z",
+          "conclusion": "success",
+          "name": "Probe HTTPS endpoint",
+          "number": 3,
+          "startedAt": "2026-10-23T08:24:21Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-23T08:24:21Z",
+          "conclusion": "success",
+          "name": "Complete job",
+          "number": 4,
+          "startedAt": "2026-10-23T08:24:21Z",
+          "status": "completed"
+        }
+      ],
+      "url": "https://github.com/erzhan12/day-forge/actions/runs/39923902893/job/120316905668"
+    }
+  ],
+  "status": "completed",
+  "url": "https://github.com/erzhan12/day-forge/actions/runs/39923902893"
+}

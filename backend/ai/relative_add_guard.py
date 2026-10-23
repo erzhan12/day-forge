@@ -27,16 +27,21 @@ _CLOCK_REF_RE = re.compile(
 
 
 def _relations_after_prefix(
-    text: str, prefix_end: int, *, allow_leading: bool = False
+    text: str, prefix_end: int, *, allow_leading: bool = False,
+    quoted_titles: re.Pattern[str] | None = None,
 ) -> list[re.Match[str]]:
+    title_spans = list(quoted_titles.finditer(text)) if quoted_titles else []
     return [
         match
         for match in _RELATION_RE.finditer(text, prefix_end)
-        if allow_leading or text[prefix_end : match.start()].strip()
+        if (allow_leading or text[prefix_end : match.start()].strip())
+        and not any(span.start() <= match.start() < span.end() for span in title_spans)
     ]
 
 
-def _active_request_index(messages: list[dict]) -> int | None:
+def _active_request_index(
+    messages: list[dict], quoted_titles: re.Pattern[str] | None = None
+) -> int | None:
     """Find a relative add in the latest turn or its pending ask chain."""
     user_index = len(messages) - 1
     while user_index >= 0:
@@ -52,7 +57,9 @@ def _active_request_index(messages: list[dict]) -> int | None:
                 or messages[user_index - 1].get("is_error") is True
             )
         )
-        if _relations_after_prefix(text, prefix_end, allow_leading=leading_answer):
+        if _relations_after_prefix(
+            text, prefix_end, allow_leading=leading_answer, quoted_titles=quoted_titles
+        ):
             return user_index
         if command is not None:
             # A fresh add command supersedes a pending request.
@@ -106,14 +113,26 @@ def relative_add_guard_ask(
     """
     if not any(action.get("type") == "add" for action in actions):
         return None
-    request_index = _active_request_index(messages)
+    # Only literal quoted block or proposed titles are opaque, not a whole command.
+    titles = {block.title for block in blocks} | {
+        action["title"] for action in actions if action.get("title")
+    }
+    quoted_names = [
+        re.escape(opening + title + closing)
+        for title in titles if _RELATION_RE.search(title)
+        for opening, closing in [('"', '"'), ("'", "'"), ("“", "”"), ("«", "»")]
+    ]
+    quoted_titles = re.compile("|".join(quoted_names), re.IGNORECASE) if quoted_names else None
+    request_index = _active_request_index(messages, quoted_titles)
     if request_index is None:
         return None
     request = messages[request_index]["content"]
     command = _ADD_COMMAND_RE.search(request)
     prefix_end = command.end() if command is not None else 0
     leading_answer = command is None and request_index == len(messages) - 1 and prefix_end == 0
-    relations = _relations_after_prefix(request, prefix_end, allow_leading=leading_answer)
+    relations = _relations_after_prefix(
+        request, prefix_end, allow_leading=leading_answer, quoted_titles=quoted_titles
+    )
     if len(relations) != 1:
         return "What start time should the new block have?"
 

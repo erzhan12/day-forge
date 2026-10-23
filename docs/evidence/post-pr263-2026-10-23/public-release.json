@@ -1,0 +1,21 @@
+{
+  "version": "407620494de979f2e577808b944e25d8dbe1de4f",
+  "assets": [
+    {
+      "path": "/static/assets/app-o0LiMoO7.css",
+      "status": 200,
+      "sha256": "b9146db946f3a781b170d9abc48c6b119e48930252f44157fad13779412ec7a0",
+      "cache_control": "max-age=315360000, public, immutable"
+    },
+    {
+      "path": "/static/assets/app-BVEIg2pc.js",
+      "status": 200,
+      "sha256": "f36f0997a144b08c144757008554052be1498923616f0b5216375cf33d97c8bd",
+      "cache_control": "max-age=315360000, public, immutable"
+    }
+  ],
+  "final_public_login_recheck": {
+    "status": 200,
+    "version": "407620494de979f2e577808b944e25d8dbe1de4f"
+  }
+}

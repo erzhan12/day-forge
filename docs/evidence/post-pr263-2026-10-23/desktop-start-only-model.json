@@ -1,0 +1,5 @@
+{
+  "schedule_id": 131,
+  "interaction_id": 915,
+  "rendered": "HISTORY\nOutcomes json:\n-\nSuccess:\nKind:\nChat\nSchedule:\n2027-11-01 (active)\nUser command:\nAdd a Work block titled \"R263 desktop pending\" lasting 30 minutes. Ask me for its start time before adding it; do not choose a time.\nAi response:\n{\"transcript_sha256\": \"1c89d9edf7d593f10be153169b409c1fb8e807c8612d652cc53ae8ff9de85f4a\", \"turn_count\": 1, \"raw\": \"{\\n \\\"actions\\\": [],\\n \\\"explanation\\\": \\\"I need the start time before adding the block.\\\",\\n \\\"ask\\\": \\\"What time should it start?\\\",\\n \\\"intent_decision\\\": \\\"new\\\",\\n \\\"pending_actions\\\": [\\n {\\n \\\"type\\\": \\\"add\\\",\\n \\\"task_id\\\": null,\\n \\\"target_ids\\\": [],\\n \\\"known_fields\\\": {\\n \\\"title\\\": \\\"R263 desktop pending\\\",\\n \\\"category\\\": \\\"work\\\",\\n \\\"duration_minutes\\\": 30\\n },\\n \\\"missing_fields\\\": [\\\"start_time\\\"]\\n }\\n ]\\n}\"}\nActions json:\n-\nCreated at:\nOct. 23, 2026, 8:26 a.m.\nClose"
+}

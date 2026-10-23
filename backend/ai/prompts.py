@@ -85,8 +85,9 @@ Known fields are title, category, start_time, end_time, duration_minutes,
 duration_delta_minutes, placement_direction. Missing fields may also include
 task_id (only for an unselected target) or confirmation. Use canonical update
 for move/resize. Existing targets must come from
-Existing blocks; ambiguous targets list ONLY the possible block IDs. An add
-has task_id=null and target_ids=[]. Known and missing fields must not overlap.
+Existing blocks; ambiguous targets list ONLY the possible block IDs. A pending
+add proposal has task_id=null and target_ids=[]. Executable add actions omit
+both keys. Known and missing fields must not overlap.
 Missing fields describe only what the user must still choose. For example an
 ambiguous time for Gym can retain title/category and mark start_time/end_time
 missing. Keep ALL unresolved siblings, including ones not in this turn's first

@@ -1,0 +1,601 @@
+{
+  "version": "407620494de979f2e577808b944e25d8dbe1de4f",
+  "date": "2027-11-03",
+  "success": false,
+  "events": [
+    {
+      "stage": "Add a Work block titled \"R263 HTTP pending\" lasting 30 minutes. Ask me for its start time before adding it; do not choose a time.",
+      "status": 200,
+      "response_sha256": "c5050be83da2b4be8e04ac277b6a5f5e7d708dc19c2dd135d640b1e8dda6af36",
+      "response": {
+        "schedule": {
+          "id": 133,
+          "date": "2027-11-03",
+          "status": "draft",
+          "revision": 0
+        },
+        "blocks": null,
+        "revision": 0,
+        "explanation": "You want to add a 30-minute Work block titled 'R263 HTTP pending' but need the start time first.",
+        "ask": "What start time should 'R263 HTTP pending' use?",
+        "applied": false,
+        "partial": false,
+        "outcomes": [],
+        "pending_intent": {
+          "id": "f4f7116e-3fe7-4c52-9318-6a5fa889c6be",
+          "version": 1,
+          "expires_at": "2026-10-23T08:59:37.052057+00:00",
+          "ask": "What start time should 'R263 HTTP pending' use?"
+        },
+        "request_id": "6b54c9f8-3489-403a-8aee-23245e80b06b",
+        "request_completed": true
+      },
+      "fresh_state": {
+        "revision": 0,
+        "date": "2027-11-03",
+        "blocks": []
+      }
+    },
+    {
+      "stage": "ask exact UUID replay",
+      "status": 200,
+      "response_sha256": "c5050be83da2b4be8e04ac277b6a5f5e7d708dc19c2dd135d640b1e8dda6af36",
+      "response": {
+        "schedule": {
+          "id": 133,
+          "date": "2027-11-03",
+          "status": "draft",
+          "revision": 0
+        },
+        "blocks": null,
+        "revision": 0,
+        "explanation": "You want to add a 30-minute Work block titled 'R263 HTTP pending' but need the start time first.",
+        "ask": "What start time should 'R263 HTTP pending' use?",
+        "applied": false,
+        "partial": false,
+        "outcomes": [],
+        "pending_intent": {
+          "id": "f4f7116e-3fe7-4c52-9318-6a5fa889c6be",
+          "version": 1,
+          "expires_at": "2026-10-23T08:59:37.052057+00:00",
+          "ask": "What start time should 'R263 HTTP pending' use?"
+        },
+        "request_id": "6b54c9f8-3489-403a-8aee-23245e80b06b",
+        "request_completed": true
+      },
+      "fresh_state": {
+        "revision": 0,
+        "date": "2027-11-03",
+        "blocks": []
+      }
+    },
+    {
+      "stage": "14:00",
+      "status": 200,
+      "response_sha256": "af568773b7731d223fb8031f6e00a96e73062c96205a66eade2800f52f2500c4",
+      "response": {
+        "schedule": {
+          "id": 133,
+          "date": "2027-11-03",
+          "status": "active",
+          "revision": 1
+        },
+        "blocks": [
+          {
+            "id": 1144,
+            "title": "R263 HTTP pending",
+            "start_time": "14:00",
+            "end_time": "14:30",
+            "category": "work",
+            "is_completed": false,
+            "sort_order": 0
+          }
+        ],
+        "revision": 1,
+        "explanation": "Added R263 HTTP pending from 14:00 to 14:30.",
+        "ask": null,
+        "applied": true,
+        "partial": false,
+        "outcomes": [
+          {
+            "action_index": 0,
+            "task_id": null,
+            "status": "applied",
+            "applied_fields": [
+              "title",
+              "category",
+              "start_time",
+              "end_time"
+            ],
+            "skipped_fields": [],
+            "reason_code": null,
+            "conflicting_task_ids": [],
+            "attempted_direction": null,
+            "suggestion": null
+          }
+        ],
+        "pending_intent": null,
+        "request_id": "e48cc949-b9e3-47ac-aa94-b8fc5a46487d",
+        "request_completed": true
+      },
+      "fresh_state": {
+        "revision": 1,
+        "date": "2027-11-03",
+        "blocks": [
+          {
+            "id": 1144,
+            "title": "R263 HTTP pending",
+            "category": "work",
+            "start_time": "14:00",
+            "end_time": "14:30",
+            "is_completed": false
+          }
+        ]
+      }
+    },
+    {
+      "stage": "answer exact UUID replay",
+      "status": 200,
+      "response_sha256": "af568773b7731d223fb8031f6e00a96e73062c96205a66eade2800f52f2500c4",
+      "response": {
+        "schedule": {
+          "id": 133,
+          "date": "2027-11-03",
+          "status": "active",
+          "revision": 1
+        },
+        "blocks": [
+          {
+            "id": 1144,
+            "title": "R263 HTTP pending",
+            "start_time": "14:00",
+            "end_time": "14:30",
+            "category": "work",
+            "is_completed": false,
+            "sort_order": 0
+          }
+        ],
+        "revision": 1,
+        "explanation": "Added R263 HTTP pending from 14:00 to 14:30.",
+        "ask": null,
+        "applied": true,
+        "partial": false,
+        "outcomes": [
+          {
+            "action_index": 0,
+            "task_id": null,
+            "status": "applied",
+            "applied_fields": [
+              "title",
+              "category",
+              "start_time",
+              "end_time"
+            ],
+            "skipped_fields": [],
+            "reason_code": null,
+            "conflicting_task_ids": [],
+            "attempted_direction": null,
+            "suggestion": null
+          }
+        ],
+        "pending_intent": null,
+        "request_id": "e48cc949-b9e3-47ac-aa94-b8fc5a46487d",
+        "request_completed": true
+      },
+      "fresh_state": {
+        "revision": 1,
+        "date": "2027-11-03",
+        "blocks": [
+          {
+            "id": 1144,
+            "title": "R263 HTTP pending",
+            "category": "work",
+            "start_time": "14:00",
+            "end_time": "14:30",
+            "is_completed": false
+          }
+        ]
+      }
+    },
+    {
+      "stage": "changed body conflict",
+      "status": 409,
+      "response_sha256": "4da42d6426d1f4da5bba75c553746e1bfa54107c2a7eafc5b5641e2bc00b7eaf",
+      "response": {
+        "code": "request_id_conflict",
+        "errors": {
+          "detail": "request_id was already used for a different request."
+        }
+      },
+      "fresh_state": {
+        "revision": 1,
+        "date": "2027-11-03",
+        "blocks": [
+          {
+            "id": 1144,
+            "title": "R263 HTTP pending",
+            "category": "work",
+            "start_time": "14:00",
+            "end_time": "14:30",
+            "is_completed": false
+          }
+        ]
+      }
+    },
+    {
+      "stage": "restore empty baseline",
+      "status": 200,
+      "response_sha256": "2d0c96ade451ecb0816731400f5f663757612c7cf7358e2efea9cb4c72c7d679",
+      "response": {
+        "schedule": {
+          "id": 133,
+          "date": "2027-11-03",
+          "status": "active",
+          "revision": 2
+        },
+        "blocks": [],
+        "revision": 2
+      },
+      "fresh_state": {
+        "revision": 2,
+        "date": "2027-11-03",
+        "blocks": []
+      }
+    },
+    {
+      "stage": "completed answer replay after Undo",
+      "status": 200,
+      "response_sha256": "af568773b7731d223fb8031f6e00a96e73062c96205a66eade2800f52f2500c4",
+      "response": {
+        "schedule": {
+          "id": 133,
+          "date": "2027-11-03",
+          "status": "active",
+          "revision": 1
+        },
+        "blocks": [
+          {
+            "id": 1144,
+            "title": "R263 HTTP pending",
+            "start_time": "14:00",
+            "end_time": "14:30",
+            "category": "work",
+            "is_completed": false,
+            "sort_order": 0
+          }
+        ],
+        "revision": 1,
+        "explanation": "Added R263 HTTP pending from 14:00 to 14:30.",
+        "ask": null,
+        "applied": true,
+        "partial": false,
+        "outcomes": [
+          {
+            "action_index": 0,
+            "task_id": null,
+            "status": "applied",
+            "applied_fields": [
+              "title",
+              "category",
+              "start_time",
+              "end_time"
+            ],
+            "skipped_fields": [],
+            "reason_code": null,
+            "conflicting_task_ids": [],
+            "attempted_direction": null,
+            "suggestion": null
+          }
+        ],
+        "pending_intent": null,
+        "request_id": "e48cc949-b9e3-47ac-aa94-b8fc5a46487d",
+        "request_completed": true
+      },
+      "fresh_state": {
+        "revision": 2,
+        "date": "2027-11-03",
+        "blocks": []
+      }
+    },
+    {
+      "stage": "14:00",
+      "status": 409,
+      "response_sha256": "29ed83c1d3a180f72797d3798fd421ee190e412ff22bbdb3fec6b43fdffed859",
+      "response": {
+        "code": "pending_intent_stale",
+        "pending_intent": null,
+        "errors": {
+          "detail": "The pending request changed or expired. Please restate it."
+        },
+        "request_id": "686ddba1-0bc9-4902-b924-b000ff64a1a8",
+        "request_completed": true
+      },
+      "fresh_state": {
+        "revision": 2,
+        "date": "2027-11-03",
+        "blocks": []
+      }
+    },
+    {
+      "stage": "Add a Work block titled \"R263 HTTP cancel\". Ask me for its start and end time first; do not add anything yet.",
+      "status": 200,
+      "response_sha256": "6eb0d5710263e912a5be33bd459deb524e7cb3f0ac9318e967cad00d4aff59bb",
+      "response": {
+        "schedule": {
+          "id": 133,
+          "date": "2027-11-03",
+          "status": "active",
+          "revision": 2
+        },
+        "blocks": null,
+        "revision": 2,
+        "explanation": "I will add a Work block titled \"R263 HTTP cancel\" once you provide the times.",
+        "ask": "What start and end times?",
+        "applied": false,
+        "partial": false,
+        "outcomes": [],
+        "pending_intent": {
+          "id": "02c34371-b93d-4b62-b930-8f034c390ea8",
+          "version": 1,
+          "expires_at": "2026-10-23T09:00:09.359990+00:00",
+          "ask": "What start and end times?"
+        },
+        "request_id": "d43a3970-5609-4b4c-a672-cffc73554cd5",
+        "request_completed": true
+      },
+      "fresh_state": {
+        "revision": 2,
+        "date": "2027-11-03",
+        "blocks": []
+      }
+    },
+    {
+      "stage": "Cancel pending request.",
+      "status": 200,
+      "response_sha256": "2d535282bbf55eab80adab9a1a5ee3bb3b94707084967a649f468dcccf6c7214",
+      "response": {
+        "schedule": {
+          "id": 133,
+          "date": "2027-11-03",
+          "status": "active",
+          "revision": 2
+        },
+        "blocks": null,
+        "revision": 2,
+        "explanation": "Pending request cancelled.",
+        "ask": null,
+        "applied": false,
+        "partial": false,
+        "outcomes": [],
+        "pending_intent": null,
+        "request_id": "0e24102f-bc0d-4838-9e4c-bd6710bec504",
+        "request_completed": true
+      },
+      "fresh_state": {
+        "revision": 2,
+        "date": "2027-11-03",
+        "blocks": []
+      }
+    },
+    {
+      "stage": "cancel exact UUID replay",
+      "status": 200,
+      "response_sha256": "2d535282bbf55eab80adab9a1a5ee3bb3b94707084967a649f468dcccf6c7214",
+      "response": {
+        "schedule": {
+          "id": 133,
+          "date": "2027-11-03",
+          "status": "active",
+          "revision": 2
+        },
+        "blocks": null,
+        "revision": 2,
+        "explanation": "Pending request cancelled.",
+        "ask": null,
+        "applied": false,
+        "partial": false,
+        "outcomes": [],
+        "pending_intent": null,
+        "request_id": "0e24102f-bc0d-4838-9e4c-bd6710bec504",
+        "request_completed": true
+      },
+      "fresh_state": {
+        "revision": 2,
+        "date": "2027-11-03",
+        "blocks": []
+      }
+    },
+    {
+      "stage": "Add a Work block titled \"R263 HTTP accepted\" from 13:00 to 13:30 NOW. Also plan a Work block titled \"R263 HTTP unresolved\"; ask me for BOTH its start and end time. Do not choose a time or duration for the second block. Apply the first block now and keep only the second pending.",
+      "status": 200,
+      "response_sha256": "1b0cfa8bee3aed54fb4fd280e53ca861dcbaee0fb35930b956c71d45b29b79c4",
+      "response": {
+        "schedule": {
+          "id": 133,
+          "date": "2027-11-03",
+          "status": "active",
+          "revision": 3
+        },
+        "blocks": [
+          {
+            "id": 1145,
+            "title": "R263 HTTP accepted",
+            "start_time": "13:00",
+            "end_time": "13:30",
+            "category": "work",
+            "is_completed": false,
+            "sort_order": 0
+          }
+        ],
+        "revision": 3,
+        "explanation": "Added the accepted block now; pending the unresolved block.",
+        "ask": "Some requested changes are still pending. Please clarify the remaining request.",
+        "applied": true,
+        "partial": true,
+        "outcomes": [
+          {
+            "action_index": 0,
+            "task_id": null,
+            "status": "applied",
+            "applied_fields": [
+              "title",
+              "category",
+              "start_time",
+              "end_time"
+            ],
+            "skipped_fields": [],
+            "reason_code": null,
+            "conflicting_task_ids": [],
+            "attempted_direction": null,
+            "suggestion": null
+          }
+        ],
+        "pending_intent": {
+          "id": "56f796f7-526e-47d4-b4ba-64f2a457980b",
+          "version": 1,
+          "expires_at": "2026-10-23T09:00:26.846094+00:00",
+          "ask": "Some requested changes are still pending. Please clarify the remaining request."
+        },
+        "request_id": "c3fa5765-2d63-4c2f-a845-5579fd373caa",
+        "request_completed": true
+      },
+      "fresh_state": {
+        "revision": 3,
+        "date": "2027-11-03",
+        "blocks": [
+          {
+            "id": 1145,
+            "title": "R263 HTTP accepted",
+            "category": "work",
+            "start_time": "13:00",
+            "end_time": "13:30",
+            "is_completed": false
+          }
+        ]
+      }
+    },
+    {
+      "stage": "partial ask exact UUID replay",
+      "status": 200,
+      "response_sha256": "1b0cfa8bee3aed54fb4fd280e53ca861dcbaee0fb35930b956c71d45b29b79c4",
+      "response": {
+        "schedule": {
+          "id": 133,
+          "date": "2027-11-03",
+          "status": "active",
+          "revision": 3
+        },
+        "blocks": [
+          {
+            "id": 1145,
+            "title": "R263 HTTP accepted",
+            "start_time": "13:00",
+            "end_time": "13:30",
+            "category": "work",
+            "is_completed": false,
+            "sort_order": 0
+          }
+        ],
+        "revision": 3,
+        "explanation": "Added the accepted block now; pending the unresolved block.",
+        "ask": "Some requested changes are still pending. Please clarify the remaining request.",
+        "applied": true,
+        "partial": true,
+        "outcomes": [
+          {
+            "action_index": 0,
+            "task_id": null,
+            "status": "applied",
+            "applied_fields": [
+              "title",
+              "category",
+              "start_time",
+              "end_time"
+            ],
+            "skipped_fields": [],
+            "reason_code": null,
+            "conflicting_task_ids": [],
+            "attempted_direction": null,
+            "suggestion": null
+          }
+        ],
+        "pending_intent": {
+          "id": "56f796f7-526e-47d4-b4ba-64f2a457980b",
+          "version": 1,
+          "expires_at": "2026-10-23T09:00:26.846094+00:00",
+          "ask": "Some requested changes are still pending. Please clarify the remaining request."
+        },
+        "request_id": "c3fa5765-2d63-4c2f-a845-5579fd373caa",
+        "request_completed": true
+      },
+      "fresh_state": {
+        "revision": 3,
+        "date": "2027-11-03",
+        "blocks": [
+          {
+            "id": 1145,
+            "title": "R263 HTTP accepted",
+            "category": "work",
+            "start_time": "13:00",
+            "end_time": "13:30",
+            "is_completed": false
+          }
+        ]
+      }
+    },
+    {
+      "stage": "15:00 to 15:30",
+      "status": 502,
+      "response_sha256": "b157887cd1582796456663dc184b57133d01ed1a18fe5b5cc2e731b80a9916d3",
+      "response": {
+        "errors": {
+          "detail": "The assistant's reply couldn't be applied. Try rephrasing."
+        },
+        "request_id": "ea29e25d-7347-40b7-af23-1a2e0d33f4cd",
+        "request_completed": true
+      },
+      "fresh_state": {
+        "revision": 3,
+        "date": "2027-11-03",
+        "blocks": [
+          {
+            "id": 1145,
+            "title": "R263 HTTP accepted",
+            "category": "work",
+            "start_time": "13:00",
+            "end_time": "13:30",
+            "is_completed": false
+          }
+        ]
+      }
+    },
+    {
+      "stage": "restore empty baseline",
+      "status": 200,
+      "response_sha256": "cf7804d84c8f94bb3026754caedf8cba0efb90527dcec385ba942a5b61c4347c",
+      "response": {
+        "schedule": {
+          "id": 133,
+          "date": "2027-11-03",
+          "status": "active",
+          "revision": 4
+        },
+        "blocks": [],
+        "revision": 4
+      },
+      "fresh_state": {
+        "revision": 4,
+        "date": "2027-11-03",
+        "blocks": []
+      }
+    }
+  ],
+  "final_state": {
+    "revision": 4,
+    "date": "2027-11-03",
+    "blocks": []
+  },
+  "logout_protected_get": "Login",
+  "transport_loss_injected": false,
+  "concurrent_load": false
+}

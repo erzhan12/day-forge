@@ -1,0 +1,24 @@
+{
+  "version": "407620494de979f2e577808b944e25d8dbe1de4f",
+  "final_states": [
+    {
+      "revision": 8,
+      "date": "2027-11-01",
+      "blocks": []
+    },
+    {
+      "revision": 10,
+      "date": "2027-11-02",
+      "blocks": []
+    },
+    {
+      "revision": 4,
+      "date": "2027-11-03",
+      "blocks": []
+    }
+  ],
+  "terminal_502_exact_replay": true,
+  "replay_fresh_state_unchanged": true,
+  "pending_cleanup_status": "cancelled",
+  "api_logout_protected_get": "Login"
+}

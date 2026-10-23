@@ -1,0 +1,56 @@
+{
+  "published_release": "407620494de979f2e577808b944e25d8dbe1de4f",
+  "published_guard_sha256": "c6c2e5ea70d2721561545118abb8d0f171237b8f780f974fe91ad6eac2270d90",
+  "candidate_guard_sha256": "55f921716fcfaa09c7e5c1107c3c33ded76cfff57414aa0ec5b67dfbb4c75719",
+  "success": true,
+  "events": [
+    {
+      "command": "Add \"Walk after lunch\" after Gym",
+      "answer": "08:00",
+      "published_ask": "What start time should the new block have?",
+      "fixed_ask": "What start time should the new block have after Gym?"
+    },
+    {
+      "command": "Add \"Walk after lunch\" after Gym",
+      "answer": "10:00",
+      "published_ask": "What start time should the new block have?",
+      "fixed_ask": null
+    },
+    {
+      "command": "Add 'Walk after lunch' after Gym",
+      "answer": "08:00",
+      "published_ask": "What start time should the new block have?",
+      "fixed_ask": "What start time should the new block have after Gym?"
+    },
+    {
+      "command": "Add 'Walk after lunch' after Gym",
+      "answer": "10:00",
+      "published_ask": "What start time should the new block have?",
+      "fixed_ask": null
+    },
+    {
+      "command": "Add “Walk after lunch” after Gym",
+      "answer": "08:00",
+      "published_ask": "What start time should the new block have?",
+      "fixed_ask": "What start time should the new block have after Gym?"
+    },
+    {
+      "command": "Add “Walk after lunch” after Gym",
+      "answer": "10:00",
+      "published_ask": "What start time should the new block have?",
+      "fixed_ask": null
+    },
+    {
+      "command": "Add «Walk after lunch» after Gym",
+      "answer": "08:00",
+      "published_ask": "What start time should the new block have?",
+      "fixed_ask": "What start time should the new block have after Gym?"
+    },
+    {
+      "command": "Add «Walk after lunch» after Gym",
+      "answer": "10:00",
+      "published_ask": "What start time should the new block have?",
+      "fixed_ask": null
+    }
+  ]
+}

@@ -2,6 +2,19 @@
 
 Patterns and corrections discovered during development. Review at session start.
 
+## Pending metadata and executable actions need distinct wording
+
+The prompt's unqualified "An add has task_id=null" referred to pending proposals,
+but live replies copied it into executable actions and failed strict validation.
+Name the two formats explicitly. At the chat provider boundary, only an add's
+null target can be discarded without changing authority; keep non-null targets,
+other unknown keys and other action types strict, and retain raw audit text.
+
+Relative-placement guards must ignore relation words inside quoted known task
+names. Mask only literal names, since masking a quoted whole command could hide
+a real condition. Check invalid placement, corrected continuation, provider-error
+recovery, and unchanged neighbours through the real parser and HTTP endpoint.
+
 ## Bounded provider titles still need wrapping in error messages
 
 A valid 255-character title without spaces expanded a 320 px page to 3217 px when
