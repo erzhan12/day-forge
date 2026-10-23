@@ -113,7 +113,7 @@ def relative_add_guard_ask(
     """
     if not any(action.get("type") == "add" for action in actions):
         return None
-    # Only literal quoted task names are opaque, not a quoted whole command.
+    # Only literal quoted block or proposed titles are opaque, not a whole command.
     titles = {block.title for block in blocks} | {
         action["title"] for action in actions if action.get("title")
     }

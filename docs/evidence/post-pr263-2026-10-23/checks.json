@@ -17,10 +17,25 @@
   "makemigrations_check_dry_run": "No changes detected",
   "source_sha256": {
     "backend/ai/prompts.py": "94990a48ab9a5d3c5c3ba21d27c3a958128b3e73e133e540ae7facdc7a9b3486",
+    "backend/ai/relative_add_guard.py": "55f921716fcfaa09c7e5c1107c3c33ded76cfff57414aa0ec5b67dfbb4c75719",
+    "backend/ai/service.py": "c39499691452e03778ed15acfae59250be9aceb3fd228e537a3c110955cf3742",
+    "backend/tests/test_ai_pending_intents.py": "e218c81f71efe9f6431cf0051a1efe3cc6e87b6d2058a4c22d79d666ea5e8d56",
+    "backend/tests/test_ai_relative_add_guard.py": "6d67a54b3e43a380d7675acc42871cdaf2610d0359c19db932f2ab948ddebbe3",
+    "backend/tests/test_ai_service_chat.py": "6699f3f8cf77ceb7711e691ef03a0945fca0b33a55fde0bc20ec485d2c859727"
+  },
+  "browser_candidate_commit": "c3e52fc481ff2a16a1eae3cfb604eedede483af4",
+  "browser_source_sha256": {
+    "backend/ai/prompts.py": "94990a48ab9a5d3c5c3ba21d27c3a958128b3e73e133e540ae7facdc7a9b3486",
     "backend/ai/relative_add_guard.py": "7bd2cbdfc2f8e921d4e8156b57d65eddfd94f5a422ae7295b62c4614f312e0a1",
     "backend/ai/service.py": "ff7a281ec8669c303dc9c2d8a73e3b2fd6bfa74bfa8d2b3db4e3f176c0c61a8a",
     "backend/tests/test_ai_pending_intents.py": "e218c81f71efe9f6431cf0051a1efe3cc6e87b6d2058a4c22d79d666ea5e8d56",
     "backend/tests/test_ai_relative_add_guard.py": "6d67a54b3e43a380d7675acc42871cdaf2610d0359c19db932f2ab948ddebbe3",
     "backend/tests/test_ai_service_chat.py": "6699f3f8cf77ceb7711e691ef03a0945fca0b33a55fde0bc20ec485d2c859727"
+  },
+  "review_followup": {
+    "review_url": "https://github.com/erzhan12/day-forge/pull/264#issuecomment-6361499937",
+    "changes": "explicit null-target key presence and quoted-title comment; equivalent behavior",
+    "make_check_repeated": true,
+    "negative_control_cases_repeated": 8
   }
 }
