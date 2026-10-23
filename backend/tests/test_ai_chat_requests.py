@@ -291,3 +291,17 @@ assert Schedule.objects.get().revision==1
 assert ChatRequest.objects.count()==1
 assert ChatRequest.objects.get().completed_at is not None
 '''.replace('WORKER_PATH', repr(str(Path(__file__).parent / 'helpers/parallel_chat_worker.py'))))
+
+
+@pytest.mark.django_db
+def test_completed_receipt_replays_after_gap_change(auth_client, user, chat_provider):
+    from templates_mgr.models import UserPreferences
+
+    payload = body()
+    first = post(auth_client, payload)
+    assert first.status_code == 200
+    UserPreferences.objects.filter(user=user).update(default_block_gap_minutes=120)
+    replay = post(auth_client, payload)
+    assert replay.content == first.content
+    assert len(chat_provider) == 1
+    assert TimeBlock.objects.count() == 1

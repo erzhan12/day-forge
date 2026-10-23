@@ -1310,3 +1310,15 @@ def test_add_other_unknown_provider_fields_remain_invalid(patch_client, fake_sch
                              "explanation": "Added.", "ask": None}))
     with pytest.raises(AIParseError):
         run_chat([{"role": "user", "content": "Add Walk at 14:00"}], fake_schedule, [], [], now)
+
+
+@pytest.mark.parametrize("gap", [None, 0, 5, 20, 120])
+def test_provider_prompt_uses_captured_gap(patch_client, gap):
+    schedule = SimpleNamespace(date=datetime.date(2026, 4, 18))
+    if gap is not None:
+        schedule._default_block_gap_minutes = gap
+    completions = patch_client(json.dumps({"actions": [], "explanation": "Done", "ask": None}))
+    run_chat([{"role": "user", "content": "thanks"}], schedule, [], [],
+             datetime.datetime(2026, 4, 18, 10, 0))
+    prompt = completions.calls[0]["messages"][0]["content"]
+    assert f"{10 if gap is None else gap}-minute gap" in prompt

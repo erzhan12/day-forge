@@ -35,7 +35,9 @@ from templates_mgr.preferences import (
     MAX_CHAT_SUGGESTION_LENGTH,
     MAX_CHAT_SUGGESTIONS,
     get_user_preferences,
+    is_valid_default_block_gap_minutes,
     normalize_chat_suggestions,
+    normalize_default_block_gap_minutes,
     normalize_theme,
     ui_preferences_payload,
 )
@@ -505,6 +507,9 @@ def _prefs_to_dict(prefs: UserPreferences) -> dict:
     # must emit all UiPreferences fields.
     return {
         "theme": normalize_theme(prefs.theme),
+        "default_block_gap_minutes": normalize_default_block_gap_minutes(
+            prefs.default_block_gap_minutes,
+        ),
         "chat_suggestions": normalize_chat_suggestions(prefs.chat_suggestions),
     }
 
@@ -586,20 +591,31 @@ def user_preferences(request):
             normalized_suggestions.append(trimmed)
         cleaned["chat_suggestions"] = normalized_suggestions
 
+    if "default_block_gap_minutes" in data:
+        gap = data["default_block_gap_minutes"]
+        if not is_valid_default_block_gap_minutes(gap):
+            return _prefs_response({"errors": {"default_block_gap_minutes": (
+                "Must be an integer from 0 to 120 minutes in 5-minute increments."
+            )}}, status=400)
+        cleaned["default_block_gap_minutes"] = gap
+
     if not cleaned:
         return _prefs_response({"errors": {"body": "No editable fields supplied."}}, status=400)
 
-    # Always write recognized fields (no "skip if unchanged" optimization)
-    # so that a corrupted ``theme`` row is healed on the next PATCH —
-    # the read-side helper normalizes invalid values without writing.
-    prefs, _ = UserPreferences.objects.get_or_create(
-        user=request.user,
-        defaults={"theme": UserPreferences.Theme.CLASSIC},
-    )
-    for field, value in cleaned.items():
-        setattr(prefs, field, value)
-    prefs.save(update_fields=list(cleaned.keys()))
-    return _prefs_response(_prefs_to_dict(prefs))
+    def update_preferences(user):
+        prefs, _ = UserPreferences.objects.get_or_create(user=user)
+        for field, value in cleaned.items():
+            setattr(prefs, field, value)
+        prefs.save(update_fields=list(cleaned))
+        return _prefs_to_dict(prefs)
+
+    try:
+        payload = run_user_maintenance(request.user.pk, update_preferences)
+    except ScheduleChanged as exc:
+        response = schedule_changed_response(exc)
+        response["Cache-Control"] = "private, no-store"
+        return response
+    return _prefs_response(payload)
 
 
 __all__ = [

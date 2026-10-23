@@ -48,6 +48,7 @@ import openai
 from django.conf import settings
 from openai import AsyncOpenAI
 from schedules.window import DEFAULT_WINDOW
+from templates_mgr.preference_defaults import DEFAULT_BLOCK_GAP_MINUTES
 
 from ai.category_resolution import UnresolvedCategory, normalize_action_categories
 from ai.implicit_add import apply_implicit_add, has_explicit_add_command
@@ -455,6 +456,9 @@ async def run_chat(messages, schedule, blocks, rules, now, categories=None) -> A
                 getattr(schedule, "_schedule_window", DEFAULT_WINDOW),
                 category_pairs,
                 sink_slug,
+                default_block_gap_minutes=getattr(
+                    schedule, "_default_block_gap_minutes", DEFAULT_BLOCK_GAP_MINUTES,
+                ),
             ),
         },
         # Schedule context + the flattened prior transcript live in a

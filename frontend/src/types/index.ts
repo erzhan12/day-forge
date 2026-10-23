@@ -124,6 +124,7 @@ export interface StreakInfo {
 export type ThemeId = "classic" | "strategic" | "light_premium" | "dark_4a"
 
 export interface UiPreferences {
+  default_block_gap_minutes?: number
   theme: ThemeId
   // Optional/unknown keeps partial or stale Inertia props safe at the
   // TypeScript boundary; useChatSuggestions performs runtime resolution.

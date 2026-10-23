@@ -32,6 +32,7 @@ from schedules.time_validation import (
     times_overlap,
 )
 from schedules.window import DEFAULT_WINDOW, ScheduleWindow
+from templates_mgr.preference_defaults import DEFAULT_BLOCK_GAP_MINUTES
 
 from ai.free_slot import GRID_MINUTES, find_slot
 
@@ -55,9 +56,8 @@ class ApplyContextSnapshot:
 
 
 # Feature 0067: deterministic auto-placement of untimed chat ``add`` actions.
-# Defaults centralised here (the grid comes from ``free_slot.GRID_MINUTES``).
+# Spacing defaults live in preference_defaults; the grid comes from free_slot.
 DEFAULT_AUTO_DURATION_MINUTES = 25
-AUTO_PLACEMENT_GAP_MINUTES = 10
 
 
 @dataclass(frozen=True)
@@ -736,6 +736,7 @@ def plan_mutations(
     day_start: str = DEFAULT_WINDOW.start_str,
     day_end: str = DEFAULT_WINDOW.end_str,
     earliest_start: datetime.time | None = None,
+    default_block_gap_minutes: int = DEFAULT_BLOCK_GAP_MINUTES,
 ) -> PartialPlan | PlanError:
     """Plan the accepted subset of a chat turn.
 
@@ -927,7 +928,7 @@ def plan_mutations(
                 continue
 
             suggestion = _find_auto_slot(
-                list(candidate.values()), base_min, dur, window, AUTO_PLACEMENT_GAP_MINUTES,
+                list(candidate.values()), base_min, dur, window, default_block_gap_minutes,
             )
             if suggestion is None or suggestion.start_time is None or suggestion.end_time is None:
                 # Both producers — find_slot(direction="later") and

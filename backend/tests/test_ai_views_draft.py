@@ -690,3 +690,22 @@ class TestDraftDayWindow:
         assert resp.json()["errors"]["detail"] == "Blocks would overlap."
         schedule = Schedule.objects.get(user=user, date="2026-05-04")
         assert not TimeBlock.objects.filter(schedule=schedule).exists()
+
+
+@pytest.mark.django_db
+def test_gap_change_during_draft_does_not_invalidate(auth_client, user, template, monkeypatch):
+    from asgiref.sync import sync_to_async
+    from templates_mgr.models import UserPreferences
+
+    row = UserPreferences.objects.create(user=user, default_block_gap_minutes=20)
+
+    async def run(*args):
+        await sync_to_async(UserPreferences.objects.filter(pk=row.pk).update)(
+            default_block_gap_minutes=0,
+        )
+        return _ok_result()
+
+    monkeypatch.setattr("ai.views.run_draft", run)
+    response = _post(auth_client)
+    assert response.status_code == 200
+    assert Schedule.objects.get(user=user, date="2026-05-04").time_blocks.exists()

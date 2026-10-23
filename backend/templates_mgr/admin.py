@@ -5,7 +5,7 @@ from django.contrib.auth.admin import UserAdmin
 from templates_mgr.models import Rule, Template, UserPreferences
 
 
-class PolicyInspectionAdmin(admin.ModelAdmin):
+class PolicyInspectionMixin:
     """Inspect AI policy; account Settings owns serialized policy writes."""
 
     def has_add_permission(self, request):
@@ -16,6 +16,10 @@ class PolicyInspectionAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+
+class PolicyInspectionAdmin(PolicyInspectionMixin, admin.ModelAdmin):
+    pass
 
 
 @admin.register(Template)
@@ -35,16 +39,15 @@ class RuleAdmin(PolicyInspectionAdmin):
 
 
 @admin.register(UserPreferences)
-class UserPreferencesAdmin(admin.ModelAdmin):
-    list_display = ("user", "theme")
+class UserPreferencesAdmin(PolicyInspectionAdmin):
+    list_display = ("user", "theme", "default_block_gap_minutes")
     list_filter = ("theme",)
     search_fields = ("user__username",)
     readonly_fields = ("created_at", "updated_at")
 
 
-class UserPreferencesInline(admin.StackedInline):
-    """Inline preferences on the User admin so staff can find a user's
-    theme where they intuitively look — under Users, not Templates."""
+class UserPreferencesInline(PolicyInspectionMixin, admin.StackedInline):
+    """Inspect preferences under Users; Settings owns policy writes."""
 
     model = UserPreferences
     can_delete = False

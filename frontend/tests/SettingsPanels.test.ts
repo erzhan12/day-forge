@@ -3,6 +3,7 @@ import { defineComponent, h } from "vue"
 import { mount } from "@vue/test-utils"
 
 const aiMocks = vi.hoisted(() => ({
+  gap: undefined as unknown,
   reload: vi.fn(),
   save: vi.fn(),
 }))
@@ -12,6 +13,7 @@ vi.mock("@inertiajs/vue3", () => ({
     props: {
       ui_preferences: {
         chat_suggestions: ["Plan", "Focus", "Break"],
+        default_block_gap_minutes: aiMocks.gap,
       },
     },
   }),
@@ -216,9 +218,7 @@ describe("SettingsTemplatesRulesPanel", () => {
       .toEqual(["Templates", "Rules", "Travel-time rules"])
     expect(wrapper.find(".template-grid").exists()).toBe(true)
 
-    // Feature 0067: the Rules subtitle documents that untimed chat block
-    // placement is backend-owned (nearest free slot forward, 25-min default,
-    // preferred 10-min gaps), alongside the existing "passed to the AI" prose.
+    // Backend-owned placement keeps duration and grid independent of spacing.
     const rulesSubtitle = wrapper.text()
     expect(rulesSubtitle).toContain("passed to the AI")
     expect(rulesSubtitle).toContain("nearest free slot")
@@ -226,7 +226,10 @@ describe("SettingsTemplatesRulesPanel", () => {
     expect(rulesSubtitle).toContain("25-minute")
     expect(rulesSubtitle).toContain("10-minute")
     expect(rulesSubtitle).toContain("prefers a 10-minute gap")
-    expect(rulesSubtitle).toContain("shrinks to 5 minutes or none")
+    expect(rulesSubtitle).toContain("5-minute steps")
+    expect(rulesSubtitle).toContain("initial free window")
+    expect(rulesSubtitle).toContain("Later windows retain the full gap")
+    expect(rulesSubtitle).toContain("Settings → Schedule")
     expect(rulesSubtitle).toContain("aligned to 5 minutes")
     expect(rulesSubtitle).toContain("5 minutes")
 
@@ -238,4 +241,16 @@ describe("SettingsTemplatesRulesPanel", () => {
     expect(wrapper.emitted("rules-changed")).toHaveLength(1)
     expect(wrapper.emitted("travel-changed")).toHaveLength(1)
   })
+})
+
+
+it.each([0, 20, 120, undefined, 7])("Rules help uses configured gap %s", (raw) => {
+  aiMocks.gap = raw
+  const wrapper = mount(SettingsTemplatesRulesPanel, {
+    props: { weekdayTemplate: null, weekendTemplate: null, rules: [], travelRules: [] },
+    global: { stubs: { TemplateEditor: true, RulesList: true, TravelRulesList: true } },
+  })
+  expect(wrapper.text()).toContain(`${raw === 0 || raw === 20 || raw === 120 ? raw : 10}-minute gap`)
+  if (raw === 0) expect(wrapper.text()).toContain("back-to-back")
+  aiMocks.gap = undefined
 })

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { ScheduleSettingsWire } from "../../types"
 import DayWindowEditor from "../DayWindowEditor.vue"
+import DefaultBlockGapEditor from "./DefaultBlockGapEditor.vue"
 
 defineProps<{ window: ScheduleSettingsWire }>()
 </script>
@@ -9,6 +10,7 @@ defineProps<{ window: ScheduleSettingsWire }>()
   <section class="settings-panel">
     <h2 id="settings-topic-schedule" class="settings-topic-heading" tabindex="-1">Schedule</h2>
     <DayWindowEditor :window="window" />
+    <DefaultBlockGapEditor />
   </section>
 </template>
 

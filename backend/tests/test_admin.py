@@ -75,3 +75,17 @@ class TestAdminRegistration:
         RuleAdmin(Rule, site)
         AIInteractionAdmin(AIInteraction, site)
         DailyReviewAdmin(DailyReview, site)
+
+
+@pytest.mark.django_db
+def test_preferences_admin_and_inline_inspection_only(admin_request):
+    from django.contrib.auth import get_user_model
+    from templates_mgr.admin import UserPreferencesAdmin, UserPreferencesInline
+    from templates_mgr.models import UserPreferences
+
+    for surface in [UserPreferencesAdmin(UserPreferences, AdminSite()),
+                    UserPreferencesInline(get_user_model(), AdminSite())]:
+        assert surface.has_view_permission(admin_request)
+        assert not surface.has_add_permission(admin_request)
+        assert not surface.has_change_permission(admin_request)
+        assert not surface.has_delete_permission(admin_request)

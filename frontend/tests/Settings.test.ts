@@ -344,3 +344,14 @@ describe("Settings topic shell", () => {
     expect(pushSpy).not.toHaveBeenCalled()
   })
 })
+
+
+it("places the default gap control below the day window under Schedule", async () => {
+  window.history.replaceState({}, "", "/settings/#schedule")
+  stubMatchMedia(true)
+  wrapper = mountSettings()
+  await nextTick()
+  const panel = wrapper.get('[aria-label="Day window"]').element.parentElement!
+  expect(panel.textContent).toContain("Default gap between blocks (minutes)")
+  expect(panel.querySelector('input[type="number"]')).not.toBeNull()
+})

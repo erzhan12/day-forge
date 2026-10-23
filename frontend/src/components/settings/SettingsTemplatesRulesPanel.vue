@@ -1,8 +1,16 @@
 <script setup lang="ts">
-import type { Rule, Template, TravelRule, UserCategory } from "../../types"
+import { computed } from "vue"
+import { usePage } from "@inertiajs/vue3"
+import { resolveDefaultBlockGap } from "../../utils/blockGap"
+import type { UiPreferences, Rule, Template, TravelRule, UserCategory } from "../../types"
 import RulesList from "../RulesList.vue"
 import TemplateEditor from "../TemplateEditor.vue"
 import TravelRulesList from "../TravelRulesList.vue"
+
+const page = usePage()
+const gap = computed(() => resolveDefaultBlockGap(
+  (page.props?.ui_preferences as UiPreferences | undefined)?.default_block_gap_minutes,
+))
 
 defineProps<{
   weekdayTemplate: Template | null
@@ -57,8 +65,14 @@ const emit = defineEmits<{
         priority rules take precedence on conflict. When you ask chat to add a
         block without a time, the backend places it at the nearest free slot
         forward from now with a 25-minute default duration, aligned to 5 minutes, and
-        prefers a 10-minute gap that shrinks to 5 minutes or none when the block
-        otherwise would not fit before the next block or the day-window end.
+        prefers a {{ gap }}-minute gap before and after the new block.
+        <template v-if="gap > 0">
+          The gap may shrink in 5-minute steps in the initial free window.
+          Later windows retain the full gap.
+        </template>
+        <template v-else>Zero allows back-to-back blocks.</template>
+        Configure this in Settings → Schedule. Explicit times and requested gaps
+        take precedence. Existing blocks are not moved.
       </p>
       <RulesList :rules="rules" @changed="emit('rules-changed')" />
     </div>

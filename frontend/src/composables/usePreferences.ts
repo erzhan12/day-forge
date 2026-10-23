@@ -26,5 +26,11 @@ export function usePreferences() {
     })
   }
 
-  return { saveTheme, saveChatSuggestions }
+  async function saveDefaultBlockGap(minutes: number): Promise<ApiResult> {
+    return requestJson("/api/user/preferences/", "PATCH", {
+      default_block_gap_minutes: minutes,
+    })
+  }
+
+  return { saveTheme, saveChatSuggestions, saveDefaultBlockGap }
 }

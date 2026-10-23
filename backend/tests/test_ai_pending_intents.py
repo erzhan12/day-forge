@@ -832,3 +832,15 @@ def test_quoted_title_can_continue_after_rejected_provider_reply(
     assert TimeBlock.objects.get(title="Gym").start_time == datetime.time(9)
     replay = auth_client.post(URL, json.dumps(body), content_type="application/json")
     assert replay.content == applied.content and len(calls) == 3 and TimeBlock.objects.count() == 2
+
+
+def test_gap_change_invalidates_pending_intent(auth_client, user, monkeypatch):
+    from templates_mgr.models import UserPreferences
+
+    ref, _, _ = ask(auth_client, user, monkeypatch)
+    UserPreferences.objects.filter(user=user).update(default_block_gap_minutes=20)
+    calls = provider(monkeypatch, AIChatResult("{}", [add()], "Added.", None))
+    response, _ = send(auth_client, user, "14:00", ref)
+    assert response.status_code == 409
+    assert response.json()["code"] == "pending_intent_stale"
+    assert not calls and not TimeBlock.objects.exists()
