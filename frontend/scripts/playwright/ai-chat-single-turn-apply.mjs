@@ -132,7 +132,7 @@ try {
     fail("privacy hint not visible before typing (iter-5 always-on regression)")
   } else {
     const hintText = (await privacyHint.textContent()) || ""
-    if (!hintText.includes("Full chat history is re-sent")) {
+    if (!hintText.includes("Messages and schedule context may be sent")) {
       fail(`privacy hint text unexpected: ${hintText.slice(0, 80)}`)
     }
   }

@@ -1,3 +1,5 @@
+import uuid
+
 from django.conf import settings
 from django.db import models
 
@@ -26,6 +28,37 @@ class ChatRequest(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=("user", "date", "request_id"), name="unique_chat_request_identity"
+            ),
+        ]
+
+
+class PendingIntent(models.Model):
+    class State(models.TextChoices):
+        OPEN = "open", "Open"
+        RESOLVED = "resolved", "Resolved"
+        CANCELLED = "cancelled", "Cancelled"
+        STALE = "stale", "Stale"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    schedule = models.ForeignKey("schedules.Schedule", on_delete=models.CASCADE)
+    state = models.CharField(max_length=10, choices=State.choices, default=State.OPEN)
+    version = models.PositiveIntegerField(default=1)
+    revision = models.PositiveBigIntegerField()
+    context_fingerprint = models.CharField(max_length=64)
+    source_message = models.TextField()
+    question = models.TextField()
+    items = models.JSONField(default=list)
+    accepted_changes = models.JSONField(default=list)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("user", "schedule"),
+                condition=models.Q(state="open"),
+                name="one_open_intent_per_schedule",
             ),
         ]
 

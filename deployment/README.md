@@ -264,6 +264,15 @@ negotiate stale tabs in both directions.
 
 ### Container rehearsal on a database copy
 
+The pending-intent boundary adds `ai.0008_pendingintent`. Keep this table when
+rolling back an image. A release without `ai/pending_intents.py` cannot enforce
+saved continuation scopes, even if it supports durable request IDs. Pause AI
+with `LLM_API_KEY=` while running that older release, and restore the key only
+after returning to compatible code. A reverse migration deletes saved intents;
+it is not part of image rollback. The pending-intent change has a local schema
+upgrade check and browser verification, but needs its own container/production
+rehearsal after deployment. See [the report](../docs/AI_PENDING_INTENT_VERIFICATION.md).
+
 Start Docker and build the images before running the rehearsal. GHCR images may
 require separate package-read credentials; local builds use the same production
 Dockerfile. These commands use PR #244, PR #245, and a second release identity

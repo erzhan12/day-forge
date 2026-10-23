@@ -1,0 +1,1421 @@
+{
+  "environment": "isolated nonstaff fixture / real OpenRouter SDK / real namespaced Redis",
+  "logged_ai_turns": 18,
+  "receipts": [
+    {
+      "date": "2027-09-01",
+      "request_id": "37b6d26ff0584be3952d98ffe1f868cd",
+      "status": 200,
+      "revision": 0,
+      "code": null,
+      "applied": false,
+      "partial": false,
+      "ask": "What time should Gym start?",
+      "explanation": "I need a new time for Gym.",
+      "pending_intent": {
+        "id": "6e0e7ea2-0aaa-41f6-b89f-5cdbe787ec54",
+        "version": 1,
+        "expires_at": "2026-10-22T08:02:59.054976+00:00",
+        "ask": "What time should Gym start?"
+      },
+      "outcomes": []
+    },
+    {
+      "date": "2027-09-01",
+      "request_id": "2b5b4fce7e9a4073bdb5516aaf19cac9",
+      "status": 200,
+      "revision": 1,
+      "code": null,
+      "applied": true,
+      "partial": false,
+      "ask": null,
+      "explanation": "Moving Gym to start at 14:00.",
+      "pending_intent": null,
+      "outcomes": [
+        {
+          "action_index": 0,
+          "task_id": 1,
+          "status": "applied",
+          "applied_fields": [
+            "start_time",
+            "end_time"
+          ],
+          "skipped_fields": [],
+          "reason_code": null,
+          "conflicting_task_ids": [],
+          "attempted_direction": null,
+          "suggestion": null
+        }
+      ],
+      "blocks": [
+        {
+          "id": 2,
+          "title": "Focus",
+          "category": "work",
+          "start_time": "10:00",
+          "end_time": "11:00",
+          "is_completed": false
+        },
+        {
+          "id": 1,
+          "title": "Gym",
+          "category": "health",
+          "start_time": "14:00",
+          "end_time": "14:30",
+          "is_completed": false
+        }
+      ]
+    },
+    {
+      "date": "2027-09-02",
+      "request_id": "5f94c2c27ac04177a99970f59fb45f22",
+      "status": 200,
+      "revision": 1,
+      "code": null,
+      "applied": true,
+      "partial": false,
+      "ask": null,
+      "explanation": "Added Accepted at 13:00-13:30; Outside at 23:30 is outside the working day window.",
+      "pending_intent": null,
+      "outcomes": [
+        {
+          "action_index": 0,
+          "task_id": null,
+          "status": "applied",
+          "applied_fields": [
+            "title",
+            "category",
+            "start_time",
+            "end_time"
+          ],
+          "skipped_fields": [],
+          "reason_code": null,
+          "conflicting_task_ids": [],
+          "attempted_direction": null,
+          "suggestion": null
+        }
+      ],
+      "blocks": [
+        {
+          "id": 3,
+          "title": "Gym",
+          "category": "health",
+          "start_time": "09:00",
+          "end_time": "09:30",
+          "is_completed": false
+        },
+        {
+          "id": 4,
+          "title": "Focus",
+          "category": "work",
+          "start_time": "10:00",
+          "end_time": "11:00",
+          "is_completed": false
+        },
+        {
+          "id": 19,
+          "title": "Accepted",
+          "category": "work",
+          "start_time": "13:00",
+          "end_time": "13:30",
+          "is_completed": false
+        }
+      ]
+    },
+    {
+      "date": "2027-09-03",
+      "request_id": "4aaa51b7b3f74f5e9091bd686af8f85d",
+      "status": 200,
+      "revision": 1,
+      "code": null,
+      "applied": true,
+      "partial": true,
+      "ask": "Conflict does not fit at that time. Please give it a concrete free start and end time.",
+      "explanation": "Adding Kept at 13:00-13:30 and Conflict at 10:15-10:45 as work blocks.",
+      "pending_intent": {
+        "id": "e2be9738-5b67-4a44-979f-d67d0ad38e8a",
+        "version": 1,
+        "expires_at": "2026-10-22T08:05:09.140454+00:00",
+        "ask": "Conflict does not fit at that time. Please give it a concrete free start and end time."
+      },
+      "outcomes": [
+        {
+          "action_index": 0,
+          "task_id": null,
+          "status": "applied",
+          "applied_fields": [
+            "title",
+            "category",
+            "start_time",
+            "end_time"
+          ],
+          "skipped_fields": [],
+          "reason_code": null,
+          "conflicting_task_ids": [],
+          "attempted_direction": null,
+          "suggestion": null
+        },
+        {
+          "action_index": 1,
+          "task_id": null,
+          "status": "skipped",
+          "applied_fields": [],
+          "skipped_fields": [
+            "title",
+            "category",
+            "start_time",
+            "end_time"
+          ],
+          "reason_code": "overlap",
+          "conflicting_task_ids": [
+            6
+          ],
+          "attempted_direction": null,
+          "suggestion": null
+        }
+      ],
+      "blocks": [
+        {
+          "id": 5,
+          "title": "Gym",
+          "category": "health",
+          "start_time": "09:00",
+          "end_time": "09:30",
+          "is_completed": false
+        },
+        {
+          "id": 6,
+          "title": "Focus",
+          "category": "work",
+          "start_time": "10:00",
+          "end_time": "11:00",
+          "is_completed": false
+        },
+        {
+          "id": 22,
+          "title": "Kept",
+          "category": "work",
+          "start_time": "13:00",
+          "end_time": "13:30",
+          "is_completed": false
+        }
+      ]
+    },
+    {
+      "date": "2027-09-03",
+      "request_id": "9a5b7edeab75464f843fab62d1dc6029",
+      "status": 200,
+      "revision": 2,
+      "code": null,
+      "applied": true,
+      "partial": false,
+      "ask": null,
+      "explanation": "Adding Conflict at 16:00-16:30.",
+      "pending_intent": null,
+      "outcomes": [
+        {
+          "action_index": 0,
+          "task_id": null,
+          "status": "applied",
+          "applied_fields": [
+            "title",
+            "category",
+            "start_time",
+            "end_time"
+          ],
+          "skipped_fields": [],
+          "reason_code": null,
+          "conflicting_task_ids": [],
+          "attempted_direction": null,
+          "suggestion": null
+        }
+      ],
+      "blocks": [
+        {
+          "id": 5,
+          "title": "Gym",
+          "category": "health",
+          "start_time": "09:00",
+          "end_time": "09:30",
+          "is_completed": false
+        },
+        {
+          "id": 6,
+          "title": "Focus",
+          "category": "work",
+          "start_time": "10:00",
+          "end_time": "11:00",
+          "is_completed": false
+        },
+        {
+          "id": 22,
+          "title": "Kept",
+          "category": "work",
+          "start_time": "13:00",
+          "end_time": "13:30",
+          "is_completed": false
+        },
+        {
+          "id": 23,
+          "title": "Conflict",
+          "category": "work",
+          "start_time": "16:00",
+          "end_time": "16:30",
+          "is_completed": false
+        }
+      ]
+    },
+    {
+      "date": "2027-09-04",
+      "request_id": "08745d5ad4b941abb45b6c72fe35475c",
+      "status": 200,
+      "revision": 0,
+      "code": null,
+      "applied": false,
+      "partial": false,
+      "ask": "What time should Gym start?",
+      "explanation": "I need the new start time to move Gym.",
+      "pending_intent": {
+        "id": "22b571ac-c6c4-43e8-a6d5-122a427d2876",
+        "version": 1,
+        "expires_at": "2026-10-22T08:07:03.155147+00:00",
+        "ask": "What time should Gym start?"
+      },
+      "outcomes": []
+    },
+    {
+      "date": "2027-09-04",
+      "request_id": "e9dafb27d7a84b57a0bcaf6505d5f956",
+      "status": 200,
+      "revision": 0,
+      "code": null,
+      "applied": false,
+      "partial": false,
+      "ask": null,
+      "explanation": "Pending request cancelled.",
+      "pending_intent": null,
+      "outcomes": []
+    },
+    {
+      "date": "2027-09-05",
+      "request_id": "42a253ef64a14e44ba3144b078028c17",
+      "status": 200,
+      "revision": 0,
+      "code": null,
+      "applied": false,
+      "partial": false,
+      "ask": "What time should Gym start?",
+      "explanation": "I need the new start time for Gym.",
+      "pending_intent": {
+        "id": "4e83c5b1-5801-4fe9-a3a1-3dfa8e6f023c",
+        "version": 1,
+        "expires_at": "2026-10-22T08:12:19.903983+00:00",
+        "ask": "What time should Gym start?"
+      },
+      "outcomes": []
+    },
+    {
+      "date": "2027-09-05",
+      "request_id": "f73983dadd8940b38a6a21a5b70dd9be",
+      "status": 200,
+      "revision": 0,
+      "code": null,
+      "applied": false,
+      "partial": false,
+      "ask": null,
+      "explanation": "Pending request cancelled.",
+      "pending_intent": null,
+      "outcomes": []
+    },
+    {
+      "date": "2027-09-06",
+      "request_id": "8324c9b9bf1045b8962802e90bdf968c",
+      "status": 200,
+      "revision": 0,
+      "code": null,
+      "applied": false,
+      "partial": false,
+      "ask": "What time should Gym start?",
+      "explanation": "You want to move Gym but need a new start time.",
+      "pending_intent": {
+        "id": "2a794e49-5256-43b9-9157-aa1897ada93d",
+        "version": 1,
+        "expires_at": "2026-10-22T08:13:29.932729+00:00",
+        "ask": "What time should Gym start?"
+      },
+      "outcomes": []
+    },
+    {
+      "date": "2027-09-06",
+      "request_id": "963cc9d30cad4813a4de119076422ab5",
+      "status": 200,
+      "revision": 1,
+      "code": null,
+      "applied": true,
+      "partial": false,
+      "ask": null,
+      "explanation": "Added Walk from 15:00-15:30 in health.",
+      "pending_intent": null,
+      "outcomes": [
+        {
+          "action_index": 0,
+          "task_id": null,
+          "status": "applied",
+          "applied_fields": [
+            "title",
+            "category",
+            "start_time",
+            "end_time"
+          ],
+          "skipped_fields": [],
+          "reason_code": null,
+          "conflicting_task_ids": [],
+          "attempted_direction": null,
+          "suggestion": null
+        }
+      ],
+      "blocks": [
+        {
+          "id": 11,
+          "title": "Gym",
+          "category": "health",
+          "start_time": "09:00",
+          "end_time": "09:30",
+          "is_completed": false
+        },
+        {
+          "id": 12,
+          "title": "Focus",
+          "category": "work",
+          "start_time": "10:00",
+          "end_time": "11:00",
+          "is_completed": false
+        },
+        {
+          "id": 29,
+          "title": "Walk",
+          "category": "health",
+          "start_time": "15:00",
+          "end_time": "15:30",
+          "is_completed": false
+        }
+      ]
+    },
+    {
+      "date": "2027-09-07",
+      "request_id": "81f089f738ab4aa5927005cc688101d7",
+      "status": 200,
+      "revision": 1,
+      "code": null,
+      "applied": true,
+      "partial": true,
+      "ask": "Conflict does not fit at that time. Please give it a concrete free start and end time.",
+      "explanation": "Adding Kept at 13:00-13:30 and Conflict at 10:15-10:45 as work blocks.",
+      "pending_intent": {
+        "id": "99d9e290-1106-4b3f-ba24-08103d1760a8",
+        "version": 1,
+        "expires_at": "2026-10-22T08:16:26.629616+00:00",
+        "ask": "Conflict does not fit at that time. Please give it a concrete free start and end time."
+      },
+      "outcomes": [
+        {
+          "action_index": 0,
+          "task_id": null,
+          "status": "applied",
+          "applied_fields": [
+            "title",
+            "category",
+            "start_time",
+            "end_time"
+          ],
+          "skipped_fields": [],
+          "reason_code": null,
+          "conflicting_task_ids": [],
+          "attempted_direction": null,
+          "suggestion": null
+        },
+        {
+          "action_index": 1,
+          "task_id": null,
+          "status": "skipped",
+          "applied_fields": [],
+          "skipped_fields": [
+            "title",
+            "category",
+            "start_time",
+            "end_time"
+          ],
+          "reason_code": "overlap",
+          "conflicting_task_ids": [
+            14
+          ],
+          "attempted_direction": null,
+          "suggestion": null
+        }
+      ],
+      "blocks": [
+        {
+          "id": 13,
+          "title": "Gym",
+          "category": "health",
+          "start_time": "09:00",
+          "end_time": "09:30",
+          "is_completed": false
+        },
+        {
+          "id": 14,
+          "title": "Focus",
+          "category": "work",
+          "start_time": "10:00",
+          "end_time": "11:00",
+          "is_completed": false
+        },
+        {
+          "id": 32,
+          "title": "Kept",
+          "category": "work",
+          "start_time": "13:00",
+          "end_time": "13:30",
+          "is_completed": false
+        }
+      ]
+    },
+    {
+      "date": "2027-09-07",
+      "request_id": "a6348741999d4323a079d1aea62530f7",
+      "status": 200,
+      "revision": 2,
+      "code": null,
+      "applied": true,
+      "partial": false,
+      "ask": null,
+      "explanation": "Adding Conflict at 16:00-16:30.",
+      "pending_intent": null,
+      "outcomes": [
+        {
+          "action_index": 0,
+          "task_id": null,
+          "status": "applied",
+          "applied_fields": [
+            "title",
+            "category",
+            "start_time",
+            "end_time"
+          ],
+          "skipped_fields": [],
+          "reason_code": null,
+          "conflicting_task_ids": [],
+          "attempted_direction": null,
+          "suggestion": null
+        }
+      ],
+      "blocks": [
+        {
+          "id": 13,
+          "title": "Gym",
+          "category": "health",
+          "start_time": "09:00",
+          "end_time": "09:30",
+          "is_completed": false
+        },
+        {
+          "id": 14,
+          "title": "Focus",
+          "category": "work",
+          "start_time": "10:00",
+          "end_time": "11:00",
+          "is_completed": false
+        },
+        {
+          "id": 32,
+          "title": "Kept",
+          "category": "work",
+          "start_time": "13:00",
+          "end_time": "13:30",
+          "is_completed": false
+        },
+        {
+          "id": 33,
+          "title": "Conflict",
+          "category": "work",
+          "start_time": "16:00",
+          "end_time": "16:30",
+          "is_completed": false
+        }
+      ]
+    },
+    {
+      "date": "2027-09-07",
+      "request_id": "81695afdb7934315b87a41e165884510",
+      "status": 502,
+      "revision": null,
+      "code": null,
+      "applied": null,
+      "partial": null,
+      "ask": null,
+      "explanation": null,
+      "pending_intent": null,
+      "outcomes": null
+    },
+    {
+      "date": "2027-09-07",
+      "request_id": "b7ec014dab0b491b95ddce1b7b39041a",
+      "status": 200,
+      "revision": 4,
+      "code": null,
+      "applied": false,
+      "partial": false,
+      "ask": "What time should Gym start?",
+      "explanation": "You want to move Gym but need a new start time.",
+      "pending_intent": {
+        "id": "af12f50b-2599-49af-981c-ae8470dad0e8",
+        "version": 1,
+        "expires_at": "2026-10-22T08:20:03.083219+00:00",
+        "ask": "What time should Gym start?"
+      },
+      "outcomes": []
+    },
+    {
+      "date": "2027-09-07",
+      "request_id": "43ba99a970ea4cceac2f7c67a0f996af",
+      "status": 200,
+      "revision": 4,
+      "code": null,
+      "applied": false,
+      "partial": false,
+      "ask": null,
+      "explanation": "Pending request cancelled.",
+      "pending_intent": null,
+      "outcomes": []
+    },
+    {
+      "date": "2027-09-07",
+      "request_id": "0a9047158c8048e395be57c2fb28fd4b",
+      "status": 200,
+      "revision": 4,
+      "code": null,
+      "applied": false,
+      "partial": false,
+      "ask": "What time should Gym start?",
+      "explanation": "I need the new start time to move Gym.",
+      "pending_intent": {
+        "id": "fbe842a8-9537-48d0-aa35-b008879b33de",
+        "version": 1,
+        "expires_at": "2026-10-22T08:20:35.365354+00:00",
+        "ask": "What time should Gym start?"
+      },
+      "outcomes": []
+    },
+    {
+      "date": "2027-09-07",
+      "request_id": "c533856c2c8f4724a135425b11a0e169",
+      "status": 200,
+      "revision": 4,
+      "code": null,
+      "applied": false,
+      "partial": false,
+      "ask": "What time should Gym start?",
+      "explanation": "I need the new start time to move Gym.",
+      "pending_intent": {
+        "id": "82bd9871-8b24-4ace-b0f0-fe102143d5f2",
+        "version": 1,
+        "expires_at": "2026-10-22T08:21:35.622709+00:00",
+        "ask": "What time should Gym start?"
+      },
+      "outcomes": []
+    },
+    {
+      "date": "2027-09-08",
+      "request_id": "383da349da814b819483b8bdacb5aca7",
+      "status": 200,
+      "revision": 0,
+      "code": null,
+      "applied": false,
+      "partial": false,
+      "ask": "What time should Gym start?",
+      "explanation": "I need the new start time for Gym.",
+      "pending_intent": {
+        "id": "38efd26a-dade-4dd4-8893-a1087bd9870c",
+        "version": 1,
+        "expires_at": "2026-10-22T08:22:15.185034+00:00",
+        "ask": "What time should Gym start?"
+      },
+      "outcomes": []
+    },
+    {
+      "date": "2027-09-08",
+      "request_id": "cc6c8fd4cfcf4d64b8787cce49652bba",
+      "status": 409,
+      "revision": null,
+      "code": "pending_intent_stale",
+      "applied": null,
+      "partial": null,
+      "ask": null,
+      "explanation": null,
+      "pending_intent": null,
+      "outcomes": null
+    },
+    {
+      "date": "2027-09-08",
+      "request_id": "34a9e0f59dd0455d9ef6183eeb58603c",
+      "status": 200,
+      "revision": 2,
+      "code": null,
+      "applied": true,
+      "partial": false,
+      "ask": null,
+      "explanation": "Переношу Gym на 14:00.",
+      "pending_intent": null,
+      "outcomes": [
+        {
+          "action_index": 0,
+          "task_id": 15,
+          "status": "applied",
+          "applied_fields": [
+            "start_time",
+            "end_time"
+          ],
+          "skipped_fields": [],
+          "reason_code": null,
+          "conflicting_task_ids": [],
+          "attempted_direction": null,
+          "suggestion": null
+        }
+      ],
+      "blocks": [
+        {
+          "id": 16,
+          "title": "Focus",
+          "category": "work",
+          "start_time": "10:00",
+          "end_time": "11:00",
+          "is_completed": true
+        },
+        {
+          "id": 15,
+          "title": "Gym",
+          "category": "health",
+          "start_time": "14:00",
+          "end_time": "14:30",
+          "is_completed": false
+        }
+      ]
+    }
+  ],
+  "intents": [
+    {
+      "id": "6e0e7ea20aaa41f6b89f5cdbe787ec54",
+      "state": "resolved",
+      "version": 1,
+      "revision": 0,
+      "source_message": "Move Gym, but ask me for the new start time first.",
+      "question": "What time should Gym start?",
+      "items": [
+        {
+          "type": "update",
+          "task_id": 1,
+          "target_ids": [
+            1
+          ],
+          "known_fields": {},
+          "missing_fields": [
+            "start_time"
+          ]
+        }
+      ],
+      "accepted_changes": [],
+      "created_at": "2026-10-22 07:47:59.055314",
+      "expires_at": "2026-10-22 08:02:59.054976",
+      "schedule_id": 2,
+      "user_id": 1,
+      "date": "2027-09-01"
+    },
+    {
+      "id": "e2be97385b674a44979fd67d0ad38e8a",
+      "state": "resolved",
+      "version": 1,
+      "revision": 1,
+      "source_message": "Add Kept at 13:00 for 30 minutes and Conflict at 10:15 for 30 minutes, both work. Keep the requested times and let the backend resolve conflicts.",
+      "question": "Conflict does not fit at that time. Please give it a concrete free start and end time.",
+      "items": [
+        {
+          "type": "add",
+          "task_id": null,
+          "target_ids": [],
+          "known_fields": {
+            "title": "Conflict",
+            "category": "work"
+          },
+          "missing_fields": [
+            "duration_minutes",
+            "end_time",
+            "placement_direction",
+            "start_time"
+          ]
+        }
+      ],
+      "accepted_changes": [
+        {
+          "type": "add",
+          "action_index": 0,
+          "block_id": 22,
+          "fields": [
+            "title",
+            "category",
+            "start_time",
+            "end_time"
+          ],
+          "revision": 1
+        }
+      ],
+      "created_at": "2026-10-22 07:50:09.140648",
+      "expires_at": "2026-10-22 08:05:09.140454",
+      "schedule_id": 4,
+      "user_id": 1,
+      "date": "2027-09-03"
+    },
+    {
+      "id": "22b571acc6c443e8a6d5122a427d2876",
+      "state": "cancelled",
+      "version": 1,
+      "revision": 0,
+      "source_message": "Move Gym, but ask me for the new start time first.",
+      "question": "What time should Gym start?",
+      "items": [
+        {
+          "type": "update",
+          "task_id": 7,
+          "target_ids": [
+            7
+          ],
+          "known_fields": {},
+          "missing_fields": [
+            "start_time"
+          ]
+        }
+      ],
+      "accepted_changes": [],
+      "created_at": "2026-10-22 07:52:03.155361",
+      "expires_at": "2026-10-22 08:07:03.155147",
+      "schedule_id": 5,
+      "user_id": 1,
+      "date": "2027-09-04"
+    },
+    {
+      "id": "4e83c5b158014fe9a3a13dfa8e6f023c",
+      "state": "cancelled",
+      "version": 1,
+      "revision": 0,
+      "source_message": "Move Gym, but ask me for the new start time first.",
+      "question": "What time should Gym start?",
+      "items": [
+        {
+          "type": "update",
+          "task_id": 9,
+          "target_ids": [
+            9
+          ],
+          "known_fields": {},
+          "missing_fields": [
+            "start_time"
+          ]
+        }
+      ],
+      "accepted_changes": [],
+      "created_at": "2026-10-22 07:57:19.904113",
+      "expires_at": "2026-10-22 08:12:19.903983",
+      "schedule_id": 6,
+      "user_id": 1,
+      "date": "2027-09-05"
+    },
+    {
+      "id": "2a794e49525643b99157aa1897ada93d",
+      "state": "cancelled",
+      "version": 1,
+      "revision": 0,
+      "source_message": "Move Gym, but ask me for the new start time first.",
+      "question": "What time should Gym start?",
+      "items": [
+        {
+          "type": "update",
+          "task_id": 11,
+          "target_ids": [
+            11
+          ],
+          "known_fields": {},
+          "missing_fields": [
+            "start_time"
+          ]
+        }
+      ],
+      "accepted_changes": [],
+      "created_at": "2026-10-22 07:58:29.933165",
+      "expires_at": "2026-10-22 08:13:29.932729",
+      "schedule_id": 7,
+      "user_id": 1,
+      "date": "2027-09-06"
+    },
+    {
+      "id": "99d9e29011064b3fba2408103d1760a8",
+      "state": "resolved",
+      "version": 1,
+      "revision": 1,
+      "source_message": "Add Kept at 13:00 for 30 minutes and Conflict at 10:15 for 30 minutes, both work. Keep the requested times and let the backend resolve conflicts.",
+      "question": "Conflict does not fit at that time. Please give it a concrete free start and end time.",
+      "items": [
+        {
+          "type": "add",
+          "task_id": null,
+          "target_ids": [],
+          "known_fields": {
+            "title": "Conflict",
+            "category": "work",
+            "duration_minutes": 30
+          },
+          "missing_fields": [
+            "end_time",
+            "start_time"
+          ]
+        }
+      ],
+      "accepted_changes": [
+        {
+          "type": "add",
+          "action_index": 0,
+          "block_id": 32,
+          "fields": [
+            "title",
+            "category",
+            "start_time",
+            "end_time"
+          ],
+          "revision": 1
+        }
+      ],
+      "created_at": "2026-10-22 08:01:26.629828",
+      "expires_at": "2026-10-22 08:16:26.629616",
+      "schedule_id": 8,
+      "user_id": 1,
+      "date": "2027-09-07"
+    },
+    {
+      "id": "af12f50b259949af981cae8470dad0e8",
+      "state": "cancelled",
+      "version": 1,
+      "revision": 4,
+      "source_message": "Move Gym, but ask me for the new start time first.",
+      "question": "What time should Gym start?",
+      "items": [
+        {
+          "type": "update",
+          "task_id": 37,
+          "target_ids": [
+            37
+          ],
+          "known_fields": {},
+          "missing_fields": [
+            "start_time"
+          ]
+        }
+      ],
+      "accepted_changes": [],
+      "created_at": "2026-10-22 08:05:03.083355",
+      "expires_at": "2026-10-22 08:20:03.083219",
+      "schedule_id": 8,
+      "user_id": 1,
+      "date": "2027-09-07"
+    },
+    {
+      "id": "fbe842a8953748d0aa35b008879b33de",
+      "state": "cancelled",
+      "version": 1,
+      "revision": 4,
+      "source_message": "Move Gym, but ask me for the new start time first.",
+      "question": "What time should Gym start?",
+      "items": [
+        {
+          "type": "update",
+          "task_id": 37,
+          "target_ids": [
+            37
+          ],
+          "known_fields": {},
+          "missing_fields": [
+            "start_time"
+          ]
+        }
+      ],
+      "accepted_changes": [],
+      "created_at": "2026-10-22 08:05:35.365556",
+      "expires_at": "2026-10-22 08:20:35.365354",
+      "schedule_id": 8,
+      "user_id": 1,
+      "date": "2027-09-07"
+    },
+    {
+      "id": "82bd98718b244aceb0f0fe102143d5f2",
+      "state": "open",
+      "version": 1,
+      "revision": 4,
+      "source_message": "Move Gym, but ask me for the new start time first.",
+      "question": "What time should Gym start?",
+      "items": [
+        {
+          "type": "update",
+          "task_id": 37,
+          "target_ids": [
+            37
+          ],
+          "known_fields": {},
+          "missing_fields": [
+            "start_time"
+          ]
+        }
+      ],
+      "accepted_changes": [],
+      "created_at": "2026-10-22 08:06:35.622881",
+      "expires_at": "2026-10-22 08:21:35.622709",
+      "schedule_id": 8,
+      "user_id": 1,
+      "date": "2027-09-07"
+    },
+    {
+      "id": "38efd26adade4dd48893a1087bd9870c",
+      "state": "stale",
+      "version": 1,
+      "revision": 0,
+      "source_message": "Move Gym, but ask me for the new start time first.",
+      "question": "What time should Gym start?",
+      "items": [
+        {
+          "type": "update",
+          "task_id": 15,
+          "target_ids": [
+            15
+          ],
+          "known_fields": {},
+          "missing_fields": [
+            "start_time"
+          ]
+        }
+      ],
+      "accepted_changes": [],
+      "created_at": "2026-10-22 08:07:15.185275",
+      "expires_at": "2026-10-22 08:22:15.185034",
+      "schedule_id": 9,
+      "user_id": 1,
+      "date": "2027-09-08"
+    }
+  ],
+  "interactions": [
+    {
+      "date": "2027-09-01",
+      "command": "Move Gym, but ask me for the new start time first.",
+      "success": true,
+      "error_class": null,
+      "actions": []
+    },
+    {
+      "date": "2027-09-01",
+      "command": "14:00",
+      "success": true,
+      "error_class": null,
+      "actions": [
+        {
+          "type": "update",
+          "task_id": 1,
+          "changes": {
+            "start_time": "14:00"
+          }
+        }
+      ]
+    },
+    {
+      "date": "2027-09-02",
+      "command": "Add Accepted at 13:00 for 30 minutes, and Outside at 23:30 for 30 minutes, both work.",
+      "success": true,
+      "error_class": null,
+      "actions": [
+        {
+          "type": "add",
+          "title": "Accepted",
+          "category": "work",
+          "start_time": "13:00",
+          "end_time": "13:30"
+        }
+      ]
+    },
+    {
+      "date": "2027-09-03",
+      "command": "Add Kept at 13:00 for 30 minutes and Conflict at 10:15 for 30 minutes, both work. Keep the requested times and let the backend resolve conflicts.",
+      "success": true,
+      "error_class": null,
+      "actions": [
+        {
+          "type": "add",
+          "title": "Kept",
+          "category": "work",
+          "start_time": "13:00",
+          "end_time": "13:30"
+        },
+        {
+          "type": "add",
+          "title": "Conflict",
+          "category": "work",
+          "start_time": "10:15",
+          "end_time": "10:45"
+        }
+      ]
+    },
+    {
+      "date": "2027-09-03",
+      "command": "Conflict at 16:00 for 30 minutes.",
+      "success": true,
+      "error_class": null,
+      "actions": [
+        {
+          "type": "add",
+          "title": "Conflict",
+          "category": "work",
+          "start_time": "16:00",
+          "end_time": "16:30"
+        }
+      ]
+    },
+    {
+      "date": "2027-09-04",
+      "command": "Move Gym, but ask me for the new start time first.",
+      "success": true,
+      "error_class": null,
+      "actions": []
+    },
+    {
+      "date": "2027-09-05",
+      "command": "Move Gym, but ask me for the new start time first.",
+      "success": true,
+      "error_class": null,
+      "actions": []
+    },
+    {
+      "date": "2027-09-05",
+      "command": "No, do not move Gym.",
+      "success": true,
+      "error_class": null,
+      "actions": []
+    },
+    {
+      "date": "2027-09-06",
+      "command": "Move Gym, but ask me for the new start time first.",
+      "success": true,
+      "error_class": null,
+      "actions": []
+    },
+    {
+      "date": "2027-09-06",
+      "command": "Add Walk at 15:00 for 30 minutes, category health.",
+      "success": true,
+      "error_class": null,
+      "actions": [
+        {
+          "type": "add",
+          "title": "Walk",
+          "category": "health",
+          "start_time": "15:00",
+          "end_time": "15:30"
+        }
+      ]
+    },
+    {
+      "date": "2027-09-07",
+      "command": "Add Kept at 13:00 for 30 minutes and Conflict at 10:15 for 30 minutes, both work. Keep the requested times and let the backend resolve conflicts.",
+      "success": true,
+      "error_class": null,
+      "actions": [
+        {
+          "type": "add",
+          "title": "Kept",
+          "category": "work",
+          "start_time": "13:00",
+          "end_time": "13:30"
+        },
+        {
+          "type": "add",
+          "title": "Conflict",
+          "category": "work",
+          "start_time": "10:15",
+          "end_time": "10:45"
+        }
+      ]
+    },
+    {
+      "date": "2027-09-07",
+      "command": "Conflict at 16:00 for 30 minutes.",
+      "success": true,
+      "error_class": null,
+      "actions": [
+        {
+          "type": "add",
+          "title": "Conflict",
+          "category": "work",
+          "start_time": "16:00",
+          "end_time": "16:30"
+        }
+      ]
+    },
+    {
+      "date": "2027-09-07",
+      "command": "Move Gym, but ask me for the new start time first.",
+      "success": false,
+      "error_class": "AIParseError",
+      "actions": []
+    },
+    {
+      "date": "2027-09-07",
+      "command": "Move Gym, but ask me for the new start time first.",
+      "success": true,
+      "error_class": null,
+      "actions": []
+    },
+    {
+      "date": "2027-09-07",
+      "command": "Move Gym, but ask me for the new start time first.",
+      "success": true,
+      "error_class": null,
+      "actions": []
+    },
+    {
+      "date": "2027-09-07",
+      "command": "Move Gym, but ask me for the new start time first.",
+      "success": true,
+      "error_class": null,
+      "actions": []
+    },
+    {
+      "date": "2027-09-08",
+      "command": "Move Gym, but ask me for the new start time first.",
+      "success": true,
+      "error_class": null,
+      "actions": []
+    },
+    {
+      "date": "2027-09-08",
+      "command": "Перенеси Gym на 14:00, сохрани длительность.",
+      "success": true,
+      "error_class": null,
+      "actions": [
+        {
+          "type": "move",
+          "task_id": 15,
+          "start_time": "14:00"
+        }
+      ]
+    }
+  ],
+  "final_schedule_rows": [
+    {
+      "date": "2026-10-22",
+      "revision": 0,
+      "title": null,
+      "start_time": null,
+      "end_time": null,
+      "is_completed": null
+    },
+    {
+      "date": "2027-09-01",
+      "revision": 2,
+      "title": "Gym",
+      "start_time": "09:00:00",
+      "end_time": "09:30:00",
+      "is_completed": 0
+    },
+    {
+      "date": "2027-09-01",
+      "revision": 2,
+      "title": "Focus",
+      "start_time": "10:00:00",
+      "end_time": "11:00:00",
+      "is_completed": 0
+    },
+    {
+      "date": "2027-09-02",
+      "revision": 2,
+      "title": "Gym",
+      "start_time": "09:00:00",
+      "end_time": "09:30:00",
+      "is_completed": 0
+    },
+    {
+      "date": "2027-09-02",
+      "revision": 2,
+      "title": "Focus",
+      "start_time": "10:00:00",
+      "end_time": "11:00:00",
+      "is_completed": 0
+    },
+    {
+      "date": "2027-09-03",
+      "revision": 4,
+      "title": "Gym",
+      "start_time": "09:00:00",
+      "end_time": "09:30:00",
+      "is_completed": 0
+    },
+    {
+      "date": "2027-09-03",
+      "revision": 4,
+      "title": "Focus",
+      "start_time": "10:00:00",
+      "end_time": "11:00:00",
+      "is_completed": 0
+    },
+    {
+      "date": "2027-09-04",
+      "revision": 0,
+      "title": "Gym",
+      "start_time": "09:00:00",
+      "end_time": "09:30:00",
+      "is_completed": 0
+    },
+    {
+      "date": "2027-09-04",
+      "revision": 0,
+      "title": "Focus",
+      "start_time": "10:00:00",
+      "end_time": "11:00:00",
+      "is_completed": 0
+    },
+    {
+      "date": "2027-09-05",
+      "revision": 0,
+      "title": "Gym",
+      "start_time": "09:00:00",
+      "end_time": "09:30:00",
+      "is_completed": 0
+    },
+    {
+      "date": "2027-09-05",
+      "revision": 0,
+      "title": "Focus",
+      "start_time": "10:00:00",
+      "end_time": "11:00:00",
+      "is_completed": 0
+    },
+    {
+      "date": "2027-09-06",
+      "revision": 2,
+      "title": "Gym",
+      "start_time": "09:00:00",
+      "end_time": "09:30:00",
+      "is_completed": 0
+    },
+    {
+      "date": "2027-09-06",
+      "revision": 2,
+      "title": "Focus",
+      "start_time": "10:00:00",
+      "end_time": "11:00:00",
+      "is_completed": 0
+    },
+    {
+      "date": "2027-09-07",
+      "revision": 4,
+      "title": "Gym",
+      "start_time": "09:00:00",
+      "end_time": "09:30:00",
+      "is_completed": 0
+    },
+    {
+      "date": "2027-09-07",
+      "revision": 4,
+      "title": "Focus",
+      "start_time": "10:00:00",
+      "end_time": "11:00:00",
+      "is_completed": 0
+    },
+    {
+      "date": "2027-09-08",
+      "revision": 4,
+      "title": "Gym",
+      "start_time": "09:00:00",
+      "end_time": "09:30:00",
+      "is_completed": 0
+    },
+    {
+      "date": "2027-09-08",
+      "revision": 4,
+      "title": "Focus",
+      "start_time": "10:00:00",
+      "end_time": "11:00:00",
+      "is_completed": 0
+    }
+  ],
+  "screenshots": {
+    "desktop-partial-resolved.jpg": {
+      "pixelWidth": 1425,
+      "pixelHeight": 891
+    },
+    "mobile-partial.jpg": {
+      "pixelWidth": 375,
+      "pixelHeight": 812
+    },
+    "mobile-stale-reconciled.jpg": {
+      "pixelWidth": 305,
+      "pixelHeight": 705
+    },
+    "mobile-logout-back.jpg": {
+      "pixelWidth": 320,
+      "pixelHeight": 740
+    },
+    "desktop-partial.jpg": {
+      "pixelWidth": 1425,
+      "pixelHeight": 891
+    },
+    "mobile-new-command.jpg": {
+      "pixelWidth": 375,
+      "pixelHeight": 812
+    },
+    "desktop-continued.jpg": {
+      "pixelWidth": 1425,
+      "pixelHeight": 891
+    },
+    "mobile-refusal.jpg": {
+      "pixelWidth": 375,
+      "pixelHeight": 812
+    },
+    "mobile-320-pending.jpg": {
+      "pixelWidth": 305,
+      "pixelHeight": 705
+    },
+    "mobile-pending.jpg": {
+      "pixelWidth": 375,
+      "pixelHeight": 812
+    },
+    "mobile-after-stale-new-command.jpg": {
+      "pixelWidth": 305,
+      "pixelHeight": 705
+    },
+    "desktop-cancelled.jpg": {
+      "pixelWidth": 1440,
+      "pixelHeight": 900
+    },
+    "mobile-partial-resolved.jpg": {
+      "pixelWidth": 375,
+      "pixelHeight": 812
+    }
+  },
+  "mobile_320_layout": {
+    "window_inner_width": 320,
+    "client_width": 305,
+    "scroll_width": 305
+  },
+  "explicit_cancel_counter": {
+    "before": 6,
+    "after": 6
+  },
+  "stale_reply_counter": {
+    "before": 17,
+    "after": 17,
+    "schedule_revision_before": 1,
+    "schedule_revision_after": 1
+  }
+}

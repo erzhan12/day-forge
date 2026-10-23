@@ -92,6 +92,84 @@ function makeDeferred(): DeferredApiResult {
 }
 
 describe("useChat", () => {
+  const intent = { id: "ba598a1c-bddc-461f-a057-e5bf2b6bf81c", version: 1, expires_at: "2027-01-15T15:00:00Z", ask: "When?" }
+
+  it("binds answers to the server intent and advances its independent version", async () => {
+    const chat = useChat()
+    chat.setActiveDate("2026-05-07")
+    requestJsonMock
+      .mockResolvedValueOnce({ ok: true, data: { applied: false, ask: "When?", pending_intent: intent } })
+      .mockResolvedValueOnce({ ok: true, data: { applied: false, ask: "Which time?", pending_intent: { ...intent, version: 2 } } })
+      .mockResolvedValueOnce({ ok: true, data: { applied: false, explanation: "Done", pending_intent: null } })
+    await chat.submitTurn("Move Gym", vi.fn())
+    expect(chat.hasPendingIntent.value).toBe(true)
+    await chat.submitTurn("Later", vi.fn())
+    expect(requestJsonMock.mock.calls[1][2]).toMatchObject({ pending_intent_id: intent.id, pending_intent_version: 1, intent_action: "continue" })
+    await chat.submitTurn("14:00", vi.fn())
+    expect(requestJsonMock.mock.calls[2][2]).toMatchObject({ pending_intent_version: 2 })
+    expect(chat.hasPendingIntent.value).toBe(false)
+  })
+
+  it("sends explicit cancellation as a new durable request without registering Undo", async () => {
+    const chat = useChat()
+    chat.setActiveDate("2026-05-07")
+    const pushUndo = vi.fn()
+    requestJsonMock
+      .mockResolvedValueOnce({ ok: true, data: { applied: false, ask: "When?", pending_intent: intent } })
+      .mockResolvedValueOnce({ ok: true, data: { applied: false, explanation: "Cancelled", pending_intent: null } })
+    await chat.submitTurn("Move Gym", pushUndo)
+    const original = requestJsonMock.mock.calls[0][2].request_id
+    await chat.cancelPendingIntent(pushUndo)
+    expect(requestJsonMock.mock.calls[1][2]).toMatchObject({ pending_intent_id: intent.id, pending_intent_version: 1, intent_action: "cancel" })
+    expect(requestJsonMock.mock.calls[1][2].request_id).not.toBe(original)
+    expect(pushUndo).not.toHaveBeenCalled()
+    expect(chat.hasPendingIntent.value).toBe(false)
+  })
+
+  it.each(["clear", "date"])("drops the intent reference on %s", async (boundary) => {
+    const chat = useChat()
+    chat.setActiveDate("2026-05-07")
+    requestJsonMock.mockResolvedValueOnce({ ok: true, data: { applied: false, ask: "When?", pending_intent: intent } })
+    await chat.submitTurn("Move Gym", vi.fn())
+    if (boundary === "clear") chat.clearThread()
+    else chat.setActiveDate("2026-05-08")
+    expect(chat.hasPendingIntent.value).toBe(false)
+    requestJsonMock.mockResolvedValueOnce({ ok: true, data: { applied: false, explanation: "New turn" } })
+    await chat.submitTurn("New request", vi.fn())
+    expect(requestJsonMock.mock.calls[1][2]).not.toHaveProperty("pending_intent_id")
+  })
+
+  it("drops a stale intent but preserves the user's visible error", async () => {
+    const chat = useChat()
+    chat.setActiveDate("2026-05-07")
+    requestJsonMock
+      .mockResolvedValueOnce({ ok: true, data: { applied: false, ask: "When?", pending_intent: intent } })
+      .mockResolvedValueOnce({ ok: false, status: 409, code: "pending_intent_stale", data: { request_completed: true }, errors: { detail: "Expired; restate it" } })
+    await chat.submitTurn("Move Gym", vi.fn())
+    await chat.submitTurn("14:00", vi.fn())
+    expect(chat.hasPendingIntent.value).toBe(false)
+    expect(chat.pendingAsk.value).toBeNull()
+    expect(chat.lastError.value).toBe("Expired; restate it")
+    expect(routerReload).toHaveBeenCalled()
+  })
+
+  it("retains the exact pending-intent reference for an uncertain transport retry", async () => {
+    const chat = useChat()
+    chat.setActiveDate("2026-05-07")
+    requestJsonMock
+      .mockResolvedValueOnce({ ok: true, data: { applied: false, ask: "When?", pending_intent: intent } })
+      .mockResolvedValueOnce({ ok: false, errors: { detail: "Lost connection" } })
+      .mockResolvedValueOnce({ ok: false, errors: { detail: "Lost connection" } })
+    await chat.submitTurn("Move Gym", vi.fn())
+    await chat.submitTurn("14:00", vi.fn())
+    expect(requestJsonMock.mock.calls[1][2]).toEqual(requestJsonMock.mock.calls[2][2])
+    expect(requestJsonMock.mock.calls[1][2]).toMatchObject({ pending_intent_id: intent.id, pending_intent_version: 1 })
+    expect(chat.hasPendingRequest.value).toBe(true)
+    const callsBeforeCancel = requestJsonMock.mock.calls.length
+    await chat.cancelPendingIntent(vi.fn())
+    expect(requestJsonMock.mock.calls.length).toBe(callsBeforeCancel)
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     _resetChatStateForTests()

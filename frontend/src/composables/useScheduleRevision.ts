@@ -418,5 +418,7 @@ export function refreshSchedule(only: string[] = ["blocks", "schedule"], isCurre
   })
 }
 export function isScheduleRevisionConflict(result: ApiResult): boolean {
-  return result.status === 409 && (result.code === "schedule_changed" || result.errors?.detail === "schedule_changed")
+  // An intent can be stale because another tab changed this day's state or
+  // policies. Reconcile before allowing another write, including on expiry.
+  return result.status === 409 && (result.code === "schedule_changed" || result.code === "pending_intent_stale" || result.errors?.detail === "schedule_changed")
 }

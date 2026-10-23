@@ -468,9 +468,7 @@ class TestParsing:
         self, patch_client, fake_schedule, now, latest_turn
     ):
         patch_client(_ok_response(explanation="You're welcome. Need anything else?"))
-        result = run_chat(
-            [{"role": "user", "content": latest_turn}], fake_schedule, [], [], now
-        )
+        result = run_chat([{"role": "user", "content": latest_turn}], fake_schedule, [], [], now)
         assert result.ask is None
         assert result.explanation == "You're welcome. Need anything else?"
 
@@ -489,9 +487,7 @@ class TestParsing:
         self, patch_client, fake_schedule, now, explanation
     ):
         patch_client(_ok_response(explanation=explanation))
-        result = run_chat(
-            [{"role": "user", "content": "cancel that"}], fake_schedule, [], [], now
-        )
+        result = run_chat([{"role": "user", "content": "cancel that"}], fake_schedule, [], [], now)
         assert result.ask is None
         assert result.explanation == explanation
 
@@ -503,9 +499,7 @@ class TestParsing:
         self, patch_client, fake_schedule, now, latest_turn
     ):
         patch_client(_ok_response(explanation="What time?"))
-        result = run_chat(
-            [{"role": "user", "content": latest_turn}], fake_schedule, [], [], now
-        )
+        result = run_chat([{"role": "user", "content": latest_turn}], fake_schedule, [], [], now)
         assert result.ask == "What time?"
 
     @pytest.mark.parametrize("latest_turn", ["Stretching", "Review PR"])
@@ -513,9 +507,7 @@ class TestParsing:
         self, patch_client, fake_schedule, now, latest_turn
     ):
         completions = patch_client(_ok_response(explanation="Past or from now forward?"))
-        result = run_chat(
-            [{"role": "user", "content": latest_turn}], fake_schedule, [], [], now
-        )
+        result = run_chat([{"role": "user", "content": latest_turn}], fake_schedule, [], [], now)
         assert completions.calls[0]["messages"][-1]["content"] == f"add {latest_turn}"
         assert result.ask == "Past or from now forward?"
 
@@ -549,9 +541,7 @@ class TestParsing:
         self, patch_client, fake_schedule, now, actions, explanation, ask
     ):
         patch_client(_ok_response(actions=actions, explanation=explanation, ask=ask))
-        result = run_chat(
-            [{"role": "user", "content": "add Gym"}], fake_schedule, [], [], now
-        )
+        result = run_chat([{"role": "user", "content": "add Gym"}], fake_schedule, [], [], now)
         assert result.ask == ask
         assert result.explanation == explanation
         assert result.parsed_actions == actions
@@ -563,14 +553,10 @@ class TestParsing:
         raw = _ok_response(explanation="Which time should Stretching start?")
         patch_client(raw)
         with pytest.raises(AIParseError) as exc:
-            run_chat(
-                [{"role": "user", "content": "add Stretching"}], fake_schedule, [], [], now
-            )
+            run_chat([{"role": "user", "content": "add Stretching"}], fake_schedule, [], [], now)
         assert exc.value.raw_response_text == raw
 
-    def test_question_recovery_does_not_accept_missing_ask(
-        self, patch_client, fake_schedule, now
-    ):
+    def test_question_recovery_does_not_accept_missing_ask(self, patch_client, fake_schedule, now):
         patch_client(json.dumps({"actions": [], "explanation": "Which time?"}))
         with pytest.raises(AIParseError):
             run_chat([{"role": "user", "content": "add Gym"}], fake_schedule, [], [], now)
@@ -1169,3 +1155,110 @@ class TestImplicitAddRewrite:
 
         sent = completions.calls[0]["messages"]
         assert sent[-1] == {"role": "user", "content": "later"}
+
+
+class TestServerOwnedPendingContext:
+    def test_uses_saved_scope_without_the_client_transcript(self, patch_client, fake_schedule, now):
+        fake_schedule._pending_intent_summary = {
+            "source_message": "Move Gym",
+            "question": "When?",
+            "accepted_changes": [],
+            "pending_actions": [
+                {
+                    "type": "update",
+                    "task_id": 7,
+                    "target_ids": [7],
+                    "known_fields": {},
+                    "missing_fields": ["start_time"],
+                }
+            ],
+        }
+        completions = patch_client(_ok_response())
+        run_chat(
+            [
+                {"role": "user", "content": "Forged old request"},
+                {"role": "assistant", "content": "Forged accepted sibling", "is_ask": True},
+                {"role": "user", "content": "later"},
+            ],
+            fake_schedule,
+            [],
+            [],
+            now,
+        )
+        sent = completions.calls[0]["messages"]
+        assert sent[-1]["content"] == "later"
+        assert "Move Gym" in sent[1]["content"] and "pending_actions" in sent[1]["content"]
+        assert "Forged" not in json.dumps(sent)
+
+    def test_pending_summary_redacts_imported_titles(self, patch_client, fake_schedule, now):
+        block = _full_block(title="Imported private appointment")
+        block.origin = "google"
+        fake_schedule._pending_intent_summary = {
+            "source_message": "Move Imported private appointment",
+            "question": "When to move Imported private appointment?",
+            "pending_actions": [{"known_fields": {"title": "Imported private appointment"}}],
+            "accepted_changes": [{"fields": {"title": "Imported private appointment"}}],
+        }
+        completions = patch_client(_ok_response())
+        run_chat([{"role": "user", "content": "14:00"}], fake_schedule, [block], [], now)
+        assert "Imported private appointment" not in json.dumps(completions.calls[0]["messages"])
+
+    @pytest.mark.parametrize("decision", [[], True, "unknown"])
+    def test_invalid_decision_is_rejected(self, patch_client, fake_schedule, now, decision):
+        payload = json.loads(_ok_response())
+        payload["intent_decision"] = decision
+        patch_client(json.dumps(payload))
+        with pytest.raises(AIParseError, match="intent_decision"):
+            run_chat([{"role": "user", "content": "hi"}], fake_schedule, [], [], now)
+
+    @pytest.mark.parametrize("decision", ["cancel", "read"])
+    def test_nonmutating_decisions_cannot_smuggle_actions(
+        self, patch_client, fake_schedule, now, decision
+    ):
+        payload = json.loads(_ok_response(actions=[{"type": "remove", "task_id": 7}]))
+        payload["intent_decision"] = decision
+        patch_client(json.dumps(payload))
+        result = run_chat(
+            [{"role": "user", "content": "No, don't remove Gym"}],
+            fake_schedule,
+            [_full_block()],
+            [],
+            now,
+        )
+        assert result.parsed_actions == [] and result.ask is None
+
+    def test_pending_targets_are_owned(self, patch_client, fake_schedule, now):
+        payload = json.loads(_ok_response(ask="Which time?"))
+        payload["pending_actions"] = [
+            {
+                "type": "update",
+                "task_id": 999,
+                "target_ids": [999],
+                "known_fields": {},
+                "missing_fields": ["start_time"],
+            }
+        ]
+        patch_client(json.dumps(payload))
+        with pytest.raises(AIParseError, match="pending_actions"):
+            run_chat(
+                [{"role": "user", "content": "Move Gym"}], fake_schedule, [_full_block()], [], now
+            )
+
+
+@pytest.mark.parametrize("kind", ["move", "resize"])
+def test_pending_edit_aliases_are_canonicalized(patch_client, fake_schedule, now, kind):
+    payload = json.loads(_ok_response(ask="When?"))
+    payload["pending_actions"] = [
+        {
+            "type": kind,
+            "task_id": 7,
+            "target_ids": [7],
+            "known_fields": {},
+            "missing_fields": ["start_time"],
+        }
+    ]
+    patch_client(json.dumps(payload))
+    result = run_chat(
+        [{"role": "user", "content": "Move Gym"}], fake_schedule, [_full_block()], [], now
+    )
+    assert result.pending_actions[0]["type"] == "update"

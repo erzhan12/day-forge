@@ -1,0 +1,100 @@
+{
+  "from": "0007_chatrequest",
+  "to": "0008_pendingintent",
+  "existing_tables_preserved": 22,
+  "existing_rows_preserved": 1043,
+  "source_database_unchanged": true,
+  "new_intents": 0,
+  "new_content_types": 1,
+  "new_permissions": 4,
+  "tables": {
+    "auth_group_permissions": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "auth_user_groups": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "auth_user_user_permissions": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "django_admin_log": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "auth_group": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "auth_user": {
+      "count": 8,
+      "sha256": "1bcf91041ac28806f5580e8f8ce0ceb64fff04e3722bd9317ba3628bb20bda36"
+    },
+    "django_session": {
+      "count": 207,
+      "sha256": "4adad93a239f75683d17a0f9c81d51e3797a72aefa927f34cc864bf38dc3f422"
+    },
+    "templates_mgr_rule": {
+      "count": 3,
+      "sha256": "32a2080095d54804d52a7ef1858c4e9186ca831460ceb7e2bc7d8b99f6a458aa"
+    },
+    "templates_mgr_template": {
+      "count": 2,
+      "sha256": "c3e6d2df1f10c9f45b429d3ea7dc075db4c9996f9b547914258a4f792a2170f7"
+    },
+    "analytics_dailyreview": {
+      "count": 29,
+      "sha256": "eaf8c8586ea0240a3972c3d4d97a76ddd238582ebeff18a6fb70efc979676f6b"
+    },
+    "templates_mgr_userpreferences": {
+      "count": 3,
+      "sha256": "7af7e3d853a3dbdd2210abe93a940d3eb1877d505640f08dd2711c69239d533d"
+    },
+    "calendar_sync_caldavaccount": {
+      "count": 1,
+      "sha256": "7464a41d601110a18c6acb5c323eb0257f1839635b95e39515d60482a5408834"
+    },
+    "todoist_sync_todoistaccount": {
+      "count": 1,
+      "sha256": "d3c9a2efa8154ceacf49a9afd0f8279d224c41da0ea9b51689262f5c5d529ee6"
+    },
+    "gcal_sync_googlecalendaraccount": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "habitica_sync_habiticaaccount": {
+      "count": 1,
+      "sha256": "4519d700cbf0921b490cbb7993f47bef4e2d39346c0d0a1e32f59c3d22fea81f"
+    },
+    "ai_aiinteraction": {
+      "count": 311,
+      "sha256": "5b501b8cc7ee952ac53d6285317ab60b9bd6c76a2ad50faaed76afaab2c9af1f"
+    },
+    "calendar_sync_travelrule": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "schedules_category": {
+      "count": 12,
+      "sha256": "3e00ecf20ed29e1825e75f9574593e8071aa75fa737b861ef631bb63e55f5875"
+    },
+    "schedules_userschedulesettings": {
+      "count": 3,
+      "sha256": "883f450cc51b8e4b88033981ad30928289e8b6e57a23334e835efb2378ea2ebe"
+    },
+    "schedules_schedule": {
+      "count": 123,
+      "sha256": "bca69b589b6d9800fd8f59c3a645a9e30104fdfa924e8b9c5ab418eafc5a2855"
+    },
+    "schedules_timeblock": {
+      "count": 339,
+      "sha256": "c97435dc0bea895aedc11d10a39e27de16b0c2e672bb6397be30efda76edb52e"
+    },
+    "ai_chatrequest": {
+      "count": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  }
+}

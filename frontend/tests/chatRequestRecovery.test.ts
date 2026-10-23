@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { ref } from "vue"
 import { createScheduleRevision } from "../src/composables/useScheduleRevision"
 import { _resetChatStateForTests, useChat } from "../src/composables/useChat"
-import { retainChatRequestsForUser } from "../src/utils/chatRequestRecovery"
+import { readChatRequest, retainChatRequestsForUser } from "../src/utils/chatRequestRecovery"
 import type { TimeBlock } from "../src/types"
 
 const { reload } = vi.hoisted(() => ({ reload: vi.fn() }))
@@ -36,6 +36,40 @@ beforeEach(() => {
 afterEach(() => { _resetChatStateForTests(); sessionStorage.clear(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
 describe("durable chat recovery", () => {
+  it("restores a frozen continuation after remount with the same intent and request UUID", async () => {
+    const first = setup()
+    const intent = { id: "ba598a1c-bddc-461f-a057-e5bf2b6bf81c", version: 2, expires_at: "2027-01-15T15:00:00Z", ask: "When?" }
+    fetchMock.mockImplementationOnce(() => new Response(JSON.stringify({
+      request_id: sent().request_id, request_completed: true, revision: 0,
+      schedule: { id: 1, date: DAY, revision: 0, status: "active" },
+      blocks: null, applied: false, ask: "When?", pending_intent: intent,
+    }), { status: 200 }))
+    await first.chat.submitTurn("Move Gym", vi.fn())
+    fetchMock.mockRejectedValue(new TypeError("lost"))
+    await first.chat.submitTurn("14:00", vi.fn())
+    const frozen = sent(1)
+    first.state.reset("dispose")
+    const second = setup()
+    fetchMock.mockImplementationOnce(() => success())
+    await second.chat.recoverPending(vi.fn())
+    expect(sent(3)).toEqual(frozen)
+    expect(frozen).toMatchObject({ pending_intent_id: intent.id, pending_intent_version: 2, intent_action: "continue" })
+    expect(second.chat.hasPendingRequest.value).toBe(false)
+  })
+
+  it.each([
+    { pending_intent_id: "bad", pending_intent_version: 1 },
+    { pending_intent_version: 1 },
+    { intent_action: "cancel" },
+    { pending_intent_id: crypto.randomUUID(), pending_intent_version: true },
+  ])("rejects malformed persisted intent references %#", extra => {
+    sessionStorage.setItem(`day-forge:chat-request:7:${DAY}`, JSON.stringify({
+      userId: 7, date: DAY, body: { request_id: crypto.randomUUID(), expected_revision: 0,
+      messages: [{ role: "user", content: "14:00" }], ...extra },
+    }))
+    expect(readChatRequest(7, DAY)).toBeNull()
+  })
+
   it.each(["network", "body", "empty", "wrong identity"])("recovers a lost %s response with the identical body and one Undo", async mode => {
     const { chat, state } = setup()
     if (mode === "network") fetchMock.mockRejectedValueOnce(new TypeError("lost response"))

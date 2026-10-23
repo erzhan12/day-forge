@@ -13,7 +13,7 @@ from django.views.decorators.http import require_http_methods
 # Revision date shown on both legal pages. Format: "D Month YYYY".
 # Bump it in the same commit that changes the wording of either template —
 # nothing derives it from git, so a stale date here is the only failure mode.
-LEGAL_LAST_UPDATED = "11 October 2026"
+LEGAL_LAST_UPDATED = "22 October 2026"
 
 
 def _render_legal(request, template_name):

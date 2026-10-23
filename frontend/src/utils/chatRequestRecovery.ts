@@ -5,6 +5,9 @@ export interface PendingChatRequest {
   body: {
     request_id: string
     expected_revision: number
+    pending_intent_id?: string
+    pending_intent_version?: number
+    intent_action?: "continue" | "cancel" | "new"
     messages: Array<{ role: string; content: string; is_ask?: boolean; is_error?: boolean; applied_add_block_ids?: number[] }>
   }
 }
@@ -30,6 +33,12 @@ export function readChatRequest(userId: number | undefined, date: string): Pendi
     if (value.userId !== userId || value.date !== date || typeof value.body?.request_id !== "string"
       || !Number.isSafeInteger(value.body.expected_revision) || !Array.isArray(value.body.messages)
       || !value.body.messages.every(m => ["user", "assistant"].includes(m.role) && typeof m.content === "string")) return null
+    const { pending_intent_id: intentId, pending_intent_version: version, intent_action: action } = value.body
+    if (action !== undefined && !["new", "continue", "cancel"].includes(action)) return null
+    if (intentId !== undefined || version !== undefined || action === "continue" || action === "cancel") {
+      if (typeof intentId !== "string" || !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(intentId)
+        || typeof version !== "number" || !Number.isSafeInteger(version) || version < 1) return null
+    }
     return value
   } catch { return null }
 }
