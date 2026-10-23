@@ -3,6 +3,7 @@
 import datetime
 import json
 import uuid
+from types import SimpleNamespace
 
 import pytest
 from ai.models import ChatRequest, PendingIntent
@@ -442,6 +443,108 @@ def test_known_duration_is_preserved_for_explicit_intervals(
     assert TimeBlock.objects.count() == (1 if duration == 30 else 0)
 
 
+@pytest.mark.parametrize(
+    "known,missing",
+    [
+        ({"duration_minutes": 30}, ["start_time"]),
+        ({"duration_minutes": 30}, ["end_time"]),
+        ({"start_time": "14:00"}, ["duration_minutes"]),
+        ({"end_time": "14:30"}, ["duration_minutes"]),
+    ],
+)
+def test_answer_accepts_only_time_fields_derived_from_permitted_operand(
+    auth_client, user, monkeypatch, known, missing
+):
+    scope = item(
+        known_fields={"title": "Gym", "category": "health", **known}, missing_fields=missing
+    )
+    ref, _, _ = ask(auth_client, user, monkeypatch, [scope])
+    provider(monkeypatch, AIChatResult("{}", [add()], "Added.", None, intent_decision="continue"))
+    response, body = send(auth_client, user, "14:00 for 30 minutes", ref)
+    assert response.status_code == 200, response.content
+    assert response.json()["pending_intent"] is None
+    block = TimeBlock.objects.get()
+    assert (str(block.start_time), str(block.end_time)) == ("14:00:00", "14:30:00")
+    assert PendingIntent.objects.get().state == "resolved"
+    replay = auth_client.post(URL, json.dumps(body), content_type="application/json")
+    assert replay.content == response.content
+    assert TimeBlock.objects.count() == 1 and Schedule.objects.get().revision == 1
+
+
+@pytest.mark.parametrize(
+    "known,action",
+    [
+        ({"duration_minutes": 30}, add(end="14:45")),
+        ({"duration_minutes": 30}, {**add(), "duration_minutes": 45}),
+        ({"start_time": "13:00"}, add()),
+        ({"end_time": "15:00"}, add()),
+        ({"start_time": "14:00"}, add(end="13:30")),
+        ({"start_time": "14:00"}, add(end="14:00")),
+        ({}, add()),
+    ],
+)
+def test_derived_interval_cannot_change_a_locked_time_or_duration(
+    auth_client, user, monkeypatch, known, action
+):
+    missing = ["start_time"] if "duration_minutes" in known else ["duration_minutes"]
+    ref, _, _ = ask(
+        auth_client,
+        user,
+        monkeypatch,
+        [
+            item(
+                known_fields={"title": "Gym", "category": "health", **known},
+                missing_fields=missing,
+            )
+        ],
+    )
+    provider(monkeypatch, AIChatResult("{}", [action], "Added.", None, intent_decision="continue"))
+    response, _ = send(auth_client, user, "14:00", ref)
+    assert response.status_code == 409
+    assert not TimeBlock.objects.exists() and Schedule.objects.get().revision == 0
+    row = PendingIntent.objects.get()
+    assert row.state == "open" and row.version == ref["version"]
+
+
+def test_partial_plan_without_model_question_keeps_scope_and_accepted_ids(
+    auth_client, user, monkeypatch
+):
+    calls = []
+
+    async def completion(**kwargs):
+        calls.append(kwargs)
+        payload = {"actions": [add()], "explanation": "Added Gym; Walk still pending.",
+                   "ask": None, "intent_decision": "new", "pending_actions": [
+                       item("Walk", known_fields={"title": "Walk", "category": "health",
+                                                  "duration_minutes": 30},
+                            missing_fields=["start_time"]),
+                   ]}
+        return SimpleNamespace(choices=[
+            SimpleNamespace(message=SimpleNamespace(content=json.dumps(payload)))
+        ])
+
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=completion)))
+    monkeypatch.setattr("django.conf.settings.LLM_API_KEY", "test-key")
+    monkeypatch.setattr("ai.service._get_client", lambda: client)
+    response, body = send(auth_client, user, "Add Gym at 14:00 and ask when Walk starts")
+    assert response.status_code == 200, response.content
+    payload = response.json()
+    assert payload["applied"] and payload["partial"] and payload["ask"]
+    row = PendingIntent.objects.get()
+    accepted_id = TimeBlock.objects.get(title="Gym").pk
+    assert row.state == "open" and row.accepted_changes[0]["block_id"] == accepted_id
+    replay = auth_client.post(URL, json.dumps(body), content_type="application/json")
+    assert replay.content == response.content and len(calls) == 1
+    provider(monkeypatch, AIChatResult(
+        "{}", [add("Walk", start="15:00", end="15:30")], "Added.", None,
+        intent_decision="continue",
+    ))
+    completed, _ = send(auth_client, user, "15:00", payload["pending_intent"])
+    assert completed.status_code == 200 and completed.json()["pending_intent"] is None
+    assert list(TimeBlock.objects.filter(title="Gym").values_list("id", flat=True)) == [accepted_id]
+    assert TimeBlock.objects.count() == 2
+
+
 def test_old_format_question_has_no_executable_scope(auth_client, user, monkeypatch):
     provider(monkeypatch, AIChatResult("{}", [], "Need a time.", "When?"))
     first, _ = send(auth_client, user)
@@ -450,6 +553,76 @@ def test_old_format_question_has_no_executable_scope(auth_client, user, monkeypa
     provider(monkeypatch, AIChatResult("{}", [add()], "Added.", None, intent_decision="continue"))
     response, _ = send(auth_client, user, "14:00", ref)
     assert response.status_code == 409 and not TimeBlock.objects.exists()
+
+
+def test_procedural_before_clause_does_not_block_a_concrete_continuation(
+    auth_client, user, monkeypatch
+):
+    command = "Add Gym for 30 minutes. Ask for its start time before adding it."
+    scope = item(known_fields={"title": "Gym", "category": "health", "duration_minutes": 30},
+                 missing_fields=["start_time"])
+    provider(monkeypatch, AIChatResult("{}", [], "Need time.", "When?",
+                                      intent_decision="new", pending_actions=[scope]))
+    first, _ = send(auth_client, user, command)
+    ref = first.json()["pending_intent"]
+    provider(monkeypatch, AIChatResult("{}", [add()], "Added.", None, intent_decision="continue"))
+    body = {"request_id": str(uuid.uuid4()), "expected_revision": 0,
+            "pending_intent_id": ref["id"], "pending_intent_version": ref["version"],
+            "messages": [{"role": "user", "content": command},
+                         {"role": "assistant", "content": "When?", "is_ask": True},
+                         {"role": "user", "content": "14:00"}]}
+    response = auth_client.post(URL, json.dumps(body), content_type="application/json")
+    assert response.status_code == 200 and response.json()["applied"]
+    assert response.json()["pending_intent"] is None and TimeBlock.objects.count() == 1
+
+
+@pytest.mark.parametrize("omit_outcomes", [False, True], ids=["empty-outcomes", "no-outcomes"])
+def test_relative_guard_rejection_preserves_permission_for_a_corrected_answer(
+    auth_client, user, monkeypatch, omit_outcomes
+):
+    schedule = Schedule.objects.create(user=user, date=DAY)
+    TimeBlock.objects.create(schedule=schedule, title="Gym", category="health",
+                             start_time="09:00", end_time="09:30", sort_order=0)
+    command = "Add Walk after Gym"
+    scope = item("Walk")
+    provider(monkeypatch, AIChatResult("{}", [], "Need time.", "When?",
+                                      intent_decision="new", pending_actions=[scope]))
+    first, _ = send(auth_client, user, command)
+    ref = first.json()["pending_intent"]
+    if omit_outcomes:
+        from ai import views
+
+        original = views._finish_chat_sync
+
+        def without_outcomes(*args, **kwargs):
+            response = original(*args, **kwargs)
+            payload = json.loads(response.content)
+            if payload.get("ask") and not payload.get("applied"):
+                assert payload.pop("outcomes") == []
+                response.content = json.dumps(payload)
+            return response
+
+        monkeypatch.setattr(views, "_finish_chat_sync", without_outcomes)
+    history = [{"role": "user", "content": command},
+               {"role": "assistant", "content": "When?", "is_ask": True}]
+    for hour, applied in [("08", False), ("10", True)]:
+        provider(monkeypatch, AIChatResult(
+            "{}", [add("Walk", f"{hour}:00", f"{hour}:30")], "Added.", None,
+            intent_decision="continue",
+        ))
+        response, _ = send(auth_client, user, ref=ref,
+                           messages=[*history, {"role": "user", "content": f"{hour}:00"}])
+        assert response.status_code == 200 and response.json()["applied"] is applied
+        if not applied:
+            assert ("outcomes" not in response.json()) is omit_outcomes
+            row = PendingIntent.objects.get()
+            assert row.items == [scope] and row.version == 2
+            assert Schedule.objects.get(pk=schedule.pk).revision == 0
+            assert not TimeBlock.objects.filter(title="Walk").exists()
+            ref = response.json()["pending_intent"]
+        else:
+            assert response.json()["pending_intent"] is None
+            assert TimeBlock.objects.get(title="Walk").start_time == datetime.time(10)
 
 
 def test_conflicting_answer_keeps_original_permission_scope(auth_client, user, monkeypatch):

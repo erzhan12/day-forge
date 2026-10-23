@@ -164,7 +164,7 @@ class ChatRehearsal(Rehearsal):
                      "--check", "--dry-run", capture=True)
 
 
-def configure_provider(root, image):
+def configure_provider(root, image, model="rehearsal-fixture"):
     provider = Path(__file__).with_name("rehearsal_chat_provider.py").resolve()
     compose_path = root / "compose.json"
     compose = json.loads(compose_path.read_text())
@@ -185,7 +185,7 @@ def configure_provider(root, image):
         raise ValueError("sandbox.env missing a single expected LLM_API_KEY= line")
     text = text.replace("LLM_API_KEY=\n", "LLM_API_KEY=rehearsal-local-only\n")
     path.write_text(text + "LLM_BASE_URL=http://provider:8000/v1\n"
-                    "LLM_MODEL=rehearsal-fixture\nLLM_DRAFT_MODEL=rehearsal-fixture\n")
+                    f"LLM_MODEL={model}\nLLM_DRAFT_MODEL={model}\n")
 
 
 def finalize_rehearsal(runner, evidence):
@@ -208,8 +208,8 @@ def finalize_rehearsal(runner, evidence):
             (runner.root / "evidence.json").write_text(json.dumps(evidence, indent=2) + "\n")
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+def main(runner_type=ChatRehearsal, *, provider_model="rehearsal-fixture", description=__doc__):
+    parser = argparse.ArgumentParser(description=description)
     parser.add_argument("--source-db", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--old-image", required=True)
@@ -238,8 +238,8 @@ def main():
             parser.error("Docker project already exists")
     source_before = database_snapshot(source)
     prepare(root, source, args.port)
-    configure_provider(root, args.new_image)
-    runner = ChatRehearsal(root, args.port)
+    configure_provider(root, args.new_image, provider_model)
+    runner = runner_type(root, args.port)
     success = False
     try:
         runner.run(args.old_image, args.old_version, args.new_image, args.new_version)

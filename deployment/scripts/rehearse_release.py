@@ -388,7 +388,8 @@ def prepare(root, source, port):
                 "depends_on": {"redis": {"condition": "service_healthy"}},
                 "mem_limit": "250m",
                 "memswap_limit": "500m",
-                "healthcheck": {"interval": "2s", "start_period": "2s"},
+                # Keep the production startup grace while probing frequently.
+                "healthcheck": {"interval": "2s", "start_period": "40s", "retries": 10},
             },
             "redis": {
                 "image": "redis:7-alpine",

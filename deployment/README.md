@@ -269,9 +269,30 @@ rolling back an image. A release without `ai/pending_intents.py` cannot enforce
 saved continuation scopes, even if it supports durable request IDs. Pause AI
 with `LLM_API_KEY=` while running that older release, and restore the key only
 after returning to compatible code. A reverse migration deletes saved intents;
-it is not part of image rollback. The pending-intent change has a local schema
-upgrade check and browser verification, but needs its own container/production
-rehearsal after deployment. See [the report](../docs/AI_PENDING_INTENT_VERIFICATION.md).
+it is not part of image rollback. The [post-PR262 report](../docs/POST_PR262_RELEASE_VERIFICATION.md)
+records the published-release checks, defects and the corrected container run.
+
+Build old/new images with their immutable `RELEASE_VERSION` values. Set
+`OLD_IMAGE`, `NEW_IMAGE`, `OLD_RELEASE` and `NEW_RELEASE` to those images and
+their baked-in versions, then run:
+
+```sh
+uv run python deployment/scripts/rehearse_pending_intents.py \
+  --source-db db/day_forge.db --output-dir /tmp/day-forge-pending-rehearsal-example \
+  --old-image "$OLD_IMAGE" --old-version "$OLD_RELEASE" \
+  --new-image "$NEW_IMAGE" --new-version "$NEW_RELEASE"
+```
+
+The runner shares the existing isolated Compose harness and fixed provider. It
+checks `ai.0007 → ai.0008`, restart, open-scope replay, image rollback with paused
+AI, a write during rollback, stale continuation, partial accepted IDs and
+reupgrade. Regression probes cover derived endpoints, an omitted question and
+relative placement. The unpatched PR262 image fails the start-only probe.
+If the source already has `0008`, only its private copy may reverse that
+migration, after verifying the intent table is empty. A nonempty table is
+rejected. Live SQL checks run inside the web container so they use its journal.
+The previous release already supports durable requests: its paused AI request
+legitimately adds a terminal 503 receipt; existing receipts must remain unchanged.
 
 Start Docker and build the images before running the rehearsal. GHCR images may
 require separate package-read credentials; local builds use the same production

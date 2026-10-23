@@ -1,0 +1,648 @@
+{
+  "provider": "OpenRouter",
+  "model": "x-ai/grok-4.3",
+  "stubbed": false,
+  "successful_calls": 6,
+  "success": true,
+  "fresh_fixture": true,
+  "source_release": "ac8b4a0 plus candidate fixes",
+  "viewports": [
+    [
+      1440,
+      900
+    ],
+    [
+      320,
+      740
+    ]
+  ],
+  "interactions": [
+    {
+      "id": 1,
+      "schedule_id": 2,
+      "user_command": "Add a Work block titled \"R262 desktop pending\" lasting 30 minutes. Ask me for its start time before adding it; do not choose a time.",
+      "ai_response": "{\"transcript_sha256\": \"a482281af4eb05eb430449d944307d07bc1a1d842fa6df95d280f9f5b5c5a2de\", \"turn_count\": 1, \"raw\": \"{\\n  \\\"actions\\\": [],\\n  \\\"explanation\\\": \\\"I need the start time before adding the new block.\\\",\\n  \\\"ask\\\": \\\"What time should the Work block start?\\\",\\n  \\\"intent_decision\\\": \\\"new\\\",\\n  \\\"pending_actions\\\": [{\\\"type\\\":\\\"add\\\", \\\"task_id\\\":null, \\\"target_ids\\\":[], \\\"known_fields\\\":{\\\"title\\\":\\\"R262 desktop pending\\\", \\\"category\\\":\\\"work\\\", \\\"duration_minutes\\\":30}, \\\"missing_fields\\\":[\\\"start_time\\\"]}]\\n}\"}",
+      "actions_json": [],
+      "outcomes_json": [],
+      "success": 1,
+      "kind": "chat"
+    },
+    {
+      "id": 2,
+      "schedule_id": 2,
+      "user_command": "14:00",
+      "ai_response": "{\"transcript_sha256\": \"a85f60398b24b655ae40db3380a215f16167f9f0ddad956a1b4e77394fe7cec7\", \"turn_count\": 3, \"raw\": \"{\\n  \\\"actions\\\": [{\\\"type\\\": \\\"add\\\", \\\"title\\\": \\\"R262 desktop pending\\\", \\\"category\\\": \\\"work\\\", \\\"start_time\\\": \\\"14:00\\\", \\\"end_time\\\": \\\"14:30\\\"}],\\n  \\\"explanation\\\": \\\"Adding the Work block at 14:00.\\\",\\n  \\\"ask\\\": null,\\n  \\\"intent_decision\\\": \\\"continue\\\",\\n  \\\"pending_actions\\\": []\\n}\"}",
+      "actions_json": [
+        {
+          "type": "add",
+          "title": "R262 desktop pending",
+          "category": "work",
+          "start_time": "14:00",
+          "end_time": "14:30"
+        }
+      ],
+      "outcomes_json": [
+        {
+          "action_index": 0,
+          "task_id": null,
+          "status": "applied",
+          "applied_fields": [
+            "title",
+            "category",
+            "start_time",
+            "end_time"
+          ],
+          "skipped_fields": [],
+          "reason_code": null,
+          "conflicting_task_ids": [],
+          "attempted_direction": null,
+          "suggestion": null
+        }
+      ],
+      "success": 1,
+      "kind": "chat"
+    },
+    {
+      "id": 3,
+      "schedule_id": 2,
+      "user_command": "Add a Work block titled \"R262 accepted\" from 13:00 to 13:30 NOW. Also plan a Work block titled \"R262 unresolved\"; ask me for BOTH its start and end time. Do not choose a time or duration for the second block. Apply the first block now and keep only the second pending.",
+      "ai_response": "{\"transcript_sha256\": \"d343af4aaad3c2bbd37fbcea46424034d29a7831d9bef421562f9c0308465714\", \"turn_count\": 1, \"raw\": \"{\\n  \\\"actions\\\": [{\\\"type\\\":\\\"add\\\",\\\"title\\\":\\\"R262 accepted\\\",\\\"category\\\":\\\"work\\\",\\\"start_time\\\":\\\"13:00\\\",\\\"end_time\\\":\\\"13:30\\\"}],\\n  \\\"explanation\\\": \\\"Added the accepted block now and kept the unresolved block pending.\\\",\\n  \\\"ask\\\": null,\\n  \\\"intent_decision\\\": \\\"new\\\",\\n  \\\"pending_actions\\\": [{\\\"type\\\":\\\"add\\\",\\\"task_id\\\":null,\\\"target_ids\\\":[],\\\"known_fields\\\":{\\\"title\\\":\\\"R262 unresolved\\\",\\\"category\\\":\\\"work\\\"},\\\"missing_fields\\\":[\\\"start_time\\\",\\\"end_time\\\"]}]\\n}\"}",
+      "actions_json": [
+        {
+          "type": "add",
+          "title": "R262 accepted",
+          "category": "work",
+          "start_time": "13:00",
+          "end_time": "13:30"
+        }
+      ],
+      "outcomes_json": [
+        {
+          "action_index": 0,
+          "task_id": null,
+          "status": "applied",
+          "applied_fields": [
+            "title",
+            "category",
+            "start_time",
+            "end_time"
+          ],
+          "skipped_fields": [],
+          "reason_code": null,
+          "conflicting_task_ids": [],
+          "attempted_direction": null,
+          "suggestion": null
+        }
+      ],
+      "success": 1,
+      "kind": "chat"
+    },
+    {
+      "id": 4,
+      "schedule_id": 2,
+      "user_command": "15:00 to 15:30",
+      "ai_response": "{\"transcript_sha256\": \"c58164f795fbc89e53ac758b71850a576444d0829a685758c89e3f9aa41f2bcb\", \"turn_count\": 3, \"raw\": \"{\\n  \\\"actions\\\": [{\\\"type\\\":\\\"add\\\",\\\"title\\\":\\\"R262 unresolved\\\",\\\"category\\\":\\\"work\\\",\\\"start_time\\\":\\\"15:00\\\",\\\"end_time\\\":\\\"15:30\\\"}],\\n  \\\"explanation\\\":\\\"Added R262 unresolved from 15:00 to 15:30.\\\",\\n  \\\"ask\\\":null,\\n  \\\"intent_decision\\\":\\\"continue\\\",\\n  \\\"pending_actions\\\":[]\\n}\"}",
+      "actions_json": [
+        {
+          "type": "add",
+          "title": "R262 unresolved",
+          "category": "work",
+          "start_time": "15:00",
+          "end_time": "15:30"
+        }
+      ],
+      "outcomes_json": [
+        {
+          "action_index": 0,
+          "task_id": null,
+          "status": "applied",
+          "applied_fields": [
+            "title",
+            "category",
+            "start_time",
+            "end_time"
+          ],
+          "skipped_fields": [],
+          "reason_code": null,
+          "conflicting_task_ids": [],
+          "attempted_direction": null,
+          "suggestion": null
+        }
+      ],
+      "success": 1,
+      "kind": "chat"
+    },
+    {
+      "id": 5,
+      "schedule_id": 3,
+      "user_command": "Add a Work block titled \"R262 mobile pending\" lasting 30 minutes. Ask me for its start time before adding it; do not choose a time.",
+      "ai_response": "{\"transcript_sha256\": \"4fad894fdc3fb4da9f35206380813656f54f5e96a6d73b9c4c9fc7f50a060870\", \"turn_count\": 1, \"raw\": \"{\\n  \\\"actions\\\": [],\\n  \\\"explanation\\\": \\\"I need the start time before adding the block.\\\",\\n  \\\"ask\\\": \\\"What start time should the 'R262 mobile pending' block have?\\\",\\n  \\\"intent_decision\\\": \\\"new\\\",\\n  \\\"pending_actions\\\": [{\\\"type\\\":\\\"add\\\", \\\"task_id\\\":null, \\\"target_ids\\\":[], \\\"known_fields\\\":{\\\"title\\\":\\\"R262 mobile pending\\\", \\\"category\\\":\\\"work\\\", \\\"duration_minutes\\\":30}, \\\"missing_fields\\\":[\\\"start_time\\\"]}]\\n}\"}",
+      "actions_json": [],
+      "outcomes_json": [],
+      "success": 1,
+      "kind": "chat"
+    },
+    {
+      "id": 6,
+      "schedule_id": 3,
+      "user_command": "16:00",
+      "ai_response": "{\"transcript_sha256\": \"5046cc94d9a557747df50150e20ee6d4af87570b1386c608f1d6c6abef771094\", \"turn_count\": 3, \"raw\": \"{\\n  \\\"actions\\\": [{\\\"type\\\":\\\"add\\\",\\\"title\\\":\\\"R262 mobile pending\\\",\\\"category\\\":\\\"work\\\",\\\"start_time\\\":\\\"16:00\\\",\\\"end_time\\\":\\\"16:30\\\"}],\\n  \\\"explanation\\\":\\\"Adding the R262 mobile pending block at 16:00.\\\",\\n  \\\"ask\\\":null,\\n  \\\"intent_decision\\\":\\\"continue\\\",\\n  \\\"pending_actions\\\":[]\\n}\"}",
+      "actions_json": [
+        {
+          "type": "add",
+          "title": "R262 mobile pending",
+          "category": "work",
+          "start_time": "16:00",
+          "end_time": "16:30"
+        }
+      ],
+      "outcomes_json": [
+        {
+          "action_index": 0,
+          "task_id": null,
+          "status": "applied",
+          "applied_fields": [
+            "title",
+            "category",
+            "start_time",
+            "end_time"
+          ],
+          "skipped_fields": [],
+          "reason_code": null,
+          "conflicting_task_ids": [],
+          "attempted_direction": null,
+          "suggestion": null
+        }
+      ],
+      "success": 1,
+      "kind": "chat"
+    }
+  ],
+  "receipts": [
+    {
+      "request_id": "fc27940c2dcb43189b98974dabc77faa",
+      "body_hash": "c60bfdf75ee1041e81b6623722e313dcf4a47b83bdc583d871fbf8c61b89abc1",
+      "response_status": 200,
+      "response_body": {
+        "schedule": {
+          "id": 2,
+          "date": "2027-09-01",
+          "status": "active",
+          "revision": 0
+        },
+        "blocks": null,
+        "revision": 0,
+        "explanation": "I need the start time before adding the new block.",
+        "ask": "What time should the Work block start?",
+        "applied": false,
+        "partial": false,
+        "outcomes": [],
+        "pending_intent": {
+          "id": "2911846d-485f-42f6-af9e-f969ce5833c5",
+          "version": 1,
+          "expires_at": "2026-10-23T02:10:22.593265+00:00",
+          "ask": "What time should the Work block start?"
+        },
+        "request_id": "fc27940c-2dcb-4318-9b98-974dabc77faa",
+        "request_completed": true
+      }
+    },
+    {
+      "request_id": "a380d9eaf9e949b89093d3750a7e664b",
+      "body_hash": "6381fc6d7c225339a19fc7cf3cc545cc061a2a87f55856cb834b6bd663514713",
+      "response_status": 200,
+      "response_body": {
+        "schedule": {
+          "id": 2,
+          "date": "2027-09-01",
+          "status": "active",
+          "revision": 1
+        },
+        "blocks": [
+          {
+            "id": 1,
+            "title": "Gym",
+            "start_time": "09:00",
+            "end_time": "09:30",
+            "category": "health",
+            "is_completed": false,
+            "sort_order": 0
+          },
+          {
+            "id": 2,
+            "title": "Focus",
+            "start_time": "10:00",
+            "end_time": "11:00",
+            "category": "work",
+            "is_completed": false,
+            "sort_order": 0
+          },
+          {
+            "id": 17,
+            "title": "R262 desktop pending",
+            "start_time": "14:00",
+            "end_time": "14:30",
+            "category": "work",
+            "is_completed": false,
+            "sort_order": 1
+          }
+        ],
+        "revision": 1,
+        "explanation": "Adding the Work block at 14:00.",
+        "ask": null,
+        "applied": true,
+        "partial": false,
+        "outcomes": [
+          {
+            "action_index": 0,
+            "task_id": null,
+            "status": "applied",
+            "applied_fields": [
+              "title",
+              "category",
+              "start_time",
+              "end_time"
+            ],
+            "skipped_fields": [],
+            "reason_code": null,
+            "conflicting_task_ids": [],
+            "attempted_direction": null,
+            "suggestion": null
+          }
+        ],
+        "pending_intent": null,
+        "request_id": "a380d9ea-f9e9-49b8-9093-d3750a7e664b",
+        "request_completed": true
+      }
+    },
+    {
+      "request_id": "a9ea607a9c894f0fb7dac993e38374a5",
+      "body_hash": "b0493bdb887992cbabd1a2492cd3bc60ff8abc92dc8de08a2a990df3d11863f9",
+      "response_status": 200,
+      "response_body": {
+        "schedule": {
+          "id": 2,
+          "date": "2027-09-01",
+          "status": "active",
+          "revision": 3
+        },
+        "blocks": [
+          {
+            "id": 18,
+            "title": "Gym",
+            "start_time": "09:00",
+            "end_time": "09:30",
+            "category": "health",
+            "is_completed": false,
+            "sort_order": 0
+          },
+          {
+            "id": 19,
+            "title": "Focus",
+            "start_time": "10:00",
+            "end_time": "11:00",
+            "category": "work",
+            "is_completed": false,
+            "sort_order": 0
+          },
+          {
+            "id": 20,
+            "title": "R262 accepted",
+            "start_time": "13:00",
+            "end_time": "13:30",
+            "category": "work",
+            "is_completed": false,
+            "sort_order": 1
+          }
+        ],
+        "revision": 3,
+        "explanation": "Added the accepted block now and kept the unresolved block pending.",
+        "ask": "Some requested changes are still pending. Please clarify the remaining request.",
+        "applied": true,
+        "partial": true,
+        "outcomes": [
+          {
+            "action_index": 0,
+            "task_id": null,
+            "status": "applied",
+            "applied_fields": [
+              "title",
+              "category",
+              "start_time",
+              "end_time"
+            ],
+            "skipped_fields": [],
+            "reason_code": null,
+            "conflicting_task_ids": [],
+            "attempted_direction": null,
+            "suggestion": null
+          }
+        ],
+        "pending_intent": {
+          "id": "253b991c-9ae7-4179-9974-945dc4ff8e07",
+          "version": 1,
+          "expires_at": "2026-10-23T02:12:53.051640+00:00",
+          "ask": "Some requested changes are still pending. Please clarify the remaining request."
+        },
+        "request_id": "a9ea607a-9c89-4f0f-b7da-c993e38374a5",
+        "request_completed": true
+      }
+    },
+    {
+      "request_id": "0fa9eec85783452c9068b4c986c16004",
+      "body_hash": "bb67cf9e031b4e9ea2006dc4da74336ed8fe761a7f72dc6f48b260e6a0638a6e",
+      "response_status": 200,
+      "response_body": {
+        "schedule": {
+          "id": 2,
+          "date": "2027-09-01",
+          "status": "active",
+          "revision": 4
+        },
+        "blocks": [
+          {
+            "id": 18,
+            "title": "Gym",
+            "start_time": "09:00",
+            "end_time": "09:30",
+            "category": "health",
+            "is_completed": false,
+            "sort_order": 0
+          },
+          {
+            "id": 19,
+            "title": "Focus",
+            "start_time": "10:00",
+            "end_time": "11:00",
+            "category": "work",
+            "is_completed": false,
+            "sort_order": 0
+          },
+          {
+            "id": 20,
+            "title": "R262 accepted",
+            "start_time": "13:00",
+            "end_time": "13:30",
+            "category": "work",
+            "is_completed": false,
+            "sort_order": 1
+          },
+          {
+            "id": 21,
+            "title": "R262 unresolved",
+            "start_time": "15:00",
+            "end_time": "15:30",
+            "category": "work",
+            "is_completed": false,
+            "sort_order": 2
+          }
+        ],
+        "revision": 4,
+        "explanation": "Added R262 unresolved from 15:00 to 15:30.",
+        "ask": null,
+        "applied": true,
+        "partial": false,
+        "outcomes": [
+          {
+            "action_index": 0,
+            "task_id": null,
+            "status": "applied",
+            "applied_fields": [
+              "title",
+              "category",
+              "start_time",
+              "end_time"
+            ],
+            "skipped_fields": [],
+            "reason_code": null,
+            "conflicting_task_ids": [],
+            "attempted_direction": null,
+            "suggestion": null
+          }
+        ],
+        "pending_intent": null,
+        "request_id": "0fa9eec8-5783-452c-9068-b4c986c16004",
+        "request_completed": true
+      }
+    },
+    {
+      "request_id": "4ede8392fdcf4a6aaf5e5e38767b3b28",
+      "body_hash": "3373ae0c1ecd40ff137f25ae6fcb8cb8c9416496c6e2e953ca3de33da3187906",
+      "response_status": 200,
+      "response_body": {
+        "schedule": {
+          "id": 3,
+          "date": "2027-09-02",
+          "status": "active",
+          "revision": 0
+        },
+        "blocks": null,
+        "revision": 0,
+        "explanation": "I need the start time before adding the block.",
+        "ask": "What start time should the 'R262 mobile pending' block have?",
+        "applied": false,
+        "partial": false,
+        "outcomes": [],
+        "pending_intent": {
+          "id": "e4474872-5d5e-4643-b0a2-bf1586af13aa",
+          "version": 1,
+          "expires_at": "2026-10-23T02:14:40.450027+00:00",
+          "ask": "What start time should the 'R262 mobile pending' block have?"
+        },
+        "request_id": "4ede8392-fdcf-4a6a-af5e-5e38767b3b28",
+        "request_completed": true
+      }
+    },
+    {
+      "request_id": "03c5703e95784c918d67613635ba6737",
+      "body_hash": "3f0433ce9f958670ffa62c3d42ddfe72fabf8d68c5b6e33b9ed95d0f466b8c04",
+      "response_status": 200,
+      "response_body": {
+        "schedule": {
+          "id": 3,
+          "date": "2027-09-02",
+          "status": "active",
+          "revision": 1
+        },
+        "blocks": [
+          {
+            "id": 3,
+            "title": "Gym",
+            "start_time": "09:00",
+            "end_time": "09:30",
+            "category": "health",
+            "is_completed": false,
+            "sort_order": 0
+          },
+          {
+            "id": 4,
+            "title": "Focus",
+            "start_time": "10:00",
+            "end_time": "11:00",
+            "category": "work",
+            "is_completed": false,
+            "sort_order": 0
+          },
+          {
+            "id": 27,
+            "title": "R262 mobile pending",
+            "start_time": "16:00",
+            "end_time": "16:30",
+            "category": "work",
+            "is_completed": false,
+            "sort_order": 1
+          }
+        ],
+        "revision": 1,
+        "explanation": "Adding the R262 mobile pending block at 16:00.",
+        "ask": null,
+        "applied": true,
+        "partial": false,
+        "outcomes": [
+          {
+            "action_index": 0,
+            "task_id": null,
+            "status": "applied",
+            "applied_fields": [
+              "title",
+              "category",
+              "start_time",
+              "end_time"
+            ],
+            "skipped_fields": [],
+            "reason_code": null,
+            "conflicting_task_ids": [],
+            "attempted_direction": null,
+            "suggestion": null
+          }
+        ],
+        "pending_intent": null,
+        "request_id": "03c5703e-9578-4c91-8d67-613635ba6737",
+        "request_completed": true
+      }
+    }
+  ],
+  "intents": [
+    {
+      "id": "2911846d485f42f6af9ef969ce5833c5",
+      "state": "resolved",
+      "version": 1,
+      "revision": 0,
+      "source_message": "Add a Work block titled \"R262 desktop pending\" lasting 30 minutes. Ask me for its start time before adding it; do not choose a time.",
+      "question": "What time should the Work block start?",
+      "items": [
+        {
+          "type": "add",
+          "task_id": null,
+          "target_ids": [],
+          "known_fields": {
+            "title": "R262 desktop pending",
+            "category": "work",
+            "duration_minutes": 30
+          },
+          "missing_fields": [
+            "start_time"
+          ]
+        }
+      ],
+      "accepted_changes": []
+    },
+    {
+      "id": "253b991c9ae741799974945dc4ff8e07",
+      "state": "resolved",
+      "version": 1,
+      "revision": 3,
+      "source_message": "Add a Work block titled \"R262 accepted\" from 13:00 to 13:30 NOW. Also plan a Work block titled \"R262 unresolved\"; ask me for BOTH its start and end time. Do not choose a time or duration for the second block. Apply the first block now and keep only the second pending.",
+      "question": "Some requested changes are still pending. Please clarify the remaining request.",
+      "items": [
+        {
+          "type": "add",
+          "task_id": null,
+          "target_ids": [],
+          "known_fields": {
+            "title": "R262 unresolved",
+            "category": "work"
+          },
+          "missing_fields": [
+            "end_time",
+            "start_time"
+          ]
+        }
+      ],
+      "accepted_changes": [
+        {
+          "type": "add",
+          "action_index": 0,
+          "block_id": 20,
+          "fields": [
+            "title",
+            "category",
+            "start_time",
+            "end_time"
+          ],
+          "revision": 3
+        }
+      ]
+    },
+    {
+      "id": "e44748725d5e4643b0a2bf1586af13aa",
+      "state": "resolved",
+      "version": 1,
+      "revision": 0,
+      "source_message": "Add a Work block titled \"R262 mobile pending\" lasting 30 minutes. Ask me for its start time before adding it; do not choose a time.",
+      "question": "What start time should the 'R262 mobile pending' block have?",
+      "items": [
+        {
+          "type": "add",
+          "task_id": null,
+          "target_ids": [],
+          "known_fields": {
+            "title": "R262 mobile pending",
+            "category": "work",
+            "duration_minutes": 30
+          },
+          "missing_fields": [
+            "start_time"
+          ]
+        }
+      ],
+      "accepted_changes": []
+    }
+  ],
+  "final_blocks": [
+    {
+      "date": "2027-09-01",
+      "title": "Gym",
+      "category": "health",
+      "start_time": "09:00:00",
+      "end_time": "09:30:00"
+    },
+    {
+      "date": "2027-09-01",
+      "title": "Focus",
+      "category": "work",
+      "start_time": "10:00:00",
+      "end_time": "11:00:00"
+    },
+    {
+      "date": "2027-09-02",
+      "title": "Gym",
+      "category": "health",
+      "start_time": "09:00:00",
+      "end_time": "09:30:00"
+    },
+    {
+      "date": "2027-09-02",
+      "title": "Focus",
+      "category": "work",
+      "start_time": "10:00:00",
+      "end_time": "11:00:00"
+    }
+  ],
+  "authenticated_sessions_after_logout": 0,
+  "confirmed_narrow_start_only_asks": [
+    1,
+    5
+  ],
+  "confirmed_partial_without_model_question": 3
+}
