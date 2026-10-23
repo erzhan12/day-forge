@@ -577,14 +577,15 @@ def test_procedural_before_clause_does_not_block_a_concrete_continuation(
 
 
 @pytest.mark.parametrize("omit_outcomes", [False, True], ids=["empty-outcomes", "no-outcomes"])
+@pytest.mark.parametrize("title", ["Walk", "Walk after lunch"])
 def test_relative_guard_rejection_preserves_permission_for_a_corrected_answer(
-    auth_client, user, monkeypatch, omit_outcomes
+    auth_client, user, monkeypatch, omit_outcomes, title
 ):
     schedule = Schedule.objects.create(user=user, date=DAY)
     TimeBlock.objects.create(schedule=schedule, title="Gym", category="health",
                              start_time="09:00", end_time="09:30", sort_order=0)
-    command = "Add Walk after Gym"
-    scope = item("Walk")
+    command = f'Add "{title}" after Gym'
+    scope = item(title)
     provider(monkeypatch, AIChatResult("{}", [], "Need time.", "When?",
                                       intent_decision="new", pending_actions=[scope]))
     first, _ = send(auth_client, user, command)
@@ -607,7 +608,7 @@ def test_relative_guard_rejection_preserves_permission_for_a_corrected_answer(
                {"role": "assistant", "content": "When?", "is_ask": True}]
     for hour, applied in [("08", False), ("10", True)]:
         provider(monkeypatch, AIChatResult(
-            "{}", [add("Walk", f"{hour}:00", f"{hour}:30")], "Added.", None,
+            "{}", [add(title, f"{hour}:00", f"{hour}:30")], "Added.", None,
             intent_decision="continue",
         ))
         response, _ = send(auth_client, user, ref=ref,
@@ -618,11 +619,11 @@ def test_relative_guard_rejection_preserves_permission_for_a_corrected_answer(
             row = PendingIntent.objects.get()
             assert row.items == [scope] and row.version == 2
             assert Schedule.objects.get(pk=schedule.pk).revision == 0
-            assert not TimeBlock.objects.filter(title="Walk").exists()
+            assert not TimeBlock.objects.filter(title=title).exists()
             ref = response.json()["pending_intent"]
         else:
             assert response.json()["pending_intent"] is None
-            assert TimeBlock.objects.get(title="Walk").start_time == datetime.time(10)
+            assert TimeBlock.objects.get(title=title).start_time == datetime.time(10)
 
 
 def test_conflicting_answer_keeps_original_permission_scope(auth_client, user, monkeypatch):
@@ -771,3 +772,63 @@ def test_deleted_schedule_is_not_recreated_by_an_old_intent(auth_client, user, m
     response, _ = send(auth_client, user, "14:00", ref, revision=0)
     assert response.status_code == 409 and response.json()["code"] == "pending_intent_stale"
     assert not calls and not Schedule.objects.exists() and not PendingIntent.objects.exists()
+
+
+@pytest.mark.parametrize("malformed", [False, True])
+def test_quoted_title_can_continue_after_rejected_provider_reply(
+    auth_client, user, monkeypatch, malformed
+):
+    schedule = Schedule.objects.create(user=user, date=DAY)
+    TimeBlock.objects.create(schedule=schedule, title="Gym", category="health",
+                             start_time="09:00", end_time="09:30", sort_order=0)
+    title = "Walk after lunch"
+    command = f'Add "{title}" after Gym for 30 minutes. Ask for its start time first.'
+    scope = item(title, known_fields={"title": title, "category": "health", "duration_minutes": 30},
+                 missing_fields=["start_time"])
+    replies = [
+        {"actions": [], "ask": "What time?", "intent_decision": "new", "pending_actions": [scope]},
+        {"actions": [{**add(title, "08:00", "08:30"), "task_id": 123 if malformed else None}],
+         "ask": None,
+         "intent_decision": "continue", "pending_actions": []},
+        {"actions": [{**add(title, "10:00", "10:30"), "task_id": None}], "ask": None,
+         "intent_decision": "continue", "pending_actions": []},
+    ]
+    calls = []
+
+    async def completion(**kwargs):
+        payload = {"explanation": "Plan.", **replies[len(calls)]}
+        calls.append(kwargs)
+        return SimpleNamespace(choices=[
+            SimpleNamespace(message=SimpleNamespace(content=json.dumps(payload)))
+        ])
+
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=completion)))
+    monkeypatch.setattr("django.conf.settings.LLM_API_KEY", "test-key")
+    monkeypatch.setattr("ai.service._get_client", lambda: client)
+    first, _ = send(auth_client, user, command)
+    assert first.status_code == 200
+    ref = first.json()["pending_intent"]
+    history = [{"role": "user", "content": command},
+               {"role": "assistant", "content": "What time?", "is_ask": True}]
+    rejected, _ = send(auth_client, user, ref=ref,
+                       messages=[*history, {"role": "user", "content": "08:00"}])
+    assert rejected.status_code == (502 if malformed else 200)
+    assert rejected.json()["request_completed"]
+    assert PendingIntent.objects.get().items == [scope]
+    assert PendingIntent.objects.get().version == ref["version"] + (0 if malformed else 1)
+    assert TimeBlock.objects.count() == 1 and Schedule.objects.get().revision == 0
+    question = rejected.json()["errors"]["detail"] if malformed else rejected.json()["ask"]
+    history += [
+        {"role": "user", "content": "08:00"},
+        {"role": "assistant", "content": question, "is_error" if malformed else "is_ask": True},
+    ]
+    if not malformed:
+        ref = rejected.json()["pending_intent"]
+    applied, body = send(auth_client, user, ref=ref,
+                         messages=[*history, {"role": "user", "content": "10:00"}])
+    assert applied.status_code == 200 and applied.json()["applied"]
+    assert applied.json()["pending_intent"] is None
+    assert TimeBlock.objects.get(title=title).start_time == datetime.time(10)
+    assert TimeBlock.objects.get(title="Gym").start_time == datetime.time(9)
+    replay = auth_client.post(URL, json.dumps(body), content_type="application/json")
+    assert replay.content == applied.content and len(calls) == 3 and TimeBlock.objects.count() == 2

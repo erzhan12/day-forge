@@ -146,6 +146,13 @@ A successful chat result adds `pending_intent: null` or `{id, version, expires_a
 
 A permitted time operand and duration may determine the other interval endpoint; this does not authorize changing locked values or choosing an unrelated interval. Valid structured remaining work is retained even when the model omits its prose question: the server supplies an ask after executing ready actions and reports `partial: true` when this turn wrote changes. A guard-only rejection preserves the original unresolved permission for a corrected reply. Legacy model questions still suppress all writes in that turn.
 
+Chat provider normalization removes only `task_id: null` from an executable `add`
+before strict action validation. That field can leak from pending metadata and has
+no target authority. Non-null add targets, null targets on existing-block actions,
+and other unknown fields remain invalid. The original provider JSON is retained
+for audit. Quoted literal task names do not introduce relative-placement clauses;
+the actual condition outside a name remains enforced.
+
 Continuation checks owner, Schedule/date, state, expiry, version, revision and context before the provider and fences them again when applying. Stale preconditions return `409 pending_intent_stale`; a schedule/policy change during the network call can return `409 schedule_changed`. Scope expansion returns `409 pending_intent_scope` without committing the plan. Each old permission can cover only one action or refined question. Accepted siblings cannot be replayed, and unanswered siblings remain pending. Explicit cancel still checks identity/version/expiry, but can close an intent after a policy change using the current revision. These terminal errors are also durable for their request ID.
 
 The provider returns `intent_decision` (`new`, `continue`, `cancel`, `read`) and structured `pending_actions` for questions. Continue is mandatory for applying a saved scope. Cancel/read discard mutations; free-text classification still depends on the model. A new command detected during continuation is reinterpreted with only the latest turn and no pending summary. Old-format questions have no executable scope and require cancelling/clearing before a restated command. Clear/date/account/session boundaries drop the client reference; uncertain transport recovery retains the frozen ID/version/body. See [the contract](AI_PENDING_INTENT.md) and [verification](AI_PENDING_INTENT_VERIFICATION.md).

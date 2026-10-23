@@ -216,3 +216,46 @@ def test_unbound_relation_still_rejects_non_clock_or_untimed_answers(answer, act
         _user(answer),
     ]
     assert relative_add_guard_ask(messages, [action], []) is not None
+
+
+@pytest.mark.parametrize("opening,closing", [('"', '"'), ("'", "'"), ("“", "”"), ("«", "»")])
+@pytest.mark.parametrize("start,expected", [
+    ("08:00", "What start time should the new block have after Gym?"), ("10:00", None),
+])
+def test_quoted_action_title_is_not_a_placement_relation(opening, closing, start, expected):
+    title = "Walk after lunch"
+    command = f"Add {opening}{title}{closing} after Gym"
+    messages = [
+        _user(command),
+        {"role": "assistant", "content": "What time?", "is_ask": True},
+        _user(start),
+    ]
+    action = {**_add(start_time=start, end_time=start[:3] + "30"), "title": title}
+    assert relative_add_guard_ask(messages, [action], [_block()]) == expected
+
+
+def test_quoted_title_without_relative_placement_is_an_ordinary_add():
+    action = {**_add(start_time="10:00", end_time="10:30"), "title": "Walk after lunch"}
+    assert relative_add_guard_ask([_user('Add "Walk after lunch" at 10:00')], [action], []) is None
+
+
+@pytest.mark.parametrize("start", ["08:00", "10:00"])
+def test_quoted_anchor_title_keeps_its_external_relation(start):
+    anchor = "Focus before lunch"
+    ask = relative_add_guard_ask(
+        [_user(f'Add Vocal after "{anchor}"')],
+        [_add(start_time=start, end_time=start[:3] + "30")],
+        [_block(title=anchor)],
+    )
+    expected = (
+        f"What start time should the new block have after {anchor}?" if start == "08:00" else None
+    )
+    assert ask == expected
+
+
+def test_quoting_a_whole_command_does_not_hide_its_relative_constraint():
+    assert relative_add_guard_ask(
+        [_user('"Add Vocal after Gym"')],
+        [_add(start_time="08:00", end_time="08:30")],
+        [_block()],
+    ) == "What start time should the new block have after Gym?"

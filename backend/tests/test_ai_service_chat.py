@@ -1262,3 +1262,51 @@ def test_pending_edit_aliases_are_canonicalized(patch_client, fake_schedule, now
         [{"role": "user", "content": "Move Gym"}], fake_schedule, [_full_block()], [], now
     )
     assert result.pending_actions[0]["type"] == "update"
+
+
+def test_add_null_provider_target_is_canonicalized_without_changing_audit(
+    patch_client, fake_schedule, now
+):
+    action = {"type": "add", "title": "Walk", "category": "personal",
+              "start_time": "14:00", "end_time": "14:30"}
+    raw = json.dumps({"actions": [{**action, "task_id": None}], "explanation": "Added.",
+                      "ask": None})
+    calls = patch_client(raw)
+    result = run_chat(
+        [{"role": "user", "content": "Add Walk at 14:00"}], fake_schedule, [], [], now
+    )
+    assert result.parsed_actions == [action] and result.raw_response_text == raw
+    assert len(calls.calls) == 1
+
+
+@pytest.mark.parametrize("target", [0, 1, False, "1", [], {}])
+def test_add_non_null_provider_target_remains_invalid(patch_client, fake_schedule, now, target):
+    patch_client(json.dumps({"actions": [{"type": "add", "title": "Walk", "category": "personal",
+                                         "start_time": "14:00", "end_time": "14:30",
+                                         "task_id": target}],
+                             "explanation": "Added.", "ask": None}))
+    with pytest.raises(AIParseError):
+        run_chat([{"role": "user", "content": "Add Walk at 14:00"}], fake_schedule, [], [], now)
+
+
+@pytest.mark.parametrize("kind,fields", [
+    ("move", {"start_time": "14:00", "end_time": "14:30"}),
+    ("resize", {"end_time": "14:30"}), ("remove", {}), ("update", {"changes": {"title": "New"}}),
+])
+def test_existing_action_null_target_is_not_normalized(
+    patch_client, fake_schedule, now, kind, fields
+):
+    patch_client(json.dumps({"actions": [{"type": kind, "task_id": None, **fields}],
+                             "explanation": "Changed.", "ask": None}))
+    with pytest.raises(AIParseError):
+        run_chat([{"role": "user", "content": "Change the block"}], fake_schedule, [], [], now)
+
+
+@pytest.mark.parametrize("extra", [{"target_ids": []}, {"mystery": None}])
+def test_add_other_unknown_provider_fields_remain_invalid(patch_client, fake_schedule, now, extra):
+    patch_client(json.dumps({"actions": [{"type": "add", "title": "Walk", "category": "personal",
+                                         "start_time": "14:00", "end_time": "14:30",
+                                         "task_id": None, **extra}],
+                             "explanation": "Added.", "ask": None}))
+    with pytest.raises(AIParseError):
+        run_chat([{"role": "user", "content": "Add Walk at 14:00"}], fake_schedule, [], [], now)

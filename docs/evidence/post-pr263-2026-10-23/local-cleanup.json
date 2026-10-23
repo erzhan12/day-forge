@@ -1,0 +1,11 @@
+{
+  "server_stopped": true,
+  "redis_owned_prefix_deleted_counts": {
+    "day-forge-pr263-quoted-live-20261023": 0,
+    "day-forge-pr263-quoted-live-final-20261023": 1
+  },
+  "private_cookie_jars_removed": 2,
+  "browser_owned_tabs_closed": true,
+  "browser_viewport_reset": true,
+  "user_servers_and_tabs_preserved": true
+}

@@ -1,0 +1,5 @@
+{
+  "schedule_id": 131,
+  "interaction_id": 921,
+  "rendered": "HISTORY\nOutcomes json:\n-\nSuccess:\nKind:\nChat\nSchedule:\n2027-11-01 (active)\nUser command:\n10:00\nAi response:\n{\"transcript_sha256\": \"3171d423872e513ffff8adda0d4b912ada537e6529cfdb5164c5353e02d5a8aa\", \"turn_count\": 9, \"raw\": \"{\\n \\\"actions\\\": [{\\\"type\\\": \\\"add\\\", \\\"title\\\": \\\"R263 desktop after anchor\\\", \\\"category\\\": \\\"work\\\", \\\"start_time\\\": \\\"10:00\\\", \\\"end_time\\\": \\\"10:30\\\"}],\\n \\\"explanation\\\": \\\"Added the block at 10:00.\\\",\\n \\\"ask\\\": null,\\n \\\"intent_decision\\\": \\\"continue\\\",\\n \\\"pending_actions\\\": []\\n}\"}\nActions json:\n[{\"type\": \"add\", \"title\": \"R263 desktop after anchor\", \"category\": \"work\", \"start_time\": \"10:00\", \"end_time\": \"10:30\"}]\nCreated at:\nOct. 23, 2026, 8:33 a.m.\nClose"
+}

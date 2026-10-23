@@ -1,0 +1,5 @@
+{
+  "schedule_id": 131,
+  "interaction_id": 920,
+  "rendered": "HISTORY\nOutcomes json:\n-\nSuccess:\nKind:\nChat\nSchedule:\n2027-11-01 (active)\nUser command:\n08:00\nAi response:\n{\"transcript_sha256\": \"be5a92664567f6fb0247d0dc6a8ca309a5d1d243065aba7d7d3822ab5484970d\", \"turn_count\": 7, \"error_detail\": \"AI chat response failed action validation: action[0]: add action has unknown key(s): ['task_id'], task_id must be an integer\", \"error_class\": \"AIParseError\", \"raw\": \"{\\n \\\"actions\\\": [{\\\"type\\\": \\\"add\\\", \\\"task_id\\\": null, \\\"title\\\": \\\"R263 desktop after anchor\\\", \\\"category\\\": \\\"work\\\", \\\"start_time\\\": \\\"08:00\\\", \\\"end_time\\\": \\\"08:30\\\"}],\\n \\\"explanation\\\": \\\"Adding the requested block at 08:00.\\\",\\n \\\"ask\\\": null,\\n \\\"intent_decision\\\": \\\"continue\\\",\\n \\\"pending_actions\\\": []\\n}\"}\nActions json:\n-\nCreated at:\nOct. 23, 2026, 8:32 a.m.\nClose"
+}

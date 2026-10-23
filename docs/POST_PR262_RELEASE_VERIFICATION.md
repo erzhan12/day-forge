@@ -1,5 +1,7 @@
 # Production и rollback после PR #262
 
+Последующий статус: исправления этого отчёта вошли в PR #263 и опубликованы как `4076204`. Точные start-only и partial-plan сценарии повторены на desktop/mobile; дополнительные найденные случаи и их локальные исправления описаны в [отчёте после PR #263](POST_PR263_PRODUCTION_VERIFICATION.md). Ниже сохранены результаты прежнего прогона на `ac8b4a0`.
+
 23 октября 2026 года, Asia/Almaty. Проверен опубликованный релиз `ac8b4a04c9ba9bb485478fe504343477eb40b8e2` на [dayforge.habitreward.org](https://dayforge.habitreward.org). Найденные исправления находятся в ветке `codex/post-pr262-release-verification`; в production они ещё не опубликованы.
 
 ## Результат

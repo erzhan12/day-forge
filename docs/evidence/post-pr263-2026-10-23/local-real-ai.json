@@ -1,0 +1,969 @@
+{
+  "environment": "isolated local candidate",
+  "site": "http://127.0.0.1:8012",
+  "provider": "OpenRouter",
+  "model": "x-ai/grok-4.3",
+  "provider_stubbed": false,
+  "success": true,
+  "real_ai_interaction_count": 11,
+  "active_session_count": 0,
+  "final_schedules": [
+    {
+      "id": 2,
+      "date": "2027-09-01",
+      "revision": 2,
+      "blocks": [
+        {
+          "title": "Gym",
+          "start_time": "09:00:00",
+          "end_time": "09:30:00",
+          "category": "health"
+        },
+        {
+          "title": "Focus",
+          "start_time": "10:00:00",
+          "end_time": "11:00:00",
+          "category": "work"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "date": "2027-09-02",
+      "revision": 2,
+      "blocks": [
+        {
+          "title": "Gym",
+          "start_time": "09:00:00",
+          "end_time": "09:30:00",
+          "category": "health"
+        },
+        {
+          "title": "Focus",
+          "start_time": "10:00:00",
+          "end_time": "11:00:00",
+          "category": "work"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "date": "2027-11-03",
+      "revision": 5,
+      "blocks": []
+    }
+  ],
+  "interactions": [
+    {
+      "id": 1,
+      "schedule_id": 10,
+      "user_command": "Add a Work block titled \"R263 HTTP pending\" lasting 30 minutes. Ask me for its start time before adding it; do not choose a time.",
+      "ai_response": "{\"transcript_sha256\": \"5afcdfe7c95dd591b1253be60a0e5ca1d876dd94cd49b654bf8bec47276af2bd\", \"turn_count\": 1, \"raw\": \"{\\n  \\\"actions\\\": [],\\n  \\\"explanation\\\": \\\"I will add a 30-minute Work block titled \\\\\\\"R263 HTTP pending\\\\\\\" once I know the start time.\\\",\\n  \\\"ask\\\": \\\"What start time should it have?\\\",\\n  \\\"intent_decision\\\": \\\"new\\\",\\n  \\\"pending_actions\\\": [{\\\"type\\\":\\\"add\\\", \\\"task_id\\\":null, \\\"target_ids\\\":[], \\\"known_fields\\\":{\\\"title\\\":\\\"R263 HTTP pending\\\", \\\"category\\\":\\\"work\\\", \\\"duration_minutes\\\":30}, \\\"missing_fields\\\":[\\\"start_time\\\"]}]\\n}\"}",
+      "actions_json": [],
+      "outcomes_json": [],
+      "success": 1,
+      "kind": "chat"
+    },
+    {
+      "id": 2,
+      "schedule_id": 10,
+      "user_command": "14:00",
+      "ai_response": "{\"transcript_sha256\": \"210c31d20020b23ab2b49c85d238b72b8707ccdae4d1ae216e9172a2308b5611\", \"turn_count\": 1, \"raw\": \"{\\n  \\\"actions\\\": [{\\\"type\\\": \\\"add\\\", \\\"title\\\": \\\"R263 HTTP pending\\\", \\\"category\\\": \\\"work\\\", \\\"start_time\\\": \\\"14:00\\\", \\\"end_time\\\": \\\"14:30\\\"}],\\n  \\\"explanation\\\": \\\"Adding the block at 14:00.\\\",\\n  \\\"ask\\\": null,\\n  \\\"intent_decision\\\": \\\"continue\\\",\\n  \\\"pending_actions\\\": []\\n}\"}",
+      "actions_json": [
+        {
+          "type": "add",
+          "title": "R263 HTTP pending",
+          "category": "work",
+          "start_time": "14:00",
+          "end_time": "14:30"
+        }
+      ],
+      "outcomes_json": [
+        {
+          "action_index": 0,
+          "task_id": null,
+          "status": "applied",
+          "applied_fields": [
+            "title",
+            "category",
+            "start_time",
+            "end_time"
+          ],
+          "skipped_fields": [],
+          "reason_code": null,
+          "conflicting_task_ids": [],
+          "attempted_direction": null,
+          "suggestion": null
+        }
+      ],
+      "success": 1,
+      "kind": "chat"
+    },
+    {
+      "id": 3,
+      "schedule_id": 10,
+      "user_command": "Add a Work block titled \"R263 HTTP cancel\". Ask me for its start and end time first; do not add anything yet.",
+      "ai_response": "{\"transcript_sha256\": \"d7e7c4cdcd7a8358b1f1efed0333db3e4ff0dddf6b389aa7961e33b033a4db3f\", \"turn_count\": 1, \"raw\": \"{\\n  \\\"actions\\\": [],\\n  \\\"explanation\\\": \\\"You want to add a Work block titled 'R263 HTTP cancel' but need start/end times first.\\\",\\n  \\\"ask\\\": \\\"What start and end times should it have?\\\",\\n  \\\"intent_decision\\\": \\\"new\\\",\\n  \\\"pending_actions\\\": [{\\\"type\\\":\\\"add\\\", \\\"task_id\\\":null, \\\"target_ids\\\":[], \\\"known_fields\\\":{\\\"title\\\":\\\"R263 HTTP cancel\\\", \\\"category\\\":\\\"work\\\"}, \\\"missing_fields\\\":[\\\"start_time\\\",\\\"end_time\\\"]}]\\n}\"}",
+      "actions_json": [],
+      "outcomes_json": [],
+      "success": 1,
+      "kind": "chat"
+    },
+    {
+      "id": 4,
+      "schedule_id": 10,
+      "user_command": "Add a Work block titled \"R263 HTTP accepted\" from 13:00 to 13:30 NOW. Also plan a Work block titled \"R263 HTTP unresolved\"; ask me for BOTH its start and end time. Do not choose a time or duration for the second block. Apply the first block now and keep only the second pending.",
+      "ai_response": "{\"transcript_sha256\": \"96e19dbf28d2502beebcab98873b1e68b6edfeb217b4949de6f3d648175d4d15\", \"turn_count\": 1, \"raw\": \"{\\n  \\\"actions\\\": [{\\\"type\\\":\\\"add\\\",\\\"title\\\":\\\"R263 HTTP accepted\\\",\\\"category\\\":\\\"work\\\",\\\"start_time\\\":\\\"13:00\\\",\\\"end_time\\\":\\\"13:30\\\"}],\\n  \\\"explanation\\\": \\\"Added the accepted Work block now; pending the unresolved one.\\\",\\n  \\\"ask\\\": null,\\n  \\\"intent_decision\\\": \\\"new\\\",\\n  \\\"pending_actions\\\": [{\\\"type\\\":\\\"add\\\",\\\"task_id\\\":null,\\\"target_ids\\\":[],\\\"known_fields\\\":{\\\"title\\\":\\\"R263 HTTP unresolved\\\",\\\"category\\\":\\\"work\\\"},\\\"missing_fields\\\":[\\\"start_time\\\",\\\"end_time\\\"]}]\\n}\"}",
+      "actions_json": [
+        {
+          "type": "add",
+          "title": "R263 HTTP accepted",
+          "category": "work",
+          "start_time": "13:00",
+          "end_time": "13:30"
+        }
+      ],
+      "outcomes_json": [
+        {
+          "action_index": 0,
+          "task_id": null,
+          "status": "applied",
+          "applied_fields": [
+            "title",
+            "category",
+            "start_time",
+            "end_time"
+          ],
+          "skipped_fields": [],
+          "reason_code": null,
+          "conflicting_task_ids": [],
+          "attempted_direction": null,
+          "suggestion": null
+        }
+      ],
+      "success": 1,
+      "kind": "chat"
+    },
+    {
+      "id": 5,
+      "schedule_id": 10,
+      "user_command": "15:00 to 15:30",
+      "ai_response": "{\"transcript_sha256\": \"0839d68437e6f3627fcf9417f8d462d42c2f31c8d7e2386e3ae3ceeb22332f67\", \"turn_count\": 1, \"raw\": \"{\\n  \\\"actions\\\": [{\\\"type\\\": \\\"add\\\", \\\"title\\\": \\\"R263 HTTP unresolved\\\", \\\"category\\\": \\\"work\\\", \\\"start_time\\\": \\\"15:00\\\", \\\"end_time\\\": \\\"15:30\\\"}],\\n  \\\"explanation\\\": \\\"Adding the unresolved Work block from 15:00 to 15:30.\\\",\\n  \\\"ask\\\": null,\\n  \\\"intent_decision\\\": \\\"continue\\\",\\n  \\\"pending_actions\\\": []\\n}\"}",
+      "actions_json": [
+        {
+          "type": "add",
+          "title": "R263 HTTP unresolved",
+          "category": "work",
+          "start_time": "15:00",
+          "end_time": "15:30"
+        }
+      ],
+      "outcomes_json": [
+        {
+          "action_index": 0,
+          "task_id": null,
+          "status": "applied",
+          "applied_fields": [
+            "title",
+            "category",
+            "start_time",
+            "end_time"
+          ],
+          "skipped_fields": [],
+          "reason_code": null,
+          "conflicting_task_ids": [],
+          "attempted_direction": null,
+          "suggestion": null
+        }
+      ],
+      "success": 1,
+      "kind": "chat"
+    },
+    {
+      "id": 6,
+      "schedule_id": 2,
+      "user_command": "Add a Work block titled \"R263 desktop after anchor\" after \"Gym\", lasting 30 minutes. Ask me for its start time first; do not choose a time.",
+      "ai_response": "{\"transcript_sha256\": \"3b10bcecc2414c4dd1041d3ff049adc941f9d67d5be4415f0662b5a512bbf899\", \"turn_count\": 1, \"raw\": \"{\\n  \\\"actions\\\": [],\\n  \\\"explanation\\\": \\\"You want to add a 30-minute Work block titled \\\\\\\"R263 desktop after anchor\\\\\\\" after Gym.\\\",\\n  \\\"ask\\\": \\\"What start time should it have?\\\",\\n  \\\"intent_decision\\\": \\\"new\\\",\\n  \\\"pending_actions\\\": [\\n    {\\n      \\\"type\\\": \\\"add\\\",\\n      \\\"task_id\\\": null,\\n      \\\"target_ids\\\": [],\\n      \\\"known_fields\\\": {\\n        \\\"title\\\": \\\"R263 desktop after anchor\\\",\\n        \\\"category\\\": \\\"work\\\",\\n        \\\"duration_minutes\\\": 30\\n      },\\n      \\\"missing_fields\\\": [\\\"start_time\\\"]\\n    }\\n  ]\\n}\"}",
+      "actions_json": [],
+      "outcomes_json": [],
+      "success": 1,
+      "kind": "chat"
+    },
+    {
+      "id": 7,
+      "schedule_id": 2,
+      "user_command": "08:00",
+      "ai_response": "{\"transcript_sha256\": \"1645baedd375b287b233c36b3bf86900628288ddc1be2247b3791226070c2af9\", \"turn_count\": 3, \"raw\": \"{\\n  \\\"actions\\\": [{\\\"type\\\": \\\"add\\\", \\\"title\\\": \\\"R263 desktop after anchor\\\", \\\"category\\\": \\\"work\\\", \\\"start_time\\\": \\\"08:00\\\", \\\"end_time\\\": \\\"08:30\\\"}],\\n  \\\"explanation\\\": \\\"Adding the requested block at 08:00.\\\",\\n  \\\"ask\\\": null,\\n  \\\"intent_decision\\\": \\\"continue\\\",\\n  \\\"pending_actions\\\": []\\n}\"}",
+      "actions_json": [
+        {
+          "type": "add",
+          "title": "R263 desktop after anchor",
+          "category": "work",
+          "start_time": "08:00",
+          "end_time": "08:30"
+        }
+      ],
+      "outcomes_json": [],
+      "success": 1,
+      "kind": "chat"
+    },
+    {
+      "id": 8,
+      "schedule_id": 2,
+      "user_command": "14:00",
+      "ai_response": "{\"transcript_sha256\": \"9c2c55ea30e4262a80904329974ec5062df2ed084171f18b37681fb4a147f27f\", \"turn_count\": 5, \"raw\": \"{\\n  \\\"actions\\\": [{\\\"type\\\": \\\"add\\\", \\\"title\\\": \\\"R263 desktop after anchor\\\", \\\"category\\\": \\\"work\\\", \\\"start_time\\\": \\\"14:00\\\", \\\"end_time\\\": \\\"14:30\\\"}],\\n  \\\"explanation\\\": \\\"Adding the block at 14:00-14:30.\\\",\\n  \\\"ask\\\": null,\\n  \\\"intent_decision\\\": \\\"continue\\\",\\n  \\\"pending_actions\\\": []\\n}\"}",
+      "actions_json": [
+        {
+          "type": "add",
+          "title": "R263 desktop after anchor",
+          "category": "work",
+          "start_time": "14:00",
+          "end_time": "14:30"
+        }
+      ],
+      "outcomes_json": [
+        {
+          "action_index": 0,
+          "task_id": null,
+          "status": "applied",
+          "applied_fields": [
+            "title",
+            "category",
+            "start_time",
+            "end_time"
+          ],
+          "skipped_fields": [],
+          "reason_code": null,
+          "conflicting_task_ids": [],
+          "attempted_direction": null,
+          "suggestion": null
+        }
+      ],
+      "success": 1,
+      "kind": "chat"
+    },
+    {
+      "id": 9,
+      "schedule_id": 3,
+      "user_command": "Add a Work block titled \"R263 mobile after anchor\" after \"Gym\", lasting 30 minutes. Ask me for its start time first; do not choose a time.",
+      "ai_response": "{\"transcript_sha256\": \"d5344a4d86f57bf6a24046a970eb943b7a079ffd717d453042fbe5ac6663c268\", \"turn_count\": 1, \"raw\": \"{\\n  \\\"actions\\\": [],\\n  \\\"explanation\\\": \\\"I need the start time before adding the block after Gym.\\\",\\n  \\\"ask\\\": \\\"What start time should the new block have?\\\",\\n  \\\"intent_decision\\\": \\\"new\\\",\\n  \\\"pending_actions\\\": [{\\\"type\\\":\\\"add\\\",\\\"task_id\\\":null,\\\"target_ids\\\":[],\\\"known_fields\\\":{\\\"title\\\":\\\"R263 mobile after anchor\\\",\\\"category\\\":\\\"work\\\",\\\"duration_minutes\\\":30},\\\"missing_fields\\\":[\\\"start_time\\\"]}]\\n}\"}",
+      "actions_json": [],
+      "outcomes_json": [],
+      "success": 1,
+      "kind": "chat"
+    },
+    {
+      "id": 10,
+      "schedule_id": 3,
+      "user_command": "08:00",
+      "ai_response": "{\"transcript_sha256\": \"d4d0d68da31f2ae6170cb1a51475e1b2bfccf77bd545f3ace61725c3fb9190de\", \"turn_count\": 3, \"raw\": \"{\\n  \\\"actions\\\": [{\\\"type\\\": \\\"add\\\", \\\"title\\\": \\\"R263 mobile after anchor\\\", \\\"category\\\": \\\"work\\\", \\\"start_time\\\": \\\"08:00\\\", \\\"end_time\\\": \\\"08:30\\\"}],\\n  \\\"explanation\\\": \\\"Adding the requested block at 08:00.\\\",\\n  \\\"ask\\\": null,\\n  \\\"intent_decision\\\": \\\"continue\\\",\\n  \\\"pending_actions\\\": []\\n}\"}",
+      "actions_json": [
+        {
+          "type": "add",
+          "title": "R263 mobile after anchor",
+          "category": "work",
+          "start_time": "08:00",
+          "end_time": "08:30"
+        }
+      ],
+      "outcomes_json": [],
+      "success": 1,
+      "kind": "chat"
+    },
+    {
+      "id": 11,
+      "schedule_id": 3,
+      "user_command": "15:00",
+      "ai_response": "{\"transcript_sha256\": \"2fb9c489653016ae0eac71fe662d3ac071341595c396bd2df04e8166dbe82aaf\", \"turn_count\": 5, \"raw\": \"{\\n  \\\"actions\\\": [{\\\"type\\\": \\\"add\\\", \\\"title\\\": \\\"R263 mobile after anchor\\\", \\\"category\\\": \\\"work\\\", \\\"start_time\\\": \\\"15:00\\\", \\\"end_time\\\": \\\"15:30\\\"}],\\n  \\\"explanation\\\": \\\"Adding the requested block at 15:00.\\\",\\n  \\\"ask\\\": null,\\n  \\\"intent_decision\\\": \\\"continue\\\",\\n  \\\"pending_actions\\\": []\\n}\"}",
+      "actions_json": [
+        {
+          "type": "add",
+          "title": "R263 mobile after anchor",
+          "category": "work",
+          "start_time": "15:00",
+          "end_time": "15:30"
+        }
+      ],
+      "outcomes_json": [
+        {
+          "action_index": 0,
+          "task_id": null,
+          "status": "applied",
+          "applied_fields": [
+            "title",
+            "category",
+            "start_time",
+            "end_time"
+          ],
+          "skipped_fields": [],
+          "reason_code": null,
+          "conflicting_task_ids": [],
+          "attempted_direction": null,
+          "suggestion": null
+        }
+      ],
+      "success": 1,
+      "kind": "chat"
+    }
+  ],
+  "receipts": [
+    {
+      "date": "2027-11-03",
+      "request_id": "5e771747f82d4fdc819f29ecf10cafe9",
+      "body_hash": "8955aa5ce41f397178976d39b29f252880d9246b2ba3f347afe5e4a7b6a09943",
+      "response_status": 200,
+      "response_body": {
+        "schedule": {
+          "id": 10,
+          "date": "2027-11-03",
+          "status": "draft",
+          "revision": 0
+        },
+        "blocks": null,
+        "revision": 0,
+        "explanation": "I will add a 30-minute Work block titled \"R263 HTTP pending\" once I know the start time.",
+        "ask": "What start time should it have?",
+        "applied": false,
+        "partial": false,
+        "outcomes": [],
+        "pending_intent": {
+          "id": "de330521-c1c0-4b65-9eb9-011afac35fbf",
+          "version": 1,
+          "expires_at": "2026-10-23T09:07:27.930442+00:00",
+          "ask": "What start time should it have?"
+        },
+        "request_id": "5e771747-f82d-4fdc-819f-29ecf10cafe9",
+        "request_completed": true
+      }
+    },
+    {
+      "date": "2027-11-03",
+      "request_id": "4389967d169847cfabd8ef68ca332376",
+      "body_hash": "12599211b89708860df25a128ce45c94b9996e860d680b9482e3731097609d96",
+      "response_status": 200,
+      "response_body": {
+        "schedule": {
+          "id": 10,
+          "date": "2027-11-03",
+          "status": "active",
+          "revision": 1
+        },
+        "blocks": [
+          {
+            "id": 17,
+            "title": "R263 HTTP pending",
+            "start_time": "14:00",
+            "end_time": "14:30",
+            "category": "work",
+            "is_completed": false,
+            "sort_order": 0
+          }
+        ],
+        "revision": 1,
+        "explanation": "Adding the block at 14:00.",
+        "ask": null,
+        "applied": true,
+        "partial": false,
+        "outcomes": [
+          {
+            "action_index": 0,
+            "task_id": null,
+            "status": "applied",
+            "applied_fields": [
+              "title",
+              "category",
+              "start_time",
+              "end_time"
+            ],
+            "skipped_fields": [],
+            "reason_code": null,
+            "conflicting_task_ids": [],
+            "attempted_direction": null,
+            "suggestion": null
+          }
+        ],
+        "pending_intent": null,
+        "request_id": "4389967d-1698-47cf-abd8-ef68ca332376",
+        "request_completed": true
+      }
+    },
+    {
+      "date": "2027-11-03",
+      "request_id": "b067ce9edc0843c8b662fe675cb826ea",
+      "body_hash": "74ea776677952bd6e67982e649c27f7f1299b105fa8b1a0b4df04d2fea638835",
+      "response_status": 409,
+      "response_body": {
+        "code": "pending_intent_stale",
+        "pending_intent": null,
+        "errors": {
+          "detail": "The pending request changed or expired. Please restate it."
+        },
+        "request_id": "b067ce9e-dc08-43c8-b662-fe675cb826ea",
+        "request_completed": true
+      }
+    },
+    {
+      "date": "2027-11-03",
+      "request_id": "bca5da860b9440bc9c658a7968d11094",
+      "body_hash": "2b0ac4e603a3232e787349e044d0dd381b63cc80e819928f909dbb08a9aa4903",
+      "response_status": 200,
+      "response_body": {
+        "schedule": {
+          "id": 10,
+          "date": "2027-11-03",
+          "status": "active",
+          "revision": 2
+        },
+        "blocks": null,
+        "revision": 2,
+        "explanation": "You want to add a Work block titled 'R263 HTTP cancel' but need start/end times first.",
+        "ask": "What start and end times should it have?",
+        "applied": false,
+        "partial": false,
+        "outcomes": [],
+        "pending_intent": {
+          "id": "361b5367-4e21-418f-ab6a-108d54d7b039",
+          "version": 1,
+          "expires_at": "2026-10-23T09:07:39.524475+00:00",
+          "ask": "What start and end times should it have?"
+        },
+        "request_id": "bca5da86-0b94-40bc-9c65-8a7968d11094",
+        "request_completed": true
+      }
+    },
+    {
+      "date": "2027-11-03",
+      "request_id": "e063ff1cac3a43f18d5e867cab7c2f19",
+      "body_hash": "6242253039cf3396fb4f78551b273cbd9e3684ed30641b978fbeee84c821e488",
+      "response_status": 200,
+      "response_body": {
+        "schedule": {
+          "id": 10,
+          "date": "2027-11-03",
+          "status": "active",
+          "revision": 2
+        },
+        "blocks": null,
+        "revision": 2,
+        "explanation": "Pending request cancelled.",
+        "ask": null,
+        "applied": false,
+        "partial": false,
+        "outcomes": [],
+        "pending_intent": null,
+        "request_id": "e063ff1c-ac3a-43f1-8d5e-867cab7c2f19",
+        "request_completed": true
+      }
+    },
+    {
+      "date": "2027-11-03",
+      "request_id": "0739769494734e98b74d09978da8a43a",
+      "body_hash": "21595e93650d4a9bd3f0fdbe3b60a288a72a4816c86388557ea2af7df6b85093",
+      "response_status": 200,
+      "response_body": {
+        "schedule": {
+          "id": 10,
+          "date": "2027-11-03",
+          "status": "active",
+          "revision": 3
+        },
+        "blocks": [
+          {
+            "id": 18,
+            "title": "R263 HTTP accepted",
+            "start_time": "13:00",
+            "end_time": "13:30",
+            "category": "work",
+            "is_completed": false,
+            "sort_order": 0
+          }
+        ],
+        "revision": 3,
+        "explanation": "Added the accepted Work block now; pending the unresolved one.",
+        "ask": "Some requested changes are still pending. Please clarify the remaining request.",
+        "applied": true,
+        "partial": true,
+        "outcomes": [
+          {
+            "action_index": 0,
+            "task_id": null,
+            "status": "applied",
+            "applied_fields": [
+              "title",
+              "category",
+              "start_time",
+              "end_time"
+            ],
+            "skipped_fields": [],
+            "reason_code": null,
+            "conflicting_task_ids": [],
+            "attempted_direction": null,
+            "suggestion": null
+          }
+        ],
+        "pending_intent": {
+          "id": "b119f607-0044-481e-89b2-3b82e8afb857",
+          "version": 1,
+          "expires_at": "2026-10-23T09:07:47.734336+00:00",
+          "ask": "Some requested changes are still pending. Please clarify the remaining request."
+        },
+        "request_id": "07397694-9473-4e98-b74d-09978da8a43a",
+        "request_completed": true
+      }
+    },
+    {
+      "date": "2027-11-03",
+      "request_id": "6b118999c45d46d48f3399865d043e0b",
+      "body_hash": "2de625408a6a9faab932b5916a992efcc63d05999ec3c26e7579fd1c1d370ab8",
+      "response_status": 200,
+      "response_body": {
+        "schedule": {
+          "id": 10,
+          "date": "2027-11-03",
+          "status": "active",
+          "revision": 4
+        },
+        "blocks": [
+          {
+            "id": 18,
+            "title": "R263 HTTP accepted",
+            "start_time": "13:00",
+            "end_time": "13:30",
+            "category": "work",
+            "is_completed": false,
+            "sort_order": 0
+          },
+          {
+            "id": 19,
+            "title": "R263 HTTP unresolved",
+            "start_time": "15:00",
+            "end_time": "15:30",
+            "category": "work",
+            "is_completed": false,
+            "sort_order": 1
+          }
+        ],
+        "revision": 4,
+        "explanation": "Adding the unresolved Work block from 15:00 to 15:30.",
+        "ask": null,
+        "applied": true,
+        "partial": false,
+        "outcomes": [
+          {
+            "action_index": 0,
+            "task_id": null,
+            "status": "applied",
+            "applied_fields": [
+              "title",
+              "category",
+              "start_time",
+              "end_time"
+            ],
+            "skipped_fields": [],
+            "reason_code": null,
+            "conflicting_task_ids": [],
+            "attempted_direction": null,
+            "suggestion": null
+          }
+        ],
+        "pending_intent": null,
+        "request_id": "6b118999-c45d-46d4-8f33-99865d043e0b",
+        "request_completed": true
+      }
+    },
+    {
+      "date": "2027-09-01",
+      "request_id": "853edc4e2857466a9b3facba487c4e4d",
+      "body_hash": "249bde1c1ed50810f63246c113e3d1891b0a16d4e2d12916c14db76cad87801d",
+      "response_status": 200,
+      "response_body": {
+        "schedule": {
+          "id": 2,
+          "date": "2027-09-01",
+          "status": "active",
+          "revision": 0
+        },
+        "blocks": null,
+        "revision": 0,
+        "explanation": "You want to add a 30-minute Work block titled \"R263 desktop after anchor\" after Gym.",
+        "ask": "What start time should it have?",
+        "applied": false,
+        "partial": false,
+        "outcomes": [],
+        "pending_intent": {
+          "id": "218dba89-50ad-4365-9bca-e49e669eab7b",
+          "version": 1,
+          "expires_at": "2026-10-23T09:11:03.142259+00:00",
+          "ask": "What start time should it have?"
+        },
+        "request_id": "853edc4e-2857-466a-9b3f-acba487c4e4d",
+        "request_completed": true
+      }
+    },
+    {
+      "date": "2027-09-01",
+      "request_id": "064e157ae43f49618d32fcd64761aab4",
+      "body_hash": "5651a73fd45e6f872b4fbf508fabf280847e4b36369cbcce547733167228674a",
+      "response_status": 200,
+      "response_body": {
+        "schedule": {
+          "id": 2,
+          "date": "2027-09-01",
+          "status": "active",
+          "revision": 0
+        },
+        "blocks": null,
+        "revision": 0,
+        "explanation": "Nothing was changed.",
+        "ask": "What start time should the new block have after Gym?",
+        "applied": false,
+        "partial": false,
+        "outcomes": [],
+        "pending_intent": {
+          "id": "218dba89-50ad-4365-9bca-e49e669eab7b",
+          "version": 2,
+          "expires_at": "2026-10-23T09:11:03.142259+00:00",
+          "ask": "What start time should the new block have after Gym?"
+        },
+        "request_id": "064e157a-e43f-4961-8d32-fcd64761aab4",
+        "request_completed": true
+      }
+    },
+    {
+      "date": "2027-09-01",
+      "request_id": "4c938d6b78ad46c8975a3d701dd10c68",
+      "body_hash": "01096911ef9aec3e8b25fc09dccc8e2d890237e8800a501798ac0e7d85863353",
+      "response_status": 200,
+      "response_body": {
+        "schedule": {
+          "id": 2,
+          "date": "2027-09-01",
+          "status": "active",
+          "revision": 1
+        },
+        "blocks": [
+          {
+            "id": 1,
+            "title": "Gym",
+            "start_time": "09:00",
+            "end_time": "09:30",
+            "category": "health",
+            "is_completed": false,
+            "sort_order": 0
+          },
+          {
+            "id": 2,
+            "title": "Focus",
+            "start_time": "10:00",
+            "end_time": "11:00",
+            "category": "work",
+            "is_completed": false,
+            "sort_order": 0
+          },
+          {
+            "id": 20,
+            "title": "R263 desktop after anchor",
+            "start_time": "14:00",
+            "end_time": "14:30",
+            "category": "work",
+            "is_completed": false,
+            "sort_order": 1
+          }
+        ],
+        "revision": 1,
+        "explanation": "Adding the block at 14:00-14:30.",
+        "ask": null,
+        "applied": true,
+        "partial": false,
+        "outcomes": [
+          {
+            "action_index": 0,
+            "task_id": null,
+            "status": "applied",
+            "applied_fields": [
+              "title",
+              "category",
+              "start_time",
+              "end_time"
+            ],
+            "skipped_fields": [],
+            "reason_code": null,
+            "conflicting_task_ids": [],
+            "attempted_direction": null,
+            "suggestion": null
+          }
+        ],
+        "pending_intent": null,
+        "request_id": "4c938d6b-78ad-46c8-975a-3d701dd10c68",
+        "request_completed": true
+      }
+    },
+    {
+      "date": "2027-09-02",
+      "request_id": "20374d5a003d4b318aadc57db98c5907",
+      "body_hash": "7c1efb283eb33ffa0b6ccf9769fcc00eed72c22115db6d31298d5cce32d7aa92",
+      "response_status": 200,
+      "response_body": {
+        "schedule": {
+          "id": 3,
+          "date": "2027-09-02",
+          "status": "active",
+          "revision": 0
+        },
+        "blocks": null,
+        "revision": 0,
+        "explanation": "I need the start time before adding the block after Gym.",
+        "ask": "What start time should the new block have?",
+        "applied": false,
+        "partial": false,
+        "outcomes": [],
+        "pending_intent": {
+          "id": "d8bc0f99-2ff8-4bfb-b0d1-e8a96ce44dd5",
+          "version": 1,
+          "expires_at": "2026-10-23T09:13:33.342994+00:00",
+          "ask": "What start time should the new block have?"
+        },
+        "request_id": "20374d5a-003d-4b31-8aad-c57db98c5907",
+        "request_completed": true
+      }
+    },
+    {
+      "date": "2027-09-02",
+      "request_id": "64d1c80be6494c6baa04eb6e5bb9bda5",
+      "body_hash": "36534e8d9c8932a2f4e83b629b8dacaddc86a59347832015512ca6776b6db334",
+      "response_status": 200,
+      "response_body": {
+        "schedule": {
+          "id": 3,
+          "date": "2027-09-02",
+          "status": "active",
+          "revision": 0
+        },
+        "blocks": null,
+        "revision": 0,
+        "explanation": "Nothing was changed.",
+        "ask": "What start time should the new block have after Gym?",
+        "applied": false,
+        "partial": false,
+        "outcomes": [],
+        "pending_intent": {
+          "id": "d8bc0f99-2ff8-4bfb-b0d1-e8a96ce44dd5",
+          "version": 2,
+          "expires_at": "2026-10-23T09:13:33.342994+00:00",
+          "ask": "What start time should the new block have after Gym?"
+        },
+        "request_id": "64d1c80b-e649-4c6b-aa04-eb6e5bb9bda5",
+        "request_completed": true
+      }
+    },
+    {
+      "date": "2027-09-02",
+      "request_id": "e3bfba2b660c450fb2a667b6ea22ff9d",
+      "body_hash": "227f88fd7e8aedff8e3b739b2aee628302a2031ee62faf0ac7801b10079a5d0f",
+      "response_status": 200,
+      "response_body": {
+        "schedule": {
+          "id": 3,
+          "date": "2027-09-02",
+          "status": "active",
+          "revision": 1
+        },
+        "blocks": [
+          {
+            "id": 3,
+            "title": "Gym",
+            "start_time": "09:00",
+            "end_time": "09:30",
+            "category": "health",
+            "is_completed": false,
+            "sort_order": 0
+          },
+          {
+            "id": 4,
+            "title": "Focus",
+            "start_time": "10:00",
+            "end_time": "11:00",
+            "category": "work",
+            "is_completed": false,
+            "sort_order": 0
+          },
+          {
+            "id": 23,
+            "title": "R263 mobile after anchor",
+            "start_time": "15:00",
+            "end_time": "15:30",
+            "category": "work",
+            "is_completed": false,
+            "sort_order": 1
+          }
+        ],
+        "revision": 1,
+        "explanation": "Adding the requested block at 15:00.",
+        "ask": null,
+        "applied": true,
+        "partial": false,
+        "outcomes": [
+          {
+            "action_index": 0,
+            "task_id": null,
+            "status": "applied",
+            "applied_fields": [
+              "title",
+              "category",
+              "start_time",
+              "end_time"
+            ],
+            "skipped_fields": [],
+            "reason_code": null,
+            "conflicting_task_ids": [],
+            "attempted_direction": null,
+            "suggestion": null
+          }
+        ],
+        "pending_intent": null,
+        "request_id": "e3bfba2b-660c-450f-b2a6-67b6ea22ff9d",
+        "request_completed": true
+      }
+    }
+  ],
+  "intents": [
+    {
+      "id": "de330521c1c04b659eb9011afac35fbf",
+      "schedule_id": 10,
+      "state": "resolved",
+      "version": 1,
+      "revision": 0,
+      "source_message": "Add a Work block titled \"R263 HTTP pending\" lasting 30 minutes. Ask me for its start time before adding it; do not choose a time.",
+      "question": "What start time should it have?",
+      "items": [
+        {
+          "type": "add",
+          "task_id": null,
+          "target_ids": [],
+          "known_fields": {
+            "title": "R263 HTTP pending",
+            "category": "work",
+            "duration_minutes": 30
+          },
+          "missing_fields": [
+            "start_time"
+          ]
+        }
+      ],
+      "accepted_changes": []
+    },
+    {
+      "id": "361b53674e21418fab6a108d54d7b039",
+      "schedule_id": 10,
+      "state": "cancelled",
+      "version": 1,
+      "revision": 2,
+      "source_message": "Add a Work block titled \"R263 HTTP cancel\". Ask me for its start and end time first; do not add anything yet.",
+      "question": "What start and end times should it have?",
+      "items": [
+        {
+          "type": "add",
+          "task_id": null,
+          "target_ids": [],
+          "known_fields": {
+            "title": "R263 HTTP cancel",
+            "category": "work"
+          },
+          "missing_fields": [
+            "end_time",
+            "start_time"
+          ]
+        }
+      ],
+      "accepted_changes": []
+    },
+    {
+      "id": "b119f6070044481e89b23b82e8afb857",
+      "schedule_id": 10,
+      "state": "resolved",
+      "version": 1,
+      "revision": 3,
+      "source_message": "Add a Work block titled \"R263 HTTP accepted\" from 13:00 to 13:30 NOW. Also plan a Work block titled \"R263 HTTP unresolved\"; ask me for BOTH its start and end time. Do not choose a time or duration for the second block. Apply the first block now and keep only the second pending.",
+      "question": "Some requested changes are still pending. Please clarify the remaining request.",
+      "items": [
+        {
+          "type": "add",
+          "task_id": null,
+          "target_ids": [],
+          "known_fields": {
+            "title": "R263 HTTP unresolved",
+            "category": "work"
+          },
+          "missing_fields": [
+            "end_time",
+            "start_time"
+          ]
+        }
+      ],
+      "accepted_changes": [
+        {
+          "type": "add",
+          "action_index": 0,
+          "block_id": 18,
+          "fields": [
+            "title",
+            "category",
+            "start_time",
+            "end_time"
+          ],
+          "revision": 3
+        }
+      ]
+    },
+    {
+      "id": "218dba8950ad43659bcae49e669eab7b",
+      "schedule_id": 2,
+      "state": "resolved",
+      "version": 2,
+      "revision": 0,
+      "source_message": "Add a Work block titled \"R263 desktop after anchor\" after \"Gym\", lasting 30 minutes. Ask me for its start time first; do not choose a time.",
+      "question": "What start time should the new block have after Gym?",
+      "items": [
+        {
+          "type": "add",
+          "task_id": null,
+          "target_ids": [],
+          "known_fields": {
+            "title": "R263 desktop after anchor",
+            "category": "work",
+            "duration_minutes": 30
+          },
+          "missing_fields": [
+            "start_time"
+          ]
+        }
+      ],
+      "accepted_changes": []
+    },
+    {
+      "id": "d8bc0f992ff84bfbb0d1e8a96ce44dd5",
+      "schedule_id": 3,
+      "state": "resolved",
+      "version": 2,
+      "revision": 0,
+      "source_message": "Add a Work block titled \"R263 mobile after anchor\" after \"Gym\", lasting 30 minutes. Ask me for its start time first; do not choose a time.",
+      "question": "What start time should the new block have after Gym?",
+      "items": [
+        {
+          "type": "add",
+          "task_id": null,
+          "target_ids": [],
+          "known_fields": {
+            "title": "R263 mobile after anchor",
+            "category": "work",
+            "duration_minutes": 30
+          },
+          "missing_fields": [
+            "start_time"
+          ]
+        }
+      ],
+      "accepted_changes": []
+    }
+  ]
+}

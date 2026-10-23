@@ -1,0 +1,5 @@
+{
+  "schedule_id": 133,
+  "interaction_id": 930,
+  "rendered": "HISTORY\nOutcomes json:\n-\nSuccess:\nKind:\nChat\nSchedule:\n2027-11-03 (active)\nUser command:\n15:00 to 15:30\nAi response:\n{\"transcript_sha256\": \"0839d68437e6f3627fcf9417f8d462d42c2f31c8d7e2386e3ae3ceeb22332f67\", \"turn_count\": 1, \"error_detail\": \"AI chat response failed action validation: action[0]: add action has unknown key(s): ['task_id'], task_id must be an integer\", \"error_class\": \"AIParseError\", \"raw\": \"{\\n \\\"actions\\\": [{\\\"type\\\": \\\"add\\\", \\\"task_id\\\": null, \\\"title\\\": \\\"R263 HTTP unresolved\\\", \\\"category\\\": \\\"work\\\", \\\"start_time\\\": \\\"15:00\\\", \\\"end_time\\\": \\\"15:30\\\"}],\\n \\\"explanation\\\": \\\"Adding the unresolved Work block from 15:00 to 15:30.\\\",\\n \\\"ask\\\": null,\\n \\\"intent_decision\\\": \\\"continue\\\",\\n \\\"pending_actions\\\": []\\n}\"}\nActions json:\n-\nCreated at:\nOct. 23, 2026, 8:45 a.m.\nClose"
+}
