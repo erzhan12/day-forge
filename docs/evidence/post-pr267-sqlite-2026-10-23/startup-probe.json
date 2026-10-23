@@ -1,0 +1,6 @@
+{
+  "url": "https://dayforge.habitreward.org/accounts/login/",
+  "status": 502,
+  "phase": "after compose restart, while Deploy health-check was in its stabilization wait",
+  "final_result": "Deploy health-check succeeded; public Login and assets returned 200 on the expected release"
+}

@@ -16,5 +16,7 @@
   "makemigrations_dry_run": "No changes detected",
   "test_file": "backend/tests/test_schedule_mutations_sqlite.py",
   "test_file_sha256": "d8643120e61d4c2cd615801dc37ace513e9f85ae088e0a6f9ee00a32d7afb516",
-  "runtime_code_changed": false
+  "runtime_code_changed": false,
+  "default_pytest_collection_count": 2360,
+  "diagnostic_runner_collected_by_default": false
 }

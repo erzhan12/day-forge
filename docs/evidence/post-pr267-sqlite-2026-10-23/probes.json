@@ -32,8 +32,8 @@
     }
   ],
   "control_and_repeat_checks_passed": 34,
-  "runner": "docs/evidence/post-pr267-sqlite-2026-10-23/probe_snapshot_test.py",
-  "reproduce": "uv run python docs/evidence/post-pr267-sqlite-2026-10-23/probe_snapshot_test.py",
+  "runner": "docs/evidence/post-pr267-sqlite-2026-10-23/probe_sqlite_snapshot.py",
+  "reproduce": "uv run python docs/evidence/post-pr267-sqlite-2026-10-23/probe_sqlite_snapshot.py",
   "production_database_accessed": false,
   "runtime_code_changed": false
 }

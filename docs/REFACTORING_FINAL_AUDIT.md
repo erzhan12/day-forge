@@ -1,5 +1,7 @@
 # Итоговый аудит Day Forge после R00–R12
 
+Дополнение после PR #267, 23 октября: Deploy остановился на фиксированном ожидании 100 мс в SQLite snapshot-тесте. PR #268 заменил его ожиданием writer Future с ограниченным timeout, сохранив проверку старого read snapshot и передачу ошибок writer. 30 повторов, отрицательные контроли, полные suites, PR CI и Deploy `2496bd7` прошли; публичная версия подтверждена. Runtime-код приложения не менялся. [Отчёт](POST_PR267_SQLITE_DEPLOY_FIX.md).
+
 Дополнение после PR #266, 23 октября: Deploy опубликовал `2f78696`. [Production-проверка Schedule admin](POST_PR264_PRODUCTION_VERIFICATION.md#проверка-после-deploy-pr-266) подтвердила отсутствие 500 с пустым и непустым inline, read-only интерфейс и 403 на add/delete страницах Schedule и TimeBlock в staff-сессии. Тестовый блок убран, день пуст, исходный status сохранён. Прямой staff POST в production не отправлялся; отказ POST с 403 проверен HTTP-регрессией опубликованного кода. Дополнительных runtime-исправлений не потребовалось.
 
 Дополнение после PR #264, 23 октября: [production-проверка текущего `ee8d914`](POST_PR264_PRODUCTION_VERIFICATION.md) закрыла `after` в названии, отказ и корректный повтор, partial без дублей, replay, Undo и Logout на desktop/mobile. Scoped audit подтвердил 15 успешных реальных AI-вызовов, тестовые дни оставлены пустыми. Дополнительный Schedule admin 500 воспроизведён локально: inline передаёт `obj` в общий permission-mixin. Исправление и HTTP-тесты готовы, полные suites прошли, публикация admin-исправления остаётся открытой.

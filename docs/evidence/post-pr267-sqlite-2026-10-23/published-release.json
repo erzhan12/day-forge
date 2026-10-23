@@ -1,0 +1,21 @@
+{
+  "url": "https://dayforge.habitreward.org/accounts/login/",
+  "status": 200,
+  "version": "2496bd770288593978631d37371f7d02fff201a5",
+  "assets": [
+    {
+      "path": "/static/assets/app-Cm2RWFvr.css",
+      "status": 200,
+      "sha256": "9b97392f05f343168a950d34e0e627931166bfe2a9174a7593ce4f7b86f8a132",
+      "cache_control": "max-age=315360000, public, immutable"
+    },
+    {
+      "path": "/static/assets/app-CEga6-rI.js",
+      "status": 200,
+      "sha256": "e7e1ac9eec17dcb7ab399d5296e9a3337516a77c7ff8ecdc9b48e2d5222ce4ee",
+      "cache_control": "max-age=315360000, public, immutable"
+    }
+  ],
+  "authenticated": false,
+  "production_writes": false
+}
