@@ -26,7 +26,7 @@ PASSWORD = "container-rehearsal-local-only"
 DAY = "2027-07-20"
 
 
-def database_snapshot(path, *, omit_origin=False):
+def database_snapshot(path, *, omit_origin=False, omit_columns=None):
     """Persist only hashes and counts, never schedule content or credentials."""
     with sqlite3.connect(path.as_uri() + "?mode=ro", uri=True) as db:
         assert db.execute("PRAGMA integrity_check").fetchone() == ("ok",)
@@ -38,6 +38,7 @@ def database_snapshot(path, *, omit_origin=False):
             columns = [row[1] for row in db.execute(f"PRAGMA table_info({quoted})")]
             if omit_origin and table == "schedules_timeblock" and "origin" in columns:
                 columns.remove("origin")
+            columns = [c for c in columns if c not in (omit_columns or {}).get(table, ())]
             selection = ",".join('"' + c.replace('"', '""') + '"' for c in columns)
             hashes = sorted(
                 hashlib.sha256(repr(row).encode()).hexdigest()
@@ -96,7 +97,7 @@ class Rehearsal:
             capture_output=capture,
         ).stdout
 
-    def request(self, path, *, data=None, headers=None, follow=True):
+    def request(self, path, *, data=None, headers=None, follow=True, method=None):
         request_headers = {"Origin": self.base, **(headers or {})}
         if data is not None:
             request_headers["Content-Type"] = "application/json"
@@ -107,6 +108,7 @@ class Rehearsal:
             self.base + path,
             data=None if data is None else json.dumps(data).encode(),
             headers=request_headers,
+            method=method,
         )
         try:
             client = (

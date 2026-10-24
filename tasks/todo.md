@@ -4,6 +4,8 @@ This file tracks work that still needs a decision or implementation. The previou
 
 ## In progress
 
+- [ ] **Gap migration container rehearsal.** Check the pre-0006 database upgrade, saved 0/10/20, restart, old-image preference/manual writes and reupgrade on a private copy. A pre-gap ORM insert exposed the missing database default; add a forward compatibility migration and verify the real rollback path.
+
 - [x] **#258 configurable default block gap.** Implemented in PR #265. Production desktop/mobile verification on `a2e6133` passed 0/10/20 persistence through fresh login, six real untimed AI adds, explicit time/gap precedence, eight Undo operations and narrow-screen validation. Original preferences restored; six test days empty. See [the verification report](../docs/BLOCK_GAP_PRODUCTION_VERIFICATION.md).
 
 - [x] **First PR CI run.** PR #237 passed the reusable CI workflow on GitHub Actions, and the post-merge deployment completed successfully.

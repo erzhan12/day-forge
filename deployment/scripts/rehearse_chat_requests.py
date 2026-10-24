@@ -208,7 +208,10 @@ def finalize_rehearsal(runner, evidence):
             (runner.root / "evidence.json").write_text(json.dumps(evidence, indent=2) + "\n")
 
 
-def main(runner_type=ChatRehearsal, *, provider_model="rehearsal-fixture", description=__doc__):
+def main(
+    runner_type=ChatRehearsal, *, provider_model="rehearsal-fixture", description=__doc__,
+    snapshot=database_snapshot,
+):
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument("--source-db", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
@@ -236,25 +239,29 @@ def main(runner_type=ChatRehearsal, *, provider_model="rehearsal-fixture", descr
             command.append("--all")
         if subprocess.check_output(command, text=True).strip():
             parser.error("Docker project already exists")
-    source_before = database_snapshot(source)
+    source_before = snapshot(source)
     prepare(root, source, args.port)
-    configure_provider(root, args.new_image, provider_model)
+    if provider_model is not None:
+        configure_provider(root, args.new_image, provider_model)
     runner = runner_type(root, args.port)
     success = False
     try:
         runner.run(args.old_image, args.old_version, args.new_image, args.new_version)
-        final = database_snapshot(root / "data/day_forge.db")
+        final = snapshot(root / "data/day_forge.db")
         for table, hashes in source_before.items():
             if table != "django_migrations":
                 assert set(hashes).issubset(set(final[table])), table
-        assert source_before == database_snapshot(source), "Working source database changed"
+        assert source_before == snapshot(source), "Working source database changed"
         success = True
     finally:
         evidence = {"success": success, "source_snapshot_sha256": digest(source_before),
                     "source_tables": len(source_before),
                     "source_rows": sum(map(len, source_before.values())),
                     "old_version": args.old_version, "new_version": args.new_version,
-                    "provider": "isolated fixture; no paid calls", "events": runner.events}
+                    "provider": (
+                        "isolated fixture; no paid calls" if provider_model is not None
+                        else "AI disabled; no provider configured"
+                    ), "events": runner.events}
         finalize_rehearsal(runner, evidence)
     print(f"PASS: {root / 'evidence.json'}")
 
