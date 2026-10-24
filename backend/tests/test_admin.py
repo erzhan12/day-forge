@@ -107,5 +107,16 @@ def test_preferences_admin_and_inline_inspection_only(admin_request):
                     UserPreferencesInline(get_user_model(), AdminSite())]:
         assert surface.has_view_permission(admin_request)
         assert not surface.has_add_permission(admin_request)
+        assert not surface.has_add_permission(admin_request, obj=None)
         assert not surface.has_change_permission(admin_request)
         assert not surface.has_delete_permission(admin_request)
+
+
+@pytest.mark.django_db
+def test_user_change_page_renders_preferences_inline(admin_client, user):
+    from templates_mgr.models import UserPreferences
+
+    UserPreferences.objects.get_or_create(user=user)
+    url = reverse("admin:auth_user_change", args=[user.pk])
+    response = admin_client.get(url)
+    assert response.status_code == 200
