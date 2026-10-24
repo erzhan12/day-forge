@@ -1,0 +1,118 @@
+{
+  "success": true,
+  "source_snapshot_sha256": "a50969fd1c0c6d2dd41b43fe97fa927887387b3fcaba5ac2acce4d987ff7c575",
+  "source_tables": 26,
+  "source_rows": 1204,
+  "old_version": "560e03fbdd7757eb872f0535710d24a1ea622c0e",
+  "new_version": "592d8483dd90eec9a1a9a75ada9d8012cca15853",
+  "provider": "AI disabled; no provider configured",
+  "events": [
+    {
+      "stage": "start",
+      "image": "day-forge-rehearsal:gap-before-265",
+      "version": "560e03fbdd7757eb872f0535710d24a1ea622c0e",
+      "assets": [
+        "/static/assets/app-o0LiMoO7.css",
+        "/static/assets/app-KtfjhhfU.js"
+      ],
+      "status": 200
+    },
+    {
+      "stage": "legacy_fixtures",
+      "users": 3,
+      "gaps_to_test": [
+        0,
+        10,
+        20
+      ]
+    },
+    {
+      "stage": "start",
+      "image": "day-forge-rehearsal:gap-db-default",
+      "version": "592d8483dd90eec9a1a9a75ada9d8012cca15853",
+      "assets": [
+        "/static/assets/app-Cm2RWFvr.css",
+        "/static/assets/app-ihaTWwHy.js"
+      ],
+      "status": 200
+    },
+    {
+      "stage": "upgrade_0005_to_0006",
+      "default": 10,
+      "legacy_columns_and_original_rows_preserved": true
+    },
+    {
+      "stage": "saved_gaps",
+      "values": [
+        0,
+        10,
+        20
+      ],
+      "themes_suggestions_and_blocks_preserved": true
+    },
+    {
+      "stage": "start",
+      "image": "day-forge-rehearsal:gap-db-default",
+      "version": "592d8483dd90eec9a1a9a75ada9d8012cca15853",
+      "assets": [
+        "/static/assets/app-Cm2RWFvr.css",
+        "/static/assets/app-ihaTWwHy.js"
+      ],
+      "status": 200
+    },
+    {
+      "stage": "restart",
+      "values": [
+        0,
+        10,
+        20
+      ],
+      "database_unchanged": true
+    },
+    {
+      "stage": "start",
+      "image": "day-forge-rehearsal:gap-before-265",
+      "version": "560e03fbdd7757eb872f0535710d24a1ea622c0e",
+      "assets": [
+        "/static/assets/app-o0LiMoO7.css",
+        "/static/assets/app-KtfjhhfU.js"
+      ],
+      "status": 200
+    },
+    {
+      "stage": "image_rollback",
+      "stored_gaps": [
+        0,
+        10,
+        20
+      ],
+      "old_preference_writes_and_manual_writes_succeeded": true,
+      "reverse_migrations": false
+    },
+    {
+      "stage": "legacy_first_preferences",
+      "status": 200
+    },
+    {
+      "stage": "start",
+      "image": "day-forge-rehearsal:gap-db-default",
+      "version": "592d8483dd90eec9a1a9a75ada9d8012cca15853",
+      "assets": [
+        "/static/assets/app-Cm2RWFvr.css",
+        "/static/assets/app-ihaTWwHy.js"
+      ],
+      "status": 200
+    },
+    {
+      "stage": "reupgrade",
+      "values": [
+        0,
+        10,
+        20
+      ],
+      "rollback_writes_preserved": true,
+      "new_user_default": 10
+    }
+  ],
+  "cleanup_completed": true
+}

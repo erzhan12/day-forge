@@ -166,7 +166,7 @@ print('GAP_FIXTURES='+json.dumps(fixtures))
             })
             client = self.clients[fixture["user_id"]]
             props = client.page(old_version)
-            status, _, _ = client.request(
+            status, _, body = client.request(
                 f"/api/schedules/{DAY}/blocks/", headers={
                     "X-Frontend-Version": old_version, "X-Schedule-User": str(fixture["user_id"]),
                 }, data={"expected_revision": props["schedule"]["revision"],
@@ -174,7 +174,16 @@ print('GAP_FIXTURES='+json.dumps(fixtures))
                          "start_time": "12:00", "end_time": "12:25"},
             )
             assert status == 201, ("rollback manual write", status)
-            fixture["blocks"] = self.blocks(fixture)
+            assert json.loads(body)["revision"] == props["schedule"]["revision"] + 1
+            after = self.blocks(fixture)
+            assert len(after) == len(fixture["blocks"]) + 1
+            assert all(block in after for block in fixture["blocks"])
+            added = [block for block in after if block["title"] == "During gap rollback"]
+            assert len(added) == 1
+            assert (added[0]["start_time"], added[0]["end_time"], added[0]["category"]) == (
+                "12:00:00", "12:25:00", "work",
+            )
+            fixture["blocks"] = after
         self.matrix(old_version, old=True)
         self.events.append({"stage": "image_rollback", "stored_gaps": [0, 10, 20],
                             "old_preference_writes_and_manual_writes_succeeded": True,

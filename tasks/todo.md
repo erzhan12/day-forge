@@ -4,7 +4,7 @@ This file tracks work that still needs a decision or implementation. The previou
 
 ## In progress
 
-- [ ] **Gap migration container rehearsal.** Check the pre-0006 database upgrade, saved 0/10/20, restart, old-image preference/manual writes and reupgrade on a private copy. A pre-gap ORM insert exposed the missing database default; add a forward compatibility migration and verify the real rollback path.
+- [x] **Gap migration container rehearsal.** Upgrade, saved 0/10/20, restart, old-image preference/manual writes and reupgrade passed on a private copy. Found a rollback-only 500 for first preferences creation and fixed it with the forward `0007` database-default migration. Original source rows remained unchanged. See [the report](../docs/BLOCK_GAP_MIGRATION_REHEARSAL.md).
 
 - [x] **#258 configurable default block gap.** Implemented in PR #265. Production desktop/mobile verification on `a2e6133` passed 0/10/20 persistence through fresh login, six real untimed AI adds, explicit time/gap precedence, eight Undo operations and narrow-screen validation. Original preferences restored; six test days empty. See [the verification report](../docs/BLOCK_GAP_PRODUCTION_VERIFICATION.md).
 
@@ -13,6 +13,7 @@ This file tracks work that still needs a decision or implementation. The previou
 
 ## Deferred validation and planned design
 
+- [ ] **Publish the gap rollback compatibility fix.** Create/review/merge the change and deploy `templates_mgr.0007` before rolling back to a pre-PR #265 image. Local migration tests, full suites and container regression/reupgrade passed; production publication remains pending. See [the report](../docs/BLOCK_GAP_MIGRATION_REHEARSAL.md).
 - [x] **Post-PR #270 publication check.** Deploy `88771eb` passed validation, image publication and health-check. Independent HTTPS and browser checks confirmed the exact release SHA, working Login and JS/CSS, immutable caching and ETag 304 responses. No application fixes or authenticated writes were needed. See [the publication report](../docs/BLOCK_GAP_PRODUCTION_VERIFICATION.md#публикация-после-pr-270).
 - [x] **SQLite snapshot test and post-PR #267 deployment recovery.** PR #268 replaces a fixed 100 ms commit assumption with a bounded writer Future join. Thirty repetitions and four control probes confirm stability, snapshot sensitivity and writer-error propagation. Full suites, PR CI and Deploy `2496bd7` passed; the public release and assets were checked. The opt-in runner uses a filename outside pytest discovery. See [the report](../docs/POST_PR267_SQLITE_DEPLOY_FIX.md).
 - [x] **Publish and verify the Schedule admin inspection fix.** PR #266 deployed as `2f78696`. Production empty/nonempty inlines render without 500, controls remain read-only, and direct Schedule/TimeBlock add/delete pages show 403 in the staff session. Independent API reads confirmed unchanged state after inspection and an empty day after cleanup. Direct staff POST was checked by the published code's HTTP regression tests, not sent to production. See [the report](../docs/POST_PR264_PRODUCTION_VERIFICATION.md#проверка-после-deploy-pr-266).

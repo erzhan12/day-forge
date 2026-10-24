@@ -1,0 +1,33 @@
+{
+  "candidate_source_commit": "592d8483dd90eec9a1a9a75ada9d8012cca15853",
+  "migration_test_before_fix": {
+    "failed": 1,
+    "passed": 1,
+    "error": "NOT NULL constraint failed: templates_mgr_userpreferences.default_block_gap_minutes"
+  },
+  "focused_migration_rehearsal_cleanup_tests_passed": 8,
+  "make_check": {
+    "backend_passed": 2362,
+    "backend_skipped": 1,
+    "frontend_passed": 1459,
+    "frontend_files": 105,
+    "ruff": "passed",
+    "typescript": "passed"
+  },
+  "makemigrations_check": "No changes detected",
+  "django_check": "System check identified no issues (0 silenced).",
+  "container_system_and_migration_checks": "passed",
+  "image_retention": "passed",
+  "production_npm_audit_vulnerabilities": 0,
+  "make_check_log_sha256": "ecbdce55f8980ac8823148cf7d9cc22d0c59db782e9ded0128c03065d9f7c731",
+  "container_baseline": "expected HTTP 500 on first legacy preferences access",
+  "container_fixed": "all stages passed",
+  "container_fixed_repeat_with_stronger_manual_write_assertions": "passed",
+  "manual_write_assertions": [
+    "revision increment",
+    "exactly one added row",
+    "original blocks unchanged",
+    "added title/time/category",
+    "all fields preserved after reupgrade"
+  ]
+}

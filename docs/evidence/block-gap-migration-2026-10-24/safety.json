@@ -1,0 +1,25 @@
+{
+  "source": "local db/day_forge.db via SQLite backup API",
+  "source_tables": 26,
+  "source_rows": 1204,
+  "source_snapshot_sha256_before": "a50969fd1c0c6d2dd41b43fe97fa927887387b3fcaba5ac2acce4d987ff7c575",
+  "source_snapshot_sha256_after": "a50969fd1c0c6d2dd41b43fe97fa927887387b3fcaba5ac2acce4d987ff7c575",
+  "source_unchanged": true,
+  "original_rows_preserved": true,
+  "sandbox_services": [
+    "web",
+    "redis",
+    "proxy"
+  ],
+  "web_and_redis_internal_network": true,
+  "only_published_port": "127.0.0.1:8014",
+  "ai_disabled": true,
+  "provider_calls": 0,
+  "external_polling_disabled": true,
+  "production_access": false,
+  "reverse_migrations": false,
+  "rehearsal_runs": 3,
+  "fixed_runs_passed": 2,
+  "all_projects_containers_and_networks_removed": true,
+  "private_database_copies_and_sandbox_secrets_removed": true
+}

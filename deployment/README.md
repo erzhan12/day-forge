@@ -294,6 +294,55 @@ rejected. Live SQL checks run inside the web container so they use its journal.
 The previous release already supports durable requests: its paused AI request
 legitimately adds a terminal 503 receipt; existing receipts must remain unchanged.
 
+### Gap preference migration and image rollback
+
+`rehearse_block_gap.py` checks `templates_mgr.0005 → 0006`, the follow-up
+database default in `0007`, saved values 0/10/20, restart, old-image writes,
+first preferences creation by old code, and reupgrade. It uses a pre-0006
+local backup and refuses a source that already has the gap column. It never
+reverses migrations to discard customized gaps. AI and polling stay disabled;
+no provider service is configured.
+
+Keep the migrated schema during image rollback. Migration `0007` is necessary
+before returning to code predating PR #265: that code omits the new NOT NULL
+column on INSERT. Its first preferences creation otherwise returns 500.
+The database default supplies 10 while retaining stored 0/20 for reupgrade.
+The old app still uses its fixed 10-minute policy and does not expose the gap.
+
+Build the exact source revisions from the [recorded gap rehearsal](../docs/BLOCK_GAP_MIGRATION_REHEARSAL.md)
+using the production Dockerfile and the matching `RELEASE_VERSION`:
+
+```sh
+GAP_BUILD_ROOT=$(mktemp -d /tmp/day-forge-gap-build-XXXXXX)
+GAP_OLD_RELEASE=560e03fbdd7757eb872f0535710d24a1ea622c0e
+GAP_NEW_RELEASE=592d8483dd90eec9a1a9a75ada9d8012cca15853
+mkdir "$GAP_BUILD_ROOT/old" "$GAP_BUILD_ROOT/new"
+git archive "$GAP_OLD_RELEASE" | tar -x -C "$GAP_BUILD_ROOT/old"
+git archive "$GAP_NEW_RELEASE" | tar -x -C "$GAP_BUILD_ROOT/new"
+docker build -f "$GAP_BUILD_ROOT/old/deployment/docker/Dockerfile" \
+  --build-arg RELEASE_VERSION="$GAP_OLD_RELEASE" \
+  -t day-forge-rehearsal:gap-before-265 "$GAP_BUILD_ROOT/old"
+docker build -f "$GAP_BUILD_ROOT/new/deployment/docker/Dockerfile" \
+  --build-arg RELEASE_VERSION="$GAP_NEW_RELEASE" \
+  -t day-forge-rehearsal:gap-db-default "$GAP_BUILD_ROOT/new"
+docker pull redis:7-alpine
+docker pull caddy:2-alpine
+uv run python deployment/scripts/rehearse_block_gap.py \
+  --source-db /path/to/pre-gap-backup.sqlite3 \
+  --output-dir /tmp/day-forge-gap-rehearsal-new \
+  --old-image day-forge-rehearsal:gap-before-265 --old-version "$GAP_OLD_RELEASE" \
+  --new-image day-forge-rehearsal:gap-db-default --new-version "$GAP_NEW_RELEASE" \
+  --port 8014
+```
+
+The source is read through SQLite's backup API. Original row hashes compare
+all legacy columns across AddField; gap values are verified independently.
+Only the proxy has a host port, bound to loopback. Containers/networks stop
+on success and failure. The output directory retains private database copies,
+secrets and logs for inspection; remove it after retaining sanitized evidence.
+
+### Original release rehearsal images
+
 Start Docker and build the images before running the rehearsal. GHCR images may
 require separate package-read credentials; local builds use the same production
 Dockerfile. These commands use PR #244, PR #245, and a second release identity
