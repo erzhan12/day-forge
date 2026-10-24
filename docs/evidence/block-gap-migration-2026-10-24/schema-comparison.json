@@ -1,0 +1,45 @@
+[
+  {
+    "case": "unfixed",
+    "not_null": true,
+    "database_default": null,
+    "applied_templates_migrations": [
+      "0001_initial",
+      "0002_user_fk",
+      "0003_user_preferences",
+      "0004_alter_userpreferences_theme",
+      "0005_userpreferences_chat_suggestions",
+      "0006_userpreferences_default_block_gap_minutes"
+    ],
+    "saved_gaps": [
+      0,
+      10,
+      20
+    ],
+    "new_legacy_user_gap": [],
+    "integrity_check": "ok"
+  },
+  {
+    "case": "fixed",
+    "not_null": true,
+    "database_default": "10",
+    "applied_templates_migrations": [
+      "0001_initial",
+      "0002_user_fk",
+      "0003_user_preferences",
+      "0004_alter_userpreferences_theme",
+      "0005_userpreferences_chat_suggestions",
+      "0006_userpreferences_default_block_gap_minutes",
+      "0007_alter_userpreferences_default_block_gap_minutes"
+    ],
+    "saved_gaps": [
+      0,
+      10,
+      20
+    ],
+    "new_legacy_user_gap": [
+      10
+    ],
+    "integrity_check": "ok"
+  }
+]

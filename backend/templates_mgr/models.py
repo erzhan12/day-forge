@@ -54,6 +54,8 @@ class UserPreferences(models.Model):
     chat_suggestions = models.JSONField(null=True, blank=True, default=None)
     default_block_gap_minutes = models.PositiveSmallIntegerField(
         default=DEFAULT_BLOCK_GAP_MINUTES,
+        # Pre-gap images omit this column when creating a preferences row.
+        db_default=DEFAULT_BLOCK_GAP_MINUTES,
         validators=[
             MinValueValidator(MIN_BLOCK_GAP_MINUTES),
             MaxValueValidator(MAX_BLOCK_GAP_MINUTES),

@@ -1,0 +1,23 @@
+[
+  {
+    "tag": "day-forge-rehearsal:gap-before-265",
+    "source_commit": "560e03fbdd7757eb872f0535710d24a1ea622c0e",
+    "baked_release_version": "560e03fbdd7757eb872f0535710d24a1ea622c0e",
+    "local_image_id": "sha256:f72dbcf2128f4c955330d070846f6ba4ddb67bc9d8470382f5048c9b8730fb5b",
+    "built_locally": true
+  },
+  {
+    "tag": "day-forge-rehearsal:gap-published",
+    "source_commit": "e99ed0ecc1f36ede1e617660f4bb0b69b148213e",
+    "baked_release_version": "e99ed0ecc1f36ede1e617660f4bb0b69b148213e",
+    "local_image_id": "sha256:fe2adc28af029ece943853450d70b95b2686d0be4c3e073d14ba913c64602bd5",
+    "built_locally": true
+  },
+  {
+    "tag": "day-forge-rehearsal:gap-db-default",
+    "source_commit": "592d8483dd90eec9a1a9a75ada9d8012cca15853",
+    "baked_release_version": "592d8483dd90eec9a1a9a75ada9d8012cca15853",
+    "local_image_id": "sha256:91de2f3d04b2bf8b9a67cbd3f3d6599e4a122f285760353f8c881d9e47caf00c",
+    "built_locally": true
+  }
+]

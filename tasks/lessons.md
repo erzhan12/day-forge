@@ -2,6 +2,16 @@
 
 Patterns and corrections discovered during development. Review at session start.
 
+## Python defaults do not support old ORM inserts after image rollback
+
+Adding a non-null field with a Python default backfills existing rows but can
+leave no persistent SQL default. A pre-field image then fails when it creates
+the first preferences row for a user, although updates to existing rows work.
+Keep a database default through a forward migration. Test a historical ORM
+INSERT against the upgraded schema and an actual old-image first-use HTTP
+request, alongside preservation of explicit zero and custom values. Image
+rollback retains the upgraded schema; reversing the field migration loses data.
+
 ## Concurrency tests must wait for completion, not elapsed time
 
 The SQLite snapshot test assumed a writer commit finished within a 100 ms sleep.

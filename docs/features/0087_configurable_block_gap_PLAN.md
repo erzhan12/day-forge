@@ -2,6 +2,8 @@
 
 **Status, 23 October 2026:** implemented in PR #265. Full automated suites passed, and [production desktop/mobile verification](../BLOCK_GAP_PRODUCTION_VERIFICATION.md) on release `a2e6133` confirmed 0/10/20 across fresh sessions, real untimed AI placement, explicit-placement precedence, Undo and narrow-screen validation. Acceptance below combines automated contract coverage with those live scenarios; it does not claim every edge case was exercised in production.
 
+**Rollback follow-up, 24 October:** [container rehearsal](../BLOCK_GAP_MIGRATION_REHEARSAL.md) exposed first preferences creation by a pre-gap ORM failing on the new NOT NULL column. A forward `0007` migration adds a persistent database default of 10. Historical-ORM tests and real container upgrade/restart/rollback/reupgrade passed with stored 0/10/20 retained; the fix still needs publication.
+
 Add `default_block_gap_minutes` to the existing per-user preferences contract and expose it under Settings → Schedule. Pass the normalized value through chat context capture, prompt construction, and automatic placement. Preserve the initial-window gap shrinking implemented in feature 0086 and explicit-placement behavior related to #185.
 
 **Requirements retained verbatim**
