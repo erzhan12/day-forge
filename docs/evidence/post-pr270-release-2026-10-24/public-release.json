@@ -1,0 +1,74 @@
+{
+  "observed_at_utc": "2026-10-23T19:06:16.463018+00:00",
+  "expected_sha": "88771eb868cc6d64a4c41bf37f6e364f991c9ccc",
+  "login": {
+    "url": "https://dayforge.habitreward.org/accounts/login/",
+    "status": 200,
+    "elapsed_ms": 819,
+    "bytes": 1202,
+    "headers": {
+      "Content-Type": "text/html; charset=utf-8",
+      "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload"
+    },
+    "meta_version": "88771eb868cc6d64a4c41bf37f6e364f991c9ccc",
+    "inertia_version": "88771eb868cc6d64a4c41bf37f6e364f991c9ccc",
+    "component": "Login"
+  },
+  "assets": [
+    {
+      "url": "https://dayforge.habitreward.org/static/assets/app-Cm2RWFvr.css",
+      "status": 200,
+      "elapsed_ms": 1209,
+      "bytes": 72635,
+      "headers": {
+        "Content-Type": "text/css; charset=\"utf-8\"",
+        "Cache-Control": "max-age=315360000, public, immutable",
+        "ETag": "\"6adb92fa-11bbb\"",
+        "Last-Modified": "Fri, 23 Oct 2026 17:01:46 GMT",
+        "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload"
+      },
+      "kind": "css",
+      "sha256": "9b97392f05f343168a950d34e0e627931166bfe2a9174a7593ce4f7b86f8a132",
+      "conditional_get": {
+        "status": 304,
+        "bytes": 0
+      }
+    },
+    {
+      "url": "https://dayforge.habitreward.org/static/assets/app-CkDED3nT.js",
+      "status": 200,
+      "elapsed_ms": 2323,
+      "bytes": 491966,
+      "headers": {
+        "Content-Type": "text/javascript; charset=\"utf-8\"",
+        "Cache-Control": "max-age=315360000, public, immutable",
+        "ETag": "\"6adb92fa-781be\"",
+        "Last-Modified": "Fri, 23 Oct 2026 17:01:46 GMT",
+        "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload"
+      },
+      "kind": "javascript",
+      "sha256": "1e5dc09864dae391bc2c6d1fa4de69007bdd03cebe95e97f1aee461d90aa09bc",
+      "compiled_release_matches": true,
+      "conditional_get": {
+        "status": 304,
+        "bytes": 0
+      }
+    }
+  ],
+  "authenticated": false,
+  "application_mutations": false,
+  "ai_calls": 0,
+  "tls_certificate_verification": true,
+  "repeat_login": {
+    "url": "https://dayforge.habitreward.org/accounts/login/",
+    "status": 200,
+    "elapsed_ms": 790,
+    "bytes": 1202,
+    "headers": {
+      "Content-Type": "text/html; charset=utf-8",
+      "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload"
+    },
+    "meta_version": "88771eb868cc6d64a4c41bf37f6e364f991c9ccc",
+    "inertia_version": "88771eb868cc6d64a4c41bf37f6e364f991c9ccc"
+  }
+}

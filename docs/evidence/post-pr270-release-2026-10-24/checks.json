@@ -1,0 +1,23 @@
+{
+  "source_sha": "88771eb868cc6d64a4c41bf37f6e364f991c9ccc",
+  "workflow_url": "https://github.com/erzhan12/day-forge/actions/runs/39990930469",
+  "all_jobs_succeeded": true,
+  "backend_passed": 2359,
+  "backend_skipped": 1,
+  "frontend_passed": 1459,
+  "frontend_files": 105,
+  "skip": "Existing opt-in R11 live comparison",
+  "ruff": "passed",
+  "typescript": "passed",
+  "production_npm_audit_vulnerabilities": 0,
+  "production_build": "passed",
+  "ssh_pinning": "passed",
+  "image_retention_tests": "passed",
+  "health_check": {
+    "path": "/accounts/login/",
+    "attempt": 1,
+    "status": 200,
+    "log_excerpt": "health-check\tUNKNOWN STEP\t2026-10-23T17:02:06.8412875Z attempt 1: HTTP 200"
+  },
+  "local_application_code_changes": false
+}
