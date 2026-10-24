@@ -29,5 +29,10 @@
     "original blocks unchanged",
     "added title/time/category",
     "all fields preserved after reupgrade"
-  ]
+  ],
+  "review_follow_up_2026_10_25": {
+    "focused_tests_passed": 8,
+    "ruff": "passed",
+    "optimized_python_missing_migration_guard": "ValueError; source bytes unchanged"
+  }
 }

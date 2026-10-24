@@ -27,10 +27,11 @@ def require_legacy_source(path):
         columns = [row[1] for row in db.execute(f"PRAGMA table_info({PREFERENCES_TABLE})")]
         if not columns or GAP_COLUMN in columns:
             raise ValueError("Use a pre-0006 backup; this runner never reverses a gap migration")
-        assert db.execute(
+        if db.execute(
             "SELECT count(*) FROM django_migrations WHERE app='templates_mgr' "
             "AND name='0005_userpreferences_chat_suggestions'"
-        ).fetchone() == (1,), "Source must have templates_mgr.0005 applied"
+        ).fetchone() != (1,):
+            raise ValueError("Source must have templates_mgr.0005 applied")
 
 
 class GapRehearsal(Rehearsal):

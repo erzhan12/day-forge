@@ -50,6 +50,14 @@ def test_rehearsal_requires_pre_gap_backup_without_reversing_it(tmp_path, rehear
         """)
     gap.require_legacy_source(path)
     with sqlite3.connect(path) as db:
+        db.execute("DELETE FROM django_migrations")
+    before = path.read_bytes()
+    with pytest.raises(ValueError, match="Source must have templates_mgr.0005 applied"):
+        gap.require_legacy_source(path)
+    assert path.read_bytes() == before
+    with sqlite3.connect(path) as db:
+        db.execute("INSERT INTO django_migrations VALUES "
+                   "('templates_mgr', '0005_userpreferences_chat_suggestions')")
         db.execute("ALTER TABLE templates_mgr_userpreferences ADD COLUMN "
                    "default_block_gap_minutes INTEGER NOT NULL DEFAULT 10")
         db.execute("INSERT INTO templates_mgr_userpreferences VALUES (1, 20)")
