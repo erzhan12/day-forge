@@ -1,0 +1,31 @@
+{
+  "release": "3a0e29416f2a74eccfdecc24293602aa80ef90a1",
+  "browser": "Chrome via CUA",
+  "existing_admin_session_preserved": true,
+  "temporary_tab_closed": true,
+  "observations": [
+    {
+      "page": "User add",
+      "has_500": false,
+      "editable_preferences_controls": 3,
+      "screenshot": "../../screenshots/post-pr275-user-admin-2026-10-26/add-user.png"
+    },
+    {
+      "page": "User change, empty preferences",
+      "has_500": false,
+      "editable_preferences_controls": 3,
+      "screenshot": "../../screenshots/post-pr275-user-admin-2026-10-26/empty-preferences.png"
+    },
+    {
+      "page": "User change, filled preferences, after POST checks",
+      "has_500": false,
+      "editable_preferences_controls": 0,
+      "theme": "Strategic",
+      "gap": 20,
+      "chat_suggestions": [
+        "Production admin verification"
+      ],
+      "screenshot": "../../screenshots/post-pr275-user-admin-2026-10-26/filled-preferences.png"
+    }
+  ]
+}

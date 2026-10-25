@@ -50,6 +50,7 @@ class UserPreferencesInline(PolicyInspectionMixin, admin.StackedInline):
     """Inspect preferences under Users; Settings owns policy writes."""
 
     model = UserPreferences
+    extra = 0
     can_delete = False
     readonly_fields = ("created_at", "updated_at")
 

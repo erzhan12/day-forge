@@ -125,9 +125,16 @@ def test_user_admin_preferences_inline_renders_and_rejects_policy_writes(
     before = list(UserPreferences.objects.filter(user=user).values())
     add_url = reverse("admin:auth_user_add")
     change_url = reverse("admin:auth_user_change", args=[user.pk])
-    assert admin_client.get(add_url).status_code == 200
+    add_response = admin_client.get(add_url)
+    assert add_response.status_code == 200
+    for field in ("theme", "chat_suggestions", "default_block_gap_minutes"):
+        assert f'name="preferences-0-{field}"'.encode() not in add_response.content
     response = admin_client.get(change_url)
     assert response.status_code == 200
+    if with_preferences:
+        assert b"Strategic" in response.content
+    for field in ("theme", "chat_suggestions", "default_block_gap_minutes"):
+        assert f'name="preferences-0-{field}"'.encode() not in response.content
     inline = UserPreferencesInline(get_user_model(), AdminSite())
     assert inline.has_add_permission(admin_request, user) is False
     assert inline.has_change_permission(admin_request, user) is False
