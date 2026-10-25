@@ -145,5 +145,5 @@ def test_user_admin_preferences_inline_renders_and_rejects_policy_writes(
     if with_preferences:
         data["preferences-0-id"] = str(before[0]["id"])
     response = admin_client.post(change_url, data)
-    assert response.status_code == 302, response.context["adminform"].form.errors
+    assert response.status_code == 302, f"expected 302, got {response.status_code}"
     assert list(UserPreferences.objects.filter(user=user).values()) == before
