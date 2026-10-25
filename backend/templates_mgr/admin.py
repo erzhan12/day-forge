@@ -8,7 +8,7 @@ from templates_mgr.models import Rule, Template, UserPreferences
 class PolicyInspectionMixin:
     """Inspect AI policy; account Settings owns serialized policy writes."""
 
-    def has_add_permission(self, request):
+    def has_add_permission(self, request, obj=None):
         return False
 
     def has_change_permission(self, request, obj=None):

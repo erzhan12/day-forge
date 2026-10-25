@@ -29,6 +29,9 @@ mixin must accept the optional object even when it always returns False.
 Direct permission-method tests missed the resulting schedule inspection 500.
 Render the real change page with empty and nonempty inlines, and verify that
 POST remains forbidden and leaves the schedule unchanged.
+Check every shared mixin reused by an inline: fixing Schedule's mixin did not
+fix the separate preferences policy mixin in User admin. Cover both add/change
+User forms and a valid User POST that must ignore injected preferences fields.
 
 ## Pending metadata and executable actions need distinct wording
 

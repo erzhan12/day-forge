@@ -1,0 +1,5 @@
+{
+  "image": "ghcr.io/erzhan12/day-forge:8fd831d39aa0",
+  "running": true,
+  "health": "healthy"
+}

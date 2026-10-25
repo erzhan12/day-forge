@@ -109,3 +109,41 @@ def test_preferences_admin_and_inline_inspection_only(admin_request):
         assert not surface.has_add_permission(admin_request)
         assert not surface.has_change_permission(admin_request)
         assert not surface.has_delete_permission(admin_request)
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("with_preferences", [False, True])
+def test_user_admin_preferences_inline_renders_and_rejects_policy_writes(
+    admin_client, user, admin_request, with_preferences,
+):
+    from django.contrib.auth import get_user_model
+    from templates_mgr.admin import UserPreferencesInline
+    from templates_mgr.models import UserPreferences
+
+    if with_preferences:
+        UserPreferences.objects.create(user=user, theme="strategic", default_block_gap_minutes=20)
+    before = list(UserPreferences.objects.filter(user=user).values())
+    add_url = reverse("admin:auth_user_add")
+    change_url = reverse("admin:auth_user_change", args=[user.pk])
+    assert admin_client.get(add_url).status_code == 200
+    response = admin_client.get(change_url)
+    assert response.status_code == 200
+    inline = UserPreferencesInline(get_user_model(), AdminSite())
+    assert inline.has_add_permission(admin_request, user) is False
+    assert inline.has_change_permission(admin_request, user) is False
+    assert inline.has_delete_permission(admin_request, user) is False
+
+    data = {
+        "username": user.username, "is_active": "on", "_save": "Save",
+        "date_joined_0": user.date_joined.strftime("%Y-%m-%d"),
+        "date_joined_1": user.date_joined.strftime("%H:%M:%S"),
+        "preferences-TOTAL_FORMS": "1", "preferences-INITIAL_FORMS": str(int(with_preferences)),
+        "preferences-MIN_NUM_FORMS": "0", "preferences-MAX_NUM_FORMS": "1",
+        "preferences-0-user": str(user.pk), "preferences-0-theme": "classic",
+        "preferences-0-default_block_gap_minutes": "0",
+    }
+    if with_preferences:
+        data["preferences-0-id"] = str(before[0]["id"])
+    response = admin_client.post(change_url, data)
+    assert response.status_code == 302, response.context["adminform"].form.errors
+    assert list(UserPreferences.objects.filter(user=user).values()) == before
