@@ -32,6 +32,9 @@ POST remains forbidden and leaves the schedule unchanged.
 Check every shared mixin reused by an inline: fixing Schedule's mixin did not
 fix the separate preferences policy mixin in User admin. Cover both add/change
 User forms and a valid User POST that must ignore injected preferences fields.
+Permission denial alone can leave inert editable controls in an empty OneToOne
+inline. Set `extra=0` on inspection-only inlines and assert both rendered controls
+and persistence: an ignored POST does not prove the form is visibly read-only.
 
 ## Pending metadata and executable actions need distinct wording
 

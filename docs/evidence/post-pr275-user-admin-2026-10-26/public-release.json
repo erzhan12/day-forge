@@ -1,0 +1,19 @@
+{
+  "version": "3a0e29416f2a74eccfdecc24293602aa80ef90a1",
+  "login_status": 200,
+  "tls_verification": true,
+  "assets": [
+    {
+      "path": "/static/assets/app-Cm2RWFvr.css",
+      "status": 200,
+      "content_type": "text/css; charset=\"utf-8\"",
+      "sha256": "9b97392f05f343168a950d34e0e627931166bfe2a9174a7593ce4f7b86f8a132"
+    },
+    {
+      "path": "/static/assets/app-DDYNmY10.js",
+      "status": 200,
+      "content_type": "text/javascript; charset=\"utf-8\"",
+      "sha256": "a8c1ed3fb5cf549f99f056dc7f2c837a5a6d7c3524ccc0c7012f2addd7aa3ca3"
+    }
+  ]
+}

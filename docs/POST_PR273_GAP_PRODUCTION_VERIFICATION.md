@@ -1,5 +1,7 @@
 # Production-проверка gap после PR #273
 
+Дополнение 26 октября: [production-проверка после PR #275](POST_PR275_USER_ADMIN_VERIFICATION.md) подтвердила отсутствие 500 в User add/change с пустым и заполненным preferences inline и реальный запрет policy-записей через HTTPS POST. Ниже сохранены результаты 25 октября. Лишние поля пустого inline убраны отдельным локальным UI-дополнением, которое ещё не опубликовано.
+
 25 октября 2026 года, Asia/Almaty. Проверен опубликованный релиз `8fd831d39aa0a17a5c3a0efb187dc1bb20527479` на [dayforge.habitreward.org](https://dayforge.habitreward.org). [Deploy #40128965066](https://github.com/erzhan12/day-forge/actions/runs/40128965066) прошёл все jobs; health-check завершился 25 октября в 01:20:10 по Алматы с HTTP 200 на первой попытке.
 
 **English summary.** Production release `8fd831d` has migration `0007` applied and a persistent SQL default of 10. Gap values 0/10/20 survived reload and fresh login on the dedicated test account. A new non-staff user's first preferences GET returned 200 and created exactly one row; a historical ORM INSERT also received 10 in a transaction that was rolled back. A separate User admin 500 was reproduced and fixed locally; that admin fix is not deployed yet.
