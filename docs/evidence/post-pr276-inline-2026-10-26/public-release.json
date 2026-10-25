@@ -1,0 +1,19 @@
+{
+  "release": "8a4743fe10cd08ce5902c36db77403be40158bc9",
+  "login_status": 200,
+  "tls_verification": true,
+  "assets": [
+    {
+      "path": "/static/assets/app-Cm2RWFvr.css",
+      "status": 200,
+      "content_type": "text/css; charset=\"utf-8\"",
+      "sha256": "9b97392f05f343168a950d34e0e627931166bfe2a9174a7593ce4f7b86f8a132"
+    },
+    {
+      "path": "/static/assets/app-B8Jns_oV.js",
+      "status": 200,
+      "content_type": "text/javascript; charset=\"utf-8\"",
+      "sha256": "db06cc9c4aa8ab5e502563e688201315c1db2b2f1a06703f5babc0c4519dc8a4"
+    }
+  ]
+}

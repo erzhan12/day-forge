@@ -1,0 +1,23 @@
+{
+  "published_release": "8a4743fe10cd08ce5902c36db77403be40158bc9",
+  "deploy": {
+    "backend_passed": 2364,
+    "backend_skipped": 1,
+    "frontend_passed": 1459,
+    "frontend_files": 105,
+    "lint_types_build_audit_retention_pinning": "passed",
+    "health_status": 200,
+    "health_attempt": 1
+  },
+  "local_admin_tests": {
+    "passed": 11,
+    "log_sha256": "9db2c0752d67bce85a52720242a462fc9f77a8e91eeee1167eb71aa8226dd004"
+  },
+  "production_https_cases": 10,
+  "csrf_failures_not_counted_as_permission_success": true,
+  "runtime_changes": false,
+  "paid_ai_calls": 0,
+  "schedule_writes": 0,
+  "original_browser_session_preserved": true,
+  "verification_tab_closed": true
+}

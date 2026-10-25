@@ -1,0 +1,47 @@
+{
+  "release": "8a4743fe10cd08ce5902c36db77403be40158bc9",
+  "browser": "Chrome via CUA",
+  "observations": [
+    {
+      "page": "add",
+      "add_remove_controls": 0,
+      "editable_controls": [],
+      "has_500": false,
+      "readonly_values": []
+    },
+    {
+      "page": "change_empty",
+      "add_remove_controls": 0,
+      "editable_controls": [],
+      "has_500": false,
+      "readonly_values": []
+    },
+    {
+      "page": "change_filled",
+      "add_remove_controls": 0,
+      "editable_controls": [],
+      "has_500": false,
+      "readonly_values": [
+        "Strategic",
+        "[\"Published inline verification\"]",
+        "20",
+        "Oct. 25, 2026, 8:58 p.m.",
+        "Oct. 25, 2026, 8:58 p.m."
+      ]
+    },
+    {
+      "page": "change_filled_after_post",
+      "add_remove_controls": 0,
+      "editable_controls": [],
+      "has_500": false,
+      "readonly_values": [
+        "Strategic",
+        "[\"Published inline verification\"]",
+        "20",
+        "Oct. 25, 2026, 8:58 p.m.",
+        "Oct. 25, 2026, 8:58 p.m."
+      ]
+    }
+  ],
+  "filled_values_and_displayed_timestamps_unchanged": true
+}
