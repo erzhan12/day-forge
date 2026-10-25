@@ -1,0 +1,54 @@
+{
+  "release": "8fd831d39aa0a17a5c3a0efb187dc1bb20527479",
+  "site": "https://dayforge.habitreward.org",
+  "date": "2026-10-25",
+  "events": [
+    {
+      "gap": 0,
+      "patch_status": 200,
+      "get_status": 200,
+      "settings_reload_gap": 0,
+      "fresh_login_gap": 0,
+      "theme_and_suggestions_unchanged": true
+    },
+    {
+      "gap": 10,
+      "patch_status": 200,
+      "get_status": 200,
+      "settings_reload_gap": 10,
+      "fresh_login_gap": 10,
+      "theme_and_suggestions_unchanged": true
+    },
+    {
+      "gap": 20,
+      "patch_status": 200,
+      "get_status": 200,
+      "settings_reload_gap": 20,
+      "fresh_login_gap": 20,
+      "theme_and_suggestions_unchanged": true
+    }
+  ],
+  "ai_calls": 0,
+  "schedule_writes": 0,
+  "public_release": {
+    "status": 200,
+    "version": "8fd831d39aa0a17a5c3a0efb187dc1bb20527479",
+    "assets": [
+      {
+        "path": "/static/assets/app-Cm2RWFvr.css",
+        "status": 200,
+        "content_type": "text/css; charset=\"utf-8\"",
+        "sha256_utf8": "9b97392f05f343168a950d34e0e627931166bfe2a9174a7593ce4f7b86f8a132"
+      },
+      {
+        "path": "/static/assets/app-BvVrdCI3.js",
+        "status": 200,
+        "content_type": "text/javascript; charset=\"utf-8\"",
+        "sha256_utf8": "36e6008c6c90c51da0487733d13c26cd367b63ec6c97e6c436179f770ac777d2"
+      }
+    ]
+  },
+  "initial_preferences_gap": 10,
+  "original_preferences_restored": true,
+  "all_matrix_stages_passed": true
+}

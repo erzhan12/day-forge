@@ -1,0 +1,18 @@
+{
+  "release": "8fd831d39aa0a17a5c3a0efb187dc1bb20527479",
+  "first_preferences_status": 200,
+  "cleanup_completed": true,
+  "preferences_absent_before_first_get": true,
+  "created_rows": 1,
+  "default_gap": 10,
+  "repeated_get_same_row": true,
+  "nonstaff_account": true,
+  "logout_confirmed": true,
+  "legacy_insert_probe": {
+    "legacy_orm_insert_gap": 10,
+    "probe_transaction_rolled_back": true,
+    "migrations_executed": false
+  },
+  "existing_test_gap_and_schedule_counts_unchanged": true,
+  "temporary_credentials_removed": true
+}

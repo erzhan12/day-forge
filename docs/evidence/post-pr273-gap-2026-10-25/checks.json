@@ -1,0 +1,46 @@
+{
+  "published_release": "8fd831d39aa0a17a5c3a0efb187dc1bb20527479",
+  "published_deploy": {
+    "backend_passed": 2362,
+    "backend_skipped": 1,
+    "frontend_passed": 1459,
+    "frontend_files": 105,
+    "lint_types_build_audit_retention_pinning": "passed"
+  },
+  "user_admin_regression_before_fix": {
+    "passed": 9,
+    "failed": 2,
+    "error": "TypeError: PolicyInspectionMixin.has_add_permission() takes 2 positional arguments but 3 were given"
+  },
+  "user_admin_after_fix": {
+    "passed": 11,
+    "empty_and_nonempty_inline": true,
+    "add_and_change_get": 200,
+    "valid_user_post_with_injected_preferences": 302,
+    "preferences_unchanged": true
+  },
+  "make_check_local_admin_fix": {
+    "backend_passed": 2364,
+    "backend_skipped": 1,
+    "frontend_passed": 1459,
+    "frontend_files": 105,
+    "ruff": "passed",
+    "typescript": "passed",
+    "log_sha256": "ce25c9d000fd721e953e4cb5f093e1a827cb38cc48c7da0acfaea308ce32c15e"
+  },
+  "makemigrations_check": "No changes detected",
+  "django_check": "System check identified no issues (0 silenced).",
+  "admin_fix_deployed": false,
+  "production_admin_add_browser": {
+    "path": "/admin/auth/user/add/",
+    "visible_result": "Server Error (500)",
+    "screenshot": "../../screenshots/post-pr273-gap-2026-10-25/user-add-500.png"
+  },
+  "ssh": {
+    "host_key_verification": "strict, existing known_hosts pin",
+    "schema_read_in_running_container": true,
+    "migration_commands_executed": false
+  },
+  "paid_ai_calls": 0,
+  "schedule_write_requests": 0
+}

@@ -1,5 +1,7 @@
 # Итоговый аудит Day Forge после R00–R12
 
+Дополнение 25 октября после PR #273: [production-проверка gap](POST_PR273_GAP_PRODUCTION_VERIFICATION.md) подтвердила `0007`, NOT NULL и SQL-default 10 в действующей базе, сохранение 0/10/20 после нового входа, первый preferences GET без 500 и совместимость исторического INSERT. Временный аккаунт удалён, исходный тестовый gap восстановлен. Найден отдельный 500 в User admin из-за сигнатуры inline permission; исправлен локально с проверкой запрета policy-записей. Полные suites: 2364 backend passed, 1 skip, 1459 frontend passed. Admin-исправление ещё не опубликовано.
+
 Дополнение 24 октября, [контейнерная репетиция gap](BLOCK_GAP_MIGRATION_REHEARSAL.md): 0/10/20 пережили upgrade, restart и rollback, но первый preferences INSERT старого образа вернул 500. Новая миграция `0007` добавляет DB-default 10 без изменения `0006` и сохранённых настроек. Исправленный образ прошёл весь цикл, включая записи старого кода и reupgrade; исходная база не менялась. Полные suites: 2362 backend passed, 1 skip и 1459 frontend passed. Исправление ещё не опубликовано.
 
 Дополнение 24 октября после PR #270: Deploy `88771eb` прошёл все jobs и HTTPS health-check с первой попытки. [Публичная проверка публикации](BLOCK_GAP_PRODUCTION_VERIFICATION.md#публикация-после-pr-270) подтвердила точный SHA в HTML и JS, загрузку JS/CSS с корректными MIME-типами, immutable cache policy, 304 по ETag и отрисовку Login в браузере. Ошибок публикации не обнаружено; новых AI-вызовов и изменений данных не было.
