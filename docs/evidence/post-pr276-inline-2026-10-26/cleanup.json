@@ -1,0 +1,16 @@
+{
+  "temporary_users_and_preferences_removed": true,
+  "existing_test_state_unchanged": true,
+  "existing_test_before": {
+    "preferences_sha256": "cfaa92157d2a1fca59e6cb0df7b97791cfa8078423133a648513159c16b99062",
+    "schedules": 22,
+    "blocks": 0
+  },
+  "existing_test_after": {
+    "preferences_sha256": "cfaa92157d2a1fca59e6cb0df7b97791cfa8078423133a648513159c16b99062",
+    "schedules": 22,
+    "blocks": 0
+  },
+  "ai_calls": 0,
+  "schedule_writes": 0
+}

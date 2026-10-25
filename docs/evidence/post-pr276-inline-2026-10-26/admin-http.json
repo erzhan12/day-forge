@@ -1,0 +1,84 @@
+{
+  "release": "8a4743fe10cd08ce5902c36db77403be40158bc9",
+  "transport": "real HTTPS to production Django admin",
+  "temporary_admin_session_ttl_seconds": 300,
+  "events": [
+    {
+      "stage": "add_user_get",
+      "status": 200,
+      "editable_preference_controls": 0
+    },
+    {
+      "stage": "add_user_post_with_policy_injection",
+      "status": 302,
+      "user_created": true,
+      "preferences_created": false
+    },
+    {
+      "stage": "empty_inline_post",
+      "get_status": 200,
+      "post_status": 302,
+      "editable_preference_controls": 0,
+      "user_edit_saved": true,
+      "preferences_before": {
+        "count": 0,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "gap": null
+      },
+      "preferences_after": {
+        "count": 0,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "gap": null
+      }
+    },
+    {
+      "stage": "filled_inline_post",
+      "get_status": 200,
+      "post_status": 302,
+      "editable_preference_controls": 0,
+      "user_edit_saved": true,
+      "preferences_before": {
+        "count": 1,
+        "sha256": "6277d6ba5f3b31c7475c387829e3cd62a9f15cec35b9808b583fe476d7f6c2ac",
+        "gap": 20
+      },
+      "preferences_after": {
+        "count": 1,
+        "sha256": "6277d6ba5f3b31c7475c387829e3cd62a9f15cec35b9808b583fe476d7f6c2ac",
+        "gap": 20
+      }
+    },
+    {
+      "stage": "filled_inline_delete_injection",
+      "status": 302,
+      "preferences_unchanged": true
+    },
+    {
+      "stage": "direct_add_get",
+      "status": 403,
+      "preferences_unchanged": true
+    },
+    {
+      "stage": "direct_add_post",
+      "status": 403,
+      "preferences_unchanged": true
+    },
+    {
+      "stage": "direct_change_post",
+      "status": 403,
+      "preferences_unchanged": true
+    },
+    {
+      "stage": "direct_delete_get",
+      "status": 403,
+      "preferences_unchanged": true
+    },
+    {
+      "stage": "direct_delete_post",
+      "status": 403,
+      "preferences_unchanged": true
+    }
+  ],
+  "success": true,
+  "temporary_admin_session_removed": true
+}

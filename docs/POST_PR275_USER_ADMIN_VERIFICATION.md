@@ -1,5 +1,7 @@
 # Production-проверка User admin после PR #275
 
+Дополнение после PR #276: [production-проверка `8a4743f`](POST_PR276_INLINE_VERIFICATION.md) закрыла публикацию `extra=0`. Лишних полей пустого inline больше нет, существующие preferences показаны текстом, запрет записи подтверждён реальными HTTPS POST. Новых ошибок не найдено. Ниже сохранён исторический результат релиза `3a0e294`.
+
 26 октября 2026 года, Asia/Almaty. [Deploy #40230966870](https://github.com/erzhan12/day-forge/actions/runs/40230966870) опубликовал `3a0e29416f2a74eccfdecc24293602aa80ef90a1`. Все jobs прошли; HTTPS health-check вернул 200 на первой попытке 26 октября в 01:34:13 по Алматы.
 
 **English summary.** Production add/change User admin forms now render without 500, including users with no preferences and users with existing preferences. Ten real HTTPS checks confirmed that user edits succeed while injected preferences creates/updates/deletes are ignored and direct preferences writes return 403. Existing preferences, including timestamps, remain unchanged. Django still renders inert editable controls for an empty inline; a local `extra=0` follow-up removes those controls and passes the full suites, but is not deployed yet.
