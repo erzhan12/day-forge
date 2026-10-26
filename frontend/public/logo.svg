@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="212 203 600 600" role="img" aria-label="day-forge">
+  <title>day-forge</title>
+  <defs>
+    <mask id="spark-gap" maskUnits="userSpaceOnUse" x="200" y="200" width="620" height="620">
+      <rect x="200" y="200" width="620" height="620" fill="#fff"/>
+      <path d="M716 632Q724 708 772 716Q724 724 716 773Q708 724 640 716Q708 708 716 632Z" fill="#000" stroke="#000" stroke-width="16" stroke-linejoin="round"/>
+    </mask>
+  </defs>
+  <g fill="#2E2F33" fill-rule="evenodd" mask="url(#spark-gap)">
+    <path d="M325 283L368 233H530A265 267.5 0 0 1 530 768H355L428 686H520A185 186.5 0 0 0 520 313H415V417H325Z"/>
+    <path d="M325 573L360 530H415V658L325 762Z"/>
+    <path d="M230 530L285 453H540L487 530Z"/>
+  </g>
+  <g fill="#F14C1C">
+    <rect x="497" y="352" width="131" height="20" rx="3"/>
+    <rect x="470" y="405" width="186" height="20" rx="3"/>
+    <rect x="553" y="458" width="125" height="20" rx="3"/>
+    <rect x="522" y="510" width="155" height="20" rx="3"/>
+    <rect x="487" y="563" width="178" height="20" rx="3"/>
+    <rect x="454" y="615" width="177" height="20" rx="3"/>
+    <path d="M716 632Q724 708 772 716Q724 724 716 773Q708 724 640 716Q708 708 716 632Z"/>
+  </g>
+</svg>

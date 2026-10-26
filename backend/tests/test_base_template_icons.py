@@ -37,6 +37,21 @@ LINK_RE = re.compile(
     r'href="(?P<href>[^"]+)"',
 )
 
+# Size-less icon links (SVG favicon, legacy .ico) are not matched by LINK_RE
+# on purpose: they have no pixel dimensions to verify against an IHDR.
+SIZELESS_LINK_RE = re.compile(
+    r'<link\s+rel="(?P<rel>icon|shortcut icon)"\s+type="(?P<type>[^"]+)"\s+'
+    r'href="(?P<href>[^"]+)"',
+)
+
+
+def _sizeless_icon_files(vite_dev_mode):
+    html = render_to_string("base.html", {"vite_dev_mode": vite_dev_mode})
+    return sorted(
+        (m.group("rel"), m.group("type"), m.group("href").rsplit("/", 1)[-1])
+        for m in SIZELESS_LINK_RE.finditer(html)
+    )
+
 
 def _icon_links(vite_dev_mode):
     """Render ``base.html`` and return ``[(rel, sizes, href), ...]``.
@@ -46,9 +61,7 @@ def _icon_links(vite_dev_mode):
     every per-link assertion below pass vacuously over an empty list.
     """
     html = render_to_string("base.html", {"vite_dev_mode": vite_dev_mode})
-    links = [
-        (m.group("rel"), m.group("sizes"), m.group("href")) for m in LINK_RE.finditer(html)
-    ]
+    links = [(m.group("rel"), m.group("sizes"), m.group("href")) for m in LINK_RE.finditer(html)]
     assert len(links) == EXPECTED_ICON_COUNT, (
         f"expected {EXPECTED_ICON_COUNT} icon links, parsed {len(links)}"
         " — if 0, check attribute order in base.html (LINK_RE needs rel -> sizes -> href)"
@@ -135,3 +148,13 @@ class TestBaseTemplateIcons:
             # public/ lands in the dist root, hence the static root — the
             # icons are never under a subdirectory like assets/.
             assert "/" not in href.removeprefix(settings.STATIC_URL)
+
+    def test_sizeless_icons_match_across_branches_and_exist(self):
+        expected = [
+            ("icon", "image/svg+xml", "favicon.svg"),
+            ("shortcut icon", "image/x-icon", "favicon.ico"),
+        ]
+        for vite_dev_mode in (True, False):
+            assert _sizeless_icon_files(vite_dev_mode) == expected
+        for _rel, _type, filename in expected:
+            assert (PUBLIC_DIR / filename).is_file(), f"missing {filename}"
