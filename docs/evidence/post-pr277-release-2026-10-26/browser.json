@@ -1,0 +1,24 @@
+{
+  "browser": "in-app Chromium via CUA",
+  "component": "Login",
+  "heading": "Day Forge",
+  "inertia_release": "4cd59c5579f94fab9c1a3172c3eaf9b649e98c09",
+  "meta_release": "4cd59c5579f94fab9c1a3172c3eaf9b649e98c09",
+  "scripts": [
+    "/static/assets/app-37OoBZo1.js"
+  ],
+  "sign_in_visible": true,
+  "stylesheets": [
+    {
+      "path": "/static/assets/app-Cm2RWFvr.css"
+    }
+  ],
+  "url": "https://dayforge.habitreward.org/accounts/login/",
+  "computed_styles": {
+    "body_background": "rgb(11, 18, 32)",
+    "button_background": "rgb(90, 166, 255)"
+  },
+  "css_verified_visually": true,
+  "cssom_note": "The read-only DOM scope does not expose link.sheet; CSS was verified using computed styles, screenshot and independent HTTPS requests.",
+  "console_errors": []
+}

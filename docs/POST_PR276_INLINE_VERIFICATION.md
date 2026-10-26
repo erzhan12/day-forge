@@ -53,3 +53,22 @@ POST отправлены отдельным HTTP-клиентом через н
 [Очистка и сохранность](evidence/post-pr276-inline-2026-10-26/cleanup.json), [сводка проверок](evidence/post-pr276-inline-2026-10-26/checks.json).
 
 Новых ошибок не обнаружено. Публикация `extra=0` и её production-проверка закрыты. AI, расписания, OAuth, миграции, production-рестарт и rollback вне штатного Deploy в этом smoke не использовались.
+
+## Публикация после PR #277
+
+26 октября отдельная проверка [Deploy #40235378375](https://github.com/erzhan12/day-forge/actions/runs/40235378375) подтвердила публикацию `4cd59c5579f94fab9c1a3172c3eaf9b649e98c09`. Все jobs прошли; health-check получил HTTP 200 на первой попытке в 02:29:49 по Алматы.
+
+Независимый HTTPS-клиент без cookies получил Login с HTTP 200. Точный SHA совпал в `meta frontend-version`, Inertia version и содержимом опубликованного JS. Редиректов к другому ресурсу не было, проверка TLS оставалась включённой.
+
+| Asset | GET | Размер | Content-Type | If-None-Match |
+| --- | --- | --- | --- | --- |
+| `app-37OoBZo1.js` | 200 | 491966 байт | `text/javascript` | 304, пустой body |
+| `app-Cm2RWFvr.css` | 200 | 72635 байт | `text/css` | 304, пустой body |
+
+Оба assets имеют immutable cache policy. SHA-256, ETag и полные response metadata сохранены в [HTTPS evidence](evidence/post-pr277-release-2026-10-26/public-release.json). [Метаданные Deploy](evidence/post-pr277-release-2026-10-26/deploy.json) фиксируют опубликованный commit и завершение jobs.
+
+Встроенный Chromium отрисовал Login с формой Sign in и применённым оформлением. DOM страницы содержит тот же SHA и ссылки на проверенные JS/CSS; computed styles и [скриншот](screenshots/post-pr277-release-2026-10-26/login.png) подтверждают применение CSS. Ошибок в console log новой вкладки не было. `link.sheet` не доступен через изолированный DOM-инструмент, поэтому он не использовался как критерий загрузки: проверены HTTPS-ответ, computed styles и изображение страницы. [Браузерные результаты](evidence/post-pr277-release-2026-10-26/browser.json).
+
+В самом Deploy прошли 2364 backend-теста, 1 существующий opt-in skip и 1459 frontend-тестов, а также lint, TypeScript, production npm audit, image retention, SSH pinning и production build. [Сводка](evidence/post-pr277-release-2026-10-26/checks.json).
+
+Ошибок публикации не обнаружено, runtime-код не менялся. Эта проверка ограничена публичной Login и её сборкой. Авторизованных запросов, AI-вызовов, изменений расписания/настроек и SSH-команд не было; тестовые аккаунты не создавались. Результаты User admin на `8a4743f` сохранены выше. Временная браузерная вкладка закрыта.

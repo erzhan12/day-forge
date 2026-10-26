@@ -1,0 +1,40 @@
+{
+  "checked_at": "2026-10-26T10:35:50.384214+05:00",
+  "site": "https://dayforge.habitreward.org",
+  "expected_release": "4cd59c5579f94fab9c1a3172c3eaf9b649e98c09",
+  "health_probe": {
+    "path": "/accounts/login/",
+    "status": 200,
+    "component": "Login",
+    "anonymous": true
+  },
+  "meta_release": "4cd59c5579f94fab9c1a3172c3eaf9b649e98c09",
+  "inertia_release": "4cd59c5579f94fab9c1a3172c3eaf9b649e98c09",
+  "tls_verification": true,
+  "assets": [
+    {
+      "path": "/static/assets/app-Cm2RWFvr.css",
+      "status": 200,
+      "bytes": 72635,
+      "content_type": "text/css; charset=\"utf-8\"",
+      "cache_control": "max-age=315360000, public, immutable",
+      "etag": "\"6ade74b8-11bbb\"",
+      "sha256": "9b97392f05f343168a950d34e0e627931166bfe2a9174a7593ce4f7b86f8a132",
+      "conditional_status": 304
+    },
+    {
+      "path": "/static/assets/app-37OoBZo1.js",
+      "status": 200,
+      "bytes": 491966,
+      "content_type": "text/javascript; charset=\"utf-8\"",
+      "cache_control": "max-age=315360000, public, immutable",
+      "etag": "\"6ade74b8-781be\"",
+      "sha256": "c107aa0300b1fec8472efe8c186b0f9e0bebabb28ae22ab492afe527eecf0e20",
+      "embedded_release_matches": true,
+      "conditional_status": 304
+    }
+  ],
+  "authenticated_requests": 0,
+  "ai_calls": 0,
+  "schedule_writes": 0
+}
