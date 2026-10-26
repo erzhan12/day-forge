@@ -1,3 +1,5 @@
+<p align="center"><img src="frontend/public/logo.svg" alt="Day Forge logo" width="160"></p>
+
 # Day Forge
 
 Day Forge is a daily schedule assistant with templates, manual editing, AI chat and drafts, external calendar and task integrations, and daily reviews.
