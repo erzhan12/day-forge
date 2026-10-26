@@ -1,0 +1,23 @@
+{
+  "published_release": "4cd59c5579f94fab9c1a3172c3eaf9b649e98c09",
+  "deploy": {
+    "backend_passed": 2364,
+    "backend_skipped": 1,
+    "frontend_passed": 1459,
+    "lint_types_build_audit_retention_pinning": "passed",
+    "health_check_status": 200,
+    "health_check_attempt": 1
+  },
+  "independent_https_status": 200,
+  "meta_inertia_js_release_match": true,
+  "js_css_get_status": 200,
+  "js_css_conditional_status": 304,
+  "browser_login_rendered": true,
+  "browser_console_errors": 0,
+  "runtime_changes": false,
+  "authenticated_requests": 0,
+  "ai_calls": 0,
+  "schedule_writes": 0,
+  "ssh_commands": 0,
+  "temporary_browser_tab_closed": true
+}
