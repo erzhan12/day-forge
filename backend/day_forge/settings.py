@@ -101,6 +101,9 @@ STATICFILES_DIRS = [FRONTEND_BUILD_DIR]
 STATIC_ROOT = PROJECT_ROOT / "staticfiles"
 # Vite content hashes use URL-safe base64 rather than Django's hex convention.
 WHITENOISE_IMMUTABLE_FILE_TEST = r"/assets/[^/]+-[A-Za-z0-9_-]{8,}\.(?:js|css)$"
+# WhiteNoise has no entry for .webmanifest and would serve it as
+# application/octet-stream; declare the W3C media type explicitly.
+WHITENOISE_MIMETYPES = {".webmanifest": "application/manifest+json"}
 
 # Inertia
 FRONTEND_RELEASE = None if DEBUG else load_frontend_release(FRONTEND_BUILD_DIR)
