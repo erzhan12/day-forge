@@ -158,3 +158,57 @@ class TestBaseTemplateIcons:
             assert _sizeless_icon_files(vite_dev_mode) == expected
         for _rel, _type, filename in expected:
             assert (PUBLIC_DIR / filename).is_file(), f"missing {filename}"
+
+
+MANIFEST_LINK_RE = re.compile(r'<link\s+rel="manifest"\s+href="(?P<href>[^"]+)"')
+THEME_COLOR_RE = re.compile(r'<meta\s+name="theme-color"\s+content="(?P<color>[^"]+)"')
+
+
+def _manifest_href(vite_dev_mode):
+    html = render_to_string("base.html", {"vite_dev_mode": vite_dev_mode})
+    hrefs = MANIFEST_LINK_RE.findall(html)
+    assert len(hrefs) == 1, f"expected exactly one manifest link, got {hrefs}"
+    return hrefs[0]
+
+
+def _load_manifest():
+    import json
+
+    return json.loads((PUBLIC_DIR / "manifest.webmanifest").read_text(encoding="utf-8"))
+
+
+class TestWebManifest:
+    def test_manifest_linked_in_both_branches(self):
+        dev = _manifest_href(vite_dev_mode=True)
+        prod = _manifest_href(vite_dev_mode=False)
+        assert dev == f"{DEV_ORIGIN}manifest.webmanifest"
+        assert prod == f"{settings.STATIC_URL}manifest.webmanifest"
+
+    @pytest.mark.parametrize("vite_dev_mode", [True, False])
+    def test_theme_color_matches_manifest(self, vite_dev_mode):
+        html = render_to_string("base.html", {"vite_dev_mode": vite_dev_mode})
+        colors = THEME_COLOR_RE.findall(html)
+        assert colors == [_load_manifest()["theme_color"]]
+
+    def test_manifest_is_valid_and_installable(self):
+        m = _load_manifest()
+        assert m["name"] and m["short_name"]
+        assert m["start_url"] == "/" and m["scope"] == "/"
+        assert m["display"] == "standalone"
+        any_sizes = {i["sizes"] for i in m["icons"] if i.get("purpose", "any") == "any"}
+        assert {"192x192", "512x512"} <= any_sizes
+        assert any(i.get("purpose") == "maskable" for i in m["icons"])
+
+    def test_manifest_icons_exist_with_declared_sizes(self):
+        for icon in _load_manifest()["icons"]:
+            path = PUBLIC_DIR / icon["src"]
+            assert path.is_file(), f"missing {icon['src']}"
+            assert icon["type"] == "image/png"
+            declared = tuple(int(n) for n in icon["sizes"].split("x"))
+            assert _png_dimensions(path) == declared
+
+    def test_whitenoise_serves_manifest_media_type(self):
+        from whitenoise.media_types import MediaTypes
+
+        media = MediaTypes(extra_types=settings.WHITENOISE_MIMETYPES)
+        assert media.get_type("manifest.webmanifest") == "application/manifest+json"
