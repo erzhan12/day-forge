@@ -196,6 +196,24 @@ left alone. Cleanup errors are logged without failing the deploy; the next
 deploy retries. GHCR tags are unaffected. Check host usage with `df -h /` and
 `docker system df` after deployment.
 
+### Verifying GitHub Actions upgrades
+
+Keep actions pinned to full commit SHAs and compare each pin with the upstream
+release tag. A successful PR validation run exercises `setup-uv`, but the
+`docker/login-action` step runs during Deploy's `build-and-push` job. After
+upgrading it, wait for image publication, deployment and the HTTPS health-check.
+
+Claude Code Review intentionally skips draft, fork and Dependabot PRs. A green
+validation check on an action-update PR therefore does not prove the reviewer
+works. After a Claude action upgrade, use an eligible non-draft PR in this
+repository, check the action version in its workflow log, and confirm that the
+reviewer actually posts its result. A documentation-only PR can provide this
+check when no eligible PR is open; keep the existing workflow guards intact.
+
+The Claude action pins the PR revision it reviews. If the branch changes while
+the action is preparing its checkout, it can reject the outdated run. Check
+the run for the latest head instead of treating an older result as current.
+
 ## Frontend release identity
 
 The frontend build receives `RELEASE_VERSION` from the workflow's full Git SHA. Vite embeds it in the JS bundle and writes `.vite/release.json`; Django uses that packaged identity for Inertia and API compatibility checks. Production startup refuses missing or incomplete build assets. Runtime `.env` does not select the release identity.
