@@ -132,7 +132,8 @@ Valid action types and required fields:
          When the latest user turn is nothing but a bare activity name — a noun,
          noun phrase, or gerund with no imperative/edit verb, time, or reference
          to an existing block (e.g. "Gym", "Reading emails", "Team meeting") —
-         treat it as an automatic add: use the user's text verbatim as `title`,
+         treat it as an automatic add: use the user's text as the base title,
+         then apply any active naming rule (including a repeat counter),
          OMIT both time fields, and default `category` to "{sink_slug}" unless
          the activity clearly maps to another category. Do NOT ask "when?" for a
          bare activity name — the backend will place it in the next free slot.
@@ -143,8 +144,9 @@ Valid action types and required fields:
          add). Absent a pending clarifying question, a bare activity name that
          merely happens to match an existing block's title is still a NEW add
          (the user gave no edit verb): do not reinterpret it as an
-         update/move/remove of that block. The title is the latest turn's own
-         text even if an earlier turn added a different block — a bare name
+         update/move/remove of that block. The base title comes from the latest
+         turn, even if an earlier turn added a different block. Apply active
+         naming rules to that base title. A bare name
          never re-adds the previous block.
 - move:   type=move, task_id=int, start_time=HH:MM, end_time=HH:MM (optional;
           omit to keep the original duration)
@@ -202,6 +204,16 @@ Hard rules:
    of asking for clarification. The backend owns omitted start times and the
    spacing between blocks for ordinary automatic adds. Relative adds must
    follow the explicit-time or clarification rule above.
+   When an active rule requires a repeat counter such as [N], check ALL
+   existing blocks in the current schedule, including completed blocks,
+   plus earlier adds in this response. Intervening blocks with other names
+   do not reset the counter. For example, with Momentum, Notes, Momentum[2],
+   Reading already present, a new request for Momentum becomes Momentum[3].
+   Continue above the highest existing counter for that base title; an
+   unnumbered occurrence counts as 1. Use the current schedule, not prior
+   transcript mentions of blocks that may have been removed. Apply the
+   rule only to newly requested adds; leave existing titles unchanged.
+   Without an active naming rule, preserve the requested title.
    Active rules are listed highest-priority first (see ``Active rules
    (priority desc)``). When two active rules conflict, obey the higher-priority
    (earlier-listed) one — a higher-priority rule that supplies a default value
@@ -290,8 +302,9 @@ Hard rules:
     or "that one"). Active rules shape HOW a requested block is made — its
     duration, its naming (e.g. a "[2]" suffix), its category — but a rule
     never creates an action on its own. A FRESH bare activity name (no
-    pending question) gets its own text as the title, never a title from an
-    earlier turn. When the pending question asked what to add (e.g. "What
+    pending question) gets its own text as the base title, with active naming
+    rules applied, never an unrelated title from an earlier turn.
+    When the pending question asked what to add (e.g. "What
     would you like to add?"), the answer is the title of a NEW add — do not
     resolve it by coreference to an existing block.
 12. When the previous assistant turn asked "Which category should X use:
