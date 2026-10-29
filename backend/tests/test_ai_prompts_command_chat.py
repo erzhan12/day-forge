@@ -130,6 +130,30 @@ class TestBuildChatUserMessage:
         msg = build_chat_user_message(schedule, [], now, [_rule("R")])
         assert msg.index("Existing blocks:") < msg.index("Active rules")
 
+    def test_repeat_naming_context_includes_nonadjacent_and_completed_blocks(self):
+        blocks = [
+            SimpleNamespace(
+                id=index,
+                title=title,
+                start_time=datetime.time(8 + index, 0),
+                end_time=datetime.time(8 + index, 25),
+                category="work",
+                is_completed=index == 1,
+            )
+            for index, title in enumerate(["Momentum", "Notes", "Momentum[2]", "Reading"], start=1)
+        ]
+        rule = "If a block with the same name already exists, append [N]."
+        msg = build_chat_user_message(
+            _schedule(datetime.date(2026, 10, 29)),
+            blocks,
+            datetime.datetime(2026, 10, 29, 14),
+            [_rule(rule)],
+        )
+        for block in blocks:
+            assert f'title="{block.title}"' in msg
+        assert 'completed=true title="Momentum"' in msg
+        assert rule in msg
+
 
 class TestChatSystemPromptAutoPlacement:
     """Feature 0067: chat system prompt describes the two add modes and the
@@ -307,6 +331,19 @@ class TestChatSystemPromptRulePrecedence:
             or "follow the higher-priority" in low
             or "higher-priority rule wins" in low
         )
+
+    def test_repeat_naming_rule_uses_whole_current_schedule(self):
+        prompt = self._prompt()
+        assert "use the user's text verbatim as `title`" not in prompt
+        assert "then apply any active naming rule" in prompt
+        assert "check ALL\n   existing blocks" in prompt
+        assert "including completed blocks" in prompt
+        assert "plus earlier adds in this response" in prompt
+        assert "do not reset the counter" in prompt
+        assert "becomes Momentum[3]" in prompt
+        assert "highest existing counter" in prompt
+        assert "leave existing titles unchanged" in prompt
+        assert "Without an active naming rule, preserve the requested title" in prompt
 
     def test_anchors_precedence_on_list_order(self):
         low = self._prompt().lower()
