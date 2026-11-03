@@ -1,5 +1,20 @@
+import { readFileSync } from "node:fs"
+import { resolve } from "node:path"
 import { describe, expect, it } from "vitest"
 import { formatBlockDuration, formatDailyExport } from "../src/utils/dailyExport"
+
+// Shared backend/frontend parity fixtures (feature 0088). Read via Node `fs`
+// with a path relative to the repo root, not a Vite import, so no `fs.allow`
+// change is needed. `schedules.daily_export.format_daily_export` (Python)
+// must render byte-identical Markdown from these same cases — see
+// `backend/tests/test_daily_export.py`.
+function loadFixture(name: string): any[] {
+  const path = resolve(__dirname, "../../backend/tests/fixtures/daily_export", name)
+  return JSON.parse(readFileSync(path, "utf-8"))
+}
+
+const MARKDOWN_CASES = loadFixture("markdown.json")
+const NOTES_CASES = loadFixture("notes.json")
 
 describe("formatBlockDuration", () => {
   it.each([
@@ -72,5 +87,38 @@ describe("formatDailyExport", () => {
       "## day-forge · 2026-08-29\n\nblocks: 0/1 done\n\n- [ ] 09:00 Gym (health) 1h\n\nnote: done with care",
     )
     expect(formatDailyExport({ date: "2026-08-29", blocks, note: " \n\t " })).not.toContain("note:")
+  })
+
+  it("does not mutate the input blocks array", () => {
+    const blocks = [
+      {
+        title: "Later task", start_time: "10:00", end_time: "11:30",
+        category: "other", is_completed: false, sort_order: 1,
+      },
+      {
+        title: "Morning run", start_time: "08:00", end_time: "08:45",
+        category: "health", is_completed: true,
+      },
+    ]
+    const snapshot = JSON.parse(JSON.stringify(blocks))
+    formatDailyExport({ date: "2026-08-29", blocks, note: "  hi  " })
+    expect(blocks).toEqual(snapshot)
+  })
+})
+
+describe("formatDailyExport (shared backend/frontend fixtures)", () => {
+  it.each(MARKDOWN_CASES.map((c) => [c.name, c]))("%s", (_name, testCase) => {
+    const result = formatDailyExport({ date: testCase.date, blocks: testCase.blocks })
+    expect(result).toBe(testCase.expected)
+  })
+
+  it.each(NOTES_CASES.map((c) => [c.name, c]))("%s", (_name, testCase) => {
+    const args: { date: string; blocks: any[]; note?: string } = {
+      date: testCase.date,
+      blocks: testCase.blocks,
+    }
+    if (testCase.note_present) args.note = testCase.note
+    const result = formatDailyExport(args)
+    expect(result).toBe(testCase.expected)
   })
 })

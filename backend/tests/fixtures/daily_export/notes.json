@@ -1,0 +1,188 @@
+[
+  {
+    "name": "absent_note",
+    "date": "2026-08-29",
+    "blocks": [
+      {
+        "title": "Gym",
+        "start_time": "09:00",
+        "end_time": "10:00",
+        "category": "health",
+        "is_completed": false,
+        "sort_order": 0
+      }
+    ],
+    "note_present": false,
+    "expected": "## day-forge \u00b7 2026-08-29\n\nblocks: 0/1 done\n\n- [ ] 09:00 Gym (health) 1h"
+  },
+  {
+    "name": "empty_string_note",
+    "date": "2026-08-29",
+    "blocks": [
+      {
+        "title": "Gym",
+        "start_time": "09:00",
+        "end_time": "10:00",
+        "category": "health",
+        "is_completed": false,
+        "sort_order": 0
+      }
+    ],
+    "note_present": true,
+    "note": "",
+    "expected": "## day-forge \u00b7 2026-08-29\n\nblocks: 0/1 done\n\n- [ ] 09:00 Gym (health) 1h"
+  },
+  {
+    "name": "whitespace_only_spaces",
+    "date": "2026-08-29",
+    "blocks": [
+      {
+        "title": "Gym",
+        "start_time": "09:00",
+        "end_time": "10:00",
+        "category": "health",
+        "is_completed": false,
+        "sort_order": 0
+      }
+    ],
+    "note_present": true,
+    "note": "   ",
+    "expected": "## day-forge \u00b7 2026-08-29\n\nblocks: 0/1 done\n\n- [ ] 09:00 Gym (health) 1h"
+  },
+  {
+    "name": "whitespace_only_tabs_and_newlines",
+    "date": "2026-08-29",
+    "blocks": [
+      {
+        "title": "Gym",
+        "start_time": "09:00",
+        "end_time": "10:00",
+        "category": "health",
+        "is_completed": false,
+        "sort_order": 0
+      }
+    ],
+    "note_present": true,
+    "note": "\t\n \t",
+    "expected": "## day-forge \u00b7 2026-08-29\n\nblocks: 0/1 done\n\n- [ ] 09:00 Gym (health) 1h"
+  },
+  {
+    "name": "internal_whitespace_collapses_and_edges_trim",
+    "date": "2026-08-29",
+    "blocks": [
+      {
+        "title": "Gym",
+        "start_time": "09:00",
+        "end_time": "10:00",
+        "category": "health",
+        "is_completed": false,
+        "sort_order": 0
+      }
+    ],
+    "note_present": true,
+    "note": "  done\t with\ncare  ",
+    "expected": "## day-forge \u00b7 2026-08-29\n\nblocks: 0/1 done\n\n- [ ] 09:00 Gym (health) 1h\n\nnote: done with care"
+  },
+  {
+    "name": "unicode_space_variants_collapse",
+    "date": "2026-08-29",
+    "blocks": [
+      {
+        "title": "Gym",
+        "start_time": "09:00",
+        "end_time": "10:00",
+        "category": "health",
+        "is_completed": false,
+        "sort_order": 0
+      }
+    ],
+    "note_present": true,
+    "note": "\u3000word\u3000one\u00a0\u2003word\u3000two\u3000",
+    "expected": "## day-forge \u00b7 2026-08-29\n\nblocks: 0/1 done\n\n- [ ] 09:00 Gym (health) 1h\n\nnote: word one word two"
+  },
+  {
+    "name": "bom_trimmed_from_edges",
+    "date": "2026-08-29",
+    "blocks": [
+      {
+        "title": "Gym",
+        "start_time": "09:00",
+        "end_time": "10:00",
+        "category": "health",
+        "is_completed": false,
+        "sort_order": 0
+      }
+    ],
+    "note_present": true,
+    "note": "\ufeffHello\ufeff",
+    "expected": "## day-forge \u00b7 2026-08-29\n\nblocks: 0/1 done\n\n- [ ] 09:00 Gym (health) 1h\n\nnote: Hello"
+  },
+  {
+    "name": "bom_collapsed_in_middle",
+    "date": "2026-08-29",
+    "blocks": [
+      {
+        "title": "Gym",
+        "start_time": "09:00",
+        "end_time": "10:00",
+        "category": "health",
+        "is_completed": false,
+        "sort_order": 0
+      }
+    ],
+    "note_present": true,
+    "note": "Hello\ufeffWorld",
+    "expected": "## day-forge \u00b7 2026-08-29\n\nblocks: 0/1 done\n\n- [ ] 09:00 Gym (health) 1h\n\nnote: Hello World"
+  },
+  {
+    "name": "nel_preserved_not_trimmed",
+    "date": "2026-08-29",
+    "blocks": [
+      {
+        "title": "Gym",
+        "start_time": "09:00",
+        "end_time": "10:00",
+        "category": "health",
+        "is_completed": false,
+        "sort_order": 0
+      }
+    ],
+    "note_present": true,
+    "note": "\u0085Keep",
+    "expected": "## day-forge \u00b7 2026-08-29\n\nblocks: 0/1 done\n\n- [ ] 09:00 Gym (health) 1h\n\nnote: \u0085Keep"
+  },
+  {
+    "name": "nel_surrounded_by_real_spaces_only_edges_trimmed",
+    "date": "2026-08-29",
+    "blocks": [
+      {
+        "title": "Gym",
+        "start_time": "09:00",
+        "end_time": "10:00",
+        "category": "health",
+        "is_completed": false,
+        "sort_order": 0
+      }
+    ],
+    "note_present": true,
+    "note": " \u0085 ",
+    "expected": "## day-forge \u00b7 2026-08-29\n\nblocks: 0/1 done\n\n- [ ] 09:00 Gym (health) 1h\n\nnote: \u0085"
+  },
+  {
+    "name": "control_separators_preserved",
+    "date": "2026-08-29",
+    "blocks": [
+      {
+        "title": "Gym",
+        "start_time": "09:00",
+        "end_time": "10:00",
+        "category": "health",
+        "is_completed": false,
+        "sort_order": 0
+      }
+    ],
+    "note_present": true,
+    "note": "\u001c \u001d \u001e \u001f",
+    "expected": "## day-forge \u00b7 2026-08-29\n\nblocks: 0/1 done\n\n- [ ] 09:00 Gym (health) 1h\n\nnote: \u001c \u001d \u001e \u001f"
+  }
+]

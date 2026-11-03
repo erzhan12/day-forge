@@ -582,3 +582,91 @@ schedule.refresh_from_db()
 assert schedule.revision == 0
 assert list(schedule.time_blocks.values()) == before
 """)
+
+
+def test_shared_reader_ignores_independent_writer_reservation(copied_database):
+    """``read_schedule_day`` is a pure read and must not need the SQLite
+    writer: it succeeds immediately even while an independent connection
+    holds an unreleased ``BEGIN IMMEDIATE`` reservation."""
+    run_on_copy(copied_database, """
+import sqlite3
+from django.contrib.auth.models import User
+from schedules.models import Schedule, TimeBlock
+from schedules.reads import read_schedule_day
+user = User.objects.create_user(username='shared-reader-no-writer')
+schedule = Schedule.objects.create(user=user, date='2026-10-10')
+TimeBlock.objects.create(
+    schedule=schedule, title='Existing', start_time='09:00', end_time='10:00'
+)
+holder = sqlite3.connect(sys.argv[1], timeout=0.1, isolation_level=None)
+holder.execute('BEGIN IMMEDIATE')
+try:
+    result = read_schedule_day(user, schedule.date)
+finally:
+    holder.rollback()
+    holder.close()
+assert result is not None
+returned_schedule, blocks = result
+assert returned_schedule.pk == schedule.pk
+assert [b.title for b in blocks] == ['Existing']
+""")
+
+
+def test_shared_reader_snapshot_stays_coherent_across_concurrent_commit(copied_database):
+    """A commit landing between the schedule query and the block query must
+    not be partially visible: the reader's own transaction snapshot must
+    keep both reads coherent with each other."""
+    run_on_copy(copied_database, """
+import sqlite3
+from concurrent.futures import ThreadPoolExecutor
+from threading import Event
+from django.contrib.auth.models import User
+from django.db import connection
+from django.db.models import QuerySet
+from schedules.models import Schedule, TimeBlock
+from schedules.reads import read_schedule_day
+from unittest.mock import patch
+with connection.cursor() as cursor:
+    cursor.execute('PRAGMA journal_mode=WAL')
+user = User.objects.create_user(username='shared-reader-snapshot')
+schedule = Schedule.objects.create(user=user, date='2026-10-10')
+TimeBlock.objects.create(
+    schedule=schedule, title='Old', start_time='09:00', end_time='10:00'
+)
+start = Event()
+def writer():
+    db = sqlite3.connect(sys.argv[1], timeout=2, isolation_level=None)
+    try:
+        assert start.wait(5)
+        db.execute('BEGIN IMMEDIATE')
+        db.execute('UPDATE schedules_schedule SET revision = 1 WHERE id = ?', (schedule.pk,))
+        db.execute(
+            'UPDATE schedules_timeblock SET title = ? WHERE schedule_id = ?',
+            ('New', schedule.pk),
+        )
+        db.commit()
+    finally:
+        db.close()
+seen = False
+original_first = QuerySet.first
+def pause_after_schedule(self):
+    global seen
+    result = original_first(self)
+    if not seen and self.model is Schedule:
+        seen = True
+        start.set()
+        # Finish the real commit before this reader's own block query runs.
+        future.result(timeout=5)
+    return result
+with ThreadPoolExecutor(max_workers=1) as pool:
+    future = pool.submit(writer)
+    with patch.object(QuerySet, 'first', pause_after_schedule):
+        result = read_schedule_day(user, schedule.date)
+assert seen
+returned_schedule, blocks = result
+assert returned_schedule.revision == 0, returned_schedule.revision
+assert [b.title for b in blocks] == ['Old'], blocks
+schedule.refresh_from_db()
+assert schedule.revision == 1
+assert list(schedule.time_blocks.values_list('title', flat=True)) == ['New']
+""")

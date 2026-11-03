@@ -70,7 +70,17 @@ vi.mock("../src/composables/useHabiticaAccount", () => ({
   }),
 }))
 
+const { useDailyExportTokenMock, fetchStatusMock } = vi.hoisted(() => ({
+  useDailyExportTokenMock: vi.fn(),
+  fetchStatusMock: vi.fn(),
+}))
+
+vi.mock("../src/composables/useDailyExportToken", () => ({
+  useDailyExportToken: useDailyExportTokenMock,
+}))
+
 import Settings from "../src/pages/Settings.vue"
+import DailyExportTokenPanel from "../src/components/settings/DailyExportTokenPanel.vue"
 import { makeCategories } from "./helpers/schedule"
 
 function stubMatchMedia(matches: boolean): void {
@@ -85,7 +95,10 @@ function stubMatchMedia(matches: boolean): void {
   )
 }
 
-function mountSettings(categories = makeCategories()): VueWrapper {
+function mountSettings(
+  categories = makeCategories(),
+  extraProps: Record<string, unknown> = {},
+): VueWrapper {
   return mount(Settings, {
     attachTo: document.body,
     props: {
@@ -94,6 +107,7 @@ function mountSettings(categories = makeCategories()): VueWrapper {
       travel_rules: [],
       categories,
       schedule_window: { start: "06:00", end: "23:00", time_zone: "Asia/Almaty" },
+      ...extraProps,
     },
     global: {
       stubs: {
@@ -112,6 +126,15 @@ let wrapper: VueWrapper | null = null
 
 beforeEach(() => {
   window.history.replaceState({}, "", "/settings/#appearance")
+  fetchStatusMock.mockReset()
+  useDailyExportTokenMock.mockReset().mockImplementation(() => ({
+    state: reactive({ hasToken: false, createdAt: null, rawToken: null, loading: false, error: null }),
+    fetchStatus: fetchStatusMock,
+    createToken: vi.fn(),
+    revokeToken: vi.fn(),
+    dismissRawToken: vi.fn(),
+    dispose: vi.fn(),
+  }))
 })
 
 afterEach(() => {
@@ -354,4 +377,53 @@ it("places the default gap control below the day window under Schedule", async (
   const panel = wrapper.get('[aria-label="Day window"]').element.parentElement!
   expect(panel.textContent).toContain("Default gap between blocks (minutes)")
   expect(panel.querySelector('input[type="number"]')).not.toBeNull()
+})
+
+describe("DailyExportTokenPanel wiring (feature 0088)", () => {
+  it("mounts the export-token panel only while Integrations is active", async () => {
+    stubMatchMedia(true)
+    wrapper = mountSettings()
+    expect(wrapper.find('[data-testid="settings-integration-export-token"]').exists())
+      .toBe(false)
+
+    window.history.replaceState({}, "", "/settings/#integrations")
+    window.dispatchEvent(new HashChangeEvent("hashchange"))
+    await nextTick()
+    expect(wrapper.find('[data-testid="settings-integration-export-token"]').exists())
+      .toBe(true)
+    expect(useDailyExportTokenMock).toHaveBeenCalledTimes(1)
+
+    window.history.replaceState({}, "", "/settings/#appearance")
+    window.dispatchEvent(new HashChangeEvent("hashchange"))
+    await nextTick()
+    // Unlike every other integrations sub-panel (which stay mounted via
+    // v-show), this one must fully tear down — it holds a one-time secret.
+    expect(wrapper.find('[data-testid="settings-integration-export-token"]').exists())
+      .toBe(false)
+  })
+
+  it("passes the page's auth_user_id through to the panel", async () => {
+    window.history.replaceState({}, "", "/settings/#integrations")
+    stubMatchMedia(true)
+    wrapper = mountSettings(makeCategories(), { auth_user_id: 42 })
+    await nextTick()
+    const panel = wrapper.findComponent(DailyExportTokenPanel)
+    expect(panel.props("authUserId")).toBe(42)
+    expect(fetchStatusMock).toHaveBeenCalled()
+  })
+
+  it("remounts the panel (fresh composable instance) when the account changes", async () => {
+    window.history.replaceState({}, "", "/settings/#integrations")
+    stubMatchMedia(true)
+    wrapper = mountSettings(makeCategories(), { auth_user_id: 1 })
+    await nextTick()
+    expect(useDailyExportTokenMock).toHaveBeenCalledTimes(1)
+
+    await wrapper.setProps({ auth_user_id: 2 })
+    await nextTick()
+    // A different `:key` forces Vue to destroy and recreate the component,
+    // which creates a brand-new composable instance rather than reusing one
+    // that might still hold the previous account's raw token in memory.
+    expect(useDailyExportTokenMock).toHaveBeenCalledTimes(2)
+  })
 })

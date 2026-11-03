@@ -1,0 +1,209 @@
+[
+  {
+    "name": "empty_day",
+    "date": "2026-08-29",
+    "blocks": [],
+    "expected": "## day-forge · 2026-08-29\n\nblocks: 0/0 done"
+  },
+  {
+    "name": "no_completed_single_minute_block",
+    "date": "2026-08-29",
+    "blocks": [
+      {
+        "title": "Gym",
+        "start_time": "09:00",
+        "end_time": "09:45",
+        "category": "health",
+        "is_completed": false
+      }
+    ],
+    "expected": "## day-forge · 2026-08-29\n\nblocks: 0/1 done\n\n- [ ] 09:00 Gym (health) 45m"
+  },
+  {
+    "name": "all_completed_hour_block",
+    "date": "2026-08-29",
+    "blocks": [
+      {
+        "title": "Deep Work",
+        "start_time": "09:00",
+        "end_time": "10:00",
+        "category": "work",
+        "is_completed": true,
+        "sort_order": 0
+      }
+    ],
+    "expected": "## day-forge · 2026-08-29\n\nblocks: 1/1 done\n\n- [x] 09:00 Deep Work (work) 1h"
+  },
+  {
+    "name": "mixed_completed_unsorted_input_and_tied_sort_order",
+    "date": "2026-08-29",
+    "blocks": [
+      {
+        "title": "Later task",
+        "start_time": "10:00",
+        "end_time": "11:30",
+        "category": "other",
+        "is_completed": false,
+        "sort_order": 1
+      },
+      {
+        "title": "Morning\nrun",
+        "start_time": "08:00",
+        "end_time": "08:45",
+        "category": "health",
+        "is_completed": true,
+        "sort_order": 1
+      },
+      {
+        "title": "Reading",
+        "start_time": "10:00",
+        "end_time": "10:30",
+        "category": "reading",
+        "is_completed": false
+      },
+      {
+        "title": "Standup",
+        "start_time": "09:00",
+        "end_time": "09:15",
+        "category": "work",
+        "is_completed": true,
+        "sort_order": 0
+      }
+    ],
+    "expected": "## day-forge · 2026-08-29\n\nblocks: 2/4 done\n\n- [x] 08:00 Morning\nrun (health) 45m\n- [x] 09:00 Standup (work) 15m\n- [ ] 10:00 Reading (reading) 30m\n- [ ] 10:00 Later task 1h 30m"
+  },
+  {
+    "name": "stable_tie_same_start_and_explicit_sort_order",
+    "date": "2026-08-29",
+    "blocks": [
+      {
+        "title": "Alpha",
+        "start_time": "09:00",
+        "end_time": "09:30",
+        "category": "other",
+        "is_completed": false,
+        "sort_order": 0
+      },
+      {
+        "title": "Beta",
+        "start_time": "09:00",
+        "end_time": "09:30",
+        "category": "other",
+        "is_completed": false,
+        "sort_order": 0
+      }
+    ],
+    "expected": "## day-forge · 2026-08-29\n\nblocks: 0/2 done\n\n- [ ] 09:00 Alpha 30m\n- [ ] 09:00 Beta 30m"
+  },
+  {
+    "name": "stable_tie_same_start_both_missing_sort_order",
+    "date": "2026-08-29",
+    "blocks": [
+      {
+        "title": "First",
+        "start_time": "08:00",
+        "end_time": "08:15",
+        "category": "other",
+        "is_completed": false
+      },
+      {
+        "title": "Second",
+        "start_time": "08:00",
+        "end_time": "08:15",
+        "category": "other",
+        "is_completed": false
+      }
+    ],
+    "expected": "## day-forge · 2026-08-29\n\nblocks: 0/2 done\n\n- [ ] 08:00 First 15m\n- [ ] 08:00 Second 15m"
+  },
+  {
+    "name": "other_category_omits_parens",
+    "date": "2026-08-29",
+    "blocks": [
+      {
+        "title": "Misc",
+        "start_time": "07:00",
+        "end_time": "07:05",
+        "category": "other",
+        "is_completed": false,
+        "sort_order": 0
+      }
+    ],
+    "expected": "## day-forge · 2026-08-29\n\nblocks: 0/1 done\n\n- [ ] 07:00 Misc 5m"
+  },
+  {
+    "name": "custom_category_shows_parens",
+    "date": "2026-08-29",
+    "blocks": [
+      {
+        "title": "Side project",
+        "start_time": "20:00",
+        "end_time": "21:00",
+        "category": "side_project",
+        "is_completed": true,
+        "sort_order": 0
+      }
+    ],
+    "expected": "## day-forge · 2026-08-29\n\nblocks: 1/1 done\n\n- [x] 20:00 Side project (side_project) 1h"
+  },
+  {
+    "name": "unicode_and_multiline_title",
+    "date": "2026-08-29",
+    "blocks": [
+      {
+        "title": "Café ☕ run\n& stretch",
+        "start_time": "06:30",
+        "end_time": "07:00",
+        "category": "health",
+        "is_completed": true,
+        "sort_order": 0
+      }
+    ],
+    "expected": "## day-forge · 2026-08-29\n\nblocks: 1/1 done\n\n- [x] 06:30 Café ☕ run\n& stretch (health) 30m"
+  },
+  {
+    "name": "zero_length_duration_fallback",
+    "date": "2026-08-29",
+    "blocks": [
+      {
+        "title": "Zero-length glitch",
+        "start_time": "12:00",
+        "end_time": "12:00",
+        "category": "other",
+        "is_completed": false,
+        "sort_order": 0
+      }
+    ],
+    "expected": "## day-forge · 2026-08-29\n\nblocks: 0/1 done\n\n- [ ] 12:00 Zero-length glitch 0m"
+  },
+  {
+    "name": "negative_duration_fallback",
+    "date": "2026-08-29",
+    "blocks": [
+      {
+        "title": "Reversed glitch",
+        "start_time": "12:30",
+        "end_time": "12:00",
+        "category": "other",
+        "is_completed": false,
+        "sort_order": 0
+      }
+    ],
+    "expected": "## day-forge · 2026-08-29\n\nblocks: 0/1 done\n\n- [ ] 12:30 Reversed glitch 0m"
+  },
+  {
+    "name": "mixed_hour_and_minute_duration",
+    "date": "2026-08-29",
+    "blocks": [
+      {
+        "title": "Workshop",
+        "start_time": "13:00",
+        "end_time": "14:45",
+        "category": "work",
+        "is_completed": false,
+        "sort_order": 0
+      }
+    ],
+    "expected": "## day-forge · 2026-08-29\n\nblocks: 0/1 done\n\n- [ ] 13:00 Workshop (work) 1h 45m"
+  }
+]

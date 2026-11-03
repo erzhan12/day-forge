@@ -30,6 +30,7 @@ from todoist_sync.models import TodoistAccount
 from schedules.categories import ordered_categories, serialize_category
 from schedules.models import Category, Schedule, UserScheduleSettings
 from schedules.mutations import ScheduleChanged, run_user_maintenance
+from schedules.reads import read_schedule_day
 from schedules.serialization import serialize_block, serialize_schedule
 from schedules.window import (
     ScheduleSettings,
@@ -125,13 +126,13 @@ def _read_schedule_page(user, date, slot_type):
         # On PostgreSQL this serializes the read with shared-lock writers.
         # SQLite ignores select_for_update but keeps a read snapshot.
         get_user_model().objects.select_for_update().get(pk=user.pk)
-        schedule = Schedule.objects.filter(user=user, date=date).first()
+        day = read_schedule_day(user, date)
         settings_row = UserScheduleSettings.objects.filter(user=user).first()
         prefs_row = UserPreferences.objects.filter(user=user).first()
         categories = list(Category.objects.filter(user=user).order_by("sort_order", "id"))
-        if schedule is None or settings_row is None or prefs_row is None or not categories:
+        if day is None or settings_row is None or prefs_row is None or not categories:
             return None
-        blocks = list(schedule.time_blocks.order_by("start_time", "sort_order", "id"))
+        schedule, blocks = day
         template_exists = Template.objects.filter(user=user, type=slot_type).exists()
         return {
             "schedule": serialize_schedule(schedule),
