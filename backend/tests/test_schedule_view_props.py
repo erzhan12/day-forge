@@ -117,3 +117,29 @@ def test_schedule_window_prop_includes_persisted_time_zone(auth_inertia_client, 
     assert _props(auth_inertia_client.get("/schedule/2026-05-04/"))["schedule_window"] == {
         "start": "08:00", "end": "21:00", "time_zone": "Asia/Almaty"
     }
+
+
+@pytest.mark.django_db
+class TestSharedScheduleDayReader:
+    """``schedules.reads.read_schedule_day`` still backs the page's own
+    bootstrap and block ordering after the 0088 extraction."""
+
+    def test_page_still_reflects_the_shared_reader_block_ordering(
+        self, auth_inertia_client, user
+    ):
+        schedule = Schedule.objects.create(user=user, date=datetime.date(2026, 5, 4))
+        schedule.time_blocks.create(
+            title="Second", start_time="09:00", end_time="09:15", sort_order=1
+        )
+        schedule.time_blocks.create(
+            title="First", start_time="08:00", end_time="08:15", sort_order=0
+        )
+        props = _props(auth_inertia_client.get("/schedule/2026-05-04/"))
+        assert [b["title"] for b in props["blocks"]] == ["First", "Second"]
+
+    def test_absent_day_still_bootstraps_through_the_page_view(
+        self, auth_inertia_client, user
+    ):
+        resp = auth_inertia_client.get("/schedule/2026-05-04/")
+        assert resp.status_code == 200
+        assert Schedule.objects.filter(user=user, date=datetime.date(2026, 5, 4)).exists()

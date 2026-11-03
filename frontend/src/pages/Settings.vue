@@ -6,6 +6,7 @@ import TimeZoneMismatchPrompt from "../components/TimeZoneMismatchPrompt.vue"
 import SettingsCategoriesPanel from "../components/settings/SettingsCategoriesPanel.vue"
 import SettingsAiAssistantPanel from "../components/settings/SettingsAiAssistantPanel.vue"
 import SettingsAppearancePanel from "../components/settings/SettingsAppearancePanel.vue"
+import DailyExportTokenPanel from "../components/settings/DailyExportTokenPanel.vue"
 import SettingsIntegrationsPanel from "../components/settings/SettingsIntegrationsPanel.vue"
 import SettingsNav from "../components/settings/SettingsNav.vue"
 import SettingsNotificationsPanel from "../components/settings/SettingsNotificationsPanel.vue"
@@ -33,6 +34,9 @@ const props = defineProps<{
   travel_rules: TravelRule[]
   categories: UserCategory[]
   schedule_window: ScheduleSettingsWire
+  // Shared on every Inertia response by InertiaIdentityMiddleware; not
+  // declared by every page, only those that need it (see RULES.md).
+  auth_user_id?: number | null
 }>()
 const categoryCatalogValid = computed(() => hasValidCategoryCatalog(props.categories))
 
@@ -330,6 +334,16 @@ async function handleHabiticaDisconnect(): Promise<void> {
               :habitica-busy="habiticaBusy"
               :handle-habitica-connect="handleHabiticaConnect"
               :handle-habitica-disconnect="handleHabiticaDisconnect"
+            />
+            <!-- `v-if` (not `v-show`, unlike every panel above): this one
+            holds a one-time secret in memory, so it must fully unmount
+            (not just hide) on topic exit. `:key` forces a fresh instance
+            on account change, since the composable has no other way to
+            learn the owner changed. -->
+            <DailyExportTokenPanel
+              v-if="activeTopic === 'integrations'"
+              :key="auth_user_id ?? 'anonymous'"
+              :auth-user-id="auth_user_id"
             />
           </div>
           <div

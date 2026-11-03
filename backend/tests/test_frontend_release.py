@@ -5,6 +5,7 @@ import json
 import pytest
 from common.middleware import FrontendVersionMiddleware
 from day_forge.frontend_release import DEVELOPMENT_VERSION, load_frontend_release
+from django.contrib.auth.models import User
 from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpResponse
 from django.test import RequestFactory, override_settings
@@ -163,3 +164,45 @@ def test_development_allows_api_writes_without_a_release_handshake(supplied):
     with override_settings(INERTIA_VERSION=DEVELOPMENT_VERSION):
         response = FrontendVersionMiddleware(lambda request: HttpResponse())(request)
     assert response.status_code == 200
+
+
+# --------------------------------------------------------------------------
+# Daily export (feature 0088) boundary tests — the export route gets no
+# special-cased exemption from the release handshake; it is an ordinary
+# ``/api/`` GET like any other read.
+# --------------------------------------------------------------------------
+
+
+def test_headerless_export_get_succeeds_under_a_production_shaped_release():
+    request = RequestFactory().get("/api/export/daily/2026-08-29/")
+    with override_settings(INERTIA_VERSION="release-a"):
+        response = FrontendVersionMiddleware(lambda request: HttpResponse())(request)
+    assert response.status_code == 200
+
+
+def test_explicitly_stale_version_header_rejects_export_get():
+    request = RequestFactory().get(
+        "/api/export/daily/2026-08-29/", HTTP_X_FRONTEND_VERSION="previous-release"
+    )
+    with override_settings(INERTIA_VERSION="release-a"):
+        response = FrontendVersionMiddleware(lambda request: HttpResponse())(request)
+    assert response.status_code == 409
+    assert json.loads(response.content)["code"] == "frontend_outdated"
+
+
+@pytest.mark.django_db
+def test_export_get_identity_header_cannot_change_the_resolved_owner(auth_client, user):
+    from schedules.models import Schedule, TimeBlock
+
+    other = User.objects.create_user(username="export-release-other-owner")
+    other_day = Schedule.objects.create(user=other, date="2026-08-29")
+    TimeBlock.objects.create(
+        schedule=other_day, title="Not the session owner's", start_time="09:00", end_time="10:00"
+    )
+    response = auth_client.get(
+        "/api/export/daily/2026-08-29/",
+        {"format": "json"},
+        HTTP_X_SCHEDULE_USER=str(other.pk),
+    )
+    assert response.status_code == 200
+    assert response.json()["blocks"] == []

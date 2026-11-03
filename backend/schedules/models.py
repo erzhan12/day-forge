@@ -250,3 +250,22 @@ class TimeBlock(models.Model):
             and self.start_time >= self.end_time
         ):
             raise ValidationError("start_time must be before end_time.")
+
+
+class PersonalExportToken(models.Model):
+    """One revocable, read-only credential per user for the daily export API.
+
+    Only the SHA-256 digest of the full raw credential is persisted (see
+    ``schedules.export_tokens``); the raw value is returned once, at
+    creation, and never stored. ``token_digest`` is unique so a lookup by
+    digest cannot resolve more than one owner.
+    """
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="export_token"
+    )
+    token_digest = models.CharField(max_length=64, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.user} export token ({self.created_at:%Y-%m-%d})"

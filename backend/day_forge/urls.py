@@ -8,6 +8,8 @@ from gcal_sync import views as gcal_views
 from habitica_sync import views as habitica_views
 from schedules import api as schedules_api
 from schedules import category_api
+from schedules import export_api as schedules_export_api
+from schedules import export_token_api as schedules_export_token_api
 from schedules import legal_views as schedules_legal_views
 from schedules import settings_api as schedule_settings_api
 from schedules import views as schedules_views
@@ -91,6 +93,22 @@ urlpatterns = [
     path("api/user/categories/", category_api.categories_collection, name="categories_collection"),
     path("api/user/categories/swap/", category_api.categories_swap, name="categories_swap"),
     path("api/user/categories/<int:pk>/", category_api.category_detail, name="category_detail"),
+    # API: Daily export (feature 0088) — Bearer personal-export-token OR
+    # session auth, handled entirely inside the view (see export_auth.py).
+    # Deliberately not under /api/schedules/ so its restricted auth is
+    # never mistaken for the session-only schedule API's contract.
+    path(
+        "api/export/daily/<str:date>/",
+        schedules_export_api.daily_export,
+        name="daily_export",
+    ),
+    # Session-only management of that same credential (feature 0088) —
+    # a Bearer token must never be usable here (see export_token_api.py).
+    path(
+        "api/user/export-token/",
+        schedules_export_token_api.export_token,
+        name="export_token",
+    ),
     # API: AI
     path(
         "api/ai/schedules/<str:date>/generate-draft/",

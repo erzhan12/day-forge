@@ -112,3 +112,29 @@ def test_identity_header_on_unauthenticated_write_returns_session_invalid(client
     assert response.status_code == 401
     assert response.json()["code"] == "session_invalid"
     assert not TimeBlock.objects.filter(schedule=schedule).exists()
+
+
+@pytest.mark.django_db
+def test_export_get_identity_header_does_not_change_the_bearer_resolved_owner(client, schedule):
+    """``X-Schedule-User`` is a GET-exempt identity header for the ordinary
+    session API; it must not become a back door for the Bearer-authenticated
+    export view either. The Bearer-resolved owner (``schedule.user``, who
+    has no blocks for this date) must win over the header's claimed id."""
+    from schedules.export_tokens import create_token
+
+    other = User.objects.create_user(username="export-identity-other-owner")
+    other_day = Schedule.objects.create(user=other, date=schedule.date)
+    TimeBlock.objects.create(
+        schedule=other_day, title="Not the bearer owner's", start_time="09:00", end_time="10:00"
+    )
+    raw_token, _ = create_token(schedule.user.pk)
+
+    response = client.get(
+        f"/api/export/daily/{schedule.date}/",
+        {"format": "json"},
+        HTTP_AUTHORIZATION=f"Bearer {raw_token}",
+        HTTP_X_SCHEDULE_USER=str(other.pk),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["blocks"] == []

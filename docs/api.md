@@ -5,7 +5,7 @@ Current wire contracts after R00–R12. Architecture and implementation owners: 
 ## Conventions
 
 - Base URL: Django (`http://localhost:8006` in development). Vite serves assets and proxies application routes on `:5173`.
-- Authentication: Django session cookie. Unauthenticated protected views redirect to `/accounts/login/`. Unsafe `/api/` requests carrying a mismatched `X-Schedule-User` account ID return `401` with `code: session_invalid` before the view. This header supplements session authentication.
+- Authentication: Django session cookie. Unauthenticated protected views redirect to `/accounts/login/`. Unsafe `/api/` requests carrying a mismatched `X-Schedule-User` account ID return `401` with `code: session_invalid` before the view. This header supplements session authentication. **Exception:** `GET /api/export/daily/{date}/` never redirects — an anonymous or rejected request there returns `401` JSON (see Daily export below). Its sibling `/api/user/export-token/` also returns `401` JSON rather than redirecting, and is session-only: a supplied `Authorization` header is rejected outright, even alongside a valid session.
 - Frontend release: production JSON API calls send `X-Frontend-Version` from the running build (also exposed in the initial HTML meta). A mismatch returns HTTP 409 with `code: frontend_outdated` before the view. Unsafe `/api/` calls without the header are also refused; headerless reads remain compatible. Reload the page and let the user repeat the action; never replay a write automatically. Development/HMR uses `development` without this gate. This supplements authentication, CSRF and schedule revision checks.
 - CSRF: obtain `XSRF-TOKEN` from the login or schedule GET; send `X-XSRF-TOKEN` on unsafe requests. Missing or invalid CSRF returns 403.
 - JSON request bodies must be objects. Shared parsing rejects malformed roots with 400 and bodies over 100 KB with 413 where that parser applies. Error envelopes use `errors`, optionally a stable `code` and metadata. Middleware errors may use Django's HTML response.
@@ -754,6 +754,72 @@ Invalid date/body/notes return 400; account mismatch returns 401; failed CSRF re
 ### `PATCH /api/analytics/reviews/{pk}/notes/`
 
 Compatibility route for an existing review ID. It uses the same validation and locked notes writer as the date route. A missing or foreign review returns 404. New frontend code uses the date route so autosave works before a review row exists.
+
+---
+
+## Daily export — feature 0088
+
+A personal, read-only Markdown/JSON export of one day's schedule, plus session-only management of the credential that can authenticate it. Token-management writes still use the ordinary schedule mutation contract where applicable (CSRF, frontend-release and `X-Schedule-User` checks); the export read does not, since it accepts Bearer auth instead of a session.
+
+### `GET /api/export/daily/{date}/`
+
+**Authentication precedence** (checked in this view only — never wired into global authentication):
+
+1. An `Authorization: Bearer <token>` header, if present, must resolve to an active user's personal export token; it wins over any session. A missing `Bearer ` prefix, an unrecognized/malformed/revoked token, or an inactive owner all return `401` — even when a valid session cookie is also present.
+2. Without that header, an active authenticated session is accepted (same cookie as every other page).
+3. Otherwise: `401 {"errors": {"detail": "..."}}` with no login redirect.
+
+Query parameters never authenticate a request or select an owner.
+
+**Date**: `{date}` is either the literal `today` or a strict `YYYY-MM-DD` calendar date — compact ISO (`20261010`), week dates (`2026-W35-6`), non-zero-padded forms, and impossible calendar dates (`2026-02-30`) all return `400`. `today` resolves through a **non-creating** read of the owner's saved IANA `time_zone` (falls back to UTC when no `UserScheduleSettings` row exists or the stored zone is invalid) — unlike the Schedule page's `today`, it never creates that row and never reserves the SQLite writer.
+
+**Format**: `?format=json` returns the structured report below; omitted or `?format=markdown` returns Markdown. Any other value returns `400`.
+
+Default success is `text/markdown; charset=utf-8`:
+
+```
+## day-forge · 2026-08-29
+
+blocks: 1/2 done
+
+- [x] 09:00 Gym (health) 1h
+- [ ] 14:00 Deep work 2h
+```
+
+`?format=json`:
+
+```json
+{
+  "date": "2026-08-29",
+  "blocks": [
+    {"title": "Gym", "start_time": "09:00", "end_time": "10:00", "category": "health", "is_completed": true, "sort_order": 0}
+  ],
+  "completed_count": 1,
+  "planned_count": 2,
+  "note": "",
+  "markdown": "## day-forge · 2026-08-29\n\n..."
+}
+```
+
+Export block objects carry only the formatter fields with canonical `HH:MM` times — no `id`, and no Undo's `restore_proof`. Counts reflect **current** blocks (including draft-status days), not a frozen analytics snapshot. An absent day returns `200` with an empty report (`0/0`, no blocks) and creates nothing. `note` is always `""`: the export dialog's note is transient, component-local UI state (`DailyExportDialog.vue`) — it is never substituted with `DailyReview.notes`, and this endpoint never persists one.
+
+Every response — success or error — sends `Cache-Control: private, no-store`.
+
+| Status | Cause |
+|---|---|
+| 400 | Invalid date or `format` value. |
+| 401 | Missing/malformed/invalid/revoked Bearer, or no session. |
+| 405 | Method other than GET. |
+
+### `GET` / `POST` / `DELETE /api/user/export-token/`
+
+Session-only management of the same credential — any `Authorization` header here is rejected with `401`, even with a valid session, so a leaked token alone can never inspect, mint, or revoke itself. One active token per user; the raw value is persisted nowhere — only its SHA-256 digest.
+
+- `GET` → `{"has_token": bool, "created_at": "<iso>"|null}`. Never the raw token or its digest.
+- `POST` → `201 {"token": "<raw, shown once>", "has_token": true, "created_at": "<iso>"}` on success. `409 {"errors": {...}, "code": "token_exists"}` if one already exists — revoke it first.
+- `DELETE` → `204`, including when no token exists (idempotent).
+
+CSRF, the frontend-release handshake and `X-Schedule-User` identity all apply normally (unlike the export read above). Every response is `Cache-Control: private, no-store`. Anonymous or Bearer-only requests return `401` JSON, never a login redirect.
 
 ---
 
