@@ -123,6 +123,16 @@ describe("CommandBar (chat dock)", () => {
     expect(submitTurn).not.toHaveBeenCalled()
   })
 
+  it("hides the recovery control while the request is still in flight", async () => {
+    hasPendingRequest.value = true
+    isProcessing.value = true
+    const bar = mountBar()
+    expect(bar.find('[data-testid="chat-recover"]').exists()).toBe(false)
+    isProcessing.value = false
+    await nextTick()
+    expect(bar.find('[data-testid="chat-recover"]').exists()).toBe(true)
+  })
+
   afterEach(() => {
     wrapper?.unmount()
     wrapper = null

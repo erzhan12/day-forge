@@ -277,9 +277,9 @@ onUnmounted(() => {
     />
     <p v-if="hasPendingRequest && !isProcessing" class="recovery-request">Previous request: {{ pendingRequestText }}</p>
     <button
-      v-if="hasPendingRequest"
+      v-if="hasPendingRequest && !isProcessing"
       type="button"
-      :disabled="isProcessing || Boolean(scheduleDisabled)"
+      :disabled="Boolean(scheduleDisabled)"
       data-testid="chat-recover"
       class="recover-btn"
       @click="recoverPending(props.pushUndo)"
