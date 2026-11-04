@@ -770,6 +770,31 @@ describe("CommandBar (chat dock)", () => {
     expect(btn.disabled).toBe(false)
   })
 
+  it("clear button stays enabled while a request is in flight (schedule is busy and a pending request is saved)", () => {
+    messages.value = [{ role: "user" as const, content: "hi", ask: null, explanation: null, ts: 1 }]
+    isProcessing.value = true
+    hasPendingRequest.value = true
+    const w = mount(CommandBar, {
+      props: { date: "2026-04-18", pushUndo: vi.fn(), variant: "dock" as const },
+      global: { provide: { [ScheduleDisabledKey]: ref(true) } },
+      attachTo: document.body,
+    })
+    wrapper = w
+    expect((w.get('[data-testid="chat-clear"]').element as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it("clear button is disabled for an unresolved request that is no longer in flight", () => {
+    messages.value = [{ role: "user" as const, content: "hi", ask: null, explanation: null, ts: 1 }]
+    hasPendingRequest.value = true
+    const w = mount(CommandBar, {
+      props: { date: "2026-04-18", pushUndo: vi.fn(), variant: "dock" as const },
+      global: { provide: { [ScheduleDisabledKey]: ref(false) } },
+      attachTo: document.body,
+    })
+    wrapper = w
+    expect((w.get('[data-testid="chat-clear"]').element as HTMLButtonElement).disabled).toBe(true)
+  })
+
   it("clear button is disabled when scheduleDisabled is ref(true)", () => {
     messages.value = [
       {
