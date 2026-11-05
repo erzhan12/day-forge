@@ -5,7 +5,7 @@ Thin, **stateless** [Model Context Protocol](https://modelcontextprotocol.io/) p
 - Public URL: `https://dayforge.habitreward.org/mcp` (Streamable HTTP, JSON responses, stateless sessions).
 - Health: `GET /mcp/health` → `{"status":"ok"}` (public, no auth).
 - Package: top-level `mcp_server/` (never name it `mcp/` — that shadows the SDK).
-- Upstream: compose-internal `http://web:8006` with `Host: dayforge.habitreward.org` and `X-Forwarded-Proto: https` (same trick as the web healthcheck). Override with `DAYFORGE_API_BASE` for local Inspector against the public site.
+- Upstream: compose-internal `http://web:8006` with `Host: dayforge.habitreward.org` and `X-Forwarded-Proto: https` (same trick as the web healthcheck). Override with `DAYFORGE_API_BASE` (or alias `DAYFORGE_API_URL`) for local Inspector against the public site.
 
 ## Tools
 

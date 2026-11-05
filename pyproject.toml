@@ -30,6 +30,7 @@ dev = [
 mcp = [
     "mcp>=2.3,<3",
     "httpx>=0.27",
+    "uvicorn[standard]>=0.29",
 ]
 mcp-dev = [
     "pytest>=8.0",
