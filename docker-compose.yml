@@ -30,3 +30,17 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+
+  mcp:
+    build:
+      context: .
+      dockerfile: deployment/docker/Dockerfile.mcp
+    ports:
+      - "8007:8007"
+    environment:
+      - DAYFORGE_API_BASE=http://web:8006
+      - DAYFORGE_API_HOST=dayforge.habitreward.org
+      # Local Inspector hits localhost:8007; allow both public Host and local.
+      - MCP_ALLOWED_HOSTS=dayforge.habitreward.org,localhost,localhost:*,127.0.0.1,127.0.0.1:*
+    depends_on:
+      - web

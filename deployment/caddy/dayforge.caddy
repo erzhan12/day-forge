@@ -1,11 +1,19 @@
 # Add this block to habit_reward's central Caddyfile, then reload Caddy.
 # day-forge serves its own static via WhiteNoise, so no file_server here.
+# MCP (feature 0089) lives at /mcp* on the same host; wrap both upstreams in
+# `handle` blocks so they do not both match.
 dayforge.habitreward.org {
 	encode zstd gzip
 
-	# Django trusts this via SECURE_PROXY_SSL_HEADER (settings.py).
-	reverse_proxy host.docker.internal:8006 {
-		header_up X-Forwarded-Proto https
+	handle /mcp* {
+		reverse_proxy host.docker.internal:8007
+	}
+
+	handle {
+		# Django trusts this via SECURE_PROXY_SSL_HEADER (settings.py).
+		reverse_proxy host.docker.internal:8006 {
+			header_up X-Forwarded-Proto https
+		}
 	}
 
 	header {
