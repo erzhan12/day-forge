@@ -16,6 +16,7 @@ concurrency:
 
 env:
   IMAGE: ghcr.io/${{ github.repository_owner }}/day-forge
+  IMAGE_MCP: ghcr.io/${{ github.repository_owner }}/day-forge-mcp
 
 jobs:
   test:
@@ -51,7 +52,7 @@ jobs:
         id: meta
         run: echo "tag=${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
 
-      - name: Build and push
+      - name: Build and push web
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7.4.0
         with:
           context: .
@@ -62,8 +63,20 @@ jobs:
           tags: |
             ${{ env.IMAGE }}:latest
             ${{ env.IMAGE }}:${{ steps.meta.outputs.tag }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=day-forge-web
+          cache-to: type=gha,mode=max,scope=day-forge-web
+
+      - name: Build and push MCP
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7.4.0
+        with:
+          context: .
+          file: deployment/docker/Dockerfile.mcp
+          push: true
+          tags: |
+            ${{ env.IMAGE_MCP }}:latest
+            ${{ env.IMAGE_MCP }}:${{ steps.meta.outputs.tag }}
+          cache-from: type=gha,scope=day-forge-mcp
+          cache-to: type=gha,mode=max,scope=day-forge-mcp
 
   deploy:
     needs: build-and-push
@@ -106,6 +119,7 @@ jobs:
           SSH_TARGET: ${{ secrets.SSH_USER }}@${{ secrets.SERVER_HOST }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
           IMAGE_REF: ${{ env.IMAGE }}:${{ needs.build-and-push.outputs.image_tag }}
+          IMAGE_MCP_REF: ${{ env.IMAGE_MCP }}:${{ needs.build-and-push.outputs.image_tag }}
           DJANGO_SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY }}
           ALLOWED_HOSTS: ${{ secrets.ALLOWED_HOSTS }}
           CSRF_TRUSTED_ORIGINS: ${{ secrets.CSRF_TRUSTED_ORIGINS }}
@@ -187,6 +201,8 @@ jobs:
               dotenv_line("DJANGO_SUPERUSER_EMAIL", require("DJANGO_SUPERUSER_EMAIL")),
               dotenv_line("DJANGO_SUPERUSER_PASSWORD", require("DJANGO_SUPERUSER_PASSWORD")),
               dotenv_line("DOCKER_IMAGE", require("IMAGE_REF")),
+              # MCP companion image (feature 0089). Wholesale .env rewrite — omit = erase.
+              dotenv_line("DOCKER_IMAGE_MCP", require("IMAGE_MCP_REF")),
           ]
 
           # Optional: unset -> settings.py default (10s). Set to 0 to keep
@@ -216,9 +232,11 @@ jobs:
           cd "$DEPLOY_PATH"
           echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
           export DOCKER_IMAGE="$IMAGE_REF"
+          export DOCKER_IMAGE_MCP="$IMAGE_MCP_REF"
           docker compose pull
           docker compose up -d --remove-orphans
           bash ./prune_deployment_images.sh "\$DOCKER_IMAGE" || echo "image retention cleanup failed (non-fatal)"
+          bash ./prune_deployment_images.sh "\$DOCKER_IMAGE_MCP" || echo "MCP image retention cleanup failed (non-fatal)"
           docker image prune -f || echo "dangling image prune failed (non-fatal)"
           EOF
 
@@ -234,7 +252,17 @@ jobs:
           for i in $(seq 1 5); do
             code=$(curl -s -o /dev/null -w "%{http_code}" https://dayforge.habitreward.org/accounts/login/ || true)
             echo "attempt $i: HTTP $code"
-            if [ "$code" = "200" ]; then exit 0; fi
+            if [ "$code" = "200" ]; then break; fi
+            if [ "$i" = "5" ]; then echo "health check failed"; exit 1; fi
             sleep 10
           done
-          echo "health check failed"; exit 1
+
+      - name: Probe MCP health endpoint
+        run: |
+          for i in $(seq 1 5); do
+            body=$(curl -fsS --max-time 5 https://dayforge.habitreward.org/mcp/health || true)
+            echo "attempt $i: $body"
+            if [ "$body" = '{"status":"ok"}' ]; then exit 0; fi
+            sleep 10
+          done
+          echo "MCP health check failed"; exit 1

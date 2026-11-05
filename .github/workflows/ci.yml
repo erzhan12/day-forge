@@ -49,12 +49,19 @@ jobs:
       # Run lint before pytest to fail early. Deployment's build-and-push
       # job waits for this shared validation job.
       - name: Run backend lint
-        run: uv run ruff check backend/
+        run: uv run ruff check backend/ mcp_server/
 
       - name: Run backend tests
         # AI rate-limit tests assume LocMemCache (conftest pins it); leave
         # LLM_API_KEY unset so ai.E001 does not require Redis in CI.
         run: uv run pytest backend/tests/ -q
+
+      - name: Install MCP deps
+        run: uv sync --frozen --group mcp --group mcp-dev
+
+      - name: Run MCP tests
+        # Independent of Django (pytest-django would try to boot settings).
+        run: uv run --group mcp --group mcp-dev pytest -p no:django mcp_server/tests -q
 
       - name: Test deployment image retention
         run: bash deployment/tests/test_image_retention.sh
