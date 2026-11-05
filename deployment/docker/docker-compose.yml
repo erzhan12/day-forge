@@ -62,3 +62,39 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+
+  mcp:
+    # Companion image for the Streamable HTTP MCP proxy (feature 0089 / issue #290).
+    # CI writes DOCKER_IMAGE_MCP into .env wholesale alongside DOCKER_IMAGE — omit = erase.
+    image: ${DOCKER_IMAGE_MCP:?Set DOCKER_IMAGE_MCP in .env — CI writes ghcr.io/<owner>/day-forge-mcp:<sha>}
+    container_name: day_forge_mcp
+    restart: unless-stopped
+    # Stateless proxy: idle footprint is tiny; 128m leaves headroom for concurrent calls.
+    mem_limit: 128m
+    memswap_limit: 256m
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+    # Published on 0.0.0.0:8007 so habit_reward's central Caddy reaches it via
+    # host.docker.internal:8007 (same bridge pattern as web:8006). Pair with the
+    # DOCKER-USER iptables rules in deployment/README.md §3 for port 8007.
+    ports:
+      - "8007:8007"
+    environment:
+      DAYFORGE_API_BASE: http://web:8006
+      DAYFORGE_API_HOST: dayforge.habitreward.org
+      MCP_ALLOWED_HOSTS: dayforge.habitreward.org
+      MCP_ALLOWED_ORIGINS: https://claude.ai,https://www.claude.ai,https://dayforge.habitreward.org
+      MCP_PORT: "8007"
+    depends_on:
+      web:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8007/mcp/health', timeout=4)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
