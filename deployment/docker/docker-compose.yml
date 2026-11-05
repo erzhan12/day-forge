@@ -77,22 +77,22 @@ services:
       options:
         max-size: "5m"
         max-file: "3"
-    # Published on 0.0.0.0:8007 so habit_reward's central Caddy reaches it via
-    # host.docker.internal:8007 (same bridge pattern as web:8006). Pair with the
-    # DOCKER-USER iptables rules in deployment/README.md §3 for port 8007.
+    # Published on 0.0.0.0:8009 so habit_reward's central Caddy reaches it via
+    # host.docker.internal:8009 (same bridge pattern as web:8006). Pair with the
+    # DOCKER-USER iptables rules in deployment/README.md §3 for port 8009.
     ports:
-      - "8007:8007"
+      - "8009:8009"
     environment:
       DAYFORGE_API_BASE: http://web:8006
       DAYFORGE_API_HOST: dayforge.habitreward.org
       MCP_ALLOWED_HOSTS: dayforge.habitreward.org
       MCP_ALLOWED_ORIGINS: https://claude.ai,https://www.claude.ai,https://dayforge.habitreward.org
-      MCP_PORT: "8007"
+      MCP_PORT: "8009"
     depends_on:
       web:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8007/mcp/health', timeout=4)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8009/mcp/health', timeout=4)"]
       interval: 30s
       timeout: 5s
       retries: 3
