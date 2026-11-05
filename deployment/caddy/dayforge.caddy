@@ -6,7 +6,7 @@ dayforge.habitreward.org {
 	encode zstd gzip
 
 	handle /mcp* {
-		reverse_proxy host.docker.internal:8007
+		reverse_proxy host.docker.internal:8009
 	}
 
 	handle {

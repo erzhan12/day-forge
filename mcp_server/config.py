@@ -35,7 +35,7 @@ def request_timeout() -> float:
 
 
 def mcp_port() -> int:
-    value = int(os.environ.get("MCP_PORT", "8007"))
+    value = int(os.environ.get("MCP_PORT", "8009"))
     if not 1 <= value <= 65535:
         raise ValueError(f"MCP_PORT must be 1–65535, got {value}")
     return value

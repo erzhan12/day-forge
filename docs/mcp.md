@@ -68,8 +68,8 @@ uv sync --group mcp --group mcp-dev
 # set an explicit base — public HTTPS, or local Django with DAYFORGE_API_HOST=localhost:
 export DAYFORGE_API_BASE=https://dayforge.habitreward.org
 # export DAYFORGE_API_BASE=http://127.0.0.1:8006 DAYFORGE_API_HOST=localhost
-uv run --group mcp python -m mcp_server   # :8007
+uv run --group mcp python -m mcp_server   # :8009
 uv run --group mcp --group mcp-dev pytest -p no:django mcp_server/tests -q
 ```
 
-Or `docker compose up` (dev compose builds `deployment/docker/Dockerfile.mcp` and publishes `8007`).
+Or `docker compose up` (dev compose builds `deployment/docker/Dockerfile.mcp` and publishes `8009`).
