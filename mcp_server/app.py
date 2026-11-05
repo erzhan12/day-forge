@@ -52,7 +52,8 @@ async def get_daily_report(
     """
     if date != "today" and not DATE_RE.fullmatch(date):
         raise ToolError("date must be 'today' or YYYY-MM-DD")
-    request = ctx.request_context.request
+    request_context = ctx.request_context
+    request = request_context.request if request_context is not None else None
     authorization = request.headers.get("authorization") if request is not None else None
     if not authorization:
         raise ToolError("missing Authorization header")
@@ -78,6 +79,7 @@ async def get_daily_report(
 
 def build_app():
     """Build the Streamable HTTP ASGI app. Call once per process (session manager)."""
+    config.request_timeout()  # fail loud at startup on a bad MCP_REQUEST_TIMEOUT
     return server.streamable_http_app(
         streamable_http_path="/mcp",
         json_response=True,

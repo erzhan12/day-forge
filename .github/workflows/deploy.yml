@@ -263,6 +263,6 @@ jobs:
             body=$(curl -fsS --max-time 5 https://dayforge.habitreward.org/mcp/health || true)
             echo "attempt $i: $body"
             if [ "$body" = '{"status":"ok"}' ]; then exit 0; fi
+            if [ "$i" = "5" ]; then echo "MCP health check failed"; exit 1; fi
             sleep 10
           done
-          echo "MCP health check failed"; exit 1
