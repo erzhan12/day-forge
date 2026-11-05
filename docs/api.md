@@ -759,6 +759,8 @@ Compatibility route for an existing review ID. It uses the same validation and l
 
 ## Daily export — feature 0088
 
+LLM hosts that need the same report over the Model Context Protocol should use the MCP connector documented in [mcp.md](mcp.md) (feature 0089) instead of calling this endpoint directly.
+
 A personal, read-only Markdown/JSON export of one day's schedule, plus session-only management of the credential that can authenticate it. Token-management writes still use the ordinary schedule mutation contract where applicable (CSRF, frontend-release and `X-Schedule-User` checks); the export read does not, since it accepts Bearer auth instead of a session.
 
 ### `GET /api/export/daily/{date}/`
