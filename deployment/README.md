@@ -420,7 +420,7 @@ connection.
 
 The runner starts uvicorn with the image entrypoint, real Redis, a shared
 staticfiles directory, and the production 250 MiB web memory limit. Only the
-proxy is published on `127.0.0.1:8007`. The web and Redis containers use an
+proxy is published on `127.0.0.1:8009`. The web and Redis containers use an
 internal network, AI and polling are disabled, and integration keys are dummy
 values. The localhost HTTP proxy supplies the HTTPS-forwarding header so the
 application keeps its production cookie and redirect settings. This does not
