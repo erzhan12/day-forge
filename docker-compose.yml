@@ -39,8 +39,10 @@ services:
       - "8007:8007"
     environment:
       - DAYFORGE_API_BASE=http://web:8006
-      - DAYFORGE_API_HOST=dayforge.habitreward.org
+      # DEBUG=1 Django only allows localhost/127.0.0.1 — not the public Host.
+      - DAYFORGE_API_HOST=localhost
       # Local Inspector hits localhost:8007; allow both public Host and local.
       - MCP_ALLOWED_HOSTS=dayforge.habitreward.org,localhost,localhost:*,127.0.0.1,127.0.0.1:*
+      - MCP_ALLOWED_ORIGINS=https://claude.ai,https://www.claude.ai,http://localhost,http://localhost:*,http://127.0.0.1,http://127.0.0.1:*
     depends_on:
       - web

@@ -86,6 +86,7 @@ services:
       DAYFORGE_API_BASE: http://web:8006
       DAYFORGE_API_HOST: dayforge.habitreward.org
       MCP_ALLOWED_HOSTS: dayforge.habitreward.org
+      MCP_ALLOWED_ORIGINS: https://claude.ai,https://www.claude.ai,https://dayforge.habitreward.org
       MCP_PORT: "8007"
     depends_on:
       web:

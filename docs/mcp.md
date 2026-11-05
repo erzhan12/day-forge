@@ -64,7 +64,10 @@ Schedule text flows **client → MCP proxy → export API** only. Day Forge neve
 
 ```bash
 uv sync --group mcp --group mcp-dev
-export DAYFORGE_API_BASE=https://dayforge.habitreward.org   # or http://localhost:8006 with Host headers via defaults
+# Default DAYFORGE_API_BASE is http://web:8006 (compose-internal). Outside compose,
+# set an explicit base — public HTTPS, or local Django with DAYFORGE_API_HOST=localhost:
+export DAYFORGE_API_BASE=https://dayforge.habitreward.org
+# export DAYFORGE_API_BASE=http://127.0.0.1:8006 DAYFORGE_API_HOST=localhost
 uv run --group mcp python -m mcp_server   # :8007
 uv run --group mcp --group mcp-dev pytest -p no:django mcp_server/tests -q
 ```

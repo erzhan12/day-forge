@@ -27,11 +27,20 @@ def api_host() -> str:
 
 
 def request_timeout() -> float:
-    return float(os.environ.get("MCP_REQUEST_TIMEOUT", "10"))
+    raw = os.environ.get("MCP_REQUEST_TIMEOUT", "10")
+    value = float(raw)
+    if value <= 0:
+        raise ValueError("MCP_REQUEST_TIMEOUT must be > 0")
+    return value
 
 
 def mcp_port() -> int:
     return int(os.environ.get("MCP_PORT", "8007"))
+
+
+def _csv_env(name: str, default: str) -> list[str]:
+    raw = os.environ.get(name, default)
+    return [part.strip() for part in raw.split(",") if part.strip()]
 
 
 def allowed_hosts() -> list[str]:
@@ -40,8 +49,20 @@ def allowed_hosts() -> list[str]:
     Local default covers Inspector and Starlette's TestClient host.
     Production compose sets ``dayforge.habitreward.org`` only.
     """
-    raw = os.environ.get(
+    return _csv_env(
         "MCP_ALLOWED_HOSTS",
         "localhost,localhost:*,127.0.0.1,127.0.0.1:*,testserver",
     )
-    return [part.strip() for part in raw.split(",") if part.strip()]
+
+
+def allowed_origins() -> list[str]:
+    """DNS-rebinding allowlist for browser ``Origin`` headers.
+
+    Requests without ``Origin`` (Claude Code, curl) always pass. Empty list
+    would 403 every browser client, so defaults cover claude.ai + the site.
+    """
+    return _csv_env(
+        "MCP_ALLOWED_ORIGINS",
+        "https://claude.ai,https://www.claude.ai,https://dayforge.habitreward.org,"
+        "http://localhost,http://localhost:*,http://127.0.0.1,http://127.0.0.1:*",
+    )

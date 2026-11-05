@@ -85,5 +85,6 @@ def build_app():
         transport_security=TransportSecuritySettings(
             enable_dns_rebinding_protection=True,
             allowed_hosts=config.allowed_hosts(),
+            allowed_origins=config.allowed_origins(),
         ),
     )

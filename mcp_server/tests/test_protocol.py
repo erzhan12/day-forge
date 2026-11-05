@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from mcp_server.tests.conftest import call_tool, list_tools, tool_text
+from mcp_server.tests.conftest import ACCEPT, call_tool, list_tools, tool_text
 
 
 def test_health_endpoint(client):
@@ -28,3 +28,29 @@ def test_tools_list_includes_get_daily_report_with_format_enum(client):
     assert props["format"].get("enum") == ["markdown", "json"]
     # Context must not leak into the advertised schema.
     assert "ctx" not in props
+
+
+def test_browser_origin_accepted(client):
+    resp = client.post(
+        "/mcp",
+        headers={
+            "Content-Type": "application/json",
+            "Accept": ACCEPT,
+            "Origin": "https://claude.ai",
+        },
+        json={"jsonrpc": "2.0", "id": 9, "method": "tools/list", "params": {}},
+    )
+    assert resp.status_code == 200, resp.text
+
+
+def test_unknown_origin_rejected(client):
+    resp = client.post(
+        "/mcp",
+        headers={
+            "Content-Type": "application/json",
+            "Accept": ACCEPT,
+            "Origin": "https://evil.example",
+        },
+        json={"jsonrpc": "2.0", "id": 10, "method": "tools/list", "params": {}},
+    )
+    assert resp.status_code == 403
