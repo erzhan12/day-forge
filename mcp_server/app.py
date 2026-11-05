@@ -1,14 +1,18 @@
-import os
+"""Stateless MCP proxy in front of the Day Forge daily export API."""
+
+from __future__ import annotations
+
 import re
 from typing import Literal
 
 import httpx
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
+from mcp.server.transport_security import TransportSecuritySettings
+from starlette.requests import Request
+from starlette.responses import JSONResponse, Response
 
-DAYFORGE_API_URL = os.environ.get("DAYFORGE_API_URL", "https://dayforge.habitreward.org").rstrip(
-    "/"
-)
+from mcp_server import config
 
 # fullmatch with [0-9]: `$` would accept a trailing newline and `\d` non-ASCII digits.
 DATE_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
@@ -24,6 +28,12 @@ STATUS_ERRORS = {
 server = MCPServer("day-forge")
 
 
+@server.custom_route("/mcp/health", methods=["GET"])
+async def health(_request: Request) -> Response:
+    """Public liveness probe for compose/Caddy. Body stays minimal on purpose."""
+    return JSONResponse({"status": "ok"})
+
+
 @server.tool()
 def ping() -> str:
     """Health check: returns 'pong'."""
@@ -37,6 +47,8 @@ async def get_daily_report(
     """Get the user's Day Forge daily schedule report.
 
     date: "today" or a YYYY-MM-DD date. format: "markdown" or "json".
+    Requires an ``Authorization: Bearer <export token>`` request header;
+    the token is forwarded unchanged to Day Forge and never stored.
     """
     if date != "today" and not DATE_RE.fullmatch(date):
         raise ToolError("date must be 'today' or YYYY-MM-DD")
@@ -45,12 +57,17 @@ async def get_daily_report(
     if not authorization:
         raise ToolError("missing Authorization header")
     params = {"format": "json"} if format == "json" else None
+    headers = {
+        "Authorization": authorization,
+        "Host": config.api_host(),
+        "X-Forwarded-Proto": "https",
+    }
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
+        async with httpx.AsyncClient(timeout=config.request_timeout()) as client:
             resp = await client.get(
-                f"{DAYFORGE_API_URL}/api/export/daily/{date}/",
+                f"{config.api_base()}/api/export/daily/{date}/",
                 params=params,
-                headers={"Authorization": authorization},
+                headers=headers,
             )
     except httpx.HTTPError as exc:
         raise ToolError("day-forge is unreachable") from exc
@@ -60,6 +77,13 @@ async def get_daily_report(
 
 
 def build_app():
+    """Build the Streamable HTTP ASGI app. Call once per process (session manager)."""
     return server.streamable_http_app(
-        streamable_http_path="/mcp", json_response=True, stateless_http=True
+        streamable_http_path="/mcp",
+        json_response=True,
+        stateless_http=True,
+        transport_security=TransportSecuritySettings(
+            enable_dns_rebinding_protection=True,
+            allowed_hosts=config.allowed_hosts(),
+        ),
     )
