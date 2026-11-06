@@ -82,19 +82,23 @@ try {
 
   // Stub both /chat/ endpoints with date-specific delays.
   await page.route(/\/api\/ai\/schedules\/[^/]+\/chat\/$/, async (route) => {
-    const m = route.request().url().match(/\/api\/ai\/schedules\/([^/]+)\/chat\/$/)
+    const request = route.request()
+    const m = request.url().match(/\/api\/ai\/schedules\/([^/]+)\/chat\/$/)
     const date = m?.[1]
     const isDayA = date === DAY_A
     const delay = isDayA ? DELAY_A_MS : DELAY_B_MS
     const block = isDayA
       ? { id: 7777, title: "day-A focus block", start_time: "10:00", end_time: "10:30", category: "other", is_completed: false, sort_order: 0 }
       : { id: 8888, title: "day-B coffee break", start_time: "11:00", end_time: "11:15", category: "personal", is_completed: false, sort_order: 0 }
-    const revision = route.request().postDataJSON().expected_revision + 1
+    const { request_id, expected_revision } = request.postDataJSON()
+    const revision = expected_revision + 1
     await new Promise((r) => setTimeout(r, delay))
     await route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
+        request_id,
+        request_completed: true,
         revision,
         schedule: { id: 1, date, status: "active", revision },
         blocks: [block],

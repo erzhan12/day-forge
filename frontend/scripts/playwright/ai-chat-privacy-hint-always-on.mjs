@@ -20,10 +20,8 @@
 //        - hint still visible
 //   5. State D — full page reload:
 //        - hint visible immediately, before any input
-//   6. Style check: 11px italic, centred, color #6b7280
-//      (rgb(107, 114, 128)). The "one line" sub-bullet is left for the
-//      manual eye — DPI/accessibility magnification can break it on
-//      individual machines and the test plan acknowledges that.
+//   6. Style check: 11px, italic, centred. Colour varies by theme.
+//      Check single-line rendering manually because browser zoom can change it.
 //
 // Run from frontend/:
 //   node scripts/playwright/ai-chat-privacy-hint-always-on.mjs
@@ -73,12 +71,15 @@ try {
   // irrelevant for Test 6 — we only need the response to be 200 + valid
   // JSON so `useChat` appends the assistant bubble and the thread renders.
   await page.route(/\/api\/ai\/schedules\/[^/]+\/chat\/$/, async (route) => {
-    const revision = route.request().postDataJSON().expected_revision + 1
+    const request = route.request().postDataJSON()
+    const revision = request.expected_revision + 1
     const date = route.request().url().match(/\/schedules\/([^/]+)\/chat\/$/)[1]
     return route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
+        request_id: request.request_id,
+        request_completed: true,
         revision,
         schedule: { id: 1, date, status: "active", revision },
         blocks: [
@@ -124,13 +125,12 @@ try {
   }
 
   // ─── Style check ───────────────────────────────────────────────────
-  console.log("→ Style check: 11px italic centred #6b7280…")
+  console.log("→ Style check: 11px, italic, centred…")
   const styles = await privacyHint.evaluate((el) => {
     const s = getComputedStyle(el)
     return {
       fontSize: s.fontSize,
       fontStyle: s.fontStyle,
-      color: s.color,
       textAlign: s.textAlign,
     }
   })
@@ -139,9 +139,6 @@ try {
   }
   if (styles.fontStyle !== "italic") {
     fail(`style: font-style expected italic, got ${styles.fontStyle}`)
-  }
-  if (styles.color !== "rgb(107, 114, 128)") {
-    fail(`style: color expected rgb(107, 114, 128) [#6b7280], got ${styles.color}`)
   }
   if (styles.textAlign !== "center") {
     fail(`style: text-align expected center, got ${styles.textAlign}`)
@@ -206,7 +203,6 @@ try {
   console.log("\n=== Computed styles on privacy hint ===")
   console.log(`  font-size: ${styles.fontSize}`)
   console.log(`  font-style: ${styles.fontStyle}`)
-  console.log(`  color: ${styles.color}`)
   console.log(`  text-align: ${styles.textAlign}`)
 
   console.log("\n=== Verdict ===")
