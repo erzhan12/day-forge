@@ -19,7 +19,7 @@
 //   * Escape clears the input
 //   * `/` (when focus is outside form fields) moves focus into the textarea
 
-import { computed, inject, nextTick, onMounted, onUnmounted, ref, watch } from "vue"
+import { computed, inject, nextTick, onMounted, onUnmounted, ref, useId, watch } from "vue"
 import { ScheduleDisabledKey } from "../composables/scheduleContext"
 import type { UndoAction } from "../types"
 import { useChat } from "../composables/useChat"
@@ -73,6 +73,7 @@ const inputDisabled = computed(
   () => isProcessing.value || Boolean(hasPendingRequest?.value) || Boolean(scheduleDisabled?.value),
 )
 
+const confirmDescId = useId()
 const confirmingDiscard = ref(false)
 const discardBtn = ref<HTMLButtonElement | null>(null)
 const keepBtn = ref<HTMLButtonElement | null>(null)
@@ -315,8 +316,8 @@ onUnmounted(() => {
       class="recover-btn"
       @click="askDiscard"
     >Discard request</button>
-    <div v-if="showDiscard && confirmingDiscard" class="discard-confirm" role="alertdialog" aria-label="Discard unconfirmed AI request" aria-describedby="discard-confirm-desc">
-      <p id="discard-confirm-desc" data-testid="chat-discard-warning">The original request may already have been applied. Check the schedule before retrying.</p>
+    <div v-if="showDiscard && confirmingDiscard" class="discard-confirm" role="alertdialog" aria-label="Discard unconfirmed AI request" :aria-describedby="confirmDescId">
+      <p :id="confirmDescId" data-testid="chat-discard-warning">The original request may already have been applied. Check the schedule before retrying.</p>
       <button type="button" ref="keepBtn" class="recover-btn" data-testid="chat-discard-cancel" @click="keepRequest">Keep</button>
       <button type="button" class="recover-btn" data-testid="chat-discard-confirm" @click="confirmDiscard">Discard anyway</button>
     </div>
