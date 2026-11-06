@@ -253,6 +253,8 @@ class TestChatRequestHTTP:
         assert len(chat_provider) == 1
         assert not TimeBlock.objects.exists()
         assert Schedule.objects.get().revision == 0
+        assert ChatRequest.objects.get().completed_at is not None
+        assert post(auth_client, body()).status_code == 200
 
     def test_receipt_storage_failure_rolls_back_schedule_then_can_recover(
         self, auth_client, monkeypatch, chat_provider
