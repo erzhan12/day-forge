@@ -19,7 +19,7 @@
 //   * Escape clears the input
 //   * `/` (when focus is outside form fields) moves focus into the textarea
 
-import { computed, inject, onMounted, onUnmounted, ref, watch } from "vue"
+import { computed, inject, nextTick, onMounted, onUnmounted, ref, watch } from "vue"
 import { ScheduleDisabledKey } from "../composables/scheduleContext"
 import type { UndoAction } from "../types"
 import { useChat } from "../composables/useChat"
@@ -59,6 +59,7 @@ const {
   pendingRequestText,
   cancelPendingIntent,
   hasPendingIntent,
+  discardPending,
 } = useChat()
 
 setActiveDate(props.date)
@@ -71,6 +72,27 @@ const scheduleDisabled = inject(ScheduleDisabledKey, null)
 const inputDisabled = computed(
   () => isProcessing.value || Boolean(hasPendingRequest?.value) || Boolean(scheduleDisabled?.value),
 )
+
+const confirmingDiscard = ref(false)
+const discardBtn = ref<HTMLButtonElement | null>(null)
+const keepBtn = ref<HTMLButtonElement | null>(null)
+const showDiscard = computed(() => Boolean(hasPendingRequest?.value) && !isProcessing.value)
+watch(showDiscard, (visible) => { if (!visible) confirmingDiscard.value = false })
+
+async function askDiscard() {
+  confirmingDiscard.value = true
+  await nextTick()
+  keepBtn.value?.focus()
+}
+async function keepRequest() {
+  confirmingDiscard.value = false
+  await nextTick()
+  discardBtn.value?.focus()
+}
+function confirmDiscard() {
+  confirmingDiscard.value = false
+  discardPending()
+}
 
 const input = draftInput
 const activeTheme = useActiveTheme()
@@ -286,6 +308,19 @@ onUnmounted(() => {
       title="Return the saved result, or finish the original request if needed."
     >Recover previous AI request</button>
     <button
+      v-if="showDiscard && !confirmingDiscard"
+      ref="discardBtn"
+      type="button"
+      data-testid="chat-discard"
+      class="recover-btn"
+      @click="askDiscard"
+    >Discard request</button>
+    <div v-if="showDiscard && confirmingDiscard" class="discard-confirm" role="alertdialog" aria-label="Discard unconfirmed AI request">
+      <p data-testid="chat-discard-warning">The original request may already have been applied. Check the schedule before retrying.</p>
+      <button type="button" ref="keepBtn" class="recover-btn" data-testid="chat-discard-cancel" @click="keepRequest">Keep</button>
+      <button type="button" class="recover-btn" data-testid="chat-discard-confirm" @click="confirmDiscard">Discard anyway</button>
+    </div>
+    <button
       v-if="hasPendingIntent"
       type="button"
       class="recover-btn"
@@ -355,6 +390,19 @@ onUnmounted(() => {
   background: var(--bg-panel);
   color: var(--text-primary);
   cursor: pointer;
+}
+
+.discard-confirm {
+  margin: 8px 0;
+  font-size: 12px;
+}
+
+.discard-confirm p {
+  margin: 0 0 6px;
+}
+
+.discard-confirm .recover-btn + .recover-btn {
+  margin-left: 6px;
 }
 
 .recover-btn:disabled {

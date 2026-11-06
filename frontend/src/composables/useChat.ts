@@ -156,6 +156,14 @@ function uncertain(result: ApiResult): boolean {
     || result.status === undefined || result.status >= 500 || result.status < 300
 }
 
+/** Say why the outcome is still unknown, so "wait" reads differently from "broken". */
+function unconfirmedMessage(result: ApiResult): string {
+  const next = "Recover it before sending another turn, or discard it."
+  if (result.code === "request_in_progress") return `The previous AI request is still processing on the server. Try Recover again in a few seconds, or discard it.`
+  if (result.status === undefined) return `Network error: the previous AI result could not be confirmed. ${next}`
+  return `The server could not confirm the previous AI result. ${next}`
+}
+
 /** Share one owner's thread between the page, dock, and regenerate button. */
 export function useChat(explicitRevision?: ScheduleRevisionState) {
   const revision = useScheduleRevision(explicitRevision)
@@ -188,7 +196,7 @@ export function useChat(explicitRevision?: ScheduleRevisionState) {
   async function submitTurn(text: string, pushUndo: (a: UndoAction) => void): Promise<void> {
     restorePending()
     if (state.pendingRequest.value) {
-      lastError.value = "Recover the previous AI request before sending another turn."
+      lastError.value = "Recover the previous AI request, or discard it, before sending another turn."
       draftInput.value = text
       return
     }
@@ -199,6 +207,23 @@ export function useChat(explicitRevision?: ScheduleRevisionState) {
     restorePending()
     if (!state.pendingRequest.value) return
     await executeTurn("", pushUndo, true)
+  }
+
+  /**
+   * Explicit escape from an unconfirmed request. The original request may
+   * already have been applied, so this only forgets the local record: it
+   * never rewinds the schedule or adds an Undo entry, and the next turn
+   * gets a fresh request_id.
+   */
+  function discardPending(): void {
+    const pending = state.pendingRequest.value
+    if (!pending) return
+    // A late response from the abandoned request must not write to the thread.
+    state.latestRequestId += 1
+    removeChatRequest(pending)
+    state.pendingRequest.value = null
+    lastError.value = null
+    apiHealthy.value = true
   }
 
   async function cancelPendingIntent(pushUndo: (a: UndoAction) => void): Promise<void> {
@@ -372,7 +397,7 @@ export function useChat(explicitRevision?: ScheduleRevisionState) {
 
     if (uncertain(result) && state.pendingRequest.value) {
       apiHealthy.value = false
-      lastError.value = "The previous AI result is not confirmed. Recover it before sending another turn."
+      lastError.value = unconfirmedMessage(result)
       // No synthetic is_error bubble: the original write may have committed.
       return
     }
@@ -439,6 +464,7 @@ export function useChat(explicitRevision?: ScheduleRevisionState) {
     clearThread,
     submitTurn,
     recoverPending,
+    discardPending,
     cancelPendingIntent,
     hasPendingIntent: computed(() => state.pendingIntent.value !== null),
     hasPendingRequest: computed(() => state.pendingRequest.value !== null),

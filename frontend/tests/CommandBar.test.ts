@@ -12,6 +12,7 @@ const setActiveDate = vi.fn()
 const clearThread = vi.fn()
 const submitTurn = vi.fn()
 const recoverPending = vi.fn()
+const discardPending = vi.fn()
 const cancelPendingIntent = vi.fn()
 const hasPendingIntent = ref(false)
 const hasPendingRequest = ref(false)
@@ -57,6 +58,7 @@ vi.mock("../src/composables/useChat", () => ({
     clearThread,
     submitTurn,
     recoverPending,
+    discardPending,
     cancelPendingIntent,
     hasPendingIntent,
     hasPendingRequest,
@@ -121,6 +123,44 @@ describe("CommandBar (chat dock)", () => {
     await bar.get('[data-testid="chat-recover"]').trigger("click")
     expect(recoverPending).toHaveBeenCalledWith(bar.props("pushUndo"))
     expect(submitTurn).not.toHaveBeenCalled()
+  })
+
+  it("discards an unconfirmed request only after an explicit confirmation", async () => {
+    hasPendingRequest.value = true
+    const bar = mountBar()
+    expect(bar.find('[data-testid="chat-discard-confirm"]').exists()).toBe(false)
+    await bar.get('[data-testid="chat-discard"]').trigger("click")
+    expect(discardPending).not.toHaveBeenCalled()
+    expect(bar.get('[data-testid="chat-discard-warning"]').text()).toMatch(/already (have )?been applied/i)
+    await bar.get('[data-testid="chat-discard-confirm"]').trigger("click")
+    expect(discardPending).toHaveBeenCalledTimes(1)
+    hasPendingRequest.value = false
+    await nextTick()
+    expect(bar.find('[data-testid="chat-discard"]').exists()).toBe(false)
+    expect(bar.find('[data-testid="chat-discard-confirm"]').exists()).toBe(false)
+  })
+
+  it("keeps the request when the discard confirmation is cancelled", async () => {
+    hasPendingRequest.value = true
+    const bar = mountBar()
+    await bar.get('[data-testid="chat-discard"]').trigger("click")
+    await bar.get('[data-testid="chat-discard-cancel"]').trigger("click")
+    expect(discardPending).not.toHaveBeenCalled()
+    expect(bar.find('[data-testid="chat-discard-confirm"]').exists()).toBe(false)
+    expect(bar.find('[data-testid="chat-discard"]').exists()).toBe(true)
+    expect(document.activeElement).toBe(bar.get('[data-testid="chat-discard"]').element)
+  })
+
+  it("moves focus into the confirmation and hides discard while the request is in flight", async () => {
+    hasPendingRequest.value = true
+    const bar = mountBar()
+    await bar.get('[data-testid="chat-discard"]').trigger("click")
+    await nextTick()
+    expect(document.activeElement).toBe(bar.get('[data-testid="chat-discard-cancel"]').element)
+    isProcessing.value = true
+    await nextTick()
+    expect(bar.find('[data-testid="chat-discard"]').exists()).toBe(false)
+    expect(bar.find('[data-testid="chat-discard-confirm"]').exists()).toBe(false)
   })
 
   it("hides the recovery control while the request is still in flight", async () => {

@@ -202,3 +202,54 @@ describe("durable chat recovery", () => {
     expect(chat.hasPendingRequest.value).toBe(true)
   })
 })
+
+describe("discarding an unconfirmed request", () => {
+  it("drops the stored request without touching the schedule, adds no Undo, and mints a new ID for the next turn", async () => {
+    const { chat, state } = setup()
+    fetchMock.mockRejectedValue(new TypeError("offline"))
+    const pushUndo = vi.fn()
+    await chat.submitTurn("Add Smoke", pushUndo)
+    const original = sent()
+    expect(chat.hasPendingRequest.value).toBe(true)
+    expect(sessionStorage.length).toBe(1)
+    const revisionBefore = state.revision.value
+
+    chat.discardPending()
+
+    expect(chat.hasPendingRequest.value).toBe(false)
+    expect(sessionStorage.length).toBe(0)
+    expect(chat.lastError.value).toBeNull()
+    expect(state.revision.value).toBe(revisionBefore)
+    expect(pushUndo).not.toHaveBeenCalled()
+
+    fetchMock.mockReset()
+    fetchMock.mockImplementationOnce(() => success())
+    await chat.submitTurn("Add Smoke again", pushUndo)
+    expect(sent().request_id).not.toBe(original.request_id)
+  })
+
+  it("is a no-op when nothing is pending", () => {
+    const { chat } = setup()
+    chat.lastError.value = "unrelated"
+    chat.discardPending()
+    expect(chat.lastError.value).toBe("unrelated")
+  })
+
+  it.each([
+    { name: "still processing", responses: [new Response(JSON.stringify({ code: "request_in_progress" }), { status: 409 })], text: /still processing/i },
+    { name: "server cannot confirm", responses: [new Response("boom", { status: 500 })], text: /could not confirm/i },
+    { name: "network failure", responses: [new TypeError("offline")], text: /network/i },
+  ])("explains the last recovery outcome: $name", async ({ responses, text }) => {
+    const { chat } = setup()
+    fetchMock.mockRejectedValue(new TypeError("first"))
+    await chat.submitTurn("Add Smoke", vi.fn())
+    fetchMock.mockReset()
+    for (const r of responses) {
+      if (r instanceof Response) fetchMock.mockResolvedValue(r)
+      else fetchMock.mockRejectedValue(r)
+    }
+    await chat.recoverPending(vi.fn())
+    expect(chat.hasPendingRequest.value).toBe(true)
+    expect(chat.lastError.value).toMatch(text)
+  })
+})
