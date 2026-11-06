@@ -315,8 +315,8 @@ onUnmounted(() => {
       class="recover-btn"
       @click="askDiscard"
     >Discard request</button>
-    <div v-if="showDiscard && confirmingDiscard" class="discard-confirm" role="alertdialog" aria-label="Discard unconfirmed AI request">
-      <p data-testid="chat-discard-warning">The original request may already have been applied. Check the schedule before retrying.</p>
+    <div v-if="showDiscard && confirmingDiscard" class="discard-confirm" role="alertdialog" aria-label="Discard unconfirmed AI request" aria-describedby="discard-confirm-desc">
+      <p id="discard-confirm-desc" data-testid="chat-discard-warning">The original request may already have been applied. Check the schedule before retrying.</p>
       <button type="button" ref="keepBtn" class="recover-btn" data-testid="chat-discard-cancel" @click="keepRequest">Keep</button>
       <button type="button" class="recover-btn" data-testid="chat-discard-confirm" @click="confirmDiscard">Discard anyway</button>
     </div>
