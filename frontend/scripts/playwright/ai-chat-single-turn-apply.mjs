@@ -22,8 +22,7 @@
 //   3. Send a concrete apply prompt: "add 30-minute focus block at 10:00".
 //   4. Wire-level assertions:
 //        - exactly ONE POST /api/ai/schedules/<date>/chat/
-//        - request body shape: { messages: [{role:"user", content:string}] }
-//          with NO assistant role at this point
+//        - request contains exactly one user message and no assistant messages
 //        - response 200 with all four envelope keys
 //          {blocks, explanation, ask, applied}
 //        - applied=true, ask=null, blocks is an array
@@ -33,7 +32,7 @@
 //   6. DB assertions:
 //        - schedule status flipped draft → active
 //        - ≥1 TimeBlock now exists for the seeded schedule
-//        - latest AIInteraction row: kind=command, success=True,
+//        - latest AIInteraction row: kind=chat, success=True,
 //          actions_json non-empty, user_command starts with the prompt
 //        - ai_response decodes to JSON with keys
 //          {transcript_sha256, turn_count, raw} and turn_count==1
@@ -300,8 +299,8 @@ try {
   if ("NO_AI_ROW" in dbMap) {
     fail("no AIInteraction row created for this schedule")
   } else {
-    if (dbMap.KIND !== "command") {
-      fail(`AIInteraction.kind expected "command", got ${JSON.stringify(dbMap.KIND)}`)
+    if (dbMap.KIND !== "chat") {
+      fail(`AIInteraction.kind expected "chat", got ${JSON.stringify(dbMap.KIND)}`)
     }
     if (dbMap.SUCCESS !== "True") {
       fail(`AIInteraction.success expected True, got ${JSON.stringify(dbMap.SUCCESS)}`)
