@@ -210,6 +210,49 @@ class TestChatRequestHTTP:
         assert post(auth_client, body()).status_code == 200
         assert len(chat_provider) == 1
 
+    def test_unexpected_provider_exception_is_terminal_without_leaking_detail(
+        self, auth_client, monkeypatch, chat_provider
+    ):
+        payload = body()
+        calls = []
+
+        async def crash(*args):
+            calls.append(args)
+            raise RuntimeError("secret internal detail")
+
+        with monkeypatch.context() as mp:
+            mp.setattr("ai.views.run_chat", crash)
+            first = post(auth_client, payload)
+            second = post(auth_client, payload)
+        assert first.status_code == 500
+        assert first.json()["request_completed"] is True
+        assert "secret internal detail" not in first.content.decode()
+        assert first.content == second.content
+        assert len(calls) == 1
+        assert ChatRequest.objects.get().completed_at is not None
+        assert not TimeBlock.objects.exists()
+        assert post(auth_client, body()).status_code == 200
+
+    def test_unexpected_exception_while_applying_result_is_terminal_and_rolled_back(
+        self, auth_client, monkeypatch, chat_provider
+    ):
+        payload = body()
+
+        def crash(*args, **kwargs):
+            raise RuntimeError("secret apply detail")
+
+        with monkeypatch.context() as mp:
+            mp.setattr("ai.views._finish_chat_sync", crash)
+            first = post(auth_client, payload)
+            second = post(auth_client, payload)
+        assert first.status_code == 500
+        assert first.json()["request_completed"] is True
+        assert "secret apply detail" not in first.content.decode()
+        assert first.content == second.content
+        assert len(chat_provider) == 1
+        assert not TimeBlock.objects.exists()
+        assert Schedule.objects.get().revision == 0
+
     def test_receipt_storage_failure_rolls_back_schedule_then_can_recover(
         self, auth_client, monkeypatch, chat_provider
     ):

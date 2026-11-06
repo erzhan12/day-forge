@@ -301,7 +301,7 @@ def test_scope_error_after_apply_rolls_back_schedule_and_stores_receipt(
 
 
 @pytest.mark.parametrize("error_type", [ValueError, TypeError])
-def test_executor_programming_error_propagates_and_rolls_back(
+def test_executor_programming_error_is_terminal_500_and_rolls_back(
     auth_client, user, monkeypatch, error_type
 ):
     from ai import views
@@ -316,13 +316,16 @@ def test_executor_programming_error_propagates_and_rolls_back(
         raise error_type("executor programming error")
 
     monkeypatch.setattr(views, "_finish_chat_sync", fail_after_apply)
-    with pytest.raises(error_type, match="executor programming error"):
-        send(auth_client, user, "14:00", ref)
+    response, sent_body = send(auth_client, user, "14:00", ref)
+    assert response.status_code == 500
+    assert response.json()["request_completed"] is True
+    assert "executor programming error" not in response.content.decode()
     assert not TimeBlock.objects.exists()
     assert Schedule.objects.get().revision == 0
     row = PendingIntent.objects.get()
     assert row.state == "open" and row.version == ref["version"]
-    assert ChatRequest.objects.filter(completed_at__isnull=True).count() == 1
+    receipt = ChatRequest.objects.get(request_id=sent_body["request_id"])
+    assert receipt.response_status == 500 and receipt.completed_at is not None
 
 
 @pytest.mark.parametrize(

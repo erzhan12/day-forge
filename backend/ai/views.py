@@ -39,7 +39,13 @@ from templates_mgr.preferences import get_user_preferences
 
 from ai import pending_intents
 from ai.category_resolution import UnresolvedCategory
-from ai.chat_requests import ChatClaim, claim_request, finish_request, request_identity
+from ai.chat_requests import (
+    ChatClaim,
+    claim_request,
+    finish_request,
+    request_identity,
+    unexpected_error_response,
+)
 from ai.free_slot import GRID_MINUTES
 from ai.models import AIInteraction
 from ai.mutation_planner import (
@@ -1176,6 +1182,11 @@ async def ai_chat(request, date):
         # (see ``_log_chat_failure``), never sent to the client.
         detail = AI_PARSE_ERROR_DETAIL if isinstance(e, AIParseError) else str(e)
         return await terminal(JsonResponse({"errors": {"detail": detail}}, status=status))
+    except Exception:
+        # Not an AIError: store a terminal receipt (see unexpected_error_response)
+        # instead of leaving a lease with no outcome that locks the client.
+        logger.exception("Unexpected error in AI chat provider call")
+        return await terminal(unexpected_error_response())
 
     audit_response = _build_chat_audit_response(
         messages,

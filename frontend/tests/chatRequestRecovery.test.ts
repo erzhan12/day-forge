@@ -121,6 +121,16 @@ describe("durable chat recovery", () => {
     expect(sent(1).messages[1].is_error).toBe(true)
   })
 
+  it("treats a stored unexpected-error 500 receipt as final, unlike a bare 500", async () => {
+    const { chat } = setup()
+    fetchMock.mockImplementationOnce(() => new Response(JSON.stringify({ request_id: sent(fetchMock.mock.calls.length - 1).request_id, request_completed: true, errors: { detail: "The AI request failed unexpectedly. Please try again." } }), { status: 500 }))
+    await chat.submitTurn("Add Smoke", vi.fn())
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(chat.hasPendingRequest.value).toBe(false)
+    expect(sessionStorage.length).toBe(0)
+    expect(chat.messages.value[1].isError).toBe(true)
+  })
+
   it("restores the frozen request after remount, preserves the original revision, and adds no invalid Undo", async () => {
     const first = setup()
     fetchMock.mockRejectedValue(new TypeError("offline"))

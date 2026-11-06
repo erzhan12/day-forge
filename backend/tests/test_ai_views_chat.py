@@ -1846,8 +1846,10 @@ class TestSharedApplyCoverage:
             raise RuntimeError("status transition failed")
 
         monkeypatch.setattr(Schedule, "mark_active_on_edit", _boom)
-        with pytest.raises(RuntimeError, match="status transition failed"):
-            _post(auth_client, {"messages": [_user_turn("move gym")]})
+        response = _post(auth_client, {"messages": [_user_turn("move gym")]})
+        assert response.status_code == 500
+        assert response.json()["request_completed"] is True
+        assert "status transition failed" not in response.content.decode()
         block.refresh_from_db()
         assert block.start_time.strftime("%H:%M") == "09:00"
         interaction = AIInteraction.objects.get(schedule=today_schedule)

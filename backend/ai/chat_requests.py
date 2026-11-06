@@ -8,6 +8,7 @@ and response construction in the same transaction as the terminal result.
 import datetime
 import hashlib
 import json
+import logging
 import uuid
 from dataclasses import dataclass
 
@@ -18,6 +19,8 @@ from django.utils import timezone
 from schedules.mutations import MutationRejected, ScheduleChanged, run_user_maintenance
 
 from ai.models import ChatRequest
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -66,6 +69,18 @@ def unavailable_response():
             },
         },
         status=503,
+    )
+
+
+def unexpected_error_response():
+    """Terminal 500 for a failure outside the known AI error taxonomy.
+
+    The detail is generic on purpose: the exception text can echo model output
+    or user data, so it goes to the server log only, never to the stored receipt.
+    """
+    return JsonResponse(
+        {"errors": {"detail": "The AI request failed unexpectedly. Please try again."}},
+        status=500,
     )
 
 
@@ -134,6 +149,13 @@ def finish_request(claim, build_response):
                 response = build_response()
         except MutationRejected as exc:
             response = exc.response
+        except ScheduleChanged:
+            raise
+        except Exception:
+            # The atomic block above rolled the plan back. Store a terminal
+            # receipt so a deterministic bug cannot keep this request unknown.
+            logger.exception("Unexpected error applying chat request %s", row.request_id)
+            response = unexpected_error_response()
         payload = json.loads(response.content)
         payload.update(request_id=str(row.request_id), request_completed=True)
         response.content = JsonResponse(payload).content
