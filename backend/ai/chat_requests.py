@@ -150,6 +150,8 @@ def finish_request(claim, build_response):
         except MutationRejected as exc:
             response = exc.response
         except ScheduleChanged:
+            # Must propagate: the caller maps it to 503 request_unavailable (retryable),
+            # not a terminal 500 receipt.
             raise
         except Exception:
             # The atomic block above rolled the plan back. Store a terminal

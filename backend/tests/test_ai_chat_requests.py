@@ -15,6 +15,7 @@ from django.http import JsonResponse
 from django.test import Client
 from django.utils import timezone
 from schedules.models import Schedule, TimeBlock
+from schedules.mutations import ScheduleChanged
 
 from tests.test_schedule_mutations_sqlite import copied_database, run_on_copy  # noqa: F401
 
@@ -306,6 +307,21 @@ def test_expired_worker_cannot_apply_after_takeover(user):
     assert finish_request(first, must_not_run).status_code == 409
     winner = finish_request(second, lambda: JsonResponse({"winner": True}))
     assert finish_request(first, must_not_run).content == winner.content
+
+
+@pytest.mark.django_db
+def test_schedule_changed_while_applying_is_unavailable_not_a_terminal_500(user):
+    payload = body()
+    identity, digest = request_identity(payload)
+    claim = claim_request(user.id, DAY, identity, digest)
+
+    def changed():
+        raise ScheduleChanged()
+
+    response = finish_request(claim, changed)
+    assert response.status_code == 503
+    assert json.loads(response.content)["code"] == "request_unavailable"
+    assert ChatRequest.objects.get().completed_at is None
 
 
 def test_two_processes_send_same_http_request(copied_database):  # noqa: F811 (imported fixture)

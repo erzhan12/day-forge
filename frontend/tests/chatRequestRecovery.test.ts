@@ -123,7 +123,11 @@ describe("durable chat recovery", () => {
 
   it("treats a stored unexpected-error 500 receipt as final, unlike a bare 500", async () => {
     const { chat } = setup()
-    fetchMock.mockImplementationOnce(() => new Response(JSON.stringify({ request_id: sent(fetchMock.mock.calls.length - 1).request_id, request_completed: true, errors: { detail: "The AI request failed unexpectedly. Please try again." } }), { status: 500 }))
+    fetchMock.mockImplementationOnce((_url: string, init: { body: string }) => new Response(JSON.stringify({
+      request_id: JSON.parse(init.body).request_id,
+      request_completed: true,
+      errors: { detail: "The AI request failed unexpectedly. Please try again." },
+    }), { status: 500 }))
     await chat.submitTurn("Add Smoke", vi.fn())
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(chat.hasPendingRequest.value).toBe(false)
