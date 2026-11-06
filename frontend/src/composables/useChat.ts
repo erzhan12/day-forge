@@ -222,6 +222,8 @@ export function useChat(explicitRevision?: ScheduleRevisionState) {
     state.latestRequestId += 1
     removeChatRequest(pending)
     state.pendingRequest.value = null
+    // The abandoned request's finally block skips its writes (stale id), so release the spinner here.
+    isProcessing.value = false
     lastError.value = null
     apiHealthy.value = true
   }

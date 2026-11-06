@@ -228,6 +228,32 @@ describe("discarding an unconfirmed request", () => {
     expect(sent().request_id).not.toBe(original.request_id)
   })
 
+  it("ignores a late response from the discarded request and releases the spinner", async () => {
+    const { chat } = setup()
+    fetchMock.mockRejectedValue(new TypeError("offline"))
+    await chat.submitTurn("Add Smoke", vi.fn())
+    expect(chat.hasPendingRequest.value).toBe(true)
+    const before = chat.messages.value.length
+
+    fetchMock.mockReset()
+    let release!: () => void
+    fetchMock.mockImplementationOnce(() => new Promise<Response>(resolve => {
+      release = () => resolve(success())
+    }))
+    const pushUndo = vi.fn()
+    const recovering = chat.recoverPending(pushUndo)
+    expect(chat.isProcessing.value).toBe(true)
+
+    chat.discardPending()
+    expect(chat.isProcessing.value).toBe(false)
+    release()
+    await recovering
+
+    expect(chat.hasPendingRequest.value).toBe(false)
+    expect(chat.messages.value).toHaveLength(before)
+    expect(pushUndo).not.toHaveBeenCalled()
+  })
+
   it("is a no-op when nothing is pending", () => {
     const { chat } = setup()
     chat.lastError.value = "unrelated"
