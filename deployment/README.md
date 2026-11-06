@@ -126,32 +126,51 @@ Provision `SSH_KNOWN_HOSTS` **before the first deploy**: the deploy job's very f
 remote action (the §3b `mkdir`/`chown` directory setup over SSH) already runs under the
 pinned host key, so a missing pin fails the job before any droplet setup happens.
 
-### 3. Restrict public access to `:8006` (ufw + DOCKER-USER)
+### Droplet host ports (habit_reward shared VPS)
+
+Other apps on the same droplet already bind these published ports — pick a free one for any new service:
+
+| Port | Service |
+|---|---|
+| 8001 | fitness-challenge |
+| 8002 | lang_bot |
+| 8006 | day_forge_web |
+| 8007 | progrev-stories |
+| 8008 | lexi_web |
+| **8009** | **day_forge_mcp** (this app's MCP proxy) |
+
+Do not republish day-forge MCP on 8007 — that port belongs to progrev-stories.
+
+### 3. Restrict public access to `:8006` and `:8009` (ufw + DOCKER-USER)
 
 The web container publishes `8006:8006` on `0.0.0.0` so the central Caddy can reach
-`host.docker.internal:8006` via the Docker bridge gateway. **Do not** switch to
-`127.0.0.1:8006:8006` as the primary fix — on Linux, Caddy in habit_reward's compose
+`host.docker.internal:8006` via the Docker bridge gateway. The MCP proxy (feature 0089)
+likewise publishes `8009:8009` for `host.docker.internal:8009`. **Do not** switch either
+to `127.0.0.1:…` as the primary fix — on Linux, Caddy in habit_reward's compose
 reaches the host through the bridge gateway, not loopback, and localhost-only binds
 break the Caddy → app path.
 
 **UFW alone is not enough:** Docker publishes ports through iptables (`DOCKER` chain)
-and traffic to `droplet-ip:8006` often bypasses ufw entirely. Keep ufw for SSH/80/443,
-then add **DOCKER-USER** rules (evaluated before Docker's own ACCEPT rules):
+and traffic to `droplet-ip:8006` / `:8009` often bypasses ufw entirely. Keep ufw for
+SSH/80/443, then add **DOCKER-USER** rules (evaluated before Docker's own ACCEPT rules):
 
 ```bash
 sudo ufw allow OpenSSH
 sudo ufw allow 80,443/tcp
 sudo ufw deny 8006/tcp        # belt-and-suspenders; pair with DOCKER-USER below
+sudo ufw deny 8009/tcp
 sudo ufw enable
 
-# Allow established/related, loopback, and Docker-private-source → host :8006 (Caddy path).
-# habit_reward's central Caddy runs on a Compose `br-*` bridge, NOT `docker0` — use
-# source-CIDR allow (covers default bridge + user-defined compose networks).
-# Drop other inbound to host :8006 (internet scanners).
+# Allow established/related, loopback, and Docker-private-source → host :8006/:8009
+# (Caddy path). habit_reward's central Caddy runs on a Compose `br-*` bridge, NOT
+# `docker0` — use source-CIDR allow (covers default bridge + user-defined compose
+# networks). Drop other inbound to those ports (internet scanners).
 sudo iptables -I DOCKER-USER 1 -m conntrack --ctstate RELATED,ESTABLISHED -j RETURN
 sudo iptables -I DOCKER-USER 2 -i lo -j RETURN
 sudo iptables -I DOCKER-USER 3 -s 172.16.0.0/12 -p tcp --dport 8006 -j RETURN
 sudo iptables -I DOCKER-USER 4 -p tcp --dport 8006 -j DROP
+sudo iptables -I DOCKER-USER 5 -s 172.16.0.0/12 -p tcp --dport 8009 -j RETURN
+sudo iptables -I DOCKER-USER 6 -p tcp --dport 8009 -j DROP
 
 # Persist across reboot (pick what the droplet already uses):
 #   Debian/Ubuntu: sudo apt install -y iptables-persistent && sudo netfilter-persistent save
@@ -162,10 +181,12 @@ sudo iptables -I DOCKER-USER 4 -p tcp --dport 8006 -j DROP
 
 ```bash
 curl -s -o /dev/null -w "%{http_code}\n" --max-time 5 http://<DROPLET_IP>:8006/accounts/login/
-# Expected: timeout or connection refused — NOT 200/301 from Django.
+curl -s -o /dev/null -w "%{http_code}\n" --max-time 5 http://<DROPLET_IP>:8009/mcp/health
+# Expected: timeout or connection refused — NOT 200/301 from the containers.
 
 curl -fsS -o /dev/null -w "%{http_code}\n" https://dayforge.habitreward.org/accounts/login/
-# Expected: 200 — Caddy → host.docker.internal:8006 still works after the DROP rule.
+curl -fsS https://dayforge.habitreward.org/mcp/health
+# Expected: 200 / {"status":"ok"} — Caddy → host.docker.internal:8006/:8009 still works.
 ```
 
 ### 3b. Bind-mount permissions
@@ -187,12 +208,12 @@ docker exec habit_reward_caddy caddy reload --config /etc/caddy/Caddyfile
 
 ## Deploying
 
-Push to `main` or run the **Deploy** workflow manually. Shared CI validation must pass before the workflow builds and pushes the image to GHCR. The deploy job connects over pinned SSH, writes `.env`, then runs `docker compose pull` and `docker compose up -d`. The final job checks `https://dayforge.habitreward.org/accounts/login/`.
+Push to `main` or run the **Deploy** workflow manually. Shared CI validation must pass before the workflow builds and pushes **two** images to GHCR (`day-forge:<sha>` and `day-forge-mcp:<sha>`). The deploy job connects over pinned SSH, writes `.env` (including `DOCKER_IMAGE` and `DOCKER_IMAGE_MCP` — the file is rewritten wholesale, so omit = erase), then runs `docker compose pull` and `docker compose up -d`. The final job checks `https://dayforge.habitreward.org/accounts/login/` and `/mcp/health`. Before the first MCP deploy, paste the updated `deployment/caddy/dayforge.caddy` (`handle /mcp*` → `:8009`, catch-all → `:8006`) into habit_reward's central Caddyfile and reload Caddy; see [docs/mcp.md](../docs/mcp.md).
 
-After the container starts, the deploy removes old local Day Forge images. It
-keeps the running SHA-tagged image and the two newest SHA-tagged images for
-rollback. The `latest` tag, manually named tags, and images from other apps are
-left alone. Cleanup errors are logged without failing the deploy; the next
+After the containers start, the deploy removes old local Day Forge images for
+both `DOCKER_IMAGE` and `DOCKER_IMAGE_MCP`. For each repo it keeps the running
+SHA-tagged image and the two newest SHA-tagged images for rollback. The `latest`
+tag, manually named tags, and images from other apps are left alone. Cleanup errors are logged without failing the deploy; the next
 deploy retries. GHCR tags are unaffected. Check host usage with `df -h /` and
 `docker system df` after deployment.
 
