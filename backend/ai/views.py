@@ -1185,7 +1185,7 @@ async def ai_chat(request, date):
     except Exception:
         # Not an AIError: store a terminal receipt (see unexpected_error_response)
         # instead of leaving a lease with no outcome that locks the client.
-        logger.exception("Unexpected error in AI chat provider call")
+        logger.exception("Unexpected error in AI chat view (pre-provider or provider)")
         return await terminal(unexpected_error_response())
 
     audit_response = _build_chat_audit_response(

@@ -156,6 +156,8 @@ def finish_request(claim, build_response):
         except Exception:
             # The atomic block above rolled the plan back. Store a terminal
             # receipt so a deterministic bug cannot keep this request unknown.
+            # Deliberately broad: a transient DatabaseError here also becomes a terminal
+            # receipt (user retries with a new ID) rather than an unknown, lock-prone state.
             logger.exception("Unexpected error applying chat request %s", row.request_id)
             response = unexpected_error_response()
         payload = json.loads(response.content)
