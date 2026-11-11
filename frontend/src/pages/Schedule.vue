@@ -23,7 +23,7 @@ import { FocusIndicatorControllerKey, useFocusIndicatorController } from "../com
 import { useViewport } from "../composables/useViewport"
 import { readChatSidebarOpen, writeChatSidebarOpen } from "../utils/chatSidebarStorage"
 import { readExternalTasksSidebarOpen, writeExternalTasksSidebarOpen } from "../utils/externalTasksSidebarStorage"
-import { timeToMinutes, type ScheduleWindowBounds } from "../utils/scheduleTime"
+import { formatDurationMinutes, timeToMinutes, type ScheduleWindowBounds } from "../utils/scheduleTime"
 import { useSchedulePageController } from "../composables/useSchedulePageController"
 import { ScheduleDragKey, ScheduleContainerKey } from "../composables/scheduleContext"
 import { useDrag } from "../composables/useDrag"
@@ -95,7 +95,7 @@ const todayNowMinutes = computed(() => nowDate.value === null ? null : nowMinute
 let drag: ReturnType<typeof useDrag> | undefined
 const {
   renderBounds, timelineOriginMinutes, effectiveBlocks,
-  currentBlock, currentBlockRemaining, displayList, ghostHeight, ghostIsCompact,
+  currentBlock, currentBlockRemaining, displayList, ghostHeight,
   itemHeight, nowOffsetPercent, presentation,
 } = useTimelinePresentation({
   getBlocks,
@@ -130,6 +130,13 @@ watch(categoryCatalogValid, (valid) => {
 provide(ScheduleDragKey, { startDrag, isDragging, dragBlockId, shiftedBlockIds })
 provide(ScheduleContainerKey, scheduleBodyRef)
 const draggedBlock = computed(() => canonicalBlocks.value.find(block => block.id === dragBlockId.value) ?? null)
+// A drag keeps the block's length, so the ghost shows the same duration as the card.
+const ghostDuration = computed(() => {
+  const block = draggedBlock.value
+  return block
+    ? formatDurationMinutes(timeToMinutes(block.end_time) - timeToMinutes(block.start_time))
+    : ""
+})
 
 const { isWide } = useViewport()
 const chatDockHeight = ref(0)
@@ -302,24 +309,13 @@ defineExpose({
       <div
         v-if="isDragging && draggedBlock"
         class="drag-ghost"
-        :class="{ compact: ghostIsCompact }"
         :style="{ top: ghostTop + 'px', height: ghostHeight + 'px' }"
       >
         <span class="ghost-handle">&#x2807;</span>
-        <template v-if="ghostIsCompact">
-          <input type="checkbox" class="ghost-checkbox" disabled />
-          <span class="ghost-time">{{ previewStartTime }}–{{ previewEndTime }}</span>
-          <span class="ghost-title">{{ draggedBlock.title }}</span>
-        </template>
-        <template v-else>
-          <div class="ghost-header">
-            <span class="ghost-time">{{ previewStartTime }} – {{ previewEndTime }}</span>
-          </div>
-          <div class="ghost-body">
-            <input type="checkbox" class="ghost-checkbox" disabled />
-            <span class="ghost-title">{{ draggedBlock.title }}</span>
-          </div>
-        </template>
+        <input type="checkbox" class="ghost-checkbox" disabled />
+        <span class="ghost-time">{{ previewStartTime }}–{{ previewEndTime }}</span>
+        <span class="ghost-duration">{{ ghostDuration }}</span>
+        <span class="ghost-title">{{ draggedBlock.title }}</span>
       </div>
 
       <Timeline4a
@@ -660,14 +656,16 @@ defineExpose({
   background: rgba(59, 130, 246, 0.12);
   border: 2px dashed #3b82f6;
   border-radius: 8px;
-  padding: 12px 16px 12px 34px;
+  /* Mirrors TimeBlock.vue's single row: `.time-block` padding (+2px left for
+     the dashed border), `.block-row` gap, `.checkbox` size, `.time-badge`,
+     `.duration` and `.title` text. Change both files together. */
+  padding: 4px 8px 4px 30px;
   pointer-events: none;
   z-index: 20;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 6px;
+  align-items: center;
+  gap: 8px;
   box-sizing: border-box;
   overflow: hidden;
 }
@@ -675,14 +673,6 @@ defineExpose({
 /* 4a ghost: 16px body padding + gutter + item inset (classic is padding-only). */
 .schedule-page.layout-4a .drag-ghost {
   left: calc(16px + var(--timeline-4a-axis-gutter) + var(--timeline-4a-item-inset));
-}
-
-.drag-ghost.compact {
-  flex-direction: row;
-  align-items: center;
-  justify-content: flex-start;
-  padding: 4px 8px 4px 30px;
-  gap: 8px;
 }
 
 .ghost-handle {
@@ -698,32 +688,11 @@ defineExpose({
   font-size: 16px;
 }
 
-.ghost-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  /* Match block-header height (driven by its 24px delete-btn) so the
-     body (checkbox + title) lands at the same y as in the real block. */
-  height: 24px;
-}
-
-.ghost-body {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
 .ghost-checkbox {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   flex-shrink: 0;
   pointer-events: none;
-}
-
-.drag-ghost.compact .ghost-checkbox {
-  width: 14px;
-  height: 14px;
 }
 
 .ghost-time {
@@ -733,20 +702,19 @@ defineExpose({
   flex-shrink: 0;
 }
 
-.drag-ghost.compact .ghost-time {
+.ghost-duration {
+  flex-shrink: 0;
   font-size: 12px;
+  color: var(--text-faint);
 }
 
 .ghost-title {
-  font-size: 15px;
+  min-width: 0;
+  font-size: 14px;
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.drag-ghost.compact .ghost-title {
-  font-size: 13px;
 }
 
 .schedule-slot {
