@@ -10,7 +10,10 @@ _ADD_COMMAND_RE = re.compile(
     r"\b(?:add|schedule|place|put|create|insert|добав\w*|постав\w*|запланир\w*)\b",
     re.IGNORECASE | re.UNICODE,
 )
-_RELATION_RE = re.compile(r"\b(after|before|после|до)\b", re.IGNORECASE | re.UNICODE)
+_RELATION_RE = re.compile(
+    r"\b(after|before|после|до|перед)\b", re.IGNORECASE | re.UNICODE
+)
+_CYRILLIC_RE = re.compile(r"[а-яё]", re.IGNORECASE)
 _GAP_RE = re.compile(
     r"\b(?:"
     r"(\d+)\s*[- ]?\s*(?:min(?:ute)?s?|мин(?:ут\w*)?)\s+"
@@ -26,6 +29,47 @@ _CLOCK_REF_RE = re.compile(
 )
 
 
+def _questions(russian: bool, direction: str) -> dict[str, str]:
+    """Guard questions in the language the user is writing in."""
+    if russian:
+        return {
+            "time": "Во сколько начать новый блок?",
+            "anchor": (
+                "После какого блока поставить новый?"
+                if direction == "after"
+                else "Перед каким блоком поставить новый?"
+            ),
+            # "блока «…»" keeps the case right whatever the title is.
+            "time_near": (
+                "Во сколько начать новый блок после блока «{title}»?"
+                if direction == "after"
+                else "Во сколько начать новый блок перед блоком «{title}»?"
+            ),
+        }
+    return {
+        "time": "What start time should the new block have?",
+        "anchor": f"Which existing block should the new block be placed {direction}?",
+        "time_near": f"What start time should the new block have {direction} {{title}}?",
+    }
+
+
+_QUOTES = "\"'“”«»"
+
+
+def _bare(text: str) -> str:
+    """Text without surrounding whitespace, quotes or case, for exact matches."""
+    return text.strip().strip(_QUOTES).strip().casefold()
+
+
+def _answered_anchors(answer: str, candidates: Sequence) -> list:
+    """Blocks named by the user's reply to a clarifying question."""
+    named = [block for block in candidates if _title_in_tail(block.title, answer)]
+    if len(named) > 1:
+        exact = [block for block in named if _bare(block.title) == _bare(answer)]
+        return exact or named
+    return named
+
+
 def _relations_after_prefix(
     text: str, prefix_end: int, *, allow_leading: bool = False,
     quoted_titles: re.Pattern[str] | None = None,
@@ -39,14 +83,35 @@ def _relations_after_prefix(
     ]
 
 
+def _command_outside_titles(
+    text: str, title_re: re.Pattern[str] | None
+) -> re.Match[str] | None:
+    """First add verb that is not part of a block title ("Schedule planning")."""
+    spans = list(title_re.finditer(text)) if title_re else []
+    for match in _ADD_COMMAND_RE.finditer(text):
+        if not any(span.start() <= match.start() < span.end() for span in spans):
+            return match
+    return None
+
+
 def _active_request_index(
-    messages: list[dict], quoted_titles: re.Pattern[str] | None = None
+    messages: list[dict], quoted_titles: re.Pattern[str] | None = None,
+    block_titles: frozenset[str] = frozenset(),
+    title_re: re.Pattern[str] | None = None,
 ) -> int | None:
     """Find a relative add in the latest turn or its pending ask chain."""
     user_index = len(messages) - 1
     while user_index >= 0:
         text = messages[user_index]["content"]
-        command = _ADD_COMMAND_RE.search(text)
+        # A reply that is only a block title answers a question, even when the
+        # title holds a command or relation word ("Schedule planning").
+        if user_index > 0 and _bare(text) in block_titles:
+            previous = messages[user_index - 1]
+            if previous.get("is_ask") is not True and previous.get("is_error") is not True:
+                break
+            user_index -= 2
+            continue
+        command = _command_outside_titles(text, title_re)
         prefix_end = command.end() if command is not None else 0
         leading_answer = (
             command is None
@@ -123,7 +188,16 @@ def relative_add_guard_ask(
         for opening, closing in [('"', '"'), ("'", "'"), ("“", "”"), ("«", "»")]
     ]
     quoted_titles = re.compile("|".join(quoted_names), re.IGNORECASE) if quoted_names else None
-    request_index = _active_request_index(messages, quoted_titles)
+    command_titles = [
+        re.escape(block.title) for block in blocks if _ADD_COMMAND_RE.search(block.title)
+    ]
+    title_re = (
+        re.compile(r"(?<!\w)(?:" + "|".join(command_titles) + r")(?!\w)", re.IGNORECASE)
+        if command_titles else None
+    )
+    request_index = _active_request_index(
+        messages, quoted_titles, frozenset(_bare(block.title) for block in blocks), title_re
+    )
     if request_index is None:
         return None
     request = messages[request_index]["content"]
@@ -133,8 +207,12 @@ def relative_add_guard_ask(
     relations = _relations_after_prefix(
         request, prefix_end, allow_leading=leading_answer, quoted_titles=quoted_titles
     )
+    # Answer in the language of the request or of the latest reply.
+    russian = bool(
+        _CYRILLIC_RE.search(request) or _CYRILLIC_RE.search(messages[-1]["content"])
+    )
     if len(relations) != 1:
-        return "What start time should the new block have?"
+        return _questions(russian, "after")["time"]
 
     relation = relations[0]
     direction = "after" if relation.group(1).casefold() in {"after", "после"} else "before"
@@ -142,6 +220,23 @@ def relative_add_guard_ask(
     required_gap = int(next(group for group in gap_match.groups() if group)) if gap_match else 0
     tail = request[relation.end() :]
     anchors = [block for block in blocks if _title_in_tail(block.title, tail)]
+    if len(anchors) != 1 and not _CLOCK_REF_RE.match(tail):
+        # The user may have answered "which block?" by naming it. Without
+        # this the same question repeats forever. The newest reply that names
+        # any block decides: one block resolves the anchor, several stay
+        # ambiguous candidates (a correction never falls back to an older
+        # answer). Replies naming no block, such as a clock answer, are skipped.
+        replies = (
+            message["content"]
+            for message in reversed(messages[request_index + 1 :])
+            if message.get("role") == "user"
+        )
+        for reply in replies:
+            answered = _answered_anchors(reply, blocks)
+            if answered:
+                anchors = answered
+                break
+    questions = _questions(russian, direction)
     if len(anchors) != 1:
         if _CLOCK_REF_RE.match(tail):
             return None
@@ -155,7 +250,7 @@ def relative_add_guard_ask(
             # A concrete follow-up resolves an unbound reference, including
             # procedural "before adding it". Existing anchors still constrain it.
             return None
-        return f"Which existing block should the new block be placed {direction}?"
+        return questions["anchor"]
 
     anchor = anchors[0]
     add_actions = [action for action in actions if action.get("type") == "add"]
@@ -169,13 +264,13 @@ def relative_add_guard_ask(
     checked_actions = named_before_relation if len(named_before_relation) == 1 else add_actions
     for action in checked_actions:
         if "start_time" not in action or "end_time" not in action:
-            return f"What start time should the new block have {direction} {anchor.title}?"
+            return questions["time_near"].format(title=anchor.title)
         if direction == "after" and (
             _minutes(action["start_time"]) < _minutes(anchor.end_time) + required_gap
         ):
-            return f"What start time should the new block have after {anchor.title}?"
+            return questions["time_near"].format(title=anchor.title)
         if direction == "before" and (
             _minutes(action["end_time"]) > _minutes(anchor.start_time) - required_gap
         ):
-            return f"What start time should the new block have before {anchor.title}?"
+            return questions["time_near"].format(title=anchor.title)
     return None

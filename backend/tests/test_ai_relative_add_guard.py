@@ -84,7 +84,7 @@ def test_explicit_add_must_keep_russian_requested_gap():
         [_user("добавь Вокал после Зала с отступом 10 минут")],
         [_add(start_time="09:35", end_time="10:00")],
         [_block(title="Зал")],
-    ) == "What start time should the new block have after Зал?"
+    ) == "Во сколько начать новый блок после блока «Зал»?"
 
 
 def test_explicit_add_must_keep_gap_in_mins_form():
@@ -146,7 +146,7 @@ def test_russian_relative_request_is_guarded():
         [_user("добавь Вокал после Зала")],
         [_add()],
         [_block(title="Зал")],
-    ) == "What start time should the new block have after Зал?"
+    ) == "Во сколько начать новый блок после блока «Зал»?"
 
 
 def test_ordinary_untimed_add_is_unchanged():
@@ -259,3 +259,225 @@ def test_quoting_a_whole_command_does_not_hide_its_relative_constraint():
         [_add(start_time="08:00", end_time="08:30")],
         [_block()],
     ) == "What start time should the new block have after Gym?"
+
+
+def _screenshot_chat(answer):
+    return [
+        _user("разбор по антихрупкости после прогулки"),
+        {
+            "role": "assistant",
+            "content": "После какого блока поставить новый?",
+            "is_ask": True,
+        },
+        _user(answer),
+    ]
+
+
+_DAY = [
+    _block(title="Kick-off", start="12:40", end="13:05"),
+    _block(title="Lunch Walk", start="15:00", end="16:00"),
+]
+
+
+def test_answer_naming_a_block_resolves_unknown_anchor():
+    """Regression: the answer to "which block?" was ignored, so the same
+    question repeated forever."""
+    assert relative_add_guard_ask(
+        _screenshot_chat("Lunch Walk"), [_add()], _DAY
+    ) == "Во сколько начать новый блок после блока «Lunch Walk»?"
+
+
+def test_answer_anchor_accepts_a_timed_add_after_it():
+    assert relative_add_guard_ask(
+        _screenshot_chat("Lunch Walk"),
+        [_add(start_time="16:00", end_time="16:30")],
+        _DAY,
+    ) is None
+
+
+def test_answer_anchor_still_rejects_a_timed_add_before_it():
+    assert relative_add_guard_ask(
+        _screenshot_chat("lunch walk"),
+        [_add(start_time="14:00", end_time="14:30")],
+        _DAY,
+    ) == "Во сколько начать новый блок после блока «Lunch Walk»?"
+
+
+def test_answer_naming_no_block_keeps_asking_which_block():
+    assert relative_add_guard_ask(
+        _screenshot_chat("прогулка"), [_add()], _DAY
+    ) == "После какого блока поставить новый?"
+
+
+def test_answer_disambiguates_between_named_anchors():
+    blocks = [_block(title="Gym"), _block(title="Gym Stretch", start="10:00", end="10:30")]
+    messages = [
+        _user("add Vocal after Gym Stretch or Gym"),
+        {"role": "assistant", "content": "Which one?", "is_ask": True},
+        _user("Gym Stretch"),
+    ]
+    assert relative_add_guard_ask(messages, [_add()], blocks) == (
+        "What start time should the new block have after Gym Stretch?"
+    )
+
+
+@pytest.mark.parametrize("request_text,expected", [
+    ("добавь Вокал после Обеда", "После какого блока поставить новый?"),
+    ("добавь Вокал перед Обедом", "Перед каким блоком поставить новый?"),
+    ("добавь Вокал после Зала и после Обеда", "Во сколько начать новый блок?"),
+])
+def test_russian_requests_get_russian_questions(request_text, expected):
+    assert relative_add_guard_ask([_user(request_text)], [_add()], [_block()]) == expected
+
+
+def test_russian_before_question_names_the_anchor():
+    assert relative_add_guard_ask(
+        [_user("добавь Вокал до Зала")],
+        [_add(start_time="09:10", end_time="09:35")],
+        [_block(title="Зал")],
+    ) == "Во сколько начать новый блок перед блоком «Зал»?"
+
+
+def test_anchor_named_in_an_earlier_reply_still_constrains_a_clock_answer():
+    messages = _screenshot_chat("Lunch Walk") + [
+        {
+            "role": "assistant",
+            "content": "Во сколько начать новый блок после блока «Lunch Walk»?",
+            "is_ask": True,
+        },
+        _user("14:00"),
+    ]
+    assert relative_add_guard_ask(
+        messages, [_add(start_time="14:00", end_time="14:30")], _DAY
+    ) == "Во сколько начать новый блок после блока «Lunch Walk»?"
+    assert relative_add_guard_ask(
+        messages, [_add(start_time="16:00", end_time="16:30")], _DAY
+    ) is None
+
+
+def test_correction_naming_two_blocks_does_not_fall_back_to_older_answer():
+    messages = _screenshot_chat("Lunch Walk") + [
+        {
+            "role": "assistant",
+            "content": "Во сколько начать новый блок после блока «Lunch Walk»?",
+            "is_ask": True,
+        },
+        _user("нет, не Lunch Walk, а Kick-off"),
+    ]
+    assert relative_add_guard_ask(
+        messages, [_add(start_time="14:00", end_time="14:30")], _DAY
+    ) == "После какого блока поставить новый?"
+
+
+def _ask(content="Во сколько?"):
+    return {"role": "assistant", "content": content, "is_ask": True}
+
+
+def test_reply_naming_two_blocks_still_constrains_a_later_clock_answer():
+    messages = _screenshot_chat("Kick-off или Lunch Walk") + [_ask(), _user("14:00")]
+    assert relative_add_guard_ask(
+        messages, [_add(start_time="14:00", end_time="14:30")], _DAY
+    ) == "После какого блока поставить новый?"
+
+
+def test_ambiguous_correction_followed_by_clock_answer_keeps_asking():
+    messages = _screenshot_chat("Lunch Walk") + [
+        _ask(),
+        _user("нет, не Lunch Walk, а Kick-off"),
+        _ask(),
+        _user("11:00"),
+    ]
+    assert relative_add_guard_ask(
+        messages, [_add(start_time="11:00", end_time="11:30")], _DAY
+    ) == "После какого блока поставить новый?"
+
+
+def test_newest_reply_overrides_an_earlier_answer():
+    messages = [
+        _user("add Vocal after Kick-off or Lunch Walk"),
+        _ask("Which one?"),
+        _user("Kick-off"),
+        _ask("What time?"),
+        _user("actually Lunch Walk"),
+    ]
+    assert relative_add_guard_ask(messages, [_add()], _DAY) == (
+        "What start time should the new block have after Lunch Walk?"
+    )
+
+
+def test_english_request_with_russian_reply_gets_russian_question():
+    messages = [
+        _user("add Vocal after Lunch"),
+        _ask("Which existing block should the new block be placed after?"),
+        _user("прогулка"),
+    ]
+    assert relative_add_guard_ask(messages, [_add()], _DAY) == (
+        "После какого блока поставить новый?"
+    )
+
+
+def test_reply_that_is_a_title_with_a_command_word_resolves_the_anchor():
+    blocks = _DAY + [_block(title="Schedule planning", start="15:30", end="16:00")]
+    messages = _screenshot_chat("Schedule planning")
+    assert relative_add_guard_ask(
+        messages, [_add(start_time="08:00", end_time="08:30")], blocks
+    ) == "Во сколько начать новый блок после блока «Schedule planning»?"
+
+
+@pytest.mark.parametrize("answer", ['"Gym Stretch"', "«Gym Stretch»"])
+def test_quoted_reply_picks_the_exact_title(answer):
+    blocks = [_block(title="Gym"), _block(title="Gym Stretch", start="10:00", end="10:30")]
+    messages = [
+        _user("add Vocal after the workout"),
+        _ask("Which one?"),
+        _user(answer),
+    ]
+    assert relative_add_guard_ask(messages, [_add()], blocks) == (
+        "What start time should the new block have after Gym Stretch?"
+    )
+
+
+def test_reply_can_pick_a_block_outside_the_requested_candidates():
+    blocks = _DAY + [_block(title="Reading", start="17:00", end="17:30")]
+    messages = [
+        _user("add Vocal after Kick-off or Lunch Walk"),
+        _ask("Which one?"),
+        _user("Reading"),
+    ]
+    assert relative_add_guard_ask(messages, [_add()], blocks) == (
+        "What start time should the new block have after Reading?"
+    )
+
+
+def test_clock_target_ignores_a_reply_that_names_a_block():
+    messages = [
+        _user("add Vocal before 10:00"),
+        _ask("How long?"),
+        _user("30 minutes, like Gym"),
+    ]
+    assert relative_add_guard_ask(
+        messages, [_add(start_time="09:00", end_time="09:30")], [_block()]
+    ) is None
+
+
+def test_title_only_retry_after_error_keeps_the_relative_request():
+    messages = [
+        _user("add Vocal after Lunch Walk"),
+        {"role": "assistant", "content": "Network error", "is_error": True},
+        _user("Lunch Walk"),
+    ]
+    assert relative_add_guard_ask(
+        messages, [_add(start_time="14:00", end_time="14:30")], _DAY
+    ) == "What start time should the new block have after Lunch Walk?"
+
+
+def test_reply_naming_a_command_word_title_and_another_block_keeps_asking():
+    blocks = _DAY + [_block(title="Schedule planning", start="15:30", end="16:00")]
+    messages = _screenshot_chat("Schedule planning или Lunch Walk")
+    assert relative_add_guard_ask(messages, [_add()], blocks) == (
+        "После какого блока поставить новый?"
+    )
+    later = messages + [_ask(), _user("08:00")]
+    assert relative_add_guard_ask(
+        later, [_add(start_time="08:00", end_time="08:30")], blocks
+    ) == "После какого блока поставить новый?"
