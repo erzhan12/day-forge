@@ -61,7 +61,13 @@ function handleClick() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 16px;
+  /* No vertical padding: align-items centres the text, and a 5–10 minute
+     gap is often shorter than text plus padding. */
+  padding: 0 16px;
+  /* Lets the query below hide the text when even one line cannot fit. */
+  container-type: size;
+  overflow: hidden;
+  line-height: 1.2;
   border: 1px dashed #d1d5db;
   border-radius: 8px;
   cursor: pointer;
@@ -97,8 +103,17 @@ function handleClick() {
 }
 
 .gap-slot.compact {
-  padding: 4px 12px;
+  padding: 0 12px;
   font-size: 12px;
+}
+
+/* Too short for a line of text: keep the clickable slot, drop the label
+   rather than showing half-clipped glyphs. */
+@container (max-height: 15px) {
+  .gap-label,
+  .gap-time {
+    visibility: hidden;
+  }
 }
 
 .gap-hint {

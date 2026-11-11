@@ -93,6 +93,8 @@ describe("CommandBar (chat dock)", () => {
   it("exposes cancellation for a saved intent and disables it during transport", async () => {
     hasPendingIntent.value = true
     const bar = mountBar()
+    // It cancels a clarification, not an in-flight network request.
+    expect(bar.get('[data-testid="chat-cancel-intent"]').text()).toBe("Cancel clarification")
     await bar.get('[data-testid="chat-cancel-intent"]').trigger("click")
     expect(cancelPendingIntent).toHaveBeenCalledWith(bar.props("pushUndo"))
     hasPendingRequest.value = true
