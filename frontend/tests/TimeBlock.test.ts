@@ -110,6 +110,9 @@ describe("TimeBlock", () => {
     expect(twoHours.find(".duration").text()).toBe("2h")
   })
 
+  // jsdom does not evaluate container queries or flex widths, so the narrow
+  // card rule in TimeBlock.vue (@container max-width 300px) is checked by
+  // hand in a browser. TODO: cover it with a Playwright check at 320px.
   it("renders short and long blocks with the same single-row layout", () => {
     const cases = [
       { end_time: "09:30", time: "09:00–09:30", duration: "30m" },

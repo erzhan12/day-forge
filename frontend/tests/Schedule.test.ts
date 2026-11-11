@@ -445,9 +445,9 @@ describe("Schedule.vue auto-draft watcher", () => {
   })
 
   it.each([
-    ["short", "09:00", "09:15"],
-    ["long", "09:00", "10:30"],
-  ])("renders the drag ghost of a %s block as one row", async (_label, start, end) => {
+    ["short", "09:00", "09:15", "15m"],
+    ["long", "09:00", "10:30", "1h 30m"],
+  ])("renders the drag ghost of a %s block as one row", async (_label, start, end, duration) => {
     const block = { ...makeBlock(7), start_time: start, end_time: end }
     const page = mountPage({
       schedule: makeSchedule("2026-05-04"), blocks: [block], date: "2026-05-04",
@@ -461,6 +461,7 @@ describe("Schedule.vue auto-draft watcher", () => {
     const ghost = page.get(".drag-ghost")
     expect(ghost.findAll('input[type="checkbox"]')).toHaveLength(1)
     expect(ghost.get(".ghost-time").text()).toBe("11:00–11:45")
+    expect(ghost.get(".ghost-duration").text()).toBe(duration)
     expect(ghost.get(".ghost-title").text()).toBe("Block 7")
     expect(ghost.find(".ghost-header").exists()).toBe(false)
     expect(ghost.classes()).not.toContain("compact")

@@ -23,7 +23,7 @@ import { FocusIndicatorControllerKey, useFocusIndicatorController } from "../com
 import { useViewport } from "../composables/useViewport"
 import { readChatSidebarOpen, writeChatSidebarOpen } from "../utils/chatSidebarStorage"
 import { readExternalTasksSidebarOpen, writeExternalTasksSidebarOpen } from "../utils/externalTasksSidebarStorage"
-import { timeToMinutes, type ScheduleWindowBounds } from "../utils/scheduleTime"
+import { formatDurationMinutes, timeToMinutes, type ScheduleWindowBounds } from "../utils/scheduleTime"
 import { useSchedulePageController } from "../composables/useSchedulePageController"
 import { ScheduleDragKey, ScheduleContainerKey } from "../composables/scheduleContext"
 import { useDrag } from "../composables/useDrag"
@@ -130,6 +130,13 @@ watch(categoryCatalogValid, (valid) => {
 provide(ScheduleDragKey, { startDrag, isDragging, dragBlockId, shiftedBlockIds })
 provide(ScheduleContainerKey, scheduleBodyRef)
 const draggedBlock = computed(() => canonicalBlocks.value.find(block => block.id === dragBlockId.value) ?? null)
+// A drag keeps the block's length, so the ghost shows the same duration as the card.
+const ghostDuration = computed(() => {
+  const block = draggedBlock.value
+  return block
+    ? formatDurationMinutes(timeToMinutes(block.end_time) - timeToMinutes(block.start_time))
+    : ""
+})
 
 const { isWide } = useViewport()
 const chatDockHeight = ref(0)
@@ -307,6 +314,7 @@ defineExpose({
         <span class="ghost-handle">&#x2807;</span>
         <input type="checkbox" class="ghost-checkbox" disabled />
         <span class="ghost-time">{{ previewStartTime }}–{{ previewEndTime }}</span>
+        <span class="ghost-duration">{{ ghostDuration }}</span>
         <span class="ghost-title">{{ draggedBlock.title }}</span>
       </div>
 
@@ -648,7 +656,9 @@ defineExpose({
   background: rgba(59, 130, 246, 0.12);
   border: 2px dashed #3b82f6;
   border-radius: 8px;
-  /* Mirrors TimeBlock's single row; +2px left for the dashed border. */
+  /* Mirrors TimeBlock.vue's single row: `.time-block` padding (+2px left for
+     the dashed border), `.block-row` gap, `.checkbox` size, `.time-badge`,
+     `.duration` and `.title` text. Change both files together. */
   padding: 4px 8px 4px 30px;
   pointer-events: none;
   z-index: 20;
@@ -690,6 +700,12 @@ defineExpose({
   color: var(--accent);
   font-weight: 500;
   flex-shrink: 0;
+}
+
+.ghost-duration {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--text-faint);
 }
 
 .ghost-title {
