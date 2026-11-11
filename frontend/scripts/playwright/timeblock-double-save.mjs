@@ -95,7 +95,7 @@ try {
   })
 
   // Find the seeded block's title span and enter edit mode.
-  // 60-min block is NOT compact, so the title lives in ``.block-body .title``.
+  // Every block renders its title in ``.block-row .title``.
   const titleSpan = page
     .locator(".title")
     .filter({ hasText: SEED_TITLE })

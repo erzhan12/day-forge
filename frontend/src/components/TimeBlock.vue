@@ -101,7 +101,6 @@ const durationMinutes = computed(() => {
 
 const duration = computed(() => formatDurationMinutes(durationMinutes.value))
 
-const isCompact = computed(() => durationMinutes.value <= 30)
 const remainingLabel = computed(() => {
   if (!props.isCurrent || props.remainingMinutes === null || props.remainingMinutes <= 0) {
     return null
@@ -204,7 +203,6 @@ async function handleDelete() {
     class="time-block"
     :class="{
       completed: displayedCompleted,
-      compact: isCompact,
       dragging: drag?.isDragging.value && drag?.dragBlockId.value === block.id,
       shifting: drag?.shiftedBlockIds.value.has(block.id),
     }"
@@ -216,83 +214,43 @@ async function handleDelete() {
     >
       <span class="grip-icon">&#x2807;</span>
     </div>
-    <template v-if="isCompact">
-      <div class="compact-row">
-        <input
-          type="checkbox"
-          :checked="displayedCompleted"
-          class="checkbox"
-          :class="{ saving }"
-          :disabled="disabled"
-          @change="toggleCompleted"
-        />
-        <span class="time-badge">{{ block.start_time }}–{{ block.end_time }}</span>
-        <span v-if="remainingLabel" class="remaining-badge">{{ remainingLabel }}</span>
-        <input
-          v-if="editing"
-          ref="titleInput"
-          v-model="editTitle"
-          class="title-input"
-          @blur="saveTitle"
-          @keydown.enter="saveTitle"
-          @keydown.escape="cancelEditing"
-        />
-        <span
-          v-else
-          class="title"
-          :class="{ 'title-completed': displayedCompleted }"
-          @click="startEditing"
-        >
-          {{ block.title }}
-        </span>
-        <button
-          class="delete-btn"
-          :aria-label="`Delete ${block.title}`"
-          :disabled="disabled"
-          @click="confirmingDelete = true"
-        >&times;</button>
-      </div>
-    </template>
-    <template v-else>
-      <div class="block-header">
-        <span class="time-badge">{{ block.start_time }} – {{ block.end_time }}</span>
-        <span class="duration">{{ duration }}</span>
-        <span v-if="remainingLabel" class="remaining-badge">{{ remainingLabel }}</span>
-        <button
-          class="delete-btn"
-          :aria-label="`Delete ${block.title}`"
-          :disabled="disabled"
-          @click="confirmingDelete = true"
-        >&times;</button>
-      </div>
-      <div class="block-body">
-        <input
-          type="checkbox"
-          :checked="displayedCompleted"
-          class="checkbox"
-          :class="{ saving }"
-          :disabled="disabled"
-          @change="toggleCompleted"
-        />
-        <input
-          v-if="editing"
-          ref="titleInput"
-          v-model="editTitle"
-          class="title-input"
-          @blur="saveTitle"
-          @keydown.enter="saveTitle"
-          @keydown.escape="cancelEditing"
-        />
-        <span
-          v-else
-          class="title"
-          :class="{ 'title-completed': displayedCompleted }"
-          @click="startEditing"
-        >
-          {{ block.title }}
-        </span>
-      </div>
-    </template>
+    <!-- One row for every duration so short and long cards line up. -->
+    <div class="block-row">
+      <input
+        type="checkbox"
+        :checked="displayedCompleted"
+        class="checkbox"
+        :class="{ saving }"
+        :disabled="disabled"
+        @change="toggleCompleted"
+      />
+      <span class="time-badge">{{ block.start_time }}–{{ block.end_time }}</span>
+      <span class="duration">{{ duration }}</span>
+      <span v-if="remainingLabel" class="remaining-badge">{{ remainingLabel }}</span>
+      <input
+        v-if="editing"
+        ref="titleInput"
+        v-model="editTitle"
+        class="title-input"
+        @blur="saveTitle"
+        @keydown.enter="saveTitle"
+        @keydown.escape="cancelEditing"
+      />
+      <span
+        v-else
+        class="title"
+        :class="{ 'title-completed': displayedCompleted }"
+        @click="startEditing"
+      >
+        {{ block.title }}
+      </span>
+      <button
+        class="delete-btn"
+        :aria-label="`Delete ${block.title}`"
+        :disabled="disabled"
+        @click="confirmingDelete = true"
+      >&times;</button>
+    </div>
     <div v-if="errorMessage" class="block-error">{{ errorMessage }}</div>
     <DeleteConfirmationDialog
       v-if="confirmingDelete"
@@ -319,53 +277,24 @@ async function handleDelete() {
   background: var(--bg-panel);
   border-left: 4px solid #6b7280;
   border-radius: 8px;
-  padding: 12px 16px 12px 32px;
+  padding: 4px 8px 4px 28px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
   box-sizing: border-box;
   height: 100%;
   overflow: hidden;
+  /* Lets the narrow-card query below drop secondary details. */
+  container-type: inline-size;
 }
 
 .time-block.completed {
   opacity: 0.6;
 }
 
-.time-block.compact {
-  padding: 4px 8px 4px 28px;
-}
-
-.compact-row {
+.block-row {
   display: flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
-  font-size: 13px;
-}
-
-.compact-row .time-badge {
-  flex-shrink: 0;
-}
-
-.compact-row .title,
-.compact-row .title-input {
-  flex: 1;
-  min-width: 0;
-  font-size: 13px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.compact-row .checkbox {
-  width: 14px;
-  height: 14px;
-}
-
-.compact-row .delete-btn {
-  margin-left: 0;
-  width: 20px;
-  height: 20px;
-  font-size: 14px;
 }
 
 .time-block.dragging {
@@ -401,26 +330,25 @@ async function handleDelete() {
   cursor: grabbing;
 }
 
-.block-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
-}
-
 .time-badge {
+  flex-shrink: 0;
   font-size: 12px;
   color: var(--text-muted);
   font-weight: 500;
 }
 
 .duration {
+  flex-shrink: 0;
   font-size: 12px;
   color: var(--text-faint);
 }
 
 .remaining-badge {
-  flex-shrink: 0;
+  /* Shrinks before the title does on narrow cards. */
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 12px;
   line-height: 1;
   color: var(--accent);
@@ -429,14 +357,14 @@ async function handleDelete() {
 }
 
 .delete-btn {
-  margin-left: auto;
-  width: 24px;
-  height: 24px;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
   border: none;
   border-radius: 4px;
   background: transparent;
   color: var(--text-faint);
-  font-size: 18px;
+  font-size: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -447,15 +375,9 @@ async function handleDelete() {
   color: #ef4444;
 }
 
-.block-body {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
 .checkbox {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   flex-shrink: 0;
   cursor: pointer;
 }
@@ -465,9 +387,19 @@ async function handleDelete() {
   cursor: progress;
 }
 
+.title,
+.title-input {
+  flex: 1 0 0;
+  /* Keeps the title readable and clickable however many badges the row has. */
+  min-width: 48px;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .title {
   cursor: pointer;
-  font-size: 15px;
 }
 
 .title:hover {
@@ -480,10 +412,17 @@ async function handleDelete() {
 }
 
 .title-input {
-  flex: 1;
   border: 1px solid var(--border-strong);
   border-radius: 4px;
   padding: 2px 6px;
-  font-size: 15px;
+}
+
+/* Phone-width cards: the time range already implies the duration, and on
+   the current block the countdown matters more than the range. */
+@container (max-width: 300px) {
+  .duration,
+  .block-row:has(.remaining-badge) .time-badge {
+    display: none;
+  }
 }
 </style>

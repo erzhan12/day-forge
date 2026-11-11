@@ -110,16 +110,30 @@ describe("TimeBlock", () => {
     expect(twoHours.find(".duration").text()).toBe("2h")
   })
 
-  it("keeps compact 30-minute blocks in compact layout", () => {
-    const wrapper = mountWithProvide({
-      block: makeBlock({ start_time: "09:00", end_time: "09:30" }),
-      date: "2026-04-10",
-    })
-    expect(wrapper.find(".time-block").classes()).toContain("compact")
-    expect(wrapper.find(".duration").exists()).toBe(false)
+  it("renders short and long blocks with the same single-row layout", () => {
+    const cases = [
+      { end_time: "09:30", time: "09:00–09:30", duration: "30m" },
+      { end_time: "10:30", time: "09:00–10:30", duration: "1h 30m" },
+    ]
+    for (const { end_time, time, duration } of cases) {
+      const wrapper = mountWithProvide({
+        block: makeBlock({ start_time: "09:00", end_time }),
+        date: "2026-04-10",
+      })
+      const row = wrapper.find(".time-block > .block-row")
+      expect(row.exists()).toBe(true)
+      expect(wrapper.find(".time-block").classes()).not.toContain("compact")
+      expect(wrapper.find(".block-header").exists()).toBe(false)
+      expect(wrapper.find(".block-body").exists()).toBe(false)
+      expect(row.findAll(".checkbox")).toHaveLength(1)
+      expect(row.find(".time-badge").text()).toBe(time)
+      expect(row.find(".duration").text()).toBe(duration)
+      expect(row.find(".title").text()).toBe("Test Block")
+      expect(row.find(".delete-btn").exists()).toBe(true)
+    }
   })
 
-  it("shows remaining time on an active compact block", () => {
+  it("shows remaining time on an active short block", () => {
     const wrapper = mountWithProvide({
       block: makeBlock({ start_time: "09:00", end_time: "09:30" }),
       date: "2026-04-10",
@@ -130,7 +144,7 @@ describe("TimeBlock", () => {
     expect(wrapper.find(".remaining-badge").text()).toBe("23m left")
   })
 
-  it("shows remaining time on an active expanded block while preserving total duration", () => {
+  it("shows remaining time on an active long block while preserving total duration", () => {
     const wrapper = mountWithProvide({
       block: makeBlock({ start_time: "09:00", end_time: "10:30" }),
       date: "2026-04-10",
@@ -313,9 +327,7 @@ describe("TimeBlock", () => {
     expect(mockUpdateBlock).not.toHaveBeenCalled()
   })
 
-  it("disables the compact-layout checkbox while the schedule is disabled", async () => {
-    // The compact (<=30m) branch renders a separate <input>; assert it also
-    // carries the native disabled state (both branches bind :disabled="disabled").
+  it("disables a short block's checkbox while the schedule is disabled", async () => {
     const wrapper = mount(TimeBlock, {
       props: {
         block: makeBlock({ start_time: "09:00", end_time: "09:25" }),
@@ -335,7 +347,6 @@ describe("TimeBlock", () => {
         },
       },
     })
-    expect(wrapper.find(".time-block").classes()).toContain("compact")
     expect((wrapper.find(".checkbox").element as HTMLInputElement).disabled).toBe(true)
     await wrapper.find(".checkbox").trigger("change")
     expect(mockUpdateBlock).not.toHaveBeenCalled()
@@ -351,15 +362,12 @@ describe("TimeBlock", () => {
     expect(wrapper.text()).toContain("Failed to update")
   })
 
-  it("toggles completion on the compact-layout checkbox", async () => {
-    // The compact (<=30m) and expanded branches render separate <input>s;
-    // exercise the compact one so a regression in either branch is caught.
+  it("toggles completion on a short block's checkbox", async () => {
     mockUpdateBlock.mockResolvedValue(acceptedMutation([makeBlock()]))
     const wrapper = mountWithProvide({
       block: makeBlock({ start_time: "09:00", end_time: "09:30" }),
       date: "2026-04-10",
     })
-    expect(wrapper.find(".time-block").classes()).toContain("compact")
     await wrapper.find(".checkbox").trigger("change")
     expect(mockUpdateBlock).toHaveBeenCalledWith(
       1,
