@@ -98,13 +98,18 @@ vi.mock("../src/composables/useTravelRules", () => ({
 vi.mock("../src/utils/travelRules", () => ({ matchTravelRule }))
 
 const dragIsDragging = ref(false)
+const dragBlockId = ref<number | null>(null)
+const dragPreviewStart = ref("")
+const dragPreviewEnd = ref("")
 const cancelDrag = vi.fn(() => { dragIsDragging.value = false })
 vi.mock("../src/composables/useDrag", () => ({
   // Schedule.vue imports this named helper for its drag-ghost geometry; a
   // factory omitting it leaves the binding undefined and throws when a ghost
   // renders.
-  clampedDragDuration: (b: { start_time: string; end_time: string }) =>
-    b.start_time === b.end_time ? 5 : 30,
+  clampedDragDuration: (b: { start_time: string; end_time: string }) => {
+    const minutes = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5))
+    return Math.max(5, minutes(b.end_time) - minutes(b.start_time))
+  },
   useDrag: () => ({
     frozenRenderBounds: ref(null),
     frozenNowMinutes: ref(null),
@@ -112,10 +117,10 @@ vi.mock("../src/composables/useDrag", () => ({
     frozenTimelineOriginMinutes: ref(null),
     frozenWindow: ref(null),
     isDragging: dragIsDragging,
-    dragBlockId: ref<number | null>(null),
+    dragBlockId,
     ghostTop: ref(0),
-    previewStartTime: ref(""),
-    previewEndTime: ref(""),
+    previewStartTime: dragPreviewStart,
+    previewEndTime: dragPreviewEnd,
     previewBlocks: ref([]),
     shiftedBlockIds: ref(new Set<number>()),
     startDrag: vi.fn(),
@@ -348,6 +353,7 @@ describe("Schedule.vue auto-draft watcher", () => {
   beforeEach(() => {
     canUndo.value = false
     dragIsDragging.value = false
+    dragBlockId.value = null
     cancelDrag.mockClear()
     stubLocalStorage()
     stubMatchMedia(false)
@@ -436,6 +442,29 @@ describe("Schedule.vue auto-draft watcher", () => {
     expect(cancelDrag).toHaveBeenCalledOnce()
     expect(dragIsDragging.value).toBe(false)
     expect(page.get('[role="alert"]').text()).toContain("Category data could not be loaded")
+  })
+
+  it.each([
+    ["short", "09:00", "09:15", "15m"],
+    ["long", "09:00", "10:30", "1h 30m"],
+  ])("renders the drag ghost of a %s block as one row", async (_label, start, end, duration) => {
+    const block = { ...makeBlock(7), start_time: start, end_time: end }
+    const page = mountPage({
+      schedule: makeSchedule("2026-05-04"), blocks: [block], date: "2026-05-04",
+    })
+    dragBlockId.value = 7
+    dragPreviewStart.value = "11:00"
+    dragPreviewEnd.value = "11:45"
+    dragIsDragging.value = true
+    await nextTick()
+
+    const ghost = page.get(".drag-ghost")
+    expect(ghost.findAll('input[type="checkbox"]')).toHaveLength(1)
+    expect(ghost.get(".ghost-time").text()).toBe("11:00–11:45")
+    expect(ghost.get(".ghost-duration").text()).toBe(duration)
+    expect(ghost.get(".ghost-title").text()).toBe("Block 7")
+    expect(ghost.find(".ghost-header").exists()).toBe(false)
+    expect(ghost.classes()).not.toContain("compact")
   })
 
   it("(a) fires generateDraft once on first mount when auto_draft_pending=true and blocks are empty", async () => {

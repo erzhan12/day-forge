@@ -174,12 +174,6 @@ export function useTimelinePresentation(options: UseTimelinePresentationOptions)
       ? null : options.getBlocks().find((item) => item.id === drag.dragBlockId)
     return block ? clampedDragDuration(block) * presentation.value.pxPerMinute : 0
   })
-  const ghostIsCompact = computed(() => {
-    const drag = options.getDragState()
-    const block = drag?.dragBlockId === null || drag?.dragBlockId === undefined
-      ? null : options.getBlocks().find((item) => item.id === drag.dragBlockId)
-    return block ? clampedDragDuration(block) <= 30 : false
-  })
   const itemHeight = (item: ScheduleDisplayItem): string =>
     `${renderedMinutes(item) * presentation.value.pxPerMinute}px`
   const nowOffsetPercent = (item: ScheduleDisplayItem): string =>
@@ -188,6 +182,6 @@ export function useTimelinePresentation(options: UseTimelinePresentationOptions)
   return {
     renderBounds, timelineOriginMinutes,
     effectiveBlocks, currentBlock, currentBlockRemaining, displayList,
-    ghostHeight, ghostIsCompact, itemHeight, nowOffsetPercent, presentation,
+    ghostHeight, itemHeight, nowOffsetPercent, presentation,
   }
 }

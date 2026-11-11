@@ -328,7 +328,7 @@ onUnmounted(() => {
       data-testid="chat-cancel-intent"
       :disabled="inputDisabled"
       @click="cancelPendingIntent(props.pushUndo)"
-    >Cancel pending request</button>
+    >Cancel clarification</button>
     <form class="command-row" @submit.prevent="handleSubmit">
       <span
         class="status-dot"
