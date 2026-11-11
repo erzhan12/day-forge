@@ -1,6 +1,6 @@
 Review the changed files in this branch (or staged/unstaged changes if on main). Use `git diff` to identify what changed, then review each file thoroughly.
 
-For each file, run 5 parallel subagents — one per category below. Each subagent should read the changed files and report findings as a bullet list. Only report actual issues, not generic advice.
+For each category below, run a parallel subagent that reads the changed files and reports findings as a bullet list. Only report actual issues, not generic advice.
 
 ## 1. Code Quality
 - Violations of DRY, single responsibility, or existing patterns in this codebase

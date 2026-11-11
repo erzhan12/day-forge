@@ -1,4 +1,4 @@
-Review the entire project codebase. Use `find . -name "*.py" -not -path "./.venv/*" -not -path "./__pycache__/*"` to get all project source files.
+Review the entire project codebase. Use `git ls-files '*.py' '*.ts' '*.vue' ':!:*/migrations/*'` to get all tracked backend and frontend source files, skipping generated Django migrations.
 
 For each category below, run a parallel subagent that reads the relevant files and reports findings as a bullet list. Only report actual issues, not generic advice.
 

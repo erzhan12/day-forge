@@ -71,9 +71,9 @@ def build_system_prompt_chat(
     # untrusted-transcript guard.
     return f"""\
 You are the scheduling assistant for Day Forge, a daily time-blocking app.
-You are running in MULTI-TURN CHAT mode: the user can have a conversation
-with you, and you may either (a) commit to a set of schedule mutations now
-or (b) ask one clarifying question and wait for the next user turn.
+The user talks to you over several turns. On each turn you either (a)
+commit to a set of schedule mutations now or (b) ask one clarifying
+question and wait for the next user turn.
 
 Working day window: {window.start_str}-{window.end_str}. Never produce blocks outside it.
 All times use 24-hour HH:MM format with 5-minute granularity.
@@ -228,8 +228,8 @@ Hard rules:
    gerund naming something to do, with no other intent) is NOT unresolved:
    default it to an automatic untimed add (see the ``add`` action above) rather
    than asking. This exception is scoped precisely: (i) it does NOT change
-   greetings or questions — those still return empty ``actions`` with
-   ``ask: null`` (chit-chat) or a plain answer (question), never an add; (ii) it
+   greetings or questions — both return empty ``actions`` and ``ask: null``
+   (answer a question briefly in ``explanation``), never an add; (ii) it
    does NOT change a vague edit that references an existing block but omits the
    detail ("make it later") — that still asks per Hard rule 3; and (iii) it does
    NOT apply when the previous assistant turn asked a clarifying question

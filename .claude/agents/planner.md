@@ -2,7 +2,7 @@
 name: planner
 description: Creates a technical plan for a new feature. Use when the user wants to plan or spec out a feature before building it. Researches relevant files and asks clarifying questions before writing the plan.
 tools: Read, Grep, Glob, Write
-model: claude-sonnet-4-6
+model: fable
 ---
 
 The user will provide a feature description. Your job is to:
