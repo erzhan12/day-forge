@@ -259,10 +259,29 @@ jobs:
 
       - name: Probe MCP health endpoint
         run: |
+          url=https://dayforge.habitreward.org/mcp/health
           for i in $(seq 1 5); do
-            body=$(curl -fsS --max-time 5 https://dayforge.habitreward.org/mcp/health || true)
-            echo "attempt $i: $body"
-            if [ "$body" = '{"status":"ok"}' ]; then exit 0; fi
-            if [ "$i" = "5" ]; then echo "MCP health check failed"; exit 1; fi
-            sleep 10
+            rm -f /tmp/mcp-health.body
+            # No -f: keep the status code so a failure says which layer answered.
+            code=$(curl -sS --max-time 5 -o /tmp/mcp-health.body -w "%{http_code}" "$url" || true)
+            body=$(head -c 200 /tmp/mcp-health.body 2>/dev/null || true)
+            echo "attempt $i: HTTP $code $(printf '%s' "$body" | tr '\n' ' ')"
+            if [ "$code" = "200" ] && [ "$body" = '{"status":"ok"}' ]; then exit 0; fi
+            if [ "$i" != "5" ]; then sleep 10; fi
           done
+          echo "MCP health check failed: last response was HTTP $code"
+          case "$code" in
+            404)
+              echo "::error::/mcp/health returned 404. Most likely the /mcp* route is missing from the central Caddyfile (habit_reward repo), so the request reached Django. See step 4 of deployment/README.md."
+              ;;
+            502|503)
+              echo "::error::/mcp/health returned $code. Caddy has the /mcp* route, but the MCP container (day_forge_mcp, port 8009) is not answering."
+              ;;
+            000)
+              echo "::error::/mcp/health gave no HTTP response (DNS, TLS or timeout)."
+              ;;
+            *)
+              echo "::error::/mcp/health returned HTTP $code with an unexpected body."
+              ;;
+          esac
+          exit 1

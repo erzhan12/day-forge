@@ -200,15 +200,36 @@ sudo chown -R 1000:1000 "$DEPLOY_PATH/data" "$DEPLOY_PATH/staticfiles"
 ```
 
 ### 4. Wire the subdomain into the central Caddy (habit_reward repo)
-Paste the block from `deployment/caddy/dayforge.caddy` into habit_reward's
-`Caddyfile`, commit/deploy there (or edit on the droplet), then reload:
-```bash
-docker exec habit_reward_caddy caddy reload --config /etc/caddy/Caddyfile
-```
+The central Caddy is deployed from the habit_reward repository
+(`deployment/caddy/Caddyfile`). Its deploy re-extracts the committed file, so
+anything edited by hand on the droplet is dropped the next time Caddy is
+deployed there. **Never hand-edit Caddy on the server.**
+
+For a first-time setup, open a pull request in habit_reward that adds a
+`dayforge.habitreward.org` block based on `deployment/caddy/dayforge.caddy`,
+and let that repository's Caddy deploy apply it.
+
+`deployment/caddy/dayforge.caddy` is the reference for Day Forge's routing. The
+habit_reward block may differ in its other directives (`tls`, `handle_errors`,
+log format), but these two routes must match:
+
+- `handle /mcp*` → `host.docker.internal:8009` (MCP container)
+- catch-all `handle` → `host.docker.internal:8006` with
+  `header_up X-Forwarded-Proto https` (Django)
+
+Every routing change in `dayforge.caddy` needs a matching pull request in
+habit_reward, merged and deployed there **before** the Day Forge deploy that
+depends on it. habit_reward's Caddy deploy reloads Caddy; do not reload by hand
+with a locally edited file.
+
+If `/mcp/health` returns a 404 while `/accounts/login/` returns 200, the
+`/mcp*` route is most likely missing from the central Caddyfile, so the request
+fell through to Django. Compare the two files and fix it with a pull request in
+habit_reward.
 
 ## Deploying
 
-Push to `main` or run the **Deploy** workflow manually. Shared CI validation must pass before the workflow builds and pushes **two** images to GHCR (`day-forge:<sha>` and `day-forge-mcp:<sha>`). The deploy job connects over pinned SSH, writes `.env` (including `DOCKER_IMAGE` and `DOCKER_IMAGE_MCP` — the file is rewritten wholesale, so omit = erase), then runs `docker compose pull` and `docker compose up -d`. The final job checks `https://dayforge.habitreward.org/accounts/login/` and `/mcp/health`. Before the first MCP deploy, paste the updated `deployment/caddy/dayforge.caddy` (`handle /mcp*` → `:8009`, catch-all → `:8006`) into habit_reward's central Caddyfile and reload Caddy; see [docs/mcp.md](../docs/mcp.md).
+Push to `main` or run the **Deploy** workflow manually. Shared CI validation must pass before the workflow builds and pushes **two** images to GHCR (`day-forge:<sha>` and `day-forge-mcp:<sha>`). The deploy job connects over pinned SSH, writes `.env` (including `DOCKER_IMAGE` and `DOCKER_IMAGE_MCP` — the file is rewritten wholesale, so omit = erase), then runs `docker compose pull` and `docker compose up -d`. The final job checks `https://dayforge.habitreward.org/accounts/login/` and `/mcp/health`, and prints the HTTP status when the MCP probe fails. The `/mcp*` route lives in habit_reward's central Caddyfile, not in this repository; see [step 4](#4-wire-the-subdomain-into-the-central-caddy-habit_reward-repo) for the rule that keeps it in step with `deployment/caddy/dayforge.caddy`, and [docs/mcp.md](../docs/mcp.md) for the server itself.
 
 After the containers start, the deploy removes old local Day Forge images for
 both `DOCKER_IMAGE` and `DOCKER_IMAGE_MCP`. For each repo it keeps the running

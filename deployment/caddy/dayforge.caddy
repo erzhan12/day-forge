@@ -1,4 +1,9 @@
-# Add this block to habit_reward's central Caddyfile, then reload Caddy.
+# Reference for Day Forge's routing in habit_reward's central Caddyfile
+# (deployment/caddy/Caddyfile in that repo). This file is not deployed from here.
+# Every change to the routes below needs a matching pull request in
+# habit_reward, merged and deployed before the Day Forge deploy that depends on it. Never
+# hand-edit Caddy on the server: habit_reward's Caddy deploy overwrites it.
+# See deployment/README.md, step 4.
 # day-forge serves its own static via WhiteNoise, so no file_server here.
 # MCP (feature 0089) lives at /mcp* on the same host; wrap both upstreams in
 # `handle` blocks so they do not both match.
