@@ -45,6 +45,14 @@ def test_parse_anchors_reads_comma_separated_lines():
     ]
 
 
+def test_parse_anchors_keeps_commas_inside_test_titles():
+    text = "Tests: web/a.test.ts::panel::shows A, then B, web/b.test.ts::x::y\n"
+    assert parse_anchors(text) == [
+        (1, "web/a.test.ts::panel::shows A, then B"),
+        (1, "web/b.test.ts::x::y"),
+    ]
+
+
 def test_parse_anchors_strips_parametrize_ids():
     assert parse_anchors("Tests: t.py::test_x[case-1]\n") == [(1, "t.py::test_x")]
 
@@ -59,6 +67,46 @@ def test_valid_python_anchors_pass(tmp_path):
         " app/models.py::Template.slot_type_for_date\n",
     )
     assert check_specs(tmp_path) == []
+
+
+def test_names_assigned_under_module_level_branches_resolve(tmp_path):
+    _write(
+        tmp_path,
+        "app/settings.py",
+        "if REDIS:\n    CACHES = {}\nelse:\n    CACHES = {}\n"
+        "try:\n    import x\nexcept ImportError:\n    FALLBACK = 1\n",
+    )
+    _spec(tmp_path, "Enforced: app/settings.py::CACHES, app/settings.py::FALLBACK\n")
+    assert check_specs(tmp_path) == []
+
+
+def test_inherited_test_methods_resolve_through_imported_base(tmp_path):
+    _write(
+        tmp_path,
+        "backend/tests/_contract.py",
+        "class Contract:\n    def test_429(self):\n        pass\n",
+    )
+    _write(
+        tmp_path,
+        "backend/tests/test_views.py",
+        "from tests._contract import Contract\n\n\n"
+        "class Local:\n    def test_local(self):\n        pass\n\n\n"
+        "class TestLimit(Contract, Local):\n    pass\n",
+    )
+    _spec(
+        tmp_path,
+        "Tests: backend/tests/test_views.py::TestLimit::test_429,"
+        " backend/tests/test_views.py::TestLimit::test_local\n"
+        "Tests: backend/tests/test_views.py::TestLimit::test_missing\n",
+    )
+    [error] = check_specs(tmp_path)
+    assert "test_missing" in error
+
+
+def test_function_locals_are_not_anchors(tmp_path):
+    _write(tmp_path, "app/mod.py", "def f():\n    local_name = 1\n")
+    _spec(tmp_path, "Enforced: app/mod.py::local_name\n")
+    assert len(check_specs(tmp_path)) == 1
 
 
 def test_missing_file_is_reported(tmp_path):

@@ -30,4 +30,13 @@ Steps for a feature:
 4. Before the fast-forward merge, run `openspec archive NNNN-slug` on the feature branch. It folds the deltas into `openspec/specs/` and moves the change to `openspec/changes/archive/`. Main is never edited directly, so archiving happens in the feature PR.
 5. Run `make spec-check`. It runs `openspec validate --all --strict` and checks that every `Enforced:` and `Tests:` anchor still exists.
 
+Renaming or deleting a test or symbol that a spec cites breaks `make spec-check`. Update the anchor in the same change, even when the change is a refactor that alters no behavior.
+
+Spec-writing pitfalls:
+
+- OpenSpec strict validation rejects a requirement body (the text between `### Requirement:` and the first `#### Scenario:`) longer than 500 characters. Put `Tests:` lines under scenarios and keep only the SHALL sentence and `Enforced:` in the body.
+- Anchor lists are comma-separated, but a comma only splits when a new `path::` anchor follows, so Vitest titles that contain commas are cited verbatim.
+- Python anchors resolve through the AST, including names assigned inside module-level `if`/`try` blocks and test methods inherited from a base class (cite them on the concrete class, as pytest runs them).
+- Do not write a requirement whose `Enforced:` anchor does not actually enforce it. List the gap in the feature's review notes instead. [`0099_SPEC_REVIEW.md`](0099_SPEC_REVIEW.md) holds the open items from the baseline.
+
 A change that alters no specified behavior, such as a refactor, docs edit or dependency bump, needs no OpenSpec change. Until the baseline specs absorb them, [`RULES.md`](../../RULES.md) and [`docs/api.md`](../api.md) remain authoritative where they disagree with a spec. Fix the spec in that case.
