@@ -280,8 +280,11 @@ jobs:
             000)
               echo "::error::/mcp/health gave no HTTP response (DNS, TLS or timeout)."
               ;;
+            200)
+              echo "::error::/mcp/health returned 200 with an unexpected body."
+              ;;
             *)
-              echo "::error::/mcp/health returned HTTP $code with an unexpected body."
+              echo "::error::/mcp/health returned an unexpected HTTP $code."
               ;;
           esac
           exit 1
