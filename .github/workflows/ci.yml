@@ -97,3 +97,11 @@ jobs:
       - name: Frontend production build
         working-directory: frontend
         run: npm run build
+
+      # Feature 0098: OpenSpec specs and active change deltas must validate
+      # strictly, and every Enforced:/Tests: anchor must point at real code.
+      # Keep the CLI version in step with the Makefile comment.
+      - name: OpenSpec spec check
+        run: |
+          npm install -g --no-audit --no-fund @fission-ai/openspec@2.0.0
+          make spec-check

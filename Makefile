@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 
 .PHONY: help install dev run run-manual frontend-dev frontend-install frontend-build \
-        lint lint-fix format typecheck test test-backend test-frontend check \
+        lint lint-fix format typecheck test test-backend test-frontend check spec-check \
         e2e e2e-chat e2e-draft \
         migrate makemigrations seed superuser shell \
         docker docker-build docker-down clean
@@ -75,7 +75,15 @@ test-backend: ## Run pytest
 test-frontend: ## Run frontend tests
 	cd frontend && npm test
 
-check: lint test-backend typecheck test-frontend ## Backend lint/tests and frontend type-check/tests
+check: lint test-backend typecheck test-frontend spec-check ## Backend lint/tests, frontend type-check/tests, spec checks
+
+# OpenSpec CLI pinned to the version the repo was initialised with (feature 0098).
+# Install: npm install -g @fission-ai/openspec@2.0.0 (or `openspec install 2.0.0`).
+OPENSPEC ?= openspec
+
+spec-check: ## Validate OpenSpec specs/changes (strict) and their code anchors
+	$(OPENSPEC) validate --all --strict --no-interactive
+	uv run python backend/scripts/check_spec_anchors.py
 
 # These smoke scripts run serially because they share the playwright user's
 # AI rate-limit counters. Some make real provider calls and consume tokens.

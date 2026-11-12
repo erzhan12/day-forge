@@ -4,7 +4,7 @@ Follow [AGENTS.md](AGENTS.md) for the stack, repository layout and shared develo
 
 ## Commands and verification
 
-Use the commands in [README.md](README.md#development) and [Makefile](Makefile). Run `make check` for backend lint/tests and frontend types/tests, then `make frontend-build` for the production bundle. README documents the remaining CI checks.
+Use the commands in [README.md](README.md#development) and [Makefile](Makefile). Run `make check` for backend lint/tests, frontend types/tests and OpenSpec spec checks, then `make frontend-build` for the production bundle. README documents the remaining CI checks.
 
 Seed templates for an existing user with `make seed SEED_USER=username`. The management command requires `--user`; a bare `seed_templates` call fails.
 

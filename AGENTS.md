@@ -15,7 +15,7 @@ From the repository root:
 - Create an admin user: `make superuser`.
 - Seed templates for an existing user: `make seed SEED_USER=username`. `SEED_USER` is required; the target fails before Django starts when it is empty.
 - Start development servers in separate terminals: `make run` (Django on port 8006) and `make frontend-dev` (Vite on port 5173).
-- Run local application checks: `make check`. This runs backend lint and tests, then `npm run type-check` and frontend tests.
+- Run local application checks: `make check`. This runs backend lint and tests, `npm run type-check`, frontend tests, and `make spec-check` (OpenSpec strict validation plus anchor check; needs the `openspec` 2.0.0 CLI).
 - Build production frontend assets: `make frontend-build`.
 
 The reusable PR/deploy workflow in `.github/workflows/ci.yml` also runs `npm audit --omit=dev --audit-level=high`, a production build, and a deployment SSH pinning check. See `README.md` for local equivalents. Playwright smoke scripts may contact external services; read `frontend/scripts/playwright/README.md` before running them.
@@ -32,4 +32,4 @@ The reusable PR/deploy workflow in `.github/workflows/ci.yml` also runs `npm aud
 - `frontend/src/composables/useSchedulePageController.ts`: schedule page state and mutation owner; `useScheduleRevision.ts` holds the canonical revision and blocks.
 - `backend/tests/` and `frontend/tests/`: application tests.
 
-`RULES.md` records current invariants. `docs/ARCHITECTURE.md` maps the current code. `docs/api.md` defines the API. `docs/features/README.md` explains the status of feature plans. `PHASES.md` is the original roadmap and is historical; use `tasks/todo.md` and `docs/REFACTORING_PLAN.md` for tracked work.
+`openspec/specs/` holds the per-capability behavior specs; new features add an OpenSpec change next to their numbered plan (see `docs/features/README.md`). `RULES.md` records current invariants. `docs/ARCHITECTURE.md` maps the current code. `docs/api.md` defines the API. `docs/features/README.md` explains the status of feature plans. `PHASES.md` is the original roadmap and is historical; use `tasks/todo.md` and `docs/REFACTORING_PLAN.md` for tracked work.

@@ -129,7 +129,7 @@ make frontend-build
 npm --prefix frontend audit --omit=dev --audit-level=high
 ```
 
-`make check` runs backend lint and tests plus frontend type checking and tests. The separate build and audit commands above cover the remaining application checks from CI. The workflow also checks SSH host-key pinning in `.github/workflows/deploy.yml`.
+`make check` runs backend lint and tests, frontend type checking and tests, and `make spec-check`, which validates `openspec/` strictly and checks every spec anchor against the code. It needs the OpenSpec CLI: `npm install -g @fission-ai/openspec@2.0.0`. The separate build and audit commands above cover the remaining application checks from CI. The workflow also checks SSH host-key pinning in `.github/workflows/deploy.yml`.
 
 End-to-end Playwright scripts are documented in [frontend/scripts/playwright/README.md](frontend/scripts/playwright/README.md). Some scripts call the real LLM or external providers and create data. Read the script guide before running `make e2e`.
 
