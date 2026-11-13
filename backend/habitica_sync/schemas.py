@@ -1,7 +1,6 @@
 """Request/response schemas for the Habitica API endpoints."""
 
 import re
-import uuid
 from dataclasses import dataclass
 
 
@@ -62,9 +61,4 @@ _HABITICA_TASK_ID = re.compile(
 
 def is_valid_task_id(task_id: str) -> bool:
     """Return True if ``task_id`` is a canonical hyphenated Habitica UUID."""
-    if not isinstance(task_id, str) or _HABITICA_TASK_ID.fullmatch(task_id) is None:
-        return False
-    try:
-        return str(uuid.UUID(task_id)) == task_id.lower()
-    except ValueError:
-        return False
+    return isinstance(task_id, str) and _HABITICA_TASK_ID.fullmatch(task_id) is not None

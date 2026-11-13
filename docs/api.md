@@ -1080,6 +1080,11 @@ empty JSON body. This is one-way; un-complete is not supported. Habitica returns
 Successful complete invalidates the Habitica task cache by bumping
 `account.updated_at`.
 
+`id` must be a canonical hyphenated UUID (case-insensitive). Errors: `400`
+`Invalid task id.` (checked before the account lookup; no upstream call),
+`401` invalid stored credentials, `502` provider failure, `503` no Habitica
+account, `504` timeout, `500` misconfigured encryption key.
+
 ## Travel-time rules — feature 0026
 
 Per-user rules that prefill the "Add to schedule" dialog when adding an
@@ -1414,7 +1419,7 @@ just-closed task is not re-served from a stale cache.
 
 | Name | Type | Notes |
 |------|------|-------|
-| `id` | string | Opaque Todoist task id (alphanumeric, e.g. `6X7rfFVPjhvv84XG` — **not** numeric). Round-trips from `GET /api/todoist/tasks/{date}/`. |
+| `id` | string | Todoist task id matching `^[A-Za-z0-9_-]{1,64}$` (e.g. `6X7rfFVPjhvv84XG` — **not** numeric). Round-trips from `GET /api/todoist/tasks/{date}/`. Validated before the account lookup. |
 
 **Success — `200 OK`**
 
@@ -1429,6 +1434,7 @@ refreshed list is not returned (avoids a second provider round-trip).
 
 | Status | Cause |
 |--------|-------|
+| `400` | `Invalid task id.` — `id` does not match the format above. Returned before the account check; no upstream call. |
 | `401` | `TodoistAuthError` — Todoist rejected the stored token. |
 | `502` | `TodoistProviderError` — Todoist API failure (incl. a stale/unknown id → provider `404`). |
 | `503` | No `TodoistAccount` configured for this user. |
