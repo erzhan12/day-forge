@@ -203,3 +203,7 @@ When reviewing a plan-approved exception, test its missing precondition as well 
 ## Update fixtures when removing a compatibility default
 
 R12 removed invented frontend category rows after confirming that authenticated page loaders bootstrap a live catalog. Leaf and PiP fixtures that omitted categories then exercised the new error path instead of their intended behavior. Pass a complete realistic catalog with one sink and one new-block default; keep separate malformed-catalog tests. Do not weaken an unrelated UI assertion to accommodate an incomplete fixture.
+
+## Repeated block titles are intentional
+
+A schedule may hold several blocks with the same title (`LeverX[2]`, `LeverX[3]`, repeated `Momentum`). AI chips that suggest adding a block already on the day are expected, not a bug. When reviewing chat suggestions or add actions, do not flag a title collision with an existing block as a defect.

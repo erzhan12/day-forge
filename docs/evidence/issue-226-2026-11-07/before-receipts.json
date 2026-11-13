@@ -1,0 +1,45 @@
+[
+  {
+    "status": 200,
+    "applied": true,
+    "ask": null,
+    "explanation": "Добавляю встречу в расписание.",
+    "revision": 2,
+    "blocks": [
+      {
+        "id": 688,
+        "title": "встречу",
+        "start_time": "06:00",
+        "end_time": "06:25",
+        "category": "other"
+      }
+    ],
+    "outcomes": [
+      {
+        "action_index": 0,
+        "task_id": null,
+        "status": "applied",
+        "applied_fields": [
+          "title",
+          "category",
+          "start_time",
+          "end_time"
+        ],
+        "skipped_fields": [],
+        "reason_code": null,
+        "conflicting_task_ids": [],
+        "attempted_direction": null,
+        "suggestion": null
+      }
+    ]
+  },
+  {
+    "status": 200,
+    "applied": false,
+    "ask": "Какое название у задачи?",
+    "explanation": "Нужно название для новой задачи.",
+    "revision": 2,
+    "blocks": null,
+    "outcomes": []
+  }
+]

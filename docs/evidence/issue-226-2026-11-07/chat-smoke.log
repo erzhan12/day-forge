@@ -1,0 +1,223 @@
+cd frontend || exit; failed=0; \
+	for script in scripts/playwright/ai-chat-*.mjs; do \
+		node "$script" || { \
+			printf '%s failed (exit %s)\n' "$script" "$?" >&2; \
+			failed=1; \
+		}; \
+	done; \
+	exit "$failed"
+23 objects imported automatically (use -v 2 for details).
+
+seeded 108
+{
+  "text": "запланируй встречу",
+  "request": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "запланируй встречу"
+      }
+    ],
+    "expected_revision": 12
+  },
+  "response": {
+    "applied": true,
+    "ask": null,
+    "explanation": "Добавляю встречу в расписание.",
+    "blocks": [
+      {
+        "id": 711,
+        "title": "встречу",
+        "start_time": "06:00",
+        "end_time": "06:25",
+        "category": "other"
+      }
+    ],
+    "outcomes": [
+      {
+        "action_index": 0,
+        "task_id": null,
+        "status": "applied",
+        "applied_fields": [
+          "title",
+          "category",
+          "start_time",
+          "end_time"
+        ],
+        "skipped_fields": [],
+        "reason_code": null,
+        "conflicting_task_ids": [],
+        "attempted_direction": null,
+        "suggestion": null
+      }
+    ]
+  }
+}
+Branch: immediate add, then refinement of the same ID
+{
+  "text": "в 14:00 на час, рабочая",
+  "request": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "запланируй встречу"
+      },
+      {
+        "role": "assistant",
+        "content": "Добавляю встречу в расписание."
+      },
+      {
+        "role": "user",
+        "content": "в 14:00 на час, рабочая"
+      }
+    ],
+    "expected_revision": 13
+  },
+  "response": {
+    "applied": true,
+    "ask": null,
+    "explanation": "Обновляю встречу на 14:00 на час в категорию работа.",
+    "blocks": [
+      {
+        "id": 711,
+        "title": "встречу",
+        "start_time": "14:00",
+        "end_time": "15:00",
+        "category": "work"
+      }
+    ],
+    "outcomes": [
+      {
+        "action_index": 0,
+        "task_id": 711,
+        "status": "applied",
+        "applied_fields": [
+          "category",
+          "start_time",
+          "end_time"
+        ],
+        "skipped_fields": [],
+        "reason_code": null,
+        "conflicting_task_ids": [],
+        "attempted_direction": null,
+        "suggestion": null
+      }
+    ]
+  }
+}
+Persisted: {"id":711,"title":"встречу","start_time":"14:00","end_time":"15:00","category":"work"}
+PASS: follow-up saved exactly one block with the requested attributes
+→ Seeding empty draft schedule…
+23 objects imported automatically (use -v 2 for details).
+
+seeded empty schedule 34
+→ Logging in…
+→ Opening /schedule/2026-09-26/…
+→ Phase 1: in-flight cancel against a delayed 200…
+  …waiting for the delayed response to land and be dropped…
+→ Phase 2: in-flight cancel against a delayed 500…
+  …waiting for the delayed 500 to land and be dropped…
+
+=== Captured chat responses ===
+  status=200 t=1794026687229
+  status=500 t=1794026694067
+
+=== Verdict ===
+✅ PASS — Test 4: clear is a logical cancel for both 200 and 500 in-flight responses
+→ Seeding empty draft schedules on both dates…
+23 objects imported automatically (use -v 2 for details).
+
+seeded both dates
+→ Logging in…
+→ Opening /schedule/2026-09-22/…
+→ Turn 1 on day A…
+→ Day A thread bubble count after turn 1: 2
+→ Navigating to /schedule/2026-09-23/ via DateNavigator next-day click…
+→ Same-document navigation: yes
+→ Day B thread bubble count immediately after navigation: 0
+→ Turn 2 on day B…
+
+=== Captured chat calls ===
+Turn 1: http://localhost:5173/api/ai/schedules/2026-09-22/chat/
+  status=200
+  Request body: {"request_id":"886c515e-4dbb-4f60-ae88-cb414a686d72","expected_revision":0,"messages":[{"role":"user","content":"какой у меня план на день?"}]}
+Turn 2: http://localhost:5173/api/ai/schedules/2026-09-23/chat/
+  status=200
+  Request body: {"request_id":"3fd70edc-4174-41e8-a479-4b7aacbe97eb","expected_revision":0,"messages":[{"role":"user","content":"привет, как дела?"}]}
+
+=== Verdict ===
+✅ PASS — date navigation resets the chat thread
+→ Seeding empty draft schedule…
+23 objects imported automatically (use -v 2 for details).
+
+seeded empty schedule 38
+→ Logging in…
+→ Opening /schedule/2026-09-27/…
+→ State A: fresh schedule…
+→ Style check: 11px, italic, centred…
+→ State B: after one stubbed-200 turn…
+→ State C: click clear…
+→ State D: full page reload…
+
+=== Computed styles on privacy hint ===
+  font-size: 11px
+  font-style: italic
+  text-align: center
+
+=== Verdict ===
+✅ PASS — Test 6: privacy hint is always visible across A/B/C/D and styled correctly
+→ Seeding empty draft schedule via Django shell…
+23 objects imported automatically (use -v 2 for details).
+
+seeded empty schedule 33
+→ Logging in…
+→ Opening /schedule/2026-09-25/…
+→ Pre-submit UI assertions…
+→ Submitting prompt: "add 30-minute focus block at 10:00"…
+→ Wire-level assertions…
+→ Post-submit UI assertions…
+→ DB assertions…
+
+=== Captured chat call ===
+  status=200
+  Request body: {"request_id":"7cb084f1-7cba-4a09-a3b8-c7e57771eccf","expected_revision":5,"messages":[{"role":"user","content":"add 30-minute focus block at 10:00"}]}
+  Response body: {"schedule": {"id": 33, "date": "2026-09-25", "status": "active", "revision": 6}, "blocks": [{"id": 713, "title": "focus block", "start_time": "10:00", "end_time": "10:30", "category": "other", "is_completed": false, "sort_order": 0, "restore_proof": "<redacted>"}], "revision": 6, "explanation": "Added a 30-minute focus bl
+
+=== DB after ===
+23 objects imported automatically (use -v 2 for details).
+
+STATUS active
+BLOCKS 1
+KIND chat
+SUCCESS True
+ACTIONS_LEN 1
+USER_COMMAND add 30-minute focus block at 10:00
+AI_RESPONSE_KEYS ['raw', 'transcript_sha256', 'turn_count']
+TURN_COUNT 1
+HASH_PREFIX 1e62c72c99b7
+HAS_RAW True
+
+=== Verdict ===
+✅ PASS — Test 1: single-turn chat applies actions end-to-end
+→ Seeding empty draft schedules on both days…
+23 objects imported automatically (use -v 2 for details).
+
+seeded both dates
+→ Logging in…
+→ Opening /schedule/2026-09-29/…
+→ Phase 1: submit on day A…
+→ Phase 2: navigate to day B before A resolves…
+→ Phase 3: submit on day B (2s delay)…
+→ Phase 4: waiting for B to resolve…
+→ Phase 5: waiting for late day-A response to be dropped…
+
+=== Captured /chat/ responses ===
+  date=2026-09-30 status=200 at=1794026724972
+  date=2026-09-29 status=200 at=1794026730106
+
+=== Final thread ===
+  bubble: add a coffee break at 11:00 
+  bubble: stub for 2026-09-30 Appliedadded · 11:00–11:15 · day-B coffee break
+
+=== Verdict ===
+✅ PASS — Test 12: stale day-A resolution did not leak into day-B thread
