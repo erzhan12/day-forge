@@ -654,6 +654,94 @@ class TestCompleteView:
         resp = auth_client.get("/api/todoist/tasks/1001/complete/")
         assert resp.status_code == 405
 
+    @pytest.mark.parametrize(
+        "path_segment",
+        [
+            "%3F",
+            "%23",
+            "..",
+            "%2E%2E",
+            "%25",
+            "A" * 65,
+        ],
+    )
+    def test_malformed_task_id_returns_400_without_upstream(
+        self, auth_client, account, path_segment
+    ):
+        """A malformed id must 400 and must not call the provider."""
+        with patch("todoist_sync.service.requests.post") as post:
+            resp = auth_client.post(f"/api/todoist/tasks/{path_segment}/complete/")
+        assert resp.status_code == 400
+        assert resp.json() == {"errors": {"detail": "Invalid task id."}}
+        post.assert_not_called()
+
+    def test_malformed_task_id_returns_400_without_account(self, auth_client):
+        """Validation runs before the missing-account 503."""
+        with patch("todoist_sync.service.requests.post") as post:
+            resp = auth_client.post("/api/todoist/tasks/%3F/complete/")
+        assert resp.status_code == 400
+        assert resp.json() == {"errors": {"detail": "Invalid task id."}}
+        post.assert_not_called()
+
+    def test_empty_task_id_does_not_match_route(self, auth_client, account):
+        """An empty path segment cannot reach the view (``<str:>`` is ``[^/]+``)."""
+        with patch("todoist_sync.service.requests.post") as post:
+            resp = auth_client.post("/api/todoist/tasks//complete/")
+        assert resp.status_code == 404
+        post.assert_not_called()
+
+    def test_decoded_slash_does_not_match_route(self, auth_client, account):
+        """A decoded ``/`` is rejected at routing (404), with no provider call."""
+        with patch("todoist_sync.service.requests.post") as post:
+            resp = auth_client.post("/api/todoist/tasks/foo%2Fbar/complete/")
+        assert resp.status_code == 404
+        post.assert_not_called()
+
+    def test_twice_encoded_slash_returns_400(self, auth_client, account):
+        """``%252F`` reaches the view as a literal percent and is 400."""
+        with patch("todoist_sync.service.requests.post") as post:
+            resp = auth_client.post("/api/todoist/tasks/foo%252Fbar/complete/")
+        assert resp.status_code == 400
+        assert resp.json() == {"errors": {"detail": "Invalid task id."}}
+        post.assert_not_called()
+
+
+class TestTodoistTaskIdValidation:
+    def test_empty_task_id_is_rejected(self):
+        from todoist_sync.schemas import is_valid_task_id
+
+        assert is_valid_task_id("") is False
+
+    @pytest.mark.parametrize(
+        "task_id",
+        [
+            "a",
+            "A" * 64,
+            "6X7rfFVPjhvv84XG",
+            "id_with-hyphen_and_underscore",
+        ],
+    )
+    def test_valid_ids_are_accepted(self, task_id):
+        from todoist_sync.schemas import is_valid_task_id
+
+        assert is_valid_task_id(task_id) is True
+
+    @pytest.mark.parametrize(
+        "task_id",
+        [
+            "A" * 65,
+            "abc def",
+            "abc\n",
+            "id?",
+            ".",
+            "..",
+        ],
+    )
+    def test_invalid_ids_are_rejected(self, task_id):
+        from todoist_sync.schemas import is_valid_task_id
+
+        assert is_valid_task_id(task_id) is False
+
 
 # ---- GET /api/todoist/tasks/<date>/?refresh=1 ---------------------------
 

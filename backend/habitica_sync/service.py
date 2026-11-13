@@ -1,6 +1,7 @@
 """Habitica REST client wrapper for the habitica_sync app."""
 
 import logging
+import urllib.parse
 from datetime import date
 
 import requests
@@ -213,11 +214,21 @@ def fetch_tasks_for_date(
 
 
 def complete_task(account, task_id: str) -> None:
-    """Score up one Habitica todo or daily."""
+    """Score up one Habitica todo or daily.
+
+    The view validates that ``task_id`` is a canonical hyphenated UUID
+    before calling this function. The id is percent-encoded into the path
+    (``urllib.parse.quote(..., safe="")``). Exact ``.`` and ``..`` are
+    rejected here so a direct caller cannot rely on ``requests``
+    normalising the path.
+    """
+    if task_id in (".", ".."):
+        raise ValueError("invalid task id")
     token = account.get_token()
     try:
         response = requests.post(
-            f"{settings.HABITICA_BASE_URL}/tasks/{task_id}/score/up",
+            f"{settings.HABITICA_BASE_URL}/tasks/"
+            f"{urllib.parse.quote(task_id, safe='')}/score/up",
             headers=_headers(account.api_user_id, token),
             json={},
             timeout=settings.HABITICA_REQUEST_TIMEOUT,

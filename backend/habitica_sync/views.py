@@ -22,7 +22,11 @@ from schedules.window import get_schedule_settings, resolve_time_zone
 from habitica_sync import cache as habitica_cache
 from habitica_sync import service
 from habitica_sync.models import HabiticaAccount
-from habitica_sync.schemas import normalized_task_to_dict, validate_account_payload
+from habitica_sync.schemas import (
+    is_valid_task_id,
+    normalized_task_to_dict,
+    validate_account_payload,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -214,6 +218,9 @@ def tasks(request: HttpRequest, date: str) -> JsonResponse:
 @login_required
 @require_http_methods(["POST"])
 def complete(request: HttpRequest, task_id: str) -> JsonResponse:
+    if not is_valid_task_id(task_id):
+        return _envelope("Invalid task id.", 400)
+
     try:
         account_row = request.user.habitica_account
     except HabiticaAccount.DoesNotExist:

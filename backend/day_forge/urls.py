@@ -188,6 +188,10 @@ urlpatterns = [
     # The trailing ``/complete/`` literal disambiguates this from the
     # ``<str:date>/`` route above (which has no trailing segment), so no
     # path collision despite both leading with ``<str:...>``.
+    # Keep ``<str:task_id>`` (``[^/]+``): a stricter converter or
+    # ``re_path`` would 404 malformed ids (often with an HTML body)
+    # instead of the view's 400 JSON envelope. Format is validated in
+    # the complete views.
     path(
         "api/todoist/tasks/<str:task_id>/complete/",
         todoist_views.complete,
@@ -204,6 +208,8 @@ urlpatterns = [
         habitica_views.tasks,
         name="habitica_tasks",
     ),
+    # Same ``<str:task_id>`` choice as the Todoist complete route:
+    # malformed ids must reach the view so they can return 400.
     path(
         "api/habitica/tasks/<str:task_id>/complete/",
         habitica_views.complete,

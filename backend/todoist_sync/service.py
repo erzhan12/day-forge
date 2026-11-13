@@ -13,6 +13,7 @@ API host, parameterised as ``settings.TODOIST_BASE_URL`` — never the
 """
 
 import logging
+import urllib.parse
 from datetime import date
 
 import requests
@@ -287,12 +288,19 @@ def complete_task(account, task_id: str) -> None:
     requests-lib types. Lets ``ImproperlyConfigured`` (key rotation)
     propagate so the view maps it to a config-shaped 500.
 
-    ``task_id`` round-trips from Todoist's own task list and is opaque
-    (alphanumeric, e.g. ``6X7rfFVPjhvv84XG`` — NOT numeric), so it is built
-    straight into the URL path; the ``<str:task_id>`` route converter only
-    excludes path separators (``[^/]+``), so ids are otherwise opaque.
+    ``task_id`` round-trips from Todoist's own task list and is expected
+    to match ``[A-Za-z0-9_-]{1,64}`` (e.g. ``6X7rfFVPjhvv84XG`` — NOT
+    numeric). The view validates that format before calling this function.
+    The id is percent-encoded into the path (``urllib.parse.quote(...,
+    safe="")``). Exact ``.`` and ``..`` are rejected here so a direct
+    caller cannot rely on ``requests`` normalising the path.
     """
-    url = f"{settings.TODOIST_BASE_URL}/tasks/{task_id}/close"
+    if task_id in (".", ".."):
+        raise ValueError("invalid task id")
+    url = (
+        f"{settings.TODOIST_BASE_URL}/tasks/"
+        f"{urllib.parse.quote(task_id, safe='')}/close"
+    )
     token = account.get_token()  # one of two call sites (see fetch_tasks_for_date)
     try:
         response = requests.post(

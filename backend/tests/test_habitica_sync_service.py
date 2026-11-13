@@ -208,6 +208,26 @@ def test_complete_task_scores_up_with_empty_json_body(account):
     assert kwargs["headers"]["x-client"] == "maintainer-user-DayForge"
 
 
+def test_complete_task_percent_encodes_unexpected_character(account):
+    """Defence in depth: an unexpected character is percent-encoded
+    so it cannot cut off the ``/score/up`` suffix."""
+    with patch("habitica_sync.service.requests.post") as post:
+        post.return_value = _response(data={"delta": 1})
+        service.complete_task(account, "abc?x")
+
+    assert post.call_args.args[0] == ("https://habitica.test/api/v3/tasks/abc%3Fx/score/up")
+
+
+@pytest.mark.parametrize("task_id", [".", ".."])
+def test_complete_task_rejects_dot_segments(account, task_id):
+    """``quote`` leaves ``.`` and ``..`` unchanged; reject them before
+    ``requests`` normalises the path."""
+    with patch("habitica_sync.service.requests.post") as post:
+        with pytest.raises(ValueError, match="invalid task id"):
+            service.complete_task(account, task_id)
+        post.assert_not_called()
+
+
 def test_timeout_maps_to_typed_error(account):
     with patch("habitica_sync.service.requests.get") as get:
         get.side_effect = requests.Timeout("slow")

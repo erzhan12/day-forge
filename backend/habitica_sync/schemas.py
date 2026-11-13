@@ -1,5 +1,7 @@
 """Request/response schemas for the Habitica API endpoints."""
 
+import re
+import uuid
 from dataclasses import dataclass
 
 
@@ -51,3 +53,18 @@ def validate_account_payload(data: dict) -> tuple[dict, dict]:
         "api_user_id": api_user_id.strip(),
         "api_token": api_token.strip(),
     }, {}
+
+
+_HABITICA_TASK_ID = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+)
+
+
+def is_valid_task_id(task_id: str) -> bool:
+    """Return True if ``task_id`` is a canonical hyphenated Habitica UUID."""
+    if not isinstance(task_id, str) or _HABITICA_TASK_ID.fullmatch(task_id) is None:
+        return False
+    try:
+        return str(uuid.UUID(task_id)) == task_id.lower()
+    except ValueError:
+        return False
