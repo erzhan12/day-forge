@@ -4059,6 +4059,110 @@ def test_conversational_question_does_not_disable_replay_guard(
     assert TimeBlock.objects.filter(schedule=today_schedule).count() == 1
 
 
+@pytest.mark.django_db
+@pytest.mark.parametrize("follow_up", [
+    "в 14:00 на час, рабочая", "at 14:00 for an hour, work",
+])
+def test_refine_just_added_block_without_duplicate(
+    auth_client, today_schedule, monkeypatch, follow_up
+):
+    """Issue #226: real parser, prompt rewrite, guard and persistence boundary."""
+    neighbour = TimeBlock.objects.create(
+        schedule=today_schedule, title="Neighbour", category="personal",
+        start_time="16:00", end_time="17:00",
+    )
+    original_neighbour = TimeBlock.objects.filter(pk=neighbour.pk).values().get()
+    messages = [_user_turn("запланируй встречу")]
+    meeting_id = None
+    step = 0
+
+    async def complete(**kwargs):
+        nonlocal step
+        step += 1
+        sent = kwargs["messages"]
+        if step == 1:
+            actions = [{"type": "add", "title": "встречу", "category": "other"}]
+        elif step == 2:
+            # Before the fix this was "добавь в 14:00 ..." / "add at ...".
+            assert sent[-1]["content"] == follow_up
+            actions = [{
+                "type": "update", "task_id": meeting_id,
+                "changes": {"start_time": "14:00", "end_time": "15:00", "category": "work"},
+            }]
+        else:
+            assert sent[-1]["content"] == "add Notes"
+            actions = [{"type": "add", "title": "встречу[2]", "category": "work"}]
+        return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps({
+            "actions": actions, "explanation": "Done.", "ask": None,
+        })))])
+
+    monkeypatch.setattr("ai.service._get_client", lambda: SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=complete)),
+    ))
+    monkeypatch.setattr("django.conf.settings.LLM_API_KEY", "test-key")
+    first = _post(auth_client, {"messages": messages})
+    assert first.status_code == 200, first.content
+    assert first.json()["applied"] is True
+    meeting = TimeBlock.objects.get(schedule=today_schedule, title="встречу")
+    meeting_id = meeting.pk
+    messages.extend([_assistant_turn(first.json()["explanation"]), _user_turn(follow_up)])
+    second = _post(auth_client, {"messages": messages})
+    assert second.status_code == 200, second.content
+    assert second.json()["applied"] is True
+    assert second.json()["ask"] is None
+    meeting.refresh_from_db()
+    assert (meeting.start_time, meeting.end_time, meeting.category) == (
+        datetime.time(14), datetime.time(15), "work",
+    )
+    assert TimeBlock.objects.filter(schedule=today_schedule).count() == 2
+    assert TimeBlock.objects.filter(pk=neighbour.pk).values().get() == original_neighbour
+    audit = AIInteraction.objects.filter(schedule=today_schedule).latest("id")
+    assert audit.user_command == follow_up
+    assert audit.actions_json[0]["task_id"] == meeting_id
+
+    # Unrelated fresh titles must not authorize replay of the old add.
+    messages.extend([_assistant_turn(second.json()["explanation"]), _user_turn("Notes")])
+    third = _post(auth_client, {"messages": messages})
+    assert third.status_code == 200, third.content
+    assert third.json()["applied"] is False
+    assert third.json()["outcomes"][0]["reason_code"] == "replay_guard"
+    assert TimeBlock.objects.filter(schedule=today_schedule).count() == 2
+    meeting.refresh_from_db()
+    assert (meeting.start_time, meeting.end_time, meeting.category) == (
+        datetime.time(14), datetime.time(15), "work",
+    )
+
+
+@pytest.mark.django_db
+def test_refinement_does_not_allow_provider_to_add_a_duplicate(
+    auth_client, today_schedule, monkeypatch
+):
+    block = TimeBlock.objects.create(
+        schedule=today_schedule, title="встречу", category="other",
+        start_time="06:00", end_time="06:25",
+    )
+    before = list(today_schedule.time_blocks.values())
+    original_revision = today_schedule.revision
+    _patch_run_chat(monkeypatch, AIChatResult(
+        raw_response_text="{}", explanation="Added a meeting.", ask=None,
+        parsed_actions=[{
+            "type": "add", "title": "встречу[2]", "category": "work",
+            "start_time": "14:00", "end_time": "15:00",
+        }],
+    ))
+    response = _post(auth_client, {"messages": [
+        _user_turn("запланируй встречу"),
+        {**_assistant_turn("Добавляю встречу."), "applied_add_block_ids": [block.id]},
+        _user_turn("в 14:00 на час, рабочая"),
+    ]})
+    assert response.status_code == 200, response.content
+    assert response.json()["applied"] is False
+    assert response.json()["outcomes"][0]["reason_code"] == "replay_guard"
+    assert list(today_schedule.time_blocks.values()) == before
+    today_schedule.refresh_from_db()
+    assert today_schedule.revision == original_revision
+
+
 class TestImplicitAddAuditUnaffected:
     """Feature 0083 Addendum D: the implicit-add rewrite lives entirely
     inside ``ai.service.run_chat`` and only touches the copy of the

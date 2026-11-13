@@ -1,0 +1,101 @@
+23 objects imported automatically (use -v 2 for details).
+
+seeded 108
+{
+  "text": "запланируй встречу",
+  "request": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "запланируй встречу"
+      }
+    ],
+    "expected_revision": 3
+  },
+  "response": {
+    "applied": true,
+    "ask": null,
+    "explanation": "Добавляю встречу в расписание.",
+    "blocks": [
+      {
+        "id": 689,
+        "title": "встречу",
+        "start_time": "06:00",
+        "end_time": "06:25",
+        "category": "other"
+      }
+    ],
+    "outcomes": [
+      {
+        "action_index": 0,
+        "task_id": null,
+        "status": "applied",
+        "applied_fields": [
+          "title",
+          "category",
+          "start_time",
+          "end_time"
+        ],
+        "skipped_fields": [],
+        "reason_code": null,
+        "conflicting_task_ids": [],
+        "attempted_direction": null,
+        "suggestion": null
+      }
+    ]
+  }
+}
+Branch: immediate add, then refinement of the same ID
+{
+  "text": "в 14:00 на час, рабочая",
+  "request": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "запланируй встречу"
+      },
+      {
+        "role": "assistant",
+        "content": "Добавляю встречу в расписание."
+      },
+      {
+        "role": "user",
+        "content": "в 14:00 на час, рабочая"
+      }
+    ],
+    "expected_revision": 4
+  },
+  "response": {
+    "applied": true,
+    "ask": null,
+    "explanation": "Обновляю встречу на 14:00-15:00 в категории work.",
+    "blocks": [
+      {
+        "id": 689,
+        "title": "встречу",
+        "start_time": "14:00",
+        "end_time": "15:00",
+        "category": "work"
+      }
+    ],
+    "outcomes": [
+      {
+        "action_index": 0,
+        "task_id": 689,
+        "status": "applied",
+        "applied_fields": [
+          "category",
+          "start_time",
+          "end_time"
+        ],
+        "skipped_fields": [],
+        "reason_code": null,
+        "conflicting_task_ids": [],
+        "attempted_direction": null,
+        "suggestion": null
+      }
+    ]
+  }
+}
+Persisted: {"id":689,"title":"встречу","start_time":"14:00","end_time":"15:00","category":"work"}
+PASS: follow-up saved exactly one block with the requested attributes

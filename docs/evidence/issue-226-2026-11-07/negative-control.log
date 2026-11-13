@@ -1,0 +1,162 @@
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+_ test_refine_just_added_block_without_duplicate[\u0432 14:00 \u043d\u0430 \u0447\u0430\u0441, \u0440\u0430\u0431\u043e\u0447\u0430\u044f] _
+
+auth_client = <tests.revision_client.RevisionClient object at 0x10bcc6f90>
+today_schedule = <Schedule: 2026-04-18 (draft)>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10b12b950>
+follow_up = 'в 14:00 на час, рабочая'
+
+    @pytest.mark.django_db
+    @pytest.mark.parametrize("follow_up", [
+        "в 14:00 на час, рабочая", "at 14:00 for an hour, work",
+    ])
+    def test_refine_just_added_block_without_duplicate(
+        auth_client, today_schedule, monkeypatch, follow_up
+    ):
+        """Issue #226: real parser, prompt rewrite, guard and persistence boundary."""
+        neighbour = TimeBlock.objects.create(
+            schedule=today_schedule, title="Neighbour", category="personal",
+            start_time="16:00", end_time="17:00",
+        )
+        original_neighbour = TimeBlock.objects.filter(pk=neighbour.pk).values().get()
+        messages = [_user_turn("запланируй встречу")]
+        meeting_id = None
+        step = 0
+    
+        async def complete(**kwargs):
+            nonlocal step
+            step += 1
+            sent = kwargs["messages"]
+            if step == 1:
+                actions = [{"type": "add", "title": "встречу", "category": "other"}]
+            elif step == 2:
+                # Before the fix this was "добавь в 14:00 ..." / "add at ...".
+                assert sent[-1]["content"] == follow_up
+                actions = [{
+                    "type": "update", "task_id": meeting_id,
+                    "changes": {"start_time": "14:00", "end_time": "15:00", "category": "work"},
+                }]
+            else:
+                assert sent[-1]["content"] == "add Notes"
+                actions = [{"type": "add", "title": "встречу[2]", "category": "work"}]
+            return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps({
+                "actions": actions, "explanation": "Done.", "ask": None,
+            })))])
+    
+        monkeypatch.setattr("ai.service._get_client", lambda: SimpleNamespace(
+            chat=SimpleNamespace(completions=SimpleNamespace(create=complete)),
+        ))
+        monkeypatch.setattr("django.conf.settings.LLM_API_KEY", "test-key")
+        first = _post(auth_client, {"messages": messages})
+        assert first.status_code == 200, first.content
+        assert first.json()["applied"] is True
+        meeting = TimeBlock.objects.get(schedule=today_schedule, title="встречу")
+        meeting_id = meeting.pk
+        messages.extend([_assistant_turn(first.json()["explanation"]), _user_turn(follow_up)])
+        second = _post(auth_client, {"messages": messages})
+>       assert second.status_code == 200, second.content
+E       AssertionError: b'{"errors": {"detail": "AI service error"}, "request_id": "8f2cd35e-ea85-48bd-8362-2cb144f73dbf", "request_completed": true}'
+E       assert 502 == 200
+E        +  where 502 = <JsonResponse status_code=502, "application/json">.status_code
+
+backend/tests/test_ai_views_chat.py:4108: AssertionError
+------------------------------ Captured log call -------------------------------
+ERROR    ai.service:service.py:491 AI chat unexpected error
+Traceback (most recent call last):
+  File "/Users/erzhan/DATA/PROJ/day-forge/backend/ai/service.py", line 477, in run_chat
+    response = await client.chat.completions.create(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+    )
+    ^
+  File "/Users/erzhan/DATA/PROJ/day-forge/backend/tests/test_ai_views_chat.py", line 4085, in complete
+    assert sent[-1]["content"] == follow_up
+AssertionError: assert 'добавь в 14:... час, рабочая' == 'в 14:00 на час, рабочая'
+  
+  - в 14:00 на час, рабочая
+  + добавь в 14:00 на час, рабочая
+  ? ++++ +++
+ERROR    django.request:log.py:253 Bad Gateway: /api/ai/schedules/2026-04-18/chat/
+__ test_refine_just_added_block_without_duplicate[at 14:00 for an hour, work] __
+
+auth_client = <tests.revision_client.RevisionClient object at 0x10e863890>
+today_schedule = <Schedule: 2026-04-18 (draft)>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x10e884950>
+follow_up = 'at 14:00 for an hour, work'
+
+    @pytest.mark.django_db
+    @pytest.mark.parametrize("follow_up", [
+        "в 14:00 на час, рабочая", "at 14:00 for an hour, work",
+    ])
+    def test_refine_just_added_block_without_duplicate(
+        auth_client, today_schedule, monkeypatch, follow_up
+    ):
+        """Issue #226: real parser, prompt rewrite, guard and persistence boundary."""
+        neighbour = TimeBlock.objects.create(
+            schedule=today_schedule, title="Neighbour", category="personal",
+            start_time="16:00", end_time="17:00",
+        )
+        original_neighbour = TimeBlock.objects.filter(pk=neighbour.pk).values().get()
+        messages = [_user_turn("запланируй встречу")]
+        meeting_id = None
+        step = 0
+    
+        async def complete(**kwargs):
+            nonlocal step
+            step += 1
+            sent = kwargs["messages"]
+            if step == 1:
+                actions = [{"type": "add", "title": "встречу", "category": "other"}]
+            elif step == 2:
+                # Before the fix this was "добавь в 14:00 ..." / "add at ...".
+                assert sent[-1]["content"] == follow_up
+                actions = [{
+                    "type": "update", "task_id": meeting_id,
+                    "changes": {"start_time": "14:00", "end_time": "15:00", "category": "work"},
+                }]
+            else:
+                assert sent[-1]["content"] == "add Notes"
+                actions = [{"type": "add", "title": "встречу[2]", "category": "work"}]
+            return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps({
+                "actions": actions, "explanation": "Done.", "ask": None,
+            })))])
+    
+        monkeypatch.setattr("ai.service._get_client", lambda: SimpleNamespace(
+            chat=SimpleNamespace(completions=SimpleNamespace(create=complete)),
+        ))
+        monkeypatch.setattr("django.conf.settings.LLM_API_KEY", "test-key")
+        first = _post(auth_client, {"messages": messages})
+        assert first.status_code == 200, first.content
+        assert first.json()["applied"] is True
+        meeting = TimeBlock.objects.get(schedule=today_schedule, title="встречу")
+        meeting_id = meeting.pk
+        messages.extend([_assistant_turn(first.json()["explanation"]), _user_turn(follow_up)])
+        second = _post(auth_client, {"messages": messages})
+>       assert second.status_code == 200, second.content
+E       AssertionError: b'{"errors": {"detail": "AI service error"}, "request_id": "9b945bc4-8991-4572-b441-86efc6d4528f", "request_completed": true}'
+E       assert 502 == 200
+E        +  where 502 = <JsonResponse status_code=502, "application/json">.status_code
+
+backend/tests/test_ai_views_chat.py:4108: AssertionError
+------------------------------ Captured log call -------------------------------
+ERROR    ai.service:service.py:491 AI chat unexpected error
+Traceback (most recent call last):
+  File "/Users/erzhan/DATA/PROJ/day-forge/backend/ai/service.py", line 477, in run_chat
+    response = await client.chat.completions.create(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+    )
+    ^
+  File "/Users/erzhan/DATA/PROJ/day-forge/backend/tests/test_ai_views_chat.py", line 4085, in complete
+    assert sent[-1]["content"] == follow_up
+AssertionError: assert 'add at 14:00...an hour, work' == 'at 14:00 for an hour, work'
+  
+  - at 14:00 for an hour, work
+  + add at 14:00 for an hour, work
+  ? ++++
+ERROR    django.request:log.py:253 Bad Gateway: /api/ai/schedules/2026-04-18/chat/
+=========================== short test summary info ============================
+FAILED backend/tests/test_ai_views_chat.py::test_refine_just_added_block_without_duplicate[\u0432 14:00 \u043d\u0430 \u0447\u0430\u0441, \u0440\u0430\u0431\u043e\u0447\u0430\u044f]
+FAILED backend/tests/test_ai_views_chat.py::test_refine_just_added_block_without_duplicate[at 14:00 for an hour, work]
+2 failed, 199 deselected in 0.81s

@@ -299,7 +299,14 @@ Hard rules:
     (b) the last assistant turn reported an error or a changed schedule and
     the latest turn asks to retry. Otherwise the
     transcript exists only for coreference (resolving a pronoun such as "it"
-    or "that one"). Active rules shape HOW a requested block is made — its
+    or "that one"). A follow-up containing only attributes, such as
+    "в 14:00 на час, рабочая" or "at 14:00 for an hour, work", can refine
+    the block just created or discussed even after a successful apply with
+    no question. Resolve the referent against Existing blocks and emit one
+    update with its task_id, changing only the requested fields. Never add
+    a second copy or remove and recreate it. If the referent is ambiguous,
+    ask which block to update without changing the schedule.
+    Active rules shape HOW a requested block is made — its
     duration, its naming (e.g. a "[2]" suffix), its category — but a rule
     never creates an action on its own. A FRESH bare activity name (no
     pending question) gets its own text as the base title, with active naming

@@ -1,0 +1,71 @@
+[
+  {
+    "id": 268,
+    "user_command": "в 14:00 на час, рабочая",
+    "ai_response": "{\"transcript_sha256\": \"495ab0f53c8a2549f4a14403e430c33ec3abd0d700a2bd5cb2bb147e2632e7b8\", \"turn_count\": 3, \"raw\": \"{\\n  \\\"actions\\\": [\\n    {\\n      \\\"type\\\": \\\"add\\\",\\n      \\\"title\\\": \\\"встречу\\\",\\n      \\\"category\\\": \\\"work\\\",\\n      \\\"start_time\\\": \\\"14:00\\\",\\n      \\\"end_time\\\": \\\"15:00\\\"\\n    }\\n  ],\\n  \\\"explanation\\\": \\\"Добавляю встречу на 14:00-15:00 в категорию work.\\\",\\n  \\\"ask\\\": null\\n}\"}",
+    "actions_json": [
+      {
+        "type": "add",
+        "title": "встречу",
+        "category": "work",
+        "start_time": "14:00",
+        "end_time": "15:00"
+      }
+    ],
+    "outcomes_json": [
+      {
+        "action_index": 0,
+        "task_id": null,
+        "status": "skipped",
+        "applied_fields": [],
+        "skipped_fields": [
+          "title",
+          "category",
+          "start_time",
+          "end_time"
+        ],
+        "reason_code": "replay_guard",
+        "conflicting_task_ids": [],
+        "attempted_direction": null,
+        "suggestion": null
+      }
+    ]
+  },
+  {
+    "id": 350,
+    "user_command": "запланируй встречу",
+    "ai_response": "{\"transcript_sha256\": \"886359d9836460c050a18e2c0044aef9b44ebcb5506af9f5edbd7a7a631ee9e1\", \"turn_count\": 1, \"raw\": \"{\\n  \\\"actions\\\": [\\n    {\\\"type\\\": \\\"add\\\", \\\"title\\\": \\\"встречу\\\", \\\"category\\\": \\\"other\\\"}\\n  ],\\n  \\\"explanation\\\": \\\"Добавляю встречу в расписание.\\\",\\n  \\\"ask\\\": null,\\n  \\\"intent_decision\\\": \\\"new\\\",\\n  \\\"pending_actions\\\": []\\n}\"}",
+    "actions_json": [
+      {
+        "type": "add",
+        "title": "встречу",
+        "category": "other"
+      }
+    ],
+    "outcomes_json": [
+      {
+        "action_index": 0,
+        "task_id": null,
+        "status": "applied",
+        "applied_fields": [
+          "title",
+          "category",
+          "start_time",
+          "end_time"
+        ],
+        "skipped_fields": [],
+        "reason_code": null,
+        "conflicting_task_ids": [],
+        "attempted_direction": null,
+        "suggestion": null
+      }
+    ]
+  },
+  {
+    "id": 351,
+    "user_command": "в 14:00 на час, рабочая",
+    "ai_response": "{\"transcript_sha256\": \"495ab0f53c8a2549f4a14403e430c33ec3abd0d700a2bd5cb2bb147e2632e7b8\", \"turn_count\": 3, \"raw\": \"{\\n  \\\"actions\\\": [],\\n  \\\"explanation\\\": \\\"Нужно название для новой задачи.\\\",\\n  \\\"ask\\\": \\\"Какое название у задачи?\\\",\\n  \\\"intent_decision\\\": \\\"new\\\",\\n  \\\"pending_actions\\\": [{\\\"type\\\":\\\"add\\\",\\\"task_id\\\":null,\\\"target_ids\\\":[],\\\"known_fields\\\":{\\\"start_time\\\":\\\"14:00\\\",\\\"end_time\\\":\\\"15:00\\\",\\\"category\\\":\\\"work\\\"},\\\"missing_fields\\\":[\\\"title\\\"]}]\\n}\"}",
+    "actions_json": [],
+    "outcomes_json": []
+  }
+]
