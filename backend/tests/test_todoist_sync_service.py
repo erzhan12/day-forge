@@ -530,6 +530,22 @@ class TestCompleteTask:
             service.complete_task(account, "t")
         patched_post.assert_not_called()
 
+    def test_complete_task_percent_encodes_unexpected_character(self, patched_post):
+        """Defence in depth: an unexpected character is percent-encoded
+        so it cannot cut off the ``/close`` suffix."""
+        patched_post.return_value = _fake_response(status_code=204)
+        service.complete_task(_make_account_stub(), "abc?x")
+        args, _ = patched_post.call_args
+        assert args[0].endswith("/tasks/abc%3Fx/close")
+
+    @pytest.mark.parametrize("task_id", [".", ".."])
+    def test_complete_task_rejects_dot_segments(self, patched_post, task_id):
+        """``quote`` leaves ``.`` and ``..`` unchanged; reject them before
+        ``requests`` normalises the path."""
+        with pytest.raises(ValueError, match="invalid task id"):
+            service.complete_task(_make_account_stub(), task_id)
+        patched_post.assert_not_called()
+
 
 class TestDecryptionPropagation:
     """``account.get_token()`` is called BEFORE the broad provider ``try`` in

@@ -5,6 +5,7 @@ than reaching for a heavier schema lib. These helpers exist so the view
 body stays focused on the happy path.
 """
 
+import re
 from dataclasses import dataclass
 
 
@@ -69,3 +70,11 @@ def validate_account_payload(data: dict) -> tuple[dict, dict]:
         "token": token.strip(),
     }
     return cleaned, {}
+
+
+_TODOIST_TASK_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+def is_valid_task_id(task_id: str) -> bool:
+    """Return True if ``task_id`` is a well-formed Todoist complete-path id."""
+    return isinstance(task_id, str) and _TODOIST_TASK_ID.fullmatch(task_id) is not None

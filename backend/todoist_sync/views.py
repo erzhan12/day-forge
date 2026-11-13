@@ -35,6 +35,7 @@ from todoist_sync import cache as todoist_cache
 from todoist_sync import service
 from todoist_sync.models import TodoistAccount
 from todoist_sync.schemas import (
+    is_valid_task_id,
     normalized_task_to_dict,
     validate_account_payload,
 )
@@ -241,14 +242,19 @@ def tasks(request: HttpRequest, date: str) -> JsonResponse:
 @login_required
 @require_http_methods(["POST"])
 def complete(request: HttpRequest, task_id: str) -> JsonResponse:
-    # Explicit ordering so the 503-vs-anything-else precedence is
+    # Explicit ordering so the 400-vs-503-vs-anything-else precedence is
     # deterministic and testable:
-    #   1) resolve the account (503 if absent),
-    #   2) call the service (try ladder below).
+    #   1) reject a malformed task_id (400, no provider call, even if the
+    #      user has no account),
+    #   2) resolve the account (503 if absent),
+    #   3) call the service (try ladder below).
     # The view parses NO request body — the id is in the URL path — so there
     # is no oversized-body guard here (unlike POST /account/, which
     # json.loads(request.body)). Django's global DATA_UPLOAD_MAX_MEMORY_SIZE
     # already caps any stray body at the WSGI/ASGI boundary.
+    if not is_valid_task_id(task_id):
+        return _envelope("Invalid task id.", 400)
+
     try:
         account_row = request.user.todoist_account
     except TodoistAccount.DoesNotExist:

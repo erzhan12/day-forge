@@ -1,6 +1,6 @@
 import datetime
 import json
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from cryptography.fernet import Fernet
@@ -15,6 +15,9 @@ from schedules.window import get_schedule_settings
 from tests._connect_rate_limit_contract import ConnectRateLimitContract
 
 FERNET_KEY = Fernet.generate_key().decode()
+
+# Canonical hyphenated UUID with mixed-case hex (accepted by the validator).
+VALID_HABITICA_TASK_ID = "Aaaa1111-Bbbb-4Ccc-8Ddd-EeeeEeee9999"
 
 
 @pytest.fixture(autouse=True)
@@ -244,7 +247,7 @@ def test_complete_invalidates_cache(auth_client, account):
     before = account.updated_at
     with patch("habitica_sync.service.complete_task") as complete:
         complete.return_value = None
-        resp = auth_client.post("/api/habitica/tasks/task-id/complete/")
+        resp = auth_client.post(f"/api/habitica/tasks/{VALID_HABITICA_TASK_ID}/complete/")
 
     assert resp.status_code == 200
     assert resp.json() == {"ok": True}
@@ -256,7 +259,7 @@ def test_complete_invalidates_cache(auth_client, account):
 def test_complete_error_mapping(auth_client, account):
     with patch("habitica_sync.service.complete_task") as complete:
         complete.side_effect = service.HabiticaTimeoutError("slow")
-        resp = auth_client.post("/api/habitica/tasks/task-id/complete/")
+        resp = auth_client.post(f"/api/habitica/tasks/{VALID_HABITICA_TASK_ID}/complete/")
     assert resp.status_code == 504
     _assert_envelope(resp)
 
@@ -342,10 +345,26 @@ def test_tasks_maps_improperly_configured_to_500(auth_client, account):
 def test_complete_maps_improperly_configured_to_500(auth_client, account):
     with patch("habitica_sync.service.complete_task") as complete:
         complete.side_effect = ImproperlyConfigured("bad key")
-        resp = auth_client.post("/api/habitica/tasks/task-id/complete/")
+        resp = auth_client.post(f"/api/habitica/tasks/{VALID_HABITICA_TASK_ID}/complete/")
 
     assert resp.status_code == 500
     _assert_envelope(resp)
+
+
+def test_complete_503_without_account(auth_client):
+    """A valid id with no account is 503, and Habitica is not contacted."""
+    with patch("habitica_sync.service.requests.post") as post:
+        resp = auth_client.post(f"/api/habitica/tasks/{VALID_HABITICA_TASK_ID}/complete/")
+
+    assert resp.status_code == 503
+    body = resp.json()
+    assert body["errors"]["detail"] == "No Habitica account configured"
+    assert body["code"] == "integration_account_missing"
+    assert body["meta"] == {
+        "account_state": "disconnected",
+        "resource_state": "unavailable",
+    }
+    post.assert_not_called()
 
 
 def test_tasks_maps_provider_error_to_502(auth_client, account):
@@ -395,3 +414,94 @@ def test_invalidate_tasks_does_not_resurrect_deleted_account(account):
     habitica_cache.invalidate_tasks(stale_row)
 
     assert not HabiticaAccount.objects.filter(pk=pk).exists()
+
+
+@pytest.mark.parametrize(
+    "path_segment",
+    [
+        "%3F",
+        "%23",
+        "..",
+        "%2E%2E",
+        "%25",
+        "A" * 65,
+    ],
+)
+def test_malformed_task_id_returns_400_without_upstream(auth_client, account, path_segment):
+    """A malformed id must 400 and must not call the provider."""
+    with patch("habitica_sync.service.requests.post") as post:
+        resp = auth_client.post(f"/api/habitica/tasks/{path_segment}/complete/")
+    assert resp.status_code == 400
+    assert resp.json() == {"errors": {"detail": "Invalid task id."}}
+    post.assert_not_called()
+
+
+def test_malformed_task_id_returns_400_without_account(auth_client):
+    """Validation runs before the missing-account 503."""
+    with patch("habitica_sync.service.requests.post") as post:
+        resp = auth_client.post("/api/habitica/tasks/%3F/complete/")
+    assert resp.status_code == 400
+    assert resp.json() == {"errors": {"detail": "Invalid task id."}}
+    post.assert_not_called()
+
+
+def test_empty_task_id_does_not_match_route(auth_client, account):
+    """An empty path segment cannot reach the view (``<str:>`` is ``[^/]+``)."""
+    with patch("habitica_sync.service.requests.post") as post:
+        resp = auth_client.post("/api/habitica/tasks//complete/")
+    assert resp.status_code == 404
+    post.assert_not_called()
+
+
+def test_decoded_slash_does_not_match_route(auth_client, account):
+    """A decoded ``/`` is rejected at routing (404), with no provider call."""
+    with patch("habitica_sync.service.requests.post") as post:
+        resp = auth_client.post("/api/habitica/tasks/foo%2Fbar/complete/")
+    assert resp.status_code == 404
+    post.assert_not_called()
+
+
+def test_twice_encoded_slash_returns_400(auth_client, account):
+    """``%252F`` reaches the view as a literal percent and is 400."""
+    with patch("habitica_sync.service.requests.post") as post:
+        resp = auth_client.post("/api/habitica/tasks/foo%252Fbar/complete/")
+    assert resp.status_code == 400
+    assert resp.json() == {"errors": {"detail": "Invalid task id."}}
+    post.assert_not_called()
+
+
+def test_end_to_end_posts_score_up_with_valid_id(auth_client, account):
+    """A valid UUID still reaches exactly ``/tasks/<id>/score/up``."""
+    with patch("habitica_sync.service.requests.post") as post:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        post.return_value = mock_resp
+        resp = auth_client.post(f"/api/habitica/tasks/{VALID_HABITICA_TASK_ID}/complete/")
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": True}
+    assert post.call_args.args[0] == (
+        f"https://habitica.test/api/v3/tasks/{VALID_HABITICA_TASK_ID}/score/up"
+    )
+
+
+class TestHabiticaTaskIdValidation:
+    def test_empty_task_id_is_rejected(self):
+        from habitica_sync.schemas import is_valid_task_id
+
+        assert is_valid_task_id("") is False
+
+    def test_valid_mixed_case_uuid_is_accepted(self):
+        from habitica_sync.schemas import is_valid_task_id
+
+        assert is_valid_task_id(VALID_HABITICA_TASK_ID) is True
+        assert is_valid_task_id(VALID_HABITICA_TASK_ID.lower()) is True
+
+    def test_invalid_uuid_forms_are_rejected(self):
+        from habitica_sync.schemas import is_valid_task_id
+
+        unhyphenated = VALID_HABITICA_TASK_ID.replace("-", "")
+        assert is_valid_task_id(unhyphenated) is False
+        assert is_valid_task_id(f"urn:uuid:{VALID_HABITICA_TASK_ID}") is False
+        assert is_valid_task_id("{" + VALID_HABITICA_TASK_ID + "}") is False
+        assert is_valid_task_id("11111111-2222-3333-4444-55555555555Z") is False
+        assert is_valid_task_id("11111111-2222-3333-4444-5555555555555") is False
