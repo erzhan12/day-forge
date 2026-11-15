@@ -1,0 +1,57 @@
+{
+  "date": "2026-11-07",
+  "scope": "local working tree",
+  "base_commit": "3f0374dc19325c96b3dd81d35518965805605a2b",
+  "models": {
+    "chat": "x-ai/grok-4.3",
+    "draft": "gpt-4o"
+  },
+  "checks": {
+    "make check": {
+      "exit_code": 0,
+      "backend_passed": 2683,
+      "backend_skipped": 1,
+      "frontend_passed": 1525,
+      "frontend_files": 107
+    },
+    "make frontend-build": {
+      "exit_code": 0
+    },
+    "make e2e-chat": {
+      "exit_code": 0,
+      "scripts_passed": 6
+    },
+    "make e2e-draft": {
+      "exit_code": 0,
+      "scripts_passed": 4
+    },
+    "focused_regressions": {
+      "exit_code": 0,
+      "passed": 237
+    },
+    "old_rewrite_negative_control": {
+      "exit_code": 1,
+      "expected_failures": 2
+    }
+  },
+  "sources_sha256": {
+    "backend/ai/implicit_add.py": "8cb5d85bdaa35933b5f4a6cbd55b564069764042d5ab8ebe37132c6f17415591",
+    "backend/ai/prompts.py": "bcbaa8ddbeaae67031530247c9b6388135d905bc2fb91cfb966f6be361db157f",
+    "backend/tests/test_ai_implicit_add.py": "962feeb5885cccbe25317018da7f8f9e43af3f1c52da1d218454f5f4a92d196a",
+    "backend/tests/test_ai_views_chat.py": "c63c46a931c251e17675b451644c54abfa9b6d84bbc5942a029c32a3245361a1",
+    "frontend/scripts/playwright/ai-chat-clarifying-question.mjs": "89800466dee99892b8e7e6b856f6be29f81860f88f53f2f2c94f1ff78a3fca5c",
+    "frontend/scripts/playwright/ai-chat-clear-cancels-inflight.mjs": "491e11b75c5c018a0019fb183e0c7bf51d7fe8dadbf06ee9986087114c2b43b5"
+  },
+  "evidence_sha256": {
+    "after.json": "bcf50e718ebe3066b0749ebfa084e38093ee2d5e4ad2f8b14c87e07b93d04e2a",
+    "before-receipts.json": "6c6ba2afa7526d6b31d23246ff8ccb932010376c1cd578a93371fa2724b0a965",
+    "before.json": "42bf19eec483a1a4e931d7be89c9a9d1a7cc4de9f449afc33f507f93eae6059d",
+    "build.log": "32f23ad83c522f676800f3f2254570b9ad20d0e847752152840dd6e6c29789f5",
+    "chat-smoke.log": "48092df9eefa2717157e198bc9ddeb19534a09ff49b2645c7f61d502acb07e01",
+    "check.log": "62a21eee2f349bf41465340ccbe2fcebd4f7c89054ec56617ccc087539aee532",
+    "draft-smoke.log": "d646df8b4ef930a50adb977c5dd736c7ce4d28ed41a6dae4fe92c72e1d60be1d",
+    "focused.log": "794d9a34ed67fab9da1b15afe98c9b62ea00e886278b2ddbdcc599c7d97b2106",
+    "negative-control.log": "9943016f454bb647e490a4acf76c1df4f23cb66d03d6ab86740ced7418764f70",
+    "refinement-smoke.log": "18f333fc5a482d95f714ca1db83a353ccdf95aa6389736f51c1ce163056ef2f5"
+  }
+}

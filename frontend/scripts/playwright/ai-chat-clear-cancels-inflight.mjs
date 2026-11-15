@@ -20,7 +20,7 @@
 //      it most.
 //   5. Immediately assert:
 //        - thread bubbles count == 0
-//        - textarea is enabled (NOT disabled)
+//        - spinner stops, textarea stays disabled until the result is known
 //        - privacy hint still visible
 //   6. Wait for the late /chat/ response to actually land.
 //   7. Assert nothing new appears:
@@ -40,14 +40,13 @@
 // ⚠️  LOCAL DEVELOPMENT ONLY. The seed step truncates the target
 // schedule's blocks.
 
-import { chromium } from "@playwright/test"
+import { chromium, expect } from "@playwright/test"
 import {
   BASE,
-  PANEL_TIMEOUT_MS,
+  CAPTURE_RESPONSE_TIMEOUT_MS,
   USERNAME,
   WAIT_FOR_INFLIGHT_RENDER_MS,
   WAIT_FOR_LATE_RESPONSE_SETTLE_MS,
-  WAIT_FOR_PATCH_MS,
   cleanupSchedules,
   login,
   makeFailAggregator,
@@ -124,6 +123,10 @@ try {
   // ───────────────── PHASE 1: success-path delay → cancel ─────────────────
   console.log("→ Phase 1: in-flight cancel against a delayed 200…")
   routeMode = "delay-passthrough"
+  const successResponse = page.waitForResponse(
+    resp => /\/api\/ai\/schedules\/[^/]+\/chat\/$/.test(resp.url()),
+    { timeout: CAPTURE_RESPONSE_TIMEOUT_MS },
+  )
   await inputEl.fill("add gym at 18:00 for an hour")
   // Don't await the response — the route delays it 6s.
   await inputEl.press("Enter")
@@ -149,21 +152,17 @@ try {
   if (bubblesAfterClearP1 !== 0) {
     fail(`phase 1: expected 0 bubbles immediately after clear, got ${bubblesAfterClearP1}`)
   }
-  if (await inputEl.isDisabled()) {
-    fail("phase 1: textarea still disabled after clear (token bump didn't reset isProcessing)")
-  }
+  await expect(page.locator('[aria-label="Processing…"]')).toHaveCount(0)
+  await expect(inputEl).toBeDisabled()
   if (!(await privacyHint.isVisible())) {
     fail("phase 1: privacy hint vanished after clear (should always be visible)")
   }
 
   // Now wait for the late response to actually arrive and be dropped.
   console.log("  …waiting for the delayed response to land and be dropped…")
-  const beforeWaitCount = responsesSeen.length
-  await page.waitForFunction(
-    (n) => window.performance.getEntriesByType("resource").filter((e) => /\/api\/ai\/schedules\/[^/]+\/chat\/$/.test(e.name)).length > n,
-    beforeWaitCount,
-    { timeout: PANEL_TIMEOUT_MS },
-  ).catch(() => {})
+  const success = await successResponse
+  expect(success.status()).toBe(200)
+  await expect(inputEl).toBeEnabled({ timeout: CAPTURE_RESPONSE_TIMEOUT_MS })
   // Give Vue a moment to (NOT) react.
   await page.waitForTimeout(WAIT_FOR_LATE_RESPONSE_SETTLE_MS)
 
@@ -178,6 +177,10 @@ try {
   // ───────────────── PHASE 2: error-path delay → cancel ─────────────────
   console.log("→ Phase 2: in-flight cancel against a delayed 500…")
   routeMode = "delay-fulfill-500"
+  const errorResponse = page.waitForResponse(
+    resp => /\/api\/ai\/schedules\/[^/]+\/chat\/$/.test(resp.url()),
+    { timeout: CAPTURE_RESPONSE_TIMEOUT_MS },
+  )
   await inputEl.fill("add a coffee at 09:00")
   await inputEl.press("Enter")
   await page.waitForTimeout(WAIT_FOR_INFLIGHT_RENDER_MS)
@@ -191,12 +194,17 @@ try {
   if (bubblesAfterClearP2 !== 0) {
     fail(`phase 2: expected 0 bubbles immediately after clear, got ${bubblesAfterClearP2}`)
   }
-  if (await inputEl.isDisabled()) {
-    fail("phase 2: textarea still disabled after clear")
-  }
+  await expect(page.locator('[aria-label="Processing…"]')).toHaveCount(0)
+  await expect(inputEl).toBeDisabled()
 
   console.log("  …waiting for the delayed 500 to land and be dropped…")
-  await page.waitForTimeout(DELAY_MS + WAIT_FOR_PATCH_MS)
+  const error = await errorResponse
+  expect(error.status()).toBe(500)
+  // A synthetic proxy 500 has no terminal receipt. Clear hides its reply,
+  // but cannot authorize another AI write while its outcome is unknown.
+  await expect(page.getByRole("button", { name: "Recover previous AI request" })).toBeVisible()
+  await expect(inputEl).toBeDisabled()
+  await page.waitForTimeout(WAIT_FOR_LATE_RESPONSE_SETTLE_MS)
 
   const bubblesPostResponseP2 = await thread.locator(".bubble").count().catch(() => 0)
   if (bubblesPostResponseP2 !== 0) {

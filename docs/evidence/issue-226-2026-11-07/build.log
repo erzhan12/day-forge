@@ -1,0 +1,14 @@
+cd frontend && npm run build
+
+> build
+> vue-tsc --noEmit && vite build
+
+vite v6.4.4 building for production...
+transforming...
+✓ 1000 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/.vite/manifest.json        0.18 kB │ gzip:   0.14 kB
+dist/assets/app-Bt2D55zJ.css   73.41 kB │ gzip:  12.65 kB
+dist/assets/app-C_b3bYbc.js   497.54 kB │ gzip: 163.57 kB
+✓ built in 1.02s

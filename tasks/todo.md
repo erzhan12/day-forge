@@ -4,6 +4,8 @@ This file tracks work that still needs a decision or implementation. The previou
 
 ## In progress
 
+- [x] **#226 follow-up refinement without duplicates.** Time/duration follow-ups keep their original provider text; the prompt updates the existing block ID. Replay protection remains strict. Real AI, 2683 backend tests (1 opt-in skip), 1525 frontend tests, build, all 6 chat and 4 draft smoke scenarios passed locally. See [the report](../docs/ISSUE_226_REFINEMENT_VERIFICATION.md).
+
 - [x] **Gap migration container rehearsal.** Upgrade, saved 0/10/20, restart, old-image preference/manual writes and reupgrade passed on a private copy. Found a rollback-only 500 for first preferences creation and fixed it with the forward `0007` database-default migration. Original source rows remained unchanged. See [the report](../docs/BLOCK_GAP_MIGRATION_REHEARSAL.md).
 
 - [x] **#258 configurable default block gap.** Implemented in PR #265. Production desktop/mobile verification on `a2e6133` passed 0/10/20 persistence through fresh login, six real untimed AI adds, explicit time/gap precedence, eight Undo operations and narrow-screen validation. Original preferences restored; six test days empty. See [the verification report](../docs/BLOCK_GAP_PRODUCTION_VERIFICATION.md).

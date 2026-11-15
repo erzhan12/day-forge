@@ -307,18 +307,36 @@ def _continues_previous_turn(messages: list[dict]) -> bool:
     return previous_turn.get("is_ask") is True or previous_turn.get("is_error") is True
 
 
+# Attribute fragments can refine a block even after a successful apply, with
+# no pending question. Do not turn "at 14:00 for an hour" into an add command.
+# This only preserves the user's wording; the model must still identify a
+# current block, and the replay guard continues to reject duplicate adds.
+_ATTRIBUTE_FRAGMENT_RE = re.compile(
+    r"^(?:(?:(?:at|в)\s+)?\d{1,2}:\d{2}\b|"
+    r"(?:for|на)\s+(?:\d+\s*(?:min(?:ute)?s?|hours?|мин\w*|час\w*)\b|"
+    r"(?:an? |one )?hour\b|(?:один\s+)?час\b|полчаса\b))",
+    re.IGNORECASE,
+)
+
+
 def apply_implicit_add(latest_text: str, messages: list[dict]) -> str:
     """Return the text to send to the LLM in place of ``latest_text``.
 
-    ``messages`` is the full client-supplied transcript (used only to
-    check whether ``messages[-2]`` is a pending clarifying ask or an error
-    bubble); it is never mutated. When ``latest_text`` carries no explicit
+    ``messages`` is the full client-supplied transcript, used to recognize
+    pending questions, errors and time/duration follow-ups after an assistant
+    reply; it is never mutated. When ``latest_text`` carries no explicit
     instruction (see the module docstring / plan for the exclusion list), the
     returned string is prefixed with ``"add "`` (or ``"добавь "`` when
     ``latest_text`` contains Cyrillic letters). Otherwise ``latest_text``
     is returned unchanged.
     """
     if _continues_previous_turn(messages):
+        return latest_text
+    if (
+        len(messages) >= 3
+        and messages[-2].get("role") == "assistant"
+        and _ATTRIBUTE_FRAGMENT_RE.match(latest_text.strip())
+    ):
         return latest_text
     if not latest_text.strip():
         return latest_text

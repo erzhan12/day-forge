@@ -1,0 +1,121 @@
+cd frontend || exit; failed=0; \
+	for script in scripts/playwright/ai-draft-*.mjs scripts/playwright/draft-prompt-history-suffix.mjs scripts/playwright/regenerate-422-fallback.mjs; do \
+		node "$script" || { \
+			printf '%s failed (exit %s)\n' "$script" "$?" >&2; \
+			failed=1; \
+		}; \
+	done; \
+	exit "$failed"
+→ Pre-flight: confirming playwright user exists…
+→ Seeding non-empty schedule + weekday Template…
+23 objects imported automatically (use -v 2 for details).
+
+seeded non-empty schedule 51 with weekday template
+→ Snapshotting rate-limit + AIInteraction counters…
+→ Logging in…
+→ Opening /schedule/2027-03-29/…
+→ Direct-POST /generate-draft/ on non-empty schedule…
+→ Wire-level assertions…
+→ DB + counter assertions (no mutation, no rate-limit consumption)…
+
+=== Captured /generate-draft/ call ===
+  status=409
+  Response body: {"errors": {"detail": "Schedule already has blocks; delete them before regenerating."}}
+
+=== Counters before → after ===
+  RATE: 0 → 0
+  AI:   0 → 0
+  BLOCKS: 1  STATUS: draft
+
+=== Verdict ===
+✅ PASS — /generate-draft/ 409 short-circuit: no DB mutation, no audit row, no rate-limit consumption
+→ Pre-flight: confirming playwright user exists…
+→ Seeding empty draft schedule + weekday Template…
+23 objects imported automatically (use -v 2 for details).
+
+seeded empty schedule 54 with weekday template
+→ Logging in…
+→ Opening /schedule/2027-03-22/…
+→ Waiting for .regen-btn to be visible and enabled…
+→ Clicking .regen-btn and awaiting /generate-draft/ response…
+→ Wire-level assertions…
+→ DB assertions…
+
+=== Captured /generate-draft/ call ===
+  status=200
+  Response body: {"schedule": {"id": 54, "date": "2027-03-22", "status": "draft", "revision": 2}, "blocks": [{"id": 694, "title": "Morning routine", "start_time": "07:00", "end_time": "07:30", "category": "health", "is_completed": false, "sort_order": 0, "restore_proof": "<redacted>"}, {"id": 695, "title": "Deep work", "start_time": "09:00", "end_time": "12:00", "category": "work", "is_completed": false, "sort_order": 1, "restore_pr
+
+=== DB after ===
+23 objects imported automatically (use -v 2 for details).
+
+STATUS draft
+BLOCKS 4
+KIND draft
+SUCCESS True
+ACTIONS_LEN 4
+USER_COMMAND [DRAFT]
+
+=== Verdict ===
+✅ PASS — /generate-draft/ happy path: blocks generated, status stays draft, audit row correct
+-> Seeding weekday template + history (with-review=2026-11-06, no-review=2026-11-05) and clearing target=2026-11-10...
+23 objects imported automatically (use -v 2 for details).
+
+seeded with-review=2026-11-06 no-review=2026-11-05 target=2026-11-10
+-> Login...
+-> Navigate to /schedule/2026-11-10/ (auto-draft trigger)...
+   POST /generate-draft/ -> 200
+-> Reading captured prompt...
+
+========== Recent history section ==========
+Recent history (last days):
+# 2026-11-05 (Thursday) (completed: 1/2)
+id=702 09:00-10:00 health completed=true title="Sunday run"
+id=703 11:00-12:00 personal completed=false title="Plan week"
+# 2026-11-06 (Friday) (completed: 3/4)
+id=698 09:00-09:30 work completed=true title="Standup"
+id=699 10:00-12:00 work completed=true title="Deep work"
+id=700 12:30-13:30 personal completed=true title="Lunch"
+id=701 14:00-15:00 work completed=false title="Email"
+=============================================
+
+   OK   2026-11-06 (Friday) has suffix (completed: 3/4)
+   OK   2026-11-05 (Thursday) uses live ratio (completed: 1/2)
+
+PASS - all 2 prompt-shape invariants hold.
+→ Setup: ensure playwright user has 'A weekday' template + empty draft schedules…
+23 objects imported automatically (use -v 2 for details).
+
+seeded
+→ Logging in…
+
+→ [1/4] Open /schedule/2026-09-21/ — expect Regenerate pill enabled
+  ✅ Regenerate pill is visible
+  ✅ Regenerate pill is enabled
+
+→ Simulating template deletion (without reloading the schedule page)…
+23 objects imported automatically (use -v 2 for details).
+
+deleted
+
+→ [2/4] Click Regenerate on stale page — expect 422 + inline error
+  ✅ POST /generate-draft/ returned 422 — got 422
+  ✅ Inline error visible
+  ✅ Error text is the friendly mapped message (not raw backend text) — got: No template configured. Open Settings to create one.
+
+→ [3/4] Manual editing still works (+ Add Block usable)
+  ✅ + Add block trigger button mounted
+  ✅ + Add block trigger NOT disabled
+  ✅ Clicking + Add block expands the form (title input visible)
+
+→ [4/4] Re-create template, visit a fresh date — expect Regenerate enabled
+23 objects imported automatically (use -v 2 for details).
+
+re-created
+23 objects imported automatically (use -v 2 for details).
+
+reset recovery schedule 22
+  ✅ After recovery: Regenerate pill is visible
+  ✅ After recovery: Regenerate pill is enabled
+
+=== Verdict ===
+✅ PASS — all 4 contracts hold

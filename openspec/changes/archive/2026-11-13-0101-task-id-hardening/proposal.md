@@ -17,4 +17,4 @@
 
 ## Impact
 
-Complete endpoints only. Existing Habitica view tests that used the non-UUID `task-id` now use a canonical UUID. `docs/api.md` is unchanged in this pass (not approved) and is a documentation follow-up.
+Complete endpoints only. Existing Habitica view tests that used the non-UUID `task-id` now use a canonical UUID. `docs/api.md` was updated after the PR review: the Todoist complete error table gained the `400` row and the Habitica complete section gained the id format and errors.

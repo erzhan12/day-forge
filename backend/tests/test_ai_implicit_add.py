@@ -6,6 +6,7 @@ command-less turns" for the rationale and the exact exclusion list this
 pins.
 """
 
+import pytest
 from ai.implicit_add import apply_implicit_add
 
 
@@ -116,6 +117,28 @@ class TestUnchangedPendingAsk:
             _u("Notes"),
         ]
         assert apply_implicit_add("Notes", messages) == "add Notes"
+
+
+@pytest.mark.parametrize("text", [
+    "в 14:00 на час, рабочая",
+    "at 14:00 for an hour, work",
+    "14:00, 60 minutes",
+    "на час",
+    "for 30 minutes",
+    "for an hour",
+])
+def test_attribute_follow_up_after_apply_keeps_original_text(text):
+    messages = [_u("schedule a meeting"), _a("Added meeting."), _u(text)]
+    original = [dict(message) for message in messages]
+    assert apply_implicit_add(text, messages) == text
+    assert messages == original
+
+
+@pytest.mark.parametrize("text", ["Notes", "Обед", "Reading emails 30 min"])
+def test_fresh_title_after_apply_still_gets_add_prefix(text):
+    messages = [_u("schedule a meeting"), _a("Added meeting."), _u(text)]
+    prefix = "добавь " if text == "Обед" else "add "
+    assert apply_implicit_add(text, messages) == prefix + text
 
 
 class TestUnchangedAfterErrorBubble:
