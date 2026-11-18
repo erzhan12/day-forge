@@ -55,6 +55,24 @@ def test_page_identity_changes_with_session(client, user, schedule):
 
 
 @pytest.mark.django_db
+def test_settings_category_reload_needs_explicit_identity(client, user):
+    # A partial reload's `only` list also filters shared props, so a
+    # categories-only reload keeps the client's previous auth_user_id.
+    client.force_login(user)
+    headers = {"HTTP_X_INERTIA": "true", "HTTP_X_INERTIA_PARTIAL_COMPONENT": "Settings"}
+    categories_only = client.get("/settings/", **headers, HTTP_X_INERTIA_PARTIAL_DATA="categories")
+    props = categories_only.json()["props"]
+    assert props["categories"]
+    assert "auth_user_id" not in props
+    with_identity = client.get(
+        "/settings/", **headers, HTTP_X_INERTIA_PARTIAL_DATA="categories,auth_user_id",
+    )
+    props = with_identity.json()["props"]
+    assert props["categories"]
+    assert props["auth_user_id"] == user.pk
+
+
+@pytest.mark.django_db
 def test_old_tab_cannot_restore_into_a_new_session_with_same_revision(client, user, schedule):
     other = User.objects.create_user(username="second-undo-user")
     other_day = Schedule.objects.create(user=other, date=schedule.date)

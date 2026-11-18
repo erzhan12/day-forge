@@ -5,6 +5,7 @@ import type { TimeBlock, UserCategory } from "../types"
 import { useNowMinutes } from "./useNowMinutes"
 import { useFocusIndicator } from "./useFocusIndicator"
 import { getCategoryColor } from "../utils/categoryColors"
+import { hasValidCategoryCatalog } from "../utils/categories"
 import {
   activeUnfinishedBlock,
   isDayFinished,
@@ -171,6 +172,26 @@ export function useFocusIndicatorController(): FocusIndicatorController {
       }
     },
     { immediate: true, flush: "sync" },
+  )
+
+  // Settings (and any other authenticated page carrying a live catalogue) can
+  // change category colours after Schedule has unmounted (#213). Refresh only
+  // the retained catalogue, never date/blocks/time zone, and only for a valid
+  // catalogue on an initialized, authenticated, non-Login page while a snapshot
+  // is retained. Each guard stands alone so the session watcher above may run
+  // before or after this one in the same tick.
+  watch(
+    () => page?.props?.categories,
+    (categories) => {
+      const component = page?.component
+      if (typeof component !== "string" || component === "Login") return
+      const userId = page?.props?.auth_user_id
+      if (userId === null || userId === undefined) return
+      if (retainedDate.value === "") return
+      if (!hasValidCategoryCatalog(categories)) return
+      retainedCategories.value = copiedCategories(categories)
+    },
+    { flush: "sync" },
   )
 
   return {
