@@ -377,6 +377,12 @@ Tests: backend/tests/test_ai_views_chat.py::TestApply::test_apply_actions_create
 
 Tests: backend/tests/test_ai_pending_intents.py::test_partial_plan_without_model_question_keeps_scope_and_accepted_ids
 
+#### Scenario: Relative-add guard question
+- **WHEN** the relative-add guard asks instead of placing an add
+- **THEN** the schedule is unchanged, the response has `blocks: null`, `applied: false`, `partial: false`, empty `outcomes` and an opaque `pending_intent`, and its saved scope stays private; replaying the request returns the same bytes
+
+Tests: backend/tests/test_ai_relative_guard_recovery.py::test_fresh_relative_guard_saves_scope_and_accepts_anchor_answer
+
 ### Requirement: Chat audit log
 The system SHALL write one best-effort `AIInteraction` row of kind `chat` per admitted request whose provider call returns or raises an AI error. `user_command` is the latest user turn verbatim (first 2000 chars); `ai_response` is JSON with the transcript hash, turn count and raw reply, capped at 10000 chars.
 Enforced: backend/ai/views.py::_build_chat_audit_response, backend/ai/views.py::_log_interaction

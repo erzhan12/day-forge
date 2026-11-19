@@ -21,4 +21,4 @@
 - [x] Spec deltas with real `Enforced:` / `Tests:` anchors
 - [x] Update `RULES.md`, `docs/api.md`, `docs/ARCHITECTURE.md`, `docs/AI_PENDING_INTENT.md`
 - [x] Run `make check`, `make spec-check` and `make frontend-build`
-- [ ] Archive the change on the feature branch before merge
+- [x] Archive the change on the feature branch before merge

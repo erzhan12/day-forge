@@ -34,7 +34,7 @@ Renaming or deleting a test or symbol that a spec cites breaks `make spec-check`
 
 Spec-writing pitfalls:
 
-- OpenSpec strict validation rejects a requirement body (the text between `### Requirement:` and the first `#### Scenario:`) longer than 500 characters. Put `Tests:` lines under scenarios and keep only the SHALL sentence and `Enforced:` in the body.
+- OpenSpec strict validation rejects a requirement body (the text between `### Requirement:` and the first `#### Scenario:`) longer than 500 characters. Put `Tests:` lines under scenarios and keep only the SHALL sentence and `Enforced:` in the body. The limit counts the `Enforced:` line too, and validating the change does not apply it to delta requirements: a too-long MODIFIED requirement only fails `make spec-check` after `openspec archive`, so measure the body before archiving.
 - Anchor lists are comma-separated, but a comma only splits when a new `path::` anchor follows, so Vitest titles that contain commas are cited verbatim.
 - Python anchors resolve through the AST, including names assigned inside module-level `if`/`try` blocks and test methods inherited from a base class (cite them on the concrete class, as pytest runs them).
 - Do not write a requirement whose `Enforced:` anchor does not actually enforce it. List the gap in the feature's review notes instead. [`0099_SPEC_REVIEW.md`](0099_SPEC_REVIEW.md) holds the open items from the baseline.

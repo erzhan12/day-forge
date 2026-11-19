@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Relative add guard
-The system SHALL NOT auto-place an add requested before or after an existing block. When the active request has such a relation, the turn SHALL return a server question unless each checked add has explicit times on the correct side of the one resolved anchor, including any stated gap, or a clock reply with every add timed answers a question with no single anchor. "One after another" is not a relation.
+The system SHALL NOT auto-place an add requested before or after an existing block. Such a turn SHALL return a server question unless each checked add is timed on the correct side of the one resolved anchor and any stated gap, or a clock reply with every add timed answers a question with no single anchor. "One after another" is not a relation.
 Enforced: backend/ai/relative_add_guard.py::relative_add_guard_ask, backend/ai/views.py::_finish_chat_sync
 
 #### Scenario: Untimed or misordered relative add
