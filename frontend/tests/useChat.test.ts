@@ -153,6 +153,26 @@ describe("useChat", () => {
     expect(routerReload).toHaveBeenCalled()
   })
 
+  it("retains the pending intent after a scope rejection", async () => {
+    // Feature 0104: a 409 pending_intent_scope keeps the server reference,
+    // so the corrected next answer is still bound to the same intent.
+    const chat = useChat()
+    chat.setActiveDate("2026-05-07")
+    const pushUndo = vi.fn()
+    const detail = "The reply changed the pending request. Please restate it."
+    requestJsonMock
+      .mockResolvedValueOnce({ ok: true, data: { applied: false, ask: "When?", pending_intent: intent } })
+      .mockResolvedValueOnce({ ok: false, status: 409, code: "pending_intent_scope", data: { request_completed: true, pending_intent: intent }, errors: { detail } })
+      .mockResolvedValueOnce({ ok: true, data: { applied: false, explanation: "Done", pending_intent: null } })
+    await chat.submitTurn("Add Vocal after lunch", pushUndo)
+    await chat.submitTurn("Gym", pushUndo)
+    expect(chat.lastError.value).toBe(detail)
+    expect(chat.hasPendingIntent.value).toBe(true)
+    await chat.submitTurn("Gym at 09:45", pushUndo)
+    expect(requestJsonMock.mock.calls[2][2]).toMatchObject({ pending_intent_id: intent.id, pending_intent_version: 1, intent_action: "continue" })
+    expect(pushUndo).not.toHaveBeenCalled()
+  })
+
   it("retains the exact pending-intent reference for an uncertain transport retry", async () => {
     const chat = useChat()
     chat.setActiveDate("2026-05-07")

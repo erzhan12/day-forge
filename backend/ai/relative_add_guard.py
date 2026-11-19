@@ -13,6 +13,14 @@ _ADD_COMMAND_RE = re.compile(
 _RELATION_RE = re.compile(
     r"\b(after|before|после|до|перед)\b", re.IGNORECASE | re.UNICODE
 )
+# "one after another" orders the new blocks among themselves; its "after" names
+# no existing block. Only relation words inside these spans are ignored.
+_SEQUENCE_IDIOM_RE = re.compile(
+    r"\bone\s+after\s+(?:another|the\s+other)\b"
+    r"|\b(?:один|одна|одно|одну|одни)\s+после\s+друг(?:ого|ой|ую|их)\b"
+    r"|\bдруг\s+после\s+друга\b",
+    re.IGNORECASE | re.UNICODE,
+)
 _CYRILLIC_RE = re.compile(r"[а-яё]", re.IGNORECASE)
 _GAP_RE = re.compile(
     r"\b(?:"
@@ -27,6 +35,47 @@ _CLOCK_REF_RE = re.compile(
     r"^\s*(?:at\s+)?(?:\d{1,2}(?::\d{2})?\s*(?:am|pm)?|noon|midnight)\b",
     re.IGNORECASE,
 )
+
+# Clarification answers, kept apart from the relation-tail check above.
+# A colon clock may lead a longer reply ("14:00 for 30 minutes"); a compact
+# HHMM clock must stand alone ("0945") unless a start clause introduces it.
+_CLOCK_COLON = r"(?:[01]?\d|2[0-3]):[0-5]\d"
+_CLOCK_COMPACT = r"(?:[01]\d|2[0-3])[0-5]\d"
+_LEADING_CLOCK_RE = re.compile(
+    rf"^\s*(?:(?:at|в)\s+)?(?:{_CLOCK_COLON}(?![\d:])|{_CLOCK_COMPACT}\s*[.!]?\s*$)",
+    re.IGNORECASE,
+)
+# "Vocal starts at 0945": the subject is the block being scheduled.
+_START_CLAUSE_RE = re.compile(
+    rf"\b(?:starts?|begins?|начина\w*)\s+(?:(?:at|в|с)\s+)?"
+    rf"(?:{_CLOCK_COLON}|{_CLOCK_COMPACT})(?![\d:])",
+    re.IGNORECASE,
+)
+_SEGMENT_SPLIT_RE = re.compile(r"[,;]|\.(?=\s|$)")
+
+
+def _is_clock_answer(text: str) -> bool:
+    """A reply that gives a concrete clock time for the new block."""
+    return bool(_LEADING_CLOCK_RE.match(text) or _START_CLAUSE_RE.search(text))
+
+
+def _anchor_text(reply: str) -> str:
+    """A reply without its start clauses, which name the new block, not an anchor."""
+    segments = _SEGMENT_SPLIT_RE.split(reply)
+    return ", ".join(segment for segment in segments if not _START_CLAUSE_RE.search(segment))
+
+
+def _clock_answer_completes(messages: list[dict], request_index: int, actions) -> bool:
+    """A later clock reply with every add explicitly timed answers a question."""
+    return (
+        request_index < len(messages) - 1
+        and _is_clock_answer(messages[-1]["content"])
+        and all(
+            "start_time" in action and "end_time" in action
+            for action in actions
+            if action.get("type") == "add"
+        )
+    )
 
 
 def _questions(russian: bool, direction: str) -> dict[str, str]:
@@ -74,12 +123,15 @@ def _relations_after_prefix(
     text: str, prefix_end: int, *, allow_leading: bool = False,
     quoted_titles: re.Pattern[str] | None = None,
 ) -> list[re.Match[str]]:
-    title_spans = list(quoted_titles.finditer(text)) if quoted_titles else []
+    opaque_spans = [
+        *(quoted_titles.finditer(text) if quoted_titles else ()),
+        *_SEQUENCE_IDIOM_RE.finditer(text),
+    ]
     return [
         match
         for match in _RELATION_RE.finditer(text, prefix_end)
         if (allow_leading or text[prefix_end : match.start()].strip())
-        and not any(span.start() <= match.start() < span.end() for span in title_spans)
+        and not any(span.start() <= match.start() < span.end() for span in opaque_spans)
     ]
 
 
@@ -212,6 +264,9 @@ def relative_add_guard_ask(
         _CYRILLIC_RE.search(request) or _CYRILLIC_RE.search(messages[-1]["content"])
     )
     if len(relations) != 1:
+        # No single anchor is defined, so a concrete clock answer settles it.
+        if _clock_answer_completes(messages, request_index, actions):
+            return None
         return _questions(russian, "after")["time"]
 
     relation = relations[0]
@@ -232,7 +287,7 @@ def relative_add_guard_ask(
             if message.get("role") == "user"
         )
         for reply in replies:
-            answered = _answered_anchors(reply, blocks)
+            answered = _answered_anchors(_anchor_text(reply), blocks)
             if answered:
                 anchors = answered
                 break
@@ -240,13 +295,7 @@ def relative_add_guard_ask(
     if len(anchors) != 1:
         if _CLOCK_REF_RE.match(tail):
             return None
-        latest_clock = _CLOCK_REF_RE.match(messages[-1]["content"])
-        if (
-            not anchors and request_index < len(messages) - 1
-            and latest_clock and ":" in latest_clock.group()
-            and all("start_time" in action and "end_time" in action
-                    for action in actions if action.get("type") == "add")
-        ):
+        if not anchors and _clock_answer_completes(messages, request_index, actions):
             # A concrete follow-up resolves an unbound reference, including
             # procedural "before adding it". Existing anchors still constrain it.
             return None

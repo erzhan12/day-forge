@@ -402,7 +402,106 @@ def unresolved_items(result, payload):
     return items
 
 
-def finish(context, schedule, result, build_response, reload_context):
+def _interval_minutes(action):
+    start, end = action.get("start_time"), action.get("end_time")
+    if not (_is_hhmm(start) and _is_hhmm(end)):
+        return None
+    start, end = datetime.time.fromisoformat(start), datetime.time.fromisoformat(end)
+    return (end.hour * 60 + end.minute) - (start.hour * 60 + start.minute)
+
+
+def relative_guard_add_items(actions):
+    """One add permission per add the relative-add guard interrupted.
+
+    Built only from the parsed actions of a turn the guard blocked: identity
+    (title, category) and a derivable duration are known, the placement is
+    missing. Transcript text never contributes. The rejected times are dropped.
+    """
+    items = []
+    for action in actions:
+        if action.get("type") != "add":
+            continue
+        known = {"title": action.get("title"), "category": action.get("category")}
+        missing = ["end_time", "start_time"]
+        duration = action.get("duration_minutes")
+        if duration is None:
+            duration = _interval_minutes(action)
+        if type(duration) is int and duration > 0 and duration % 5 == 0:
+            known["duration_minutes"] = duration
+        else:
+            missing.append("duration_minutes")
+        items.append(
+            {
+                "type": "add",
+                "task_id": None,
+                "target_ids": [],
+                "known_fields": known,
+                "missing_fields": sorted(missing),
+            }
+        )
+    return items
+
+
+def _duplicates(derived, model_item):
+    """A model pending add that repeats an interrupted add rather than a sibling."""
+    if model_item.get("type") != "add":
+        return False
+    known, other = derived["known_fields"], model_item.get("known_fields", {})
+    if (other.get("title"), other.get("category")) != (known["title"], known["category"]):
+        return False
+    return not (
+        "duration_minutes" in known
+        and "duration_minutes" in other
+        and other["duration_minutes"] != known["duration_minutes"]
+    )
+
+
+def merge_guard_items(derived, model_items):
+    """Derived items win over a model copy of the same add: theirs keep the
+    placement open, while the model's may lock the time the guard rejected."""
+    model_items = list(model_items)
+    for item in derived:
+        index = next(
+            (i for i, other in enumerate(model_items) if _duplicates(item, other)), None
+        )
+        if index is not None:
+            model_items.pop(index)
+    return [*derived, *model_items]
+
+
+def probe_allowed(actions, items):
+    """Identity gate for the no-write guard probe on a scope failure.
+
+    Every reply action must be an add naming the title and category of a
+    distinct saved add whose placement is still open. Only then can the
+    guard's placement question be answered within the saved scope.
+    """
+    open_adds = [
+        item
+        for item in items
+        if item["type"] == "add" and {"start_time", "end_time"} <= set(item["missing_fields"])
+    ]
+    if not actions:
+        return False
+    for action in actions:
+        if action.get("type") != "add":
+            return False
+        index = next(
+            (
+                i
+                for i, item in enumerate(open_adds)
+                if item["known_fields"].get("title") == action.get("title")
+                and item["known_fields"].get("category") == action.get("category")
+            ),
+            None,
+        )
+        if index is None:
+            return False
+        open_adds.pop(index)
+    return True
+
+
+def finish(context, schedule, result, build_response, reload_context, probe=None):
     """Called by finish_request: intent state and schedule diff share its transaction."""
     active = PendingIntent.objects.filter(
         user_id=schedule.user_id, schedule=schedule, state="open"
@@ -417,8 +516,18 @@ def finish(context, schedule, result, build_response, reload_context):
     if context.reference.action == "cancel" or decision == "cancel":
         # Check schedule/policy freshness through the existing no-op executor.
         response = build_response(cancel=True)
+    elif constrain_actions(context, result.parsed_actions):
+        response = build_response(cancel=False)
     else:
-        if not constrain_actions(context, result.parsed_actions):
+        # A reply outside the saved scope may still deserve the relative-add
+        # guard's question (an untimed add after an anchor answer). The probe
+        # never writes; without a question the scope rejection stands.
+        response = (
+            probe()
+            if probe is not None and probe_allowed(result.parsed_actions, context.row.items)
+            else None
+        )
+        if response is None:
             return JsonResponse(
                 {
                     "code": "pending_intent_scope",
@@ -429,12 +538,12 @@ def finish(context, schedule, result, build_response, reload_context):
                 },
                 status=409,
             )
-        response = build_response(cancel=False)
     if response.status_code != 200:
         if response.status_code == 409 and active:
             active.state = "stale"
             active.save(update_fields=["state"])
         return response
+    guard_blocked_turn = getattr(response, "relative_add_guard_blocked", False)
     payload = json.loads(response.content)
     cancelled = context.reference.action == "cancel" or decision == "cancel"
     next_items = unresolved_items(result, payload) if payload.get("ask") else []
@@ -495,8 +604,15 @@ def finish(context, schedule, result, build_response, reload_context):
         next_items = [
             refine_question(item, pool, derived=result.ask is None) for item in next_items
         ]
-        model_items = [refine_question(item, remaining) for item in model_items]
+        # A turn the relative-add guard blocked keeps the saved scope exactly:
+        # its proposal must not narrow it, e.g. by locking a rejected start.
+        model_items = (
+            [] if guard_blocked_turn else [refine_question(item, remaining) for item in model_items]
+        )
         next_items = [*next_items, *model_items, *remaining, *leftovers]
+    elif guard_blocked_turn and not cancelled:
+        derived = relative_guard_add_items(result.parsed_actions)
+        next_items.extend(merge_guard_items(derived, model_items))
     else:
         next_items.extend(model_items)
     if next_items and not payload.get("ask"):

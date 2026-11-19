@@ -1124,9 +1124,20 @@ async def ai_chat(request, date):
             after = _load_ai_context_sync(user, parsed_date, schedule.revision)
             return after[0], after[1], after[5]
 
+        def probe():
+            return _relative_guard_probe_sync(
+                schedule,
+                current_blocks,
+                messages,
+                result,
+                interaction,
+                expected_revision,
+                expected_fingerprint,
+            )
+
         try:
             return pending_intents.finish(
-                intent_context, schedule, result, build_response, reload_context
+                intent_context, schedule, result, build_response, reload_context, probe
             )
         except pending_intents.IntentScopeError as exc:
             raise MutationRejected(
@@ -1215,6 +1226,75 @@ async def ai_chat(request, date):
     return response
 
 
+def _unchanged_snapshot_sync(
+    schedule, result, interaction, expected_revision, expected_fingerprint
+):
+    """Confirm revision and prompt context under the write lock without writing."""
+    confirmed = _apply_actions_sync(
+        schedule,
+        replace(result, parsed_actions=[]),
+        expected_revision=expected_revision,
+        expected_fingerprint=expected_fingerprint,
+        interaction_id=interaction.id if interaction else None,
+    )
+    return confirmed.snapshot
+
+
+def _relative_guard_response(snapshot, ask):
+    """The relative-add guard's no-write question.
+
+    The response carries an internal marker (never serialized) so
+    ``pending_intents.finish`` can save a server-derived scope for the
+    interrupted adds. Model and replay-guard questions never carry it.
+    """
+    response = JsonResponse(
+        {
+            **snapshot,
+            "blocks": None,
+            "explanation": GUARD_EXPLANATION,
+            "ask": ask,
+            "applied": False,
+            "partial": False,
+            "outcomes": [],
+        }
+    )
+    response.relative_add_guard_blocked = True
+    return response
+
+
+def _relative_guard_probe_sync(
+    schedule,
+    current_blocks,
+    messages,
+    result,
+    interaction,
+    expected_revision,
+    expected_fingerprint,
+):
+    """Ask the relative-add guard about a reply that failed the pending scope.
+
+    Runs the freshness check, the replay guard and the relative-add guard, and
+    nothing else: it never applies actions. Returns the guard's marked question,
+    or ``None`` when the scope rejection should stand.
+    """
+    if not result.parsed_actions:
+        return None
+    try:
+        snapshot = _unchanged_snapshot_sync(
+            schedule, result, interaction, expected_revision, expected_fingerprint
+        )
+    except _Rollback:
+        return None
+    if find_replayed_actions(
+        result.parsed_actions,
+        messages,
+        existing_blocks={block.id: block.title for block in current_blocks},
+    ):
+        return None
+    ask = relative_add_guard_ask(messages, result.parsed_actions, current_blocks)
+    return _relative_guard_response(snapshot, ask) if ask is not None else None
+
+
 def _finish_chat_sync(
     user,
     schedule,
@@ -1228,14 +1308,9 @@ def _finish_chat_sync(
     """Build the result under the durable operation's outer write transaction."""
 
     def unchanged_snapshot():
-        confirmed = _apply_actions_sync(
-            schedule,
-            replace(result, parsed_actions=[]),
-            expected_revision=expected_revision,
-            expected_fingerprint=expected_fingerprint,
-            interaction_id=interaction.id if interaction else None,
+        return _unchanged_snapshot_sync(
+            schedule, result, interaction, expected_revision, expected_fingerprint
         )
-        return confirmed.snapshot
 
     if result.ask is not None or not result.parsed_actions:
         try:
@@ -1326,17 +1401,7 @@ def _finish_chat_sync(
             snapshot = unchanged_snapshot()
         except _Rollback as rb:
             return rb.response
-        return JsonResponse(
-            {
-                **snapshot,
-                "blocks": None,
-                "explanation": GUARD_EXPLANATION,
-                "ask": relative_ask,
-                "applied": False,
-                "partial": False,
-                "outcomes": [],
-            }
-        )
+        return _relative_guard_response(snapshot, relative_ask)
 
     # The apply path re-fetches under the write lock and validates the final
     # candidate schedule before persisting its accepted diff.

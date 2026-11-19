@@ -481,3 +481,167 @@ def test_reply_naming_a_command_word_title_and_another_block_keeps_asking():
     assert relative_add_guard_ask(
         later, [_add(start_time="08:00", end_time="08:30")], blocks
     ) == "После какого блока поставить новый?"
+
+
+# Feature 0104: sequential idioms are not placement relations.
+_SEQUENCE = [
+    {"type": "add", "title": "Vocal", "category": "other"},
+    {"type": "add", "title": "Stretching", "category": "other"},
+    {"type": "add", "title": "Breakfast", "category": "other"},
+]
+
+
+@pytest.mark.parametrize("command", [
+    "add Vocal, then Stretching, then Breakfast. without gap, one after another",
+    "add Vocal, Stretching and Breakfast one after the other",
+    "добавь Вокал, Растяжку и Завтрак один после другого",
+    "добавь Вокал, Растяжку и Завтрак друг после друга",
+])
+def test_sequence_idiom_is_not_an_existing_block_relation(command):
+    assert relative_add_guard_ask([_user(command)], _SEQUENCE, [_block()]) is None
+
+
+def test_sequence_idiom_preserves_external_anchor():
+    command = "add Vocal, Stretching, Breakfast after Gym, one after another"
+    timed = [
+        {**_SEQUENCE[0], "start_time": "09:30", "end_time": "10:00"},
+        {**_SEQUENCE[1], "start_time": "10:00", "end_time": "10:15"},
+        {**_SEQUENCE[2], "start_time": "10:15", "end_time": "10:45"},
+    ]
+    assert relative_add_guard_ask([_user(command)], timed, [_block()]) is None
+    early = [{**timed[0], "start_time": "08:00", "end_time": "08:30"}, *timed[1:]]
+    assert relative_add_guard_ask([_user(command)], early, [_block()]) == (
+        "What start time should the new block have after Gym?"
+    )
+
+
+@pytest.mark.parametrize("idiom", ["один за другим", "друг за другом", "подряд"])
+def test_russian_sequence_words_keep_a_real_relation(idiom):
+    command = f"добавь Вокал и Растяжку {idiom} после Зала"
+    blocks = [_block(title="Зал")]
+    timed = [
+        {**_SEQUENCE[0], "start_time": "09:30", "end_time": "10:00"},
+        {**_SEQUENCE[1], "start_time": "10:00", "end_time": "10:15"},
+    ]
+    assert relative_add_guard_ask([_user(command)], timed, blocks) is None
+    early = [{**timed[0], "start_time": "08:00", "end_time": "08:30"}, timed[1]]
+    assert relative_add_guard_ask([_user(command)], early, blocks) == (
+        "Во сколько начать новый блок после блока «Зал»?"
+    )
+
+
+# Feature 0104: natural clock answers and start clauses.
+def _unbound(answer):
+    return [_user("add Vocal after lunch"), _ask("Which existing block?"), _user(answer)]
+
+
+@pytest.mark.parametrize("answer", [
+    "vocal starts at 0945",
+    "vocal starts at 09:45",
+    "Вокал начинается в 0945",
+    "Вокал начинается в 09:45",
+    "09:45",
+    "0945",
+    "в 09:45",
+])
+def test_natural_clock_answer_resolves_unbound_relation(answer):
+    actions = [_add(start_time="09:45", end_time="10:15")]
+    assert relative_add_guard_ask(_unbound(answer), actions, [_block()]) is None
+    assert actions == [_add(start_time="09:45", end_time="10:15")]
+
+
+@pytest.mark.parametrize("answer,start,end", [
+    ("14:00 for 30 minutes", "14:00", "14:30"),
+    ("9:45 pm", "21:45", "22:15"),
+    ("at 14:00", "14:00", "14:30"),
+])
+def test_clock_answers_accepted_today_stay_accepted(answer, start, end):
+    actions = [_add(start_time=start, end_time=end)]
+    assert relative_add_guard_ask(_unbound(answer), actions, [_block()]) is None
+
+
+_GYM = _block(start="07:30", end="09:30")
+_EXISTING_VOCAL = _block(title="Vocal", start="16:00", end="16:30")
+
+
+@pytest.mark.parametrize("messages,actions,blocks", [
+    (_unbound("30 minutes"), [_add(start_time="14:00", end_time="14:30")], [_block()]),
+    (_unbound("0945 repetitions"), [_add(start_time="09:45", end_time="10:15")], [_block()]),
+    (_unbound("Room 1015"), [_add(start_time="10:15", end_time="10:45")], [_block()]),
+    (_unbound("2460"), [_add(start_time="09:45", end_time="10:15")], [_block()]),
+    (_unbound("09:99"), [_add(start_time="09:45", end_time="10:15")], [_block()]),
+    (_unbound("109450"), [_add(start_time="09:45", end_time="10:15")], [_block()]),
+    (_unbound("vocal starts at 0945"), [_add()], [_block()]),
+    (_unbound("vocal starts at 0945"), [_add(duration_minutes=30)], [_block()]),
+    ([_user("add Vocal after lunch"), _ask(), _user("Gym"), _ask(),
+      _user("vocal starts at 0800")], [_add(start_time="08:00", end_time="08:30")], [_GYM]),
+    ([_user("add Vocal after Gym with a 15-minute gap"), _ask(),
+      _user("vocal starts at 0935")], [_add(start_time="09:35", end_time="10:05")], [_GYM]),
+    ([_user("add Vocal after Kick-off or Lunch Walk"), _ask(),
+      _user("vocal starts at 1400")], [_add(start_time="14:00", end_time="14:30")], _DAY),
+    (_screenshot_chat("Lunch Walk") + [_ask(), _user("нет, не Lunch Walk, а Kick-off"), _ask(),
+                                       _user("вокал начинается в 1100")],
+     [_add(start_time="11:00", end_time="11:30")], _DAY),
+    (_unbound("Gym, vocal starts at 0900"), [_add(start_time="09:00", end_time="09:30")],
+     [_GYM]),
+    ([_user("add Vocal after lunch"), _ask(), _user("Gym"), _ask(),
+      _user("vocal starts at 0900")], [_add(start_time="09:00", end_time="09:30")],
+     [_GYM, _EXISTING_VOCAL]),
+], ids=["duration", "quantity", "title-number", "hour-24", "minute-99", "long-number",
+        "untimed", "untimed-duration", "before-resolved-anchor", "inside-gap",
+        "several-candidates", "ambiguous-correction", "anchor-beside-clause",
+        "same-title-subject"])
+def test_clock_answer_does_not_bypass_relative_constraints(messages, actions, blocks):
+    ask = relative_add_guard_ask(messages, actions, blocks)
+    assert ask is not None
+    if blocks[0] is _GYM and "Gym" in " ".join(m["content"] for m in messages):
+        assert ask == "What start time should the new block have after Gym?"
+
+
+def test_clock_answer_resolves_multi_relation_time_question():
+    request = _user("add Vocal after Gym and Stretching after Vocal")
+    generic = "What start time should the new block have?"
+    two = [
+        _add(start_time="09:45", end_time="10:15"),
+        {"type": "add", "title": "Stretching", "category": "other",
+         "start_time": "10:15", "end_time": "10:30"},
+    ]
+    for answer in ["vocal starts at 0945", "09:45"]:
+        messages = [request, _ask(generic), _user(answer)]
+        assert relative_add_guard_ask(messages, two, [_block()]) is None
+    assert relative_add_guard_ask([request], two, [_block()]) == generic
+    untimed_sibling = [two[0], {"type": "add", "title": "Stretching", "category": "other"}]
+    assert relative_add_guard_ask(
+        [request, _ask(generic), _user("09:45")], untimed_sibling, [_block()]
+    ) == generic
+    assert relative_add_guard_ask(
+        [request, _ask(generic), _user("ok, go ahead")], two, [_block()]
+    ) == generic
+
+
+@pytest.mark.parametrize("request_text,answer,title", [
+    ("add Vocal after lunch", "vocal starts at 0945", "Vocal"),
+    ("добавь Вокал после обеда", "Вокал начинается в 0945", "Вокал"),
+])
+def test_start_clause_about_the_new_block_is_not_an_anchor(request_text, answer, title):
+    blocks = [_GYM, _block(title=title, start="16:00", end="16:30")]
+    action = {"type": "add", "title": title, "category": "other",
+              "start_time": "09:45", "end_time": "10:15"}
+    messages = [_user(request_text), _ask(), _user(answer)]
+    assert relative_add_guard_ask(messages, [action], blocks) is None
+    named = [_user(request_text), _ask(), _user(title)]
+    assert relative_add_guard_ask(named, [action], blocks) is not None
+
+
+def test_start_clause_stays_a_start_clause_after_partial_completion():
+    blocks = [_GYM, _block(title="Vocal", start="09:45", end="10:15")]
+    messages = [
+        _user("add Vocal and Stretching before lunch"),
+        _ask("Which existing block should the new block be placed before?"),
+        _user("vocal starts at 0945"),
+        _ask("Some requested changes are still pending. Please clarify the remaining request."),
+        _user("stretching starts at 1015"),
+    ]
+    stretching = {"type": "add", "title": "Stretching", "category": "other",
+                  "start_time": "10:15", "end_time": "10:30"}
+    assert relative_add_guard_ask(messages, [stretching], blocks) is None
