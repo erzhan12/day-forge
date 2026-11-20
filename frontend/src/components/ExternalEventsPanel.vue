@@ -83,9 +83,12 @@ function sourceLabel(ev: NormalizedEvent): string {
   return ev.account_label || ev.calendar_name
 }
 
+function durationMinutes(ev: NormalizedEvent): number {
+  return Math.round((new Date(ev.end).getTime() - new Date(ev.start).getTime()) / 60_000)
+}
+
 function durationLabel(ev: NormalizedEvent): string {
-  const minutes = Math.round((new Date(ev.end).getTime() - new Date(ev.start).getTime()) / 60_000)
-  return formatDurationMinutes(minutes)
+  return formatDurationMinutes(durationMinutes(ev))
 }
 </script>
 
@@ -156,7 +159,7 @@ function durationLabel(ev: NormalizedEvent): string {
           <span class="ee-stripe" aria-hidden="true"></span>
           <div class="ee-body">
             <span class="ee-event-title">{{ ev.title }}</span>
-            <span class="ee-source" data-testid="external-event-source">{{ sourceLabel(ev) }}<template v-if="!ev.all_day"> · {{ durationLabel(ev) }}</template></span>
+            <span class="ee-source" data-testid="external-event-source">{{ sourceLabel(ev) }}<template v-if="!ev.all_day && durationMinutes(ev) > 0"> · {{ durationLabel(ev) }}</template></span>
           </div>
         </template>
         <template v-else>

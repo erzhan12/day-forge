@@ -314,6 +314,23 @@ describe("ExternalEventsPanel embedded (sources rail)", () => {
     expect(skeleton.attributes("aria-hidden")).toBeUndefined()
   })
 
+  it("shows inline loading text beside existing rows when embedded", () => {
+    const wrapper = mount(ExternalEventsPanel, {
+      props: { events: [APPLE_EVENT], loading: true, connected: true, embedded: true },
+    })
+    const loading = wrapper.get('span.ee-loading[aria-live="polite"]')
+    expect(loading.text()).toBe("Loading…")
+    expect(loading.attributes("aria-hidden")).toBeUndefined()
+    expect(wrapper.find(".ee-skeleton").exists()).toBe(false)
+  })
+
+  it("omits the duration for an event that ends at or before its start", () => {
+    const wrapper = mount(ExternalEventsPanel, {
+      props: { events: [{ ...APPLE_EVENT, end: APPLE_EVENT.start }], loading: false, connected: true, embedded: true },
+    })
+    expect(wrapper.get('[data-testid="external-event-source"]').text()).toBe("Personal")
+  })
+
   it("keeps the header in the default sidebar variant", () => {
     const wrapper = mount(ExternalEventsPanel, {
       props: { events: [APPLE_EVENT], loading: false, connected: true },

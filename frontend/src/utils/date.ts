@@ -66,7 +66,9 @@ export function addCivilDays(date: string, offset: number): string {
 }
 
 // "Thu 19 Nov". Formatted in UTC from the noon-UTC civil date, so the
-// weekday never shifts with the browser's timezone.
+// weekday never shifts with the browser's timezone. The en-GB default is
+// deliberate: en-US gives "Thu, Nov 19", and navigator.language would make
+// the rail header vary per browser and break the pinned tests.
 export function formatShortCivilDate(date: string, locale = "en-GB"): string {
   return utcCivilDate(date).toLocaleDateString(locale, {
     timeZone: "UTC", weekday: "short", day: "numeric", month: "short",
