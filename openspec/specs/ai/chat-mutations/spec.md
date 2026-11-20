@@ -451,7 +451,7 @@ Tests: backend/tests/test_ai_relative_add_guard.py::test_natural_clock_answer_re
 - **WHEN** a reply such as "Vocal starts at 0945" names an existing block that has the new block's title
 - **THEN** it is not an anchor answer, also after a sibling was applied; a block named outside the clause still binds
 
-Tests: backend/tests/test_ai_relative_add_guard.py::test_start_clause_about_the_new_block_is_not_an_anchor, backend/tests/test_ai_relative_add_guard.py::test_start_clause_stays_a_start_clause_after_partial_completion, backend/tests/test_ai_relative_guard_recovery.py::test_start_clause_stays_a_start_clause_after_partial_completion_endpoint
+Tests: backend/tests/test_ai_relative_add_guard.py::test_start_clause_about_the_new_block_is_not_an_anchor, backend/tests/test_ai_relative_add_guard.py::test_start_clause_stays_a_start_clause_after_partial_completion, backend/tests/test_ai_relative_add_guard.py::test_block_named_before_an_exclamation_still_binds, backend/tests/test_ai_relative_guard_recovery.py::test_start_clause_stays_a_start_clause_after_partial_completion_endpoint
 
 #### Scenario: Clock answer cannot bypass a constraint
 - **WHEN** the reply is a duration, an invalid or embedded number, an untimed add, or a time on the wrong side of a resolved anchor or gap, or several anchors are named

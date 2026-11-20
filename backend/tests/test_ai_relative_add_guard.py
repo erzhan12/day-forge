@@ -633,6 +633,17 @@ def test_start_clause_about_the_new_block_is_not_an_anchor(request_text, answer,
     assert relative_add_guard_ask(named, [action], blocks) is not None
 
 
+@pytest.mark.parametrize("separator", ["!", "?"])
+def test_block_named_before_an_exclamation_still_binds(separator):
+    blocks = [_GYM, _EXISTING_VOCAL]
+    action = {"type": "add", "title": "Vocal", "category": "other",
+              "start_time": "09:15", "end_time": "09:45"}
+    messages = [_user("add Vocal after lunch"), _ask(),
+                _user(f"Gym{separator} vocal starts at 0915")]
+    question = relative_add_guard_ask(messages, [action], blocks)
+    assert question is not None and "Gym" in question
+
+
 def test_start_clause_stays_a_start_clause_after_partial_completion():
     blocks = [_GYM, _block(title="Vocal", start="09:45", end="10:15")]
     messages = [

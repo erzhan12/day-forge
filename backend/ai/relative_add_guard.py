@@ -51,7 +51,7 @@ _START_CLAUSE_RE = re.compile(
     rf"(?:{_CLOCK_COLON}|{_CLOCK_COMPACT})(?![\d:])",
     re.IGNORECASE,
 )
-_SEGMENT_SPLIT_RE = re.compile(r"[,;]|\.(?=\s|$)")
+_SEGMENT_SPLIT_RE = re.compile(r"[,;!?]|\.(?=\s|$)")
 
 
 def _is_clock_answer(text: str) -> bool:

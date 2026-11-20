@@ -682,6 +682,8 @@ def test_relative_guard_round_trip_through_provider_parser(chat, gym, monkeypatc
     calls = []
 
     async def completion(**kwargs):
+        if len(calls) >= len(replies):
+            pytest.fail(f"unexpected provider call #{len(calls) + 1}")
         payload = {"explanation": "Plan.", **replies[len(calls)]}
         calls.append(kwargs)
         return SimpleNamespace(choices=[
