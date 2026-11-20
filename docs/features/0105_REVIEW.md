@@ -45,10 +45,17 @@ Accepted P3 gaps:
 - Leave tests stop at the leaving state; jsdom runs no transitions, so final removal is not asserted.
 - The bar fill width is asserted only at 0 %.
 - Embedded rows assert the source line, not the time column or the stripe variable.
-- Re-expanding a section is not asserted to drop `inert`.
 - Setting `process.env.TZ` at runtime may not change Intl's zone; `formatShortCivilDate` is correct by construction (`timeZone: "UTC"`).
 
 Verification after the last fix: `make check` (2855 backend, 1587 Vitest, OpenSpec strict and anchors) and `make frontend-build` pass.
+
+## PR review (claude-review on #315)
+
+Three cycles, APPROVED each time; CI green.
+
+- Applied: an event ending at or before its start no longer shows "· 0m"; tests for embedded inline loading and for re-expanding a section.
+- The re-expand test exposed a real defect: `:inert="collapsed"` writes `inert="false"` where `inert` is not a DOM property, and any `inert` attribute keeps the body inert. The binding now passes `undefined` when expanded.
+- Rejected with rationale on the PR: converting `showPeek()` to a `computed` (slot presence is not reactive; this branch tried it and a test failed), and caching `durationMinutes` per row (negligible cost).
 
 ## Manual checklist
 

@@ -13,4 +13,4 @@
 - [x] Run `make spec-check`
 - [x] Run `make frontend-build`
 - [x] Browser check on `dark_4a` (collapse, keyboard, persistence, checkboxes); light themes checked through resolved tokens only
-- [ ] Archive the change on the feature branch before merge
+- [x] Archive the change on the feature branch before merge
