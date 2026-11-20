@@ -64,7 +64,9 @@ function toggle() {
     </button>
     <div v-if="percent !== null" class="bar" aria-hidden="true"><i :style="{ width: barWidth }" /></div>
     <div v-if="showPeek()" :id="peekId" class="peek" data-testid="rail-section-peek"><slot name="peek" /></div>
-    <div :id="bodyId" class="body" :inert="collapsed" data-testid="rail-section-body">
+    <!-- `|| undefined` removes the attribute when expanded: where `inert` is not
+         a DOM property Vue would otherwise write inert="false", which is still inert. -->
+    <div :id="bodyId" class="body" :inert="collapsed || undefined" data-testid="rail-section-body">
       <div class="body-inner"><slot /></div>
     </div>
   </section>

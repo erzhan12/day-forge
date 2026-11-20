@@ -276,6 +276,9 @@ describe("ExternalRail4a section collapse", () => {
     expect(header.text()).toContain("Todoist")
     expect(progressText()).toBe("0 / 2")
     expect(section("todoist").find(".bar").exists()).toBe(true)
+    await toggleSectionHeader("todoist")
+    expect(header.attributes("aria-expanded")).toBe("true")
+    expect(section("todoist").get('[data-testid="rail-section-body"]').attributes("inert")).toBeUndefined()
   })
 
   it("restores each section's collapsed state from storage on mount", async () => {
