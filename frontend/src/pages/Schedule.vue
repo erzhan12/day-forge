@@ -312,7 +312,7 @@ defineExpose({
         :style="{ top: ghostTop + 'px', height: ghostHeight + 'px' }"
       >
         <span class="ghost-handle">&#x2807;</span>
-        <input type="checkbox" class="ghost-checkbox" disabled />
+        <input type="checkbox" class="ghost-checkbox df-checkbox" disabled />
         <span class="ghost-time">{{ previewStartTime }}–{{ previewEndTime }}</span>
         <span class="ghost-duration">{{ ghostDuration }}</span>
         <span class="ghost-title">{{ draggedBlock.title }}</span>
@@ -689,9 +689,6 @@ defineExpose({
 }
 
 .ghost-checkbox {
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
   pointer-events: none;
 }
 

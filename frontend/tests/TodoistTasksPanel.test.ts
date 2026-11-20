@@ -2,6 +2,8 @@
 
 import { describe, expect, it } from "vitest"
 import { mount } from "@vue/test-utils"
+import { readFileSync } from "node:fs"
+import { resolve } from "node:path"
 
 import TodoistTasksPanel from "../src/components/TodoistTasksPanel.vue"
 import type { TodoistTask } from "../src/types/todoist"
@@ -163,5 +165,64 @@ describe("TodoistTasksPanel", () => {
     await wrapper.findAll('[data-testid="todoist-complete"]')[1].trigger("change")
     expect(wrapper.emitted("complete")).toBeTruthy()
     expect(wrapper.emitted("complete")![0]).toEqual(["2"])
+  })
+
+  it("does not paint the empty copy on the skeleton during the first load", () => {
+    const wrapper = mount(TodoistTasksPanel, { props: { tasks: [], loading: true, error: null } })
+    expect(wrapper.find(".todoist-skeleton").exists()).toBe(true)
+    expect(wrapper.find(".todoist-empty").exists()).toBe(false)
+  })
+
+  it("uses the shared checkbox with the Todoist provider colour", () => {
+    const wrapper = mount(TodoistTasksPanel, { props: { tasks: [TASK_P1], loading: false, error: null } })
+    expect(wrapper.get('[data-testid="todoist-complete"]').classes()).toContain("df-checkbox")
+  })
+
+  describe("leave animation", () => {
+    const unstubbed = { global: { stubs: { transition: false, "transition-group": false } } }
+
+    it("keeps the last completed row mounted, locked, while it leaves", async () => {
+      const wrapper = mount(TodoistTasksPanel, { props: { tasks: [TASK_P1], loading: false, error: null }, ...unstubbed })
+      const box = wrapper.get<HTMLInputElement>('[data-testid="todoist-complete"]')
+      box.element.checked = true
+      await box.trigger("change")
+      await wrapper.setProps({ tasks: [] })
+      const leaving = wrapper.findAll('[data-testid="todoist-task"]')
+      expect(leaving).toHaveLength(1)
+      // The "df-task" TransitionGroup name is what the app.css leave rules key on.
+      expect(leaving[0].classes()).toContain("df-task-leave-active")
+      expect(leaving[0].attributes("aria-hidden")).toBe("true")
+      // A disabled control takes no clicks or Space, so it cannot emit again.
+      expect(leaving[0].get<HTMLInputElement>("input").element.disabled).toBe(true)
+      expect(wrapper.emitted("complete")).toEqual([["1"]])
+    })
+
+    it("restores a row after a failed completion as a fresh unchecked control", async () => {
+      const wrapper = mount(TodoistTasksPanel, { props: { tasks: [TASK_P1, TASK_P2], loading: false, error: null }, ...unstubbed })
+      const box = wrapper.get<HTMLInputElement>('[data-testid="todoist-complete"]')
+      box.element.checked = true
+      await box.trigger("change")
+      await wrapper.setProps({ tasks: [TASK_P2] })
+      await wrapper.setProps({ tasks: [TASK_P1, TASK_P2], error: "Could not complete the task." })
+      const live = wrapper.findAll('[data-testid="todoist-complete"]').filter((c) => !(c.element as HTMLInputElement).disabled)
+      expect(live).toHaveLength(2)
+      const restored = live.find((c) => c.attributes("aria-label") === "Complete task: Ship the release")!
+      expect((restored.element as HTMLInputElement).checked).toBe(false)
+      await restored.trigger("change")
+      expect(wrapper.emitted("complete")).toEqual([["1"], ["1"]])
+    })
+  })
+
+  it("animates only a ticked row; rows leaving for other reasons go at once", () => {
+    // jsdom runs no CSS transitions, so pin the stylesheet contract instead.
+    const css = readFileSync(resolve(__dirname, "..", "src/app.css"), "utf-8")
+    const base = /\.df-task-leave-active \{([^}]*)\}/.exec(css)![1]
+    expect(base).not.toContain("transition")
+    expect(css).toContain(".df-task-leave-active:has(.df-checkbox:checked) {\n  transition: opacity 250ms ease;")
+    expect(css).toContain(".df-task-leave-active:has(.df-checkbox:checked) .df-task-title {")
+    expect(css).toMatch(/\.df-task-leave-active:has\(\.df-checkbox:checked\) \.df-task-title \{[^}]*text-decoration: line-through;/)
+    expect(css).toMatch(/\.df-task-leave-to:has\(\.df-checkbox:checked\) \{[^}]*opacity: 0;/)
+    const reduced = css.slice(css.lastIndexOf("@media (prefers-reduced-motion: reduce)"))
+    expect(reduced).toMatch(/\.df-task-leave-active:has\(\.df-checkbox:checked\) \{\s*transition: none;/)
   })
 })

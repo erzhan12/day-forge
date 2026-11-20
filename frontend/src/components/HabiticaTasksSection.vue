@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { HabiticaTask } from "../types/habitica"
+import { lockLeavingTaskRow } from "../utils/taskRowLeave"
 
 defineProps<{
   tasks: HabiticaTask[]
@@ -32,7 +33,9 @@ const emit = defineEmits<{
       </button>
     </div>
 
-    <ul v-if="tasks.length > 0" class="habitica-list">
+    <!-- Always mounted so the last completed row can still play its leave
+         animation; `.habitica-list:empty` hides it once nothing is left. -->
+    <TransitionGroup tag="ul" name="df-task" class="habitica-list" @before-leave="lockLeavingTaskRow">
       <li
         v-for="task in tasks"
         :key="task.id"
@@ -41,20 +44,20 @@ const emit = defineEmits<{
       >
         <input
           type="checkbox"
-          class="habitica-complete"
+          class="habitica-complete df-checkbox"
           data-testid="habitica-complete"
           :aria-label="`Complete Habitica task: ${task.title}`"
           @change="emit('complete', task.id)"
         />
-        <span class="habitica-task-title">{{ task.title }}</span>
+        <span class="habitica-task-title df-task-title">{{ task.title }}</span>
       </li>
-    </ul>
+    </TransitionGroup>
 
     <!-- The rows are decorative, but the state still needs announcing: the
          visible "Loading…" text is suppressed in this branch, so the label
          lives here instead. -->
     <p
-      v-else-if="loading && !error"
+      v-if="tasks.length === 0 && loading && !error"
       class="habitica-skeleton"
       role="status"
       aria-label="Loading Habitica tasks"
@@ -64,7 +67,7 @@ const emit = defineEmits<{
       <span class="habitica-skel-row" aria-hidden="true"></span>
     </p>
 
-    <p v-else-if="!error" class="habitica-empty">No Habitica tasks for this day.</p>
+    <p v-if="tasks.length === 0 && !loading && !error" class="habitica-empty">No Habitica tasks for this day.</p>
   </div>
 </template>
 
@@ -130,11 +133,13 @@ const emit = defineEmits<{
   flex-shrink: 0;
 }
 
+.habitica-list:empty {
+  display: none;
+}
+
 .habitica-complete {
-  width: 14px;
-  height: 14px;
-  margin: 0;
-  cursor: pointer;
+  --checkbox-color: var(--provider-habitica);
+  --checkbox-tick: var(--provider-habitica-tick);
 }
 
 .habitica-task-title {

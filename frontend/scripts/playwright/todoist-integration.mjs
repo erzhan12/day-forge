@@ -94,7 +94,7 @@ try {
 
   console.log(`→ Schedule: panel visible after connect (${today})…`)
   await page.goto(`${BASE}/schedule/${today}/`, { waitUntil: "networkidle" })
-  const panel = page.locator('[aria-label="Todoist tasks"]')
+  const panel = page.locator('[data-testid="todoist-sidebar"]')
   await panel.waitFor({ state: "visible", timeout: PANEL_TIMEOUT_MS })
 
   const errorBanner = page.locator(".todoist-error")

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest"
 import { readFileSync } from "node:fs"
 import { resolve } from "node:path"
 import {
+  tickVariantFor,
   categoryColors,
   getCategoryColor,
 } from "../src/utils/categoryColors"
@@ -75,5 +76,19 @@ describe("components route through getCategoryColor()", () => {
     expect(source).not.toMatch(
       /import\s*\{[^}]*\bcategoryColors\b[^}]*\}\s*from\s*["']\.\.\/utils\/categoryColors["']/,
     )
+  })
+})
+
+describe("tickVariantFor", () => {
+  it("picks the dark tick on light fills and the light tick on dark fills", () => {
+    expect(tickVariantFor("#ffffff")).toBe("dark")
+    expect(tickVariantFor("#f2d58a")).toBe("dark")
+    expect(tickVariantFor("#000000")).toBe("light")
+    expect(tickVariantFor("#1e3a8a")).toBe("light")
+  })
+
+  it("falls back to the light tick for unparseable colours", () => {
+    expect(tickVariantFor("var(--accent)")).toBe("light")
+    expect(tickVariantFor("#abc")).toBe("light")
   })
 })

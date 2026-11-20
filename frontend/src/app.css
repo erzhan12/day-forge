@@ -69,6 +69,22 @@
   --radius-lg: 12px;
   --radius-pill: 999px;
 
+  /* Sources rail and shared checkbox (feature 0105) */
+  --provider-todoist: #db4035;
+  --provider-todoist-tick: var(--checkbox-tick-light);
+  --provider-habitica: #6133b4;
+  --provider-habitica-tick: var(--checkbox-tick-light);
+  --checkbox-border: #7b8390;
+  --checkbox-tick-light: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2 5 8.6l4.5-5' fill='none' stroke='%23ffffff' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --checkbox-tick-dark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2 5 8.6l4.5-5' fill='none' stroke='%2317181a' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --checkbox-tick: var(--checkbox-tick-light);
+  --calendar-hue-1: #378add;
+  --calendar-hue-2: #1d9e75;
+  --calendar-hue-3: #d4537e;
+  --calendar-hue-4: #ba7517;
+  --calendar-hue-5: #7f77dd;
+  --calendar-hue-6: #d85a30;
+
   /* Typography */
   --font-family-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
@@ -162,6 +178,20 @@ html[data-theme="strategic"] {
   --focus-ring: rgba(125, 187, 255, 0.55);
   --shadow-card: 0 18px 40px -16px rgba(0, 0, 0, 0.65);
   --shadow-panel: 0 8px 18px -10px rgba(0, 0, 0, 0.55);
+
+  /* Sources rail and shared checkbox (feature 0105) */
+  --provider-todoist: #f2685d;
+  --provider-todoist-tick: var(--checkbox-tick-dark);
+  --provider-habitica: #a98bf0;
+  --provider-habitica-tick: var(--checkbox-tick-dark);
+  --checkbox-border: #6a6f78;
+  --checkbox-tick: var(--checkbox-tick-dark);
+  --calendar-hue-1: #6aaaf0;
+  --calendar-hue-2: #4cc49b;
+  --calendar-hue-3: #e98aac;
+  --calendar-hue-4: #e0a64a;
+  --calendar-hue-5: #a49ef0;
+  --calendar-hue-6: #f08a63;
 
   --font-family-body: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
     Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -257,6 +287,20 @@ html[data-theme="dark_4a"] {
   --shadow-card: 0 8px 20px rgba(0, 0, 0, 0.26);
   --shadow-panel: 0 10px 28px rgba(0, 0, 0, 0.35);
 
+  /* Sources rail and shared checkbox (feature 0105) */
+  --provider-todoist: #f2685d;
+  --provider-todoist-tick: var(--checkbox-tick-dark);
+  --provider-habitica: #a98bf0;
+  --provider-habitica-tick: var(--checkbox-tick-dark);
+  --checkbox-border: #6a6f78;
+  --checkbox-tick: var(--checkbox-tick-dark);
+  --calendar-hue-1: #6aaaf0;
+  --calendar-hue-2: #4cc49b;
+  --calendar-hue-3: #e98aac;
+  --calendar-hue-4: #e0a64a;
+  --calendar-hue-5: #a49ef0;
+  --calendar-hue-6: #f08a63;
+
   --font-family-body: "Public Sans", -apple-system, BlinkMacSystemFont,
     "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-family-display: var(--font-family-body);
@@ -316,4 +360,99 @@ body.is-dragging {
 
 body.is-dragging * {
   cursor: grabbing !important;
+}
+
+/* Shared task checkbox (feature 0105). A native checkbox keeps its semantics,
+   change event and keyboard behaviour; only the paint is custom. The tick is a
+   background-image (not ::after, which replaced <input>s do not reliably
+   render, and not mask-image, which would mask the fill too). Callers set
+   --checkbox-color (fill) and optionally --checkbox-tick (light/dark tick). */
+.df-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  display: inline-block;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  vertical-align: middle;
+  border: 1.5px solid var(--checkbox-border);
+  border-radius: 4px;
+  background: transparent no-repeat center / 12px 12px;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.df-checkbox:hover:not(:disabled) {
+  border-color: var(--checkbox-color, var(--accent));
+}
+
+.df-checkbox:checked {
+  border-color: var(--checkbox-color, var(--accent));
+  background-color: var(--checkbox-color, var(--accent));
+  background-image: var(--checkbox-tick);
+}
+
+.df-checkbox:focus {
+  outline: none;
+}
+
+.df-checkbox:focus-visible {
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.df-checkbox:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .df-checkbox {
+    transition: none;
+  }
+}
+
+/* High-contrast modes ignore custom paint; fall back to the native control. */
+@media (forced-colors: active) {
+  .df-checkbox {
+    appearance: auto;
+    -webkit-appearance: auto;
+  }
+
+  /* Forced colours drop box-shadow focus rings; give keyboard focus an
+     outline there instead. */
+  .df-checkbox:focus-visible {
+    outline: 2px solid CanvasText;
+    outline-offset: 2px;
+  }
+}
+
+/* Completed external-task row leave (feature 0105). Used by the
+   TransitionGroup named "df-task" in TodoistTasksPanel/HabiticaTasksSection.
+   Only a row the user ticked animates: its unbound checkbox keeps the native
+   :checked state through the leave. Rows that leave for any other reason
+   (date change, refresh, disconnect) have no transition, so Vue removes them
+   at once. */
+.df-task-leave-active {
+  pointer-events: none;
+}
+
+.df-task-leave-active:has(.df-checkbox:checked) {
+  transition: opacity 250ms ease;
+}
+
+.df-task-leave-active:has(.df-checkbox:checked) .df-task-title {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
+.df-task-leave-to:has(.df-checkbox:checked) {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Same specificity as the ticked-row rule above, so this one wins. */
+  .df-task-leave-active:has(.df-checkbox:checked) {
+    transition: none;
+  }
 }

@@ -76,3 +76,29 @@ export function getCategoryColor(category: string, theme?: ThemeId, categories?:
   const id = theme ?? activeThemeId()
   return categoryOverrides[id]?.[category as Category] ?? categoryColors[category as Category] ?? "#6B7280"
 }
+
+function channel(value: number): number {
+  const c = value / 255
+  return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+}
+
+function relativeLuminance(hex: string): number | null {
+  const match = /^#?([0-9a-f]{6})$/i.exec(hex.trim())
+  if (!match) return null
+  const n = parseInt(match[1], 16)
+  return 0.2126 * channel((n >> 16) & 255) + 0.7152 * channel((n >> 8) & 255) + 0.0722 * channel(n & 255)
+}
+
+/**
+ * Which checkbox tick (feature 0105) reads better on a filled ``hex``:
+ * the one with the higher WCAG contrast ratio against the fill. The light
+ * tick is white, the dark one is near-black (#17181a, L ≈ 0.009).
+ * Unparseable colours fall back to the light tick.
+ */
+export function tickVariantFor(hex: string): "light" | "dark" {
+  const fill = relativeLuminance(hex)
+  if (fill === null) return "light"
+  const light = 1.05 / (fill + 0.05)
+  const dark = (fill + 0.05) / (relativeLuminance("#17181a")! + 0.05)
+  return dark > light ? "dark" : "light"
+}

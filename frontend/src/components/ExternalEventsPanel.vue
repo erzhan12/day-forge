@@ -8,6 +8,8 @@ import type {
 } from "../types/calendar"
 import { todayString, zonedDateTime } from "../utils/date"
 import { isExternalEventPast } from "../utils/externalEventPast"
+import { calendarColorVar } from "../utils/calendarColor"
+import { formatDurationMinutes } from "../utils/scheduleTime"
 
 const props = withDefaults(
   defineProps<{
@@ -30,6 +32,10 @@ const props = withDefaults(
     errorBanners?: ProviderErrorBanner[]
     // Per-account Google failures (200 + account_errors[]).
     accountErrors?: GoogleAccountError[]
+    // Inside the 4a sources rail (feature 0105): the rail section owns the
+    // heading, so the panel drops its own header, frame and chips and renders
+    // time / calendar stripe / title rows.
+    embedded?: boolean
   }>(),
   {
     errorBanners: () => [],
@@ -38,6 +44,7 @@ const props = withDefaults(
     date: () => todayString(),
     nowMinutes: null,
     timeZone: "UTC",
+    embedded: false,
   },
 )
 
@@ -69,6 +76,17 @@ const addDisabled = computed(() => Boolean(scheduleDisabled?.value))
 function formatTime(iso: string): string {
   return zonedDateTime(new Date(iso), props.timeZone).hhmm
 }
+
+// Apple rows carry an empty account_label; fall back to the calendar name,
+// as the chip row does.
+function sourceLabel(ev: NormalizedEvent): string {
+  return ev.account_label || ev.calendar_name
+}
+
+function durationLabel(ev: NormalizedEvent): string {
+  const minutes = Math.round((new Date(ev.end).getTime() - new Date(ev.start).getTime()) / 60_000)
+  return formatDurationMinutes(minutes)
+}
 </script>
 
 <template>
@@ -76,13 +94,14 @@ function formatTime(iso: string): string {
   <section
     v-if="connected"
     class="external-events"
-    :class="{ 'external-events--center': variant === 'center' }"
+    :class="{ 'external-events--center': variant === 'center', 'external-events--embedded': embedded }"
     aria-label="External calendar events"
   >
-    <header class="ee-header">
+    <header v-if="!embedded" class="ee-header">
       <span class="ee-title">External Calendars</span>
       <span v-if="loading" class="ee-loading" aria-live="polite">Loading…</span>
     </header>
+    <span v-else-if="loading && events.length > 0" class="ee-loading" aria-live="polite">Loading…</span>
 
     <!-- Whole-request provider failures. NON-suppressing: each renders as a
          banner above the list and carries its own per-provider Retry. -->
@@ -127,18 +146,30 @@ function formatTime(iso: string): string {
         v-for="ev in events"
         :key="ev.external_uid"
         class="ee-item"
-        :class="{ 'ee-item--past': eventIsPast(ev) }"
+        :class="{ 'ee-item--past': eventIsPast(ev), 'ee-item--embedded': embedded }"
+        :style="embedded ? { '--ee-stripe': calendarColorVar(ev.calendar_name) } : undefined"
         data-testid="external-event"
       >
-        <span class="ee-event-title">{{ ev.title }}</span>
-        <div class="ee-meta">
-          <span class="ee-time">
-            <template v-if="ev.all_day">All day</template>
-            <template v-else>{{ formatTime(ev.start) }} – {{ formatTime(ev.end) }}</template>
-          </span>
-          <span v-if="ev.account_label" class="ee-account-chip">{{ ev.account_label }}</span>
-          <span v-else class="ee-calendar-chip">{{ ev.calendar_name }}</span>
-        </div>
+        <!-- Rail row: start time | calendar-colour stripe | title + source. -->
+        <template v-if="embedded">
+          <span class="ee-time ee-time-col">{{ ev.all_day ? "All day" : formatTime(ev.start) }}</span>
+          <span class="ee-stripe" aria-hidden="true"></span>
+          <div class="ee-body">
+            <span class="ee-event-title">{{ ev.title }}</span>
+            <span class="ee-source" data-testid="external-event-source">{{ sourceLabel(ev) }}<template v-if="!ev.all_day"> · {{ durationLabel(ev) }}</template></span>
+          </div>
+        </template>
+        <template v-else>
+          <span class="ee-event-title">{{ ev.title }}</span>
+          <div class="ee-meta">
+            <span class="ee-time">
+              <template v-if="ev.all_day">All day</template>
+              <template v-else>{{ formatTime(ev.start) }} – {{ formatTime(ev.end) }}</template>
+            </span>
+            <span v-if="ev.account_label" class="ee-account-chip">{{ ev.account_label }}</span>
+            <span v-else class="ee-calendar-chip">{{ ev.calendar_name }}</span>
+          </div>
+        </template>
         <!-- Hidden for all-day events (no timed window to map — locked). -->
         <button
           v-if="!ev.all_day"
@@ -155,7 +186,15 @@ function formatTime(iso: string): string {
 
     <!-- Full-bleed empty / skeleton state ONLY when there are no events. -->
     <template v-else>
-      <p v-if="loading" class="ee-skeleton" aria-hidden="true">
+      <!-- Embedded, the panel has no header "Loading…" live text and the rail
+           peek only exists while collapsed, so the skeleton announces itself. -->
+      <p
+        v-if="loading"
+        class="ee-skeleton"
+        :aria-hidden="embedded ? undefined : 'true'"
+        :role="embedded ? 'status' : undefined"
+        :aria-label="embedded ? 'Loading calendar events' : undefined"
+      >
         <span class="ee-skel-row"></span>
         <span class="ee-skel-row"></span>
         <span class="ee-skel-row"></span>
@@ -357,6 +396,56 @@ function formatTime(iso: string): string {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+/* -- Embedded in the 4a sources rail (feature 0105) -------------------- */
+.external-events--embedded {
+  margin: 0;
+  padding: 0 6px 8px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+
+.ee-item--embedded {
+  display: grid;
+  grid-template-columns: 44px 3px minmax(0, 1fr);
+  column-gap: 10px;
+  row-gap: 4px;
+  align-items: center;
+  padding: 4px 0;
+}
+
+.ee-time-col {
+  align-self: start;
+  padding-top: 1px;
+  white-space: nowrap;
+}
+
+.ee-stripe {
+  align-self: stretch;
+  min-height: 28px;
+  border-radius: 2px;
+  background: var(--ee-stripe);
+}
+
+.ee-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ee-source {
+  font-size: 12px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ee-item--embedded .ee-add-btn {
+  grid-column: 3;
 }
 
 .ee-skel-row {

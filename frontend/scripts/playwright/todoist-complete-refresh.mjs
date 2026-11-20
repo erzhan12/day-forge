@@ -124,7 +124,7 @@ try {
 
   console.log(`→ Schedule ${today}: wait for the panel…`)
   await page.goto(`${BASE}/schedule/${today}/`, { waitUntil: "networkidle" })
-  const panel = page.locator('[aria-label="Todoist tasks"]')
+  const panel = page.locator('[data-testid="todoist-sidebar"]')
   await panel.waitFor({ state: "visible", timeout: PANEL_TIMEOUT_MS })
 
   // Ensure the sidebar is expanded (Refresh button + task list only render

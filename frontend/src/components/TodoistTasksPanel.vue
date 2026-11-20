@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { TodoistTask } from "../types/todoist"
+import { lockLeavingTaskRow } from "../utils/taskRowLeave"
 
 defineProps<{
   tasks: TodoistTask[]
@@ -22,7 +23,9 @@ const emit = defineEmits<{
       <button type="button" class="todoist-retry" @click="emit('retry')">Retry</button>
     </div>
 
-    <ul v-if="tasks.length > 0" class="todoist-list">
+    <!-- Always mounted so the last completed row can still play its leave
+         animation; `.todoist-list:empty` hides it once nothing is left. -->
+    <TransitionGroup tag="ul" name="df-task" class="todoist-list" @before-leave="lockLeavingTaskRow">
       <li
         v-for="task in tasks"
         :key="task.id"
@@ -31,23 +34,25 @@ const emit = defineEmits<{
       >
         <input
           type="checkbox"
-          class="todoist-complete"
+          class="todoist-complete df-checkbox"
           data-testid="todoist-complete"
           :aria-label="`Complete task: ${task.title}`"
           @change="emit('complete', task.id)"
         />
-        <span class="todoist-task-title">{{ task.title }}</span>
+        <span class="todoist-task-title df-task-title">{{ task.title }}</span>
       </li>
-    </ul>
+    </TransitionGroup>
 
-    <p v-else-if="loading && !error" class="todoist-skeleton" aria-hidden="true">
+    <!-- Standalone v-ifs restate the exclusions the old v-else-if chain gave
+         them implicitly: never both, and never the empty copy mid-load. -->
+    <p v-if="tasks.length === 0 && loading && !error" class="todoist-skeleton" aria-hidden="true">
       <span class="todoist-skel-row"></span>
       <span class="todoist-skel-row"></span>
       <span class="todoist-skel-row"></span>
       <span class="todoist-skel-row"></span>
     </p>
 
-    <p v-else-if="!error" class="todoist-empty">No tasks scheduled for this day.</p>
+    <p v-if="tasks.length === 0 && !loading && !error" class="todoist-empty">No tasks scheduled for this day.</p>
   </div>
 </template>
 
@@ -113,12 +118,13 @@ const emit = defineEmits<{
   flex-shrink: 0;
 }
 
+.todoist-list:empty {
+  display: none;
+}
+
 .todoist-complete {
-  width: 14px;
-  height: 14px;
-  margin: 0;
-  cursor: pointer;
-  flex-shrink: 0;
+  --checkbox-color: var(--provider-todoist);
+  --checkbox-tick: var(--provider-todoist-tick);
 }
 
 .todoist-task-title {

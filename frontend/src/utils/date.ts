@@ -65,6 +65,14 @@ export function addCivilDays(date: string, offset: number): string {
   return result.toISOString().slice(0, 10)
 }
 
+// "Thu 19 Nov". Formatted in UTC from the noon-UTC civil date, so the
+// weekday never shifts with the browser's timezone.
+export function formatShortCivilDate(date: string, locale = "en-GB"): string {
+  return utcCivilDate(date).toLocaleDateString(locale, {
+    timeZone: "UTC", weekday: "short", day: "numeric", month: "short",
+  })
+}
+
 export function formatCivilDate(date: string, locale = "en-US"): string {
   return utcCivilDate(date).toLocaleDateString(locale, {
     timeZone: "UTC", weekday: "long", year: "numeric",

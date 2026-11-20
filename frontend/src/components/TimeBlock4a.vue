@@ -56,9 +56,4 @@ const props = withDefaults(
 .time-block-4a :deep(.time-block.completed) {
   background: #1c1e21;
 }
-
-.time-block-4a :deep(.checkbox) {
-  accent-color: var(--category-color);
-  border-color: #43474d;
-}
 </style>

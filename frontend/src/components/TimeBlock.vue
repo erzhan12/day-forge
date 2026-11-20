@@ -5,7 +5,7 @@ import { ScheduleContainerKey, ScheduleDisabledKey, ScheduleDragKey, ScheduleUnd
 import { useSchedule } from "../composables/useSchedule"
 import { registerMutationUndo } from "../composables/useMutationUndo"
 import { useBlockCompletion } from "../composables/useBlockCompletion"
-import { getCategoryColor } from "../utils/categoryColors"
+import { getCategoryColor, tickVariantFor } from "../utils/categoryColors"
 import { useActiveTheme } from "../composables/useActiveTheme"
 import DeleteConfirmationDialog from "./DeleteConfirmationDialog.vue"
 import {
@@ -34,6 +34,13 @@ const { updateBlock, deleteBlock } = useSchedule(() => props.date)
 // it, `getCategoryColor()` reads dataset.theme at call time only, with
 // no Vue-tracked dep).
 const activeTheme = useActiveTheme()
+const categoryColor = computed(() => getCategoryColor(props.block.category, activeTheme.value, props.categories))
+// Shared .df-checkbox (feature 0105): fill with the category colour and pick
+// the tick that contrasts with it.
+const checkboxStyle = computed(() => ({
+  "--checkbox-color": categoryColor.value,
+  "--checkbox-tick": `var(--checkbox-tick-${tickVariantFor(categoryColor.value)})`,
+}))
 
 const undo = inject(ScheduleUndoKey, undefined)
 
@@ -206,7 +213,7 @@ async function handleDelete() {
       dragging: drag?.isDragging.value && drag?.dragBlockId.value === block.id,
       shifting: drag?.shiftedBlockIds.value.has(block.id),
     }"
-    :style="{ borderLeftColor: getCategoryColor(block.category, activeTheme, props.categories) }"
+    :style="{ borderLeftColor: categoryColor }"
   >
     <div
       class="drag-handle"
@@ -219,8 +226,9 @@ async function handleDelete() {
       <input
         type="checkbox"
         :checked="displayedCompleted"
-        class="checkbox"
+        class="checkbox df-checkbox"
         :class="{ saving }"
+        :style="checkboxStyle"
         :disabled="disabled"
         @change="toggleCompleted"
       />
@@ -375,13 +383,7 @@ async function handleDelete() {
   color: #ef4444;
 }
 
-.checkbox {
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-  cursor: pointer;
-}
-
+/* Size, paint and states come from the global .df-checkbox (app.css). */
 .checkbox.saving {
   opacity: 0.5;
   cursor: progress;

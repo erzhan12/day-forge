@@ -285,3 +285,39 @@ describe("ExternalEventsPanel add-to-schedule button", () => {
     ).toBeUndefined()
   })
 })
+
+describe("ExternalEventsPanel embedded (sources rail)", () => {
+  it("drops its own header but keeps rows and Add to schedule", () => {
+    const wrapper = mount(ExternalEventsPanel, {
+      props: { events: [APPLE_EVENT, ALL_DAY_EVENT], loading: false, connected: true, embedded: true },
+    })
+    expect(wrapper.find(".ee-header").exists()).toBe(false)
+    expect(wrapper.findAll('[data-testid="external-event"]')).toHaveLength(2)
+    expect(wrapper.findAll('[data-testid="add-to-schedule"]')).toHaveLength(1)
+  })
+
+  it("shows the calendar name for an Apple row and the account for a Google row", () => {
+    const wrapper = mount(ExternalEventsPanel, {
+      props: { events: [APPLE_EVENT, GOOGLE_EVENT, ALL_DAY_EVENT], loading: false, connected: true, embedded: true, timeZone: "UTC" },
+    })
+    const sources = wrapper.findAll('[data-testid="external-event-source"]').map((node) => node.text())
+    expect(sources).toEqual(["Personal · 1h", "alice@gmail.com · 15m", "Work"])
+  })
+
+  it("announces an empty first load itself when embedded", () => {
+    const wrapper = mount(ExternalEventsPanel, {
+      props: { events: [], loading: true, connected: true, embedded: true },
+    })
+    const skeleton = wrapper.get(".ee-skeleton")
+    expect(skeleton.attributes("role")).toBe("status")
+    expect(skeleton.attributes("aria-label")).toBe("Loading calendar events")
+    expect(skeleton.attributes("aria-hidden")).toBeUndefined()
+  })
+
+  it("keeps the header in the default sidebar variant", () => {
+    const wrapper = mount(ExternalEventsPanel, {
+      props: { events: [APPLE_EVENT], loading: false, connected: true },
+    })
+    expect(wrapper.find(".ee-header").exists()).toBe(true)
+  })
+})

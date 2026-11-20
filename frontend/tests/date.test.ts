@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { addCivilDays, civilDayDelta, formatCivilDate, todayString, zonedDateTime } from "../src/utils/date"
+import { addCivilDays, civilDayDelta, formatCivilDate, formatShortCivilDate, todayString, zonedDateTime } from "../src/utils/date"
 
 describe("saved-zone civil time", () => {
   it.each([
@@ -30,5 +30,19 @@ describe("saved-zone civil time", () => {
     expect(civilDayDelta("2026-03-08", "2026-03-09")).toBe(1)
     expect(civilDayDelta("2026-11-02", "2026-11-01")).toBe(-1)
     expect(formatCivilDate("2026-03-08")).toBe("Sunday, March 8, 2026")
+  })
+})
+
+describe("formatShortCivilDate", () => {
+  it.each(["Pacific/Honolulu", "Pacific/Kiritimati", "UTC"])("keeps the civil weekday with the process TZ at %s", (zone) => {
+    const previous = process.env.TZ
+    process.env.TZ = zone
+    try {
+      expect(formatShortCivilDate("2026-11-19")).toBe("Thu 19 Nov")
+      expect(formatShortCivilDate("2027-01-01")).toBe("Fri 1 Jan")
+    } finally {
+      if (previous === undefined) delete process.env.TZ
+      else process.env.TZ = previous
+    }
   })
 })
