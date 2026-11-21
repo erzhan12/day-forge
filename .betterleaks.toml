@@ -1,0 +1,11 @@
+title = "Betterleaks"
+description = "Extends the built-in rules and adds Telegram Bot API token detection."
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "telegram-bot-token"
+description = "Telegram Bot API token"
+regex = '''[0-9]{8,10}:[A-Za-z0-9_-]{35}'''
+confidence = "high"
