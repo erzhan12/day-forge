@@ -1,5 +1,5 @@
 title = "Betterleaks"
-description = "Extends the built-in rules and adds Telegram Bot API token detection."
+description = "Extends the built-in rules and adds Telegram Bot API token detection (the default rules miss these tokens)."
 
 [extend]
 useDefault = true
@@ -7,5 +7,7 @@ useDefault = true
 [[rules]]
 id = "telegram-bot-token"
 description = "Telegram Bot API token"
-regex = '''[0-9]{8,10}:[A-Za-z0-9_-]{35}'''
+# Boundaries use the token alphabet so a match cannot start or end inside a longer identifier.
+regex = '''(?:^|[^A-Za-z0-9_-])([0-9]{8,10}:[A-Za-z0-9_-]{35,})(?:[^A-Za-z0-9_-]|$)'''
+valueGroup = 1
 confidence = "high"
