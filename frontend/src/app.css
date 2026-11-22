@@ -258,13 +258,18 @@ html[data-theme="dark_4a"] {
   --bg-chat-sidebar: #1b1d20;
 
   --text-primary: #eceae6;
-  --text-secondary: #8e9299;
-  --text-muted: #8e9299;
-  /* Exact spec token. Decorative hour ticks are intentionally exempt from AA. */
-  --text-faint: #6a6e75;
+  /* Feature 0106: every secondary tier is #9ca3af (≥ 6.5:1 on page, panel
+     and field); hierarchy rests on size and weight. */
+  --text-secondary: #9ca3af;
+  --text-muted: #9ca3af;
+  --text-faint: #9ca3af;
 
   --border: #26292d;
   --border-strong: #2f3237;
+  /* Control outline (≥ 3:1 on page, panel and field) and the neutral fill of
+     a control in its on state; read only by the Dark 4a control skin. */
+  --border-control: #6a6e75;
+  --control-on-bg: #80858c;
 
   --accent: oklch(0.72 0.17 30);
   --accent-hover: oklch(0.77 0.17 30);
@@ -304,6 +309,9 @@ html[data-theme="dark_4a"] {
   --font-family-body: "Public Sans", -apple-system, BlinkMacSystemFont,
     "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-family-display: var(--font-family-body);
+
+  /* Native pickers, select lists and scrollbars follow the dark surface. */
+  color-scheme: dark;
 }
 
 /* -- Base ---------------------------------------------------------------- */
@@ -456,3 +464,197 @@ body.is-dragging * {
     transition: none;
   }
 }
+
+/* == Dark 4a control skin (feature 0106) == */
+/* Shared buttons, fields, links and the 18 px settings checkbox. Every
+   selector starts with html[data-theme="dark_4a"], so the class names are
+   inert in Classic, Strategic and Light Premium (tests/dark4aScope.test.ts).
+   Selectors repeat .df-btn / .df-field so they out-specify the scoped
+   component rules they replace, including those components' :hover and
+   :disabled states. */
+html[data-theme="dark_4a"] .df-btn.df-btn {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 0;
+  padding: 0 12px;
+  border-radius: 6px;
+  font-family: var(--font-family-body);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+  opacity: 1;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+html[data-theme="dark_4a"] .df-btn.df-btn--secondary {
+  height: 32px;
+  min-height: 32px;
+  background: transparent;
+  border: 1px solid var(--border-control);
+  color: var(--text-secondary);
+}
+
+html[data-theme="dark_4a"] .df-btn.df-btn--field {
+  height: 36px;
+  min-height: 36px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-control);
+  color: var(--text-primary);
+}
+
+html[data-theme="dark_4a"] .df-btn.df-btn--primary {
+  height: 36px;
+  min-height: 36px;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  color: var(--accent-contrast);
+  font-weight: 600;
+}
+
+html[data-theme="dark_4a"] .df-btn.df-btn--secondary:hover:not(:disabled),
+html[data-theme="dark_4a"] .df-btn.df-btn--field:hover:not(:disabled) {
+  background: transparent;
+  border-color: var(--text-secondary);
+  color: var(--text-primary);
+}
+
+html[data-theme="dark_4a"] .df-btn.df-btn--field:hover:not(:disabled) {
+  background: var(--bg-input);
+}
+
+html[data-theme="dark_4a"] .df-btn.df-btn--secondary:active:not(:disabled),
+html[data-theme="dark_4a"] .df-btn.df-btn--field:active:not(:disabled) {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+html[data-theme="dark_4a"] .df-btn.df-btn--primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  color: var(--accent-contrast);
+}
+
+html[data-theme="dark_4a"] .df-btn.df-btn--primary:active:not(:disabled) {
+  background: oklch(0.67 0.17 30);
+  border-color: oklch(0.67 0.17 30);
+  color: var(--accent-contrast);
+}
+
+html[data-theme="dark_4a"] .df-btn.df-btn.is-on,
+html[data-theme="dark_4a"] .df-btn.df-btn.is-on:hover:not(:disabled),
+html[data-theme="dark_4a"] .df-btn.df-btn.is-on:active:not(:disabled) {
+  background: var(--control-on-bg);
+  border-color: var(--control-on-bg);
+  color: var(--accent-contrast);
+}
+
+html[data-theme="dark_4a"] .df-btn.df-btn.is-on:hover:not(:disabled) {
+  border-color: var(--text-primary);
+}
+
+html[data-theme="dark_4a"] .df-btn.df-btn--danger,
+html[data-theme="dark_4a"] .df-btn.df-btn--danger:hover:not(:disabled) {
+  color: var(--danger-text);
+}
+
+html[data-theme="dark_4a"] .df-field.df-field {
+  box-sizing: border-box;
+  height: 36px;
+  min-height: 36px;
+  margin: 0;
+  padding: 0 10px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-control);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-family: var(--font-family-body);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+html[data-theme="dark_4a"] textarea.df-field.df-field {
+  height: auto;
+  padding: 8px 10px;
+}
+
+html[data-theme="dark_4a"] .df-field.df-field::placeholder {
+  color: var(--text-secondary);
+  opacity: 1;
+}
+
+html[data-theme="dark_4a"] .df-field.df-field:hover:not(:disabled) {
+  border-color: var(--text-secondary);
+}
+
+html[data-theme="dark_4a"] .df-btn.df-btn:focus,
+html[data-theme="dark_4a"] .df-field.df-field:focus {
+  outline: none;
+}
+
+html[data-theme="dark_4a"] .df-btn.df-btn:focus-visible,
+html[data-theme="dark_4a"] .df-field.df-field:focus-visible {
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+html[data-theme="dark_4a"] .df-field.df-field:focus {
+  border-color: var(--accent);
+}
+
+html[data-theme="dark_4a"] .df-btn.df-btn:disabled,
+html[data-theme="dark_4a"] .df-field.df-field:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+html[data-theme="dark_4a"] .df-link.df-link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+html[data-theme="dark_4a"] .df-link.df-link:hover {
+  color: var(--accent-hover);
+}
+
+/* 18 px settings checkbox (spec §7): field fill and control border while
+   unchecked; the checked fill and tick come from .df-checkbox. */
+html[data-theme="dark_4a"] .df-checkbox.df-checkbox--lg {
+  width: 18px;
+  height: 18px;
+  background-color: var(--bg-input);
+  background-size: 14px 14px;
+  border: 1px solid var(--border-control);
+  --checkbox-tick: var(--checkbox-tick-dark);
+}
+
+html[data-theme="dark_4a"] .df-checkbox.df-checkbox--lg:checked {
+  background-color: var(--checkbox-color, var(--accent));
+  border-color: var(--checkbox-color, var(--accent));
+}
+
+@media (pointer: coarse) {
+  /* 16 px input text stops iOS zoom-on-focus. */
+  html[data-theme="dark_4a"] .df-field.df-field {
+    font-size: 16px;
+  }
+}
+
+@media (forced-colors: active) {
+  html[data-theme="dark_4a"] .df-btn.df-btn:focus-visible,
+  html[data-theme="dark_4a"] .df-field.df-field:focus-visible {
+    outline: 2px solid CanvasText;
+    outline-offset: 2px;
+  }
+
+  html[data-theme="dark_4a"] .df-checkbox.df-checkbox--lg {
+    appearance: auto;
+    -webkit-appearance: auto;
+  }
+}
+/* == end Dark 4a control skin == */

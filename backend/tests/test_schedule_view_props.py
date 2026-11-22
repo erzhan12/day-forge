@@ -143,3 +143,34 @@ class TestSharedScheduleDayReader:
         resp = auth_inertia_client.get("/schedule/2026-05-04/")
         assert resp.status_code == 200
         assert Schedule.objects.filter(user=user, date=datetime.date(2026, 5, 4)).exists()
+
+
+@pytest.mark.django_db
+def test_blocks_prop_excludes_unimported_calendar_events(auth_inertia_client, user):
+    """Feature 0106: a calendar event reaches the timeline only through an
+    explicit import. The page view serialises stored blocks and never asks a
+    calendar provider for events, even with connected accounts."""
+    from unittest.mock import patch
+
+    from calendar_sync.models import CalDAVAccount
+    from gcal_sync.models import GoogleCalendarAccount
+
+    CalDAVAccount.objects.create(user=user, apple_id="me@example.com", password_encrypted=b"cipher")
+    GoogleCalendarAccount.objects.create(
+        user=user, google_account_id="google-id", email="me@example.com",
+        refresh_token_encrypted=b"cipher",
+    )
+    schedule = Schedule.objects.create(user=user, date=datetime.date(2026, 5, 4))
+    schedule.time_blocks.create(
+        title="Stored", start_time="15:00", end_time="16:00", sort_order=0
+    )
+    with patch("calendar_sync.service.fetch_events_for_date") as caldav_fetch, patch(
+        "gcal_sync.service.fetch_events_for_account"
+    ) as google_fetch:
+        props = _props(auth_inertia_client.get("/schedule/2026-05-04/"))
+
+    assert [b["title"] for b in props["blocks"]] == ["Stored"]
+    assert props["integration_bootstrap"]["connected"]["apple"] is True
+    assert props["integration_bootstrap"]["connected"]["google"] is True
+    caldav_fetch.assert_not_called()
+    google_fetch.assert_not_called()

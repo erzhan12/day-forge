@@ -51,10 +51,12 @@ vi.mock("../src/composables/useDraft", () => ({
   },
 }))
 
+const { createBlockSpy } = vi.hoisted(() => ({ createBlockSpy: vi.fn() }))
+
 vi.mock("../src/composables/useSchedule", () => ({
   useSchedule: () => ({
     reorderBlocks: vi.fn(),
-    createBlock: vi.fn(),
+    createBlock: createBlockSpy,
     updateBlock: vi.fn(),
     deleteBlock: vi.fn(),
     restoreBlocks: vi.fn(),
@@ -1106,5 +1108,127 @@ describe("Schedule.vue external source poll gating (feature 0031)", () => {
 
     expect(calendarRefreshEvents).toHaveBeenCalledWith("2026-05-04")
     expect(googleCalendarRefreshEvents).not.toHaveBeenCalled()
+  })
+})
+
+describe("Schedule.vue calendar events stay off the timeline (0106)", () => {
+  const { setPlacement } = useExternalCalendarPlacement()
+  const DATE = "2026-05-04"
+  const event = {
+    title: "Dentist",
+    start: `${DATE}T14:00:00Z`,
+    end: `${DATE}T15:00:00Z`,
+    calendar_name: "Personal",
+    all_day: false,
+    external_uid: "isolation-event",
+    account_label: "",
+  }
+  const blocks: TimeBlock[] = [
+    { ...makeBlock(1), start_time: "11:45", end_time: "12:10", sort_order: 0 },
+    { ...makeBlock(2), start_time: "15:00", end_time: "16:00", sort_order: 1 },
+  ]
+
+  beforeEach(() => {
+    stubLocalStorage()
+    stubMatchMedia(true)
+    resetExternalProviderMocks()
+    setPlacement("sidebar")
+    localStorage.setItem(EXTERNAL_TASKS_SIDEBAR_OPEN_KEY, JSON.stringify(true))
+    document.documentElement.dataset.theme = "dark_4a"
+    calendarState.statusKnown = true
+    calendarState.connected = true
+    calendarState.events = [event]
+  })
+
+  afterEach(() => {
+    wrapper?.unmount()
+    wrapper = null
+    localStorage.clear()
+    delete document.documentElement.dataset.theme
+    vi.unstubAllGlobals()
+    vi.clearAllMocks()
+  })
+
+  function mountIsolation() {
+    wrapper = mount(Schedule, {
+      props: {
+        categories: makeCategories(),
+        schedule: makeSchedule(DATE, "active"),
+        blocks,
+        date: DATE,
+        auto_draft_pending: false,
+        has_template_for_type: true,
+        slot_type: "weekday" as const,
+        schedule_window: { start: "06:00", end: "23:00", time_zone: "UTC" },
+        auth_user_id: 1,
+        integration_bootstrap: integrationBootstrap(DATE, "UTC"),
+      },
+      global: {
+        stubs: {
+          ...STUBS,
+          AddToScheduleDialog: {
+            props: ["event"],
+            template: '<div data-testid="add-dialog">{{ event.external_uid }}</div>',
+          },
+        },
+      },
+    })
+    return wrapper
+  }
+
+  function timelineItems(w: VueWrapper) {
+    const timeline = w.findComponent({ name: "Timeline4a" })
+    expect(timeline.exists()).toBe(true)
+    const presentation = timeline.props("presentation") as {
+      positionedItems: { item: { type: string; start_time: string; end_time: string; duration_minutes: number; block?: TimeBlock } }[]
+    }
+    return presentation.positionedItems.map((p) => p.item)
+  }
+
+  it("renders no timeline item for an event that was not added", async () => {
+    const w = mountIsolation()
+    await flushPromises()
+    const items = timelineItems(w)
+    const blockIds = items.filter((i) => i.type === "block").map((i) => i.block?.id)
+    expect(blockIds).toEqual([1, 2])
+    expect(items.some((i) => i.start_time === "14:00")).toBe(false)
+  })
+
+  it("keeps 12:10–15:00 as one free gap of 170 minutes", async () => {
+    const w = mountIsolation()
+    await flushPromises()
+    const gaps = timelineItems(w).filter((i) => i.type === "gap")
+    const midDay = gaps.filter((g) => g.start_time >= "12:10" && g.end_time <= "15:00")
+    expect(midDay).toHaveLength(1)
+    expect(midDay[0]).toMatchObject({ start_time: "12:10", end_time: "15:00", duration_minutes: 170 })
+  })
+
+  it("shows the event only inside the sources rail with an Add to schedule button", async () => {
+    const w = mountIsolation()
+    await flushPromises()
+    const rail = w.find('[data-testid="external-rail-4a"]')
+    expect(rail.exists()).toBe(true)
+    const rows = w.findAll('[data-testid="external-event"]')
+    expect(rows).toHaveLength(1)
+    expect(rail.element.contains(rows[0].element)).toBe(true)
+    expect(rows[0].find('[data-testid="add-to-schedule"]').exists()).toBe(true)
+    expect(w.find('[data-testid="timeline-4a"]').text()).not.toContain("Dentist")
+  })
+
+  it("opens the import dialog on Add to schedule and creates no block by itself", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }))
+    vi.stubGlobal("fetch", fetchSpy)
+    const w = mountIsolation()
+    await flushPromises()
+    fetchSpy.mockClear()
+    createBlockSpy.mockClear()
+    await w.find('[data-testid="add-to-schedule"]').trigger("click")
+    await flushPromises()
+    expect(w.find('[data-testid="add-dialog"]').text()).toBe("isolation-event")
+    expect(createBlockSpy).not.toHaveBeenCalled()
+    const writes = fetchSpy.mock.calls.filter(([, init]) => (init?.method ?? "GET").toUpperCase() !== "GET")
+    expect(writes).toEqual([])
+    const blockIds = timelineItems(w).filter((i) => i.type === "block").map((i) => i.block?.id)
+    expect(blockIds).toEqual([1, 2])
   })
 })

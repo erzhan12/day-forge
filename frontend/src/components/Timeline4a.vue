@@ -35,7 +35,7 @@ const emit = defineEmits<{ "add-here": [payload: { start_time: string; end_time:
 <style scoped>
 .timeline-4a { position:relative; margin-left:var(--timeline-4a-axis-gutter, 42px); border-left:1px solid #26292d; }
 .timeline-item { position:absolute; left:var(--timeline-4a-item-inset, 12px); right:0; }
-.hour-tick { position:absolute; left:calc(-1 * var(--timeline-4a-axis-gutter, 42px) - 1px); right:0; display:flex; align-items:center; gap:8px; transform:translateY(-50%); color:#6a6e75; font-size:11px; pointer-events:none; }
+.hour-tick { position:absolute; left:calc(-1 * var(--timeline-4a-axis-gutter, 42px) - 1px); right:0; display:flex; align-items:center; gap:8px; transform:translateY(-50%); color:var(--text-faint); font-size:11px; pointer-events:none; }
 .hour-tick span { width:33px; text-align:right; }
 .hour-tick i { height:1px; flex:1; background:#212428; }
 .timeline-now { position:absolute; left:calc(-1 * var(--timeline-4a-axis-gutter, 42px) - 1px); right:0; transform:translateY(-50%); z-index:4; }

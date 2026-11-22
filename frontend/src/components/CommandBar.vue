@@ -441,7 +441,7 @@ onUnmounted(() => {
   z-index: 30;
 }
 
-:global(html[data-theme="dark_4a"]) .command-bar.variant-dock {
+html[data-theme="dark_4a"] .command-bar.variant-dock {
   background: var(--bg-panel);
   color: var(--text-primary);
   border-color: var(--border);

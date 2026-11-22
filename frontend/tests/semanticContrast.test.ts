@@ -174,3 +174,55 @@ describe("semantic foreground × surface contrast (WCAG AA)", () => {
     })
   }
 })
+
+// ----- Dark 4a control tokens (feature 0106) ---------------------------
+//
+// SPEC.md asks for #9CA3AF secondary text and a #6A6E75 control border on
+// every Dark 4a surface. `--accent` is written as oklch() (app.css, Dark 4a
+// block), which parseColor cannot read, so it is compared as its pinned sRGB
+// value; the active shade is the skin's oklch(0.67 0.17 30).
+
+const DARK_4A_ACCENT_SRGB = "#fd7562"
+const DARK_4A_ACCENT_HOVER_SRGB = "#ff8571" // --accent-hover, oklch(0.77 0.17 30)
+const DARK_4A_ACCENT_ACTIVE_SRGB = "#eb6553" // skin :active, oklch(0.67 0.17 30)
+
+describe("Dark 4a control contrast (0106)", () => {
+  const block = extractThemeBlock("dark_4a")
+  const rgb = (token: string) => parseColor(readToken(block, token)).rgb
+  const surfaces = ["bg-page", "bg-panel", "bg-input"] as const
+
+  for (const text of ["text-secondary", "text-muted", "text-faint"]) {
+    for (const surface of surfaces) {
+      it(`--${text} on --${surface} meets 4.5:1`, () => {
+        expect(contrastRatio(rgb(text), rgb(surface))).toBeGreaterThanOrEqual(4.5)
+      })
+    }
+  }
+
+  for (const surface of surfaces) {
+    it(`--border-control on --${surface} meets 3:1`, () => {
+      expect(contrastRatio(rgb("border-control"), rgb(surface))).toBeGreaterThanOrEqual(3)
+    })
+  }
+
+  it("--control-on-bg on --bg-panel meets 3:1", () => {
+    expect(contrastRatio(rgb("control-on-bg"), rgb("bg-panel"))).toBeGreaterThanOrEqual(3)
+  })
+
+  it("--accent-contrast meets 4.5:1 on --control-on-bg and on every accent fill", () => {
+    const fg = rgb("accent-contrast")
+    expect(contrastRatio(fg, rgb("control-on-bg"))).toBeGreaterThanOrEqual(4.5)
+    for (const accent of [DARK_4A_ACCENT_SRGB, DARK_4A_ACCENT_HOVER_SRGB, DARK_4A_ACCENT_ACTIVE_SRGB]) {
+      expect(contrastRatio(fg, parseColor(accent).rgb), accent).toBeGreaterThanOrEqual(4.5)
+    }
+  })
+
+  it("secondary and field button states keep readable text", () => {
+    // resting: --text-secondary on panel / --text-primary on field;
+    // hover: --text-primary; :active: --text-primary on --bg-elevated.
+    expect(contrastRatio(rgb("text-secondary"), rgb("bg-panel"))).toBeGreaterThanOrEqual(4.5)
+    expect(contrastRatio(rgb("text-primary"), rgb("bg-input"))).toBeGreaterThanOrEqual(4.5)
+    expect(contrastRatio(rgb("text-primary"), rgb("bg-elevated"))).toBeGreaterThanOrEqual(4.5)
+    expect(contrastRatio(rgb("danger-text"), rgb("bg-input"))).toBeGreaterThanOrEqual(4.5)
+  })
+})
