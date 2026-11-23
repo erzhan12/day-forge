@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { defineComponent, h, nextTick, reactive, ref } from "vue"
 import { mount, type VueWrapper } from "@vue/test-utils"
 
+const pageTheme = vi.hoisted(() => ({ value: "classic" }))
+
 vi.mock("@inertiajs/vue3", () => ({
   Link: defineComponent({
     inheritAttrs: false,
@@ -9,11 +11,11 @@ vi.mock("@inertiajs/vue3", () => ({
       return () => h("a", attrs, slots.default?.())
     },
   }),
-  router: { reload: vi.fn() },
+  router: { reload: vi.fn(), post: vi.fn() },
   usePage: () => ({
     props: {
       ui_preferences: {
-        theme: "classic",
+        theme: pageTheme.value,
         chat_suggestions: [
           "Plan my remaining day",
           "Add a focused work block",
@@ -80,6 +82,7 @@ vi.mock("../src/composables/useDailyExportToken", () => ({
 }))
 
 import Settings from "../src/pages/Settings.vue"
+import { router } from "@inertiajs/vue3"
 import DailyExportTokenPanel from "../src/components/settings/DailyExportTokenPanel.vue"
 import { makeCategories } from "./helpers/schedule"
 
@@ -425,5 +428,57 @@ describe("DailyExportTokenPanel wiring (feature 0088)", () => {
     // which creates a brand-new composable instance rather than reusing one
     // that might still hold the previous account's raw token in memory.
     expect(useDailyExportTokenMock).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe("Settings Log out in Dark 4a (0106)", () => {
+  afterEach(() => {
+    pageTheme.value = "classic"
+    vi.unstubAllGlobals()
+  })
+
+  it("renders Log out at the bottom of the nav on wide viewports", () => {
+    pageTheme.value = "dark_4a"
+    stubMatchMedia(true)
+    wrapper = mountSettings()
+    const nav = wrapper.get("nav.settings-nav")
+    const button = nav.get('[data-testid="settings-logout"]')
+    expect(button.text()).toBe("Log out")
+    expect(button.classes()).toEqual(expect.arrayContaining(["df-btn", "df-btn--secondary"]))
+    // After the topic list.
+    const children = Array.from(nav.element.children)
+    expect(children[children.length - 1].contains(button.element)).toBe(true)
+    expect(wrapper.findAll('[data-testid="settings-logout"]')).toHaveLength(1)
+  })
+
+  it("renders Log out below the content on narrow viewports", () => {
+    pageTheme.value = "dark_4a"
+    stubMatchMedia(false)
+    wrapper = mountSettings()
+    expect(wrapper.find("nav.settings-nav").exists()).toBe(false)
+    const buttons = wrapper.findAll('[data-testid="settings-logout"]')
+    expect(buttons).toHaveLength(1)
+    const main = wrapper.get(".settings-main").element
+    const holder = buttons[0].element.closest(".settings-logout")!
+    expect(main.compareDocumentPosition(holder) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(main.contains(holder)).toBe(false)
+  })
+
+  it("posts to /accounts/logout/", async () => {
+    pageTheme.value = "dark_4a"
+    stubMatchMedia(true)
+    wrapper = mountSettings()
+    await wrapper.get('[data-testid="settings-logout"]').trigger("click")
+    expect(router.post).toHaveBeenCalledWith("/accounts/logout/")
+  })
+
+  it("renders no Log out in classic", () => {
+    stubMatchMedia(true)
+    wrapper = mountSettings()
+    expect(wrapper.find('[data-testid="settings-logout"]').exists()).toBe(false)
+    wrapper.unmount()
+    stubMatchMedia(false)
+    wrapper = mountSettings()
+    expect(wrapper.find('[data-testid="settings-logout"]').exists()).toBe(false)
   })
 })

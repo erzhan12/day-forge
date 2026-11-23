@@ -32,6 +32,7 @@ function onTopicChange(event: Event): void {
     <label for="settings-topic-select">Topic</label>
     <select
       id="settings-topic-select"
+      class="df-field"
       :value="activeTopic"
       @change="onTopicChange"
     >

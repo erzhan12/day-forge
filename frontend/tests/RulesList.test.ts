@@ -192,3 +192,43 @@ describe("RulesList", () => {
     expect(wrapper.emitted("changed")).toBeUndefined()
   })
 })
+
+describe("RulesList shared controls (0106)", () => {
+  it("tags fields and buttons with df-field / df-btn", async () => {
+    document.documentElement.dataset.theme = "dark_4a"
+    try {
+      const wrapper = mountList([rule(1, "No meetings before 10", 2), rule(2, "Lunch at 13", 1)])
+      expect(wrapper.get("form input.input").classes()).toContain("df-field")
+      expect(wrapper.get("form button.primary-btn").classes()).toEqual(
+        expect.arrayContaining(["df-btn", "df-btn--primary"]),
+      )
+      for (const arrow of arrowButtons(wrapper)) {
+        expect(arrow.classes()).toEqual(expect.arrayContaining(["df-btn", "df-btn--field"]))
+      }
+      for (const del of wrapper.findAll("button.row-delete-btn")) {
+        expect(del.classes()).toEqual(expect.arrayContaining(["df-btn", "df-btn--field", "df-btn--danger"]))
+      }
+      for (const box of wrapper.findAll("input.rule-active")) {
+        expect(box.classes()).toEqual(expect.arrayContaining(["df-checkbox", "df-checkbox--lg"]))
+      }
+
+      await wrapper.get("button.rule-text").trigger("click")
+      expect(wrapper.get(".rule-edit input").classes()).toContain("df-field")
+      expect(wrapper.get(".rule-edit .ghost-btn").classes()).toContain("df-btn--field")
+      wrapper.unmount()
+    } finally {
+      delete document.documentElement.dataset.theme
+    }
+  })
+
+  it("keeps the native Active checkbox outside dark_4a", () => {
+    document.documentElement.dataset.theme = "classic"
+    try {
+      const wrapper = mountList([rule(1, "No meetings before 10", 2)])
+      expect(wrapper.get("input.rule-active").classes()).not.toContain("df-checkbox")
+      wrapper.unmount()
+    } finally {
+      delete document.documentElement.dataset.theme
+    }
+  })
+})

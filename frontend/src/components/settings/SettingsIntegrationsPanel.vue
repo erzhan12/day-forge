@@ -77,6 +77,7 @@ function verifiedDate(timestamp: string): string {
       <p class="section-subtitle">
         Connects via iCloud CalDAV. Use an
         <a
+          class="df-link"
           href="https://support.apple.com/en-us/HT204397"
           target="_blank"
           rel="noopener noreferrer"
@@ -103,6 +104,7 @@ function verifiedDate(timestamp: string): string {
         <label class="cal-field">
           <span>Apple ID</span>
           <input
+            class="df-field"
             v-model="calendarForm.apple_id"
             type="email"
             autocomplete="username"
@@ -113,6 +115,7 @@ function verifiedDate(timestamp: string): string {
         <label class="cal-field">
           <span>App-specific password</span>
           <input
+            class="df-field"
             v-model="calendarForm.password"
             type="password"
             autocomplete="new-password"
@@ -130,13 +133,14 @@ function verifiedDate(timestamp: string): string {
         <label v-if="showAdvanced" class="cal-field">
           <span>CalDAV base URL</span>
           <input
+            class="df-field"
             v-model="calendarForm.base_url"
             type="url"
             :placeholder="calendarDefaultBaseUrl"
             :disabled="calendarBusy"
           />
         </label>
-        <button type="submit" class="cal-submit" :disabled="calendarBusy">
+        <button type="submit" class="cal-submit df-btn df-btn--primary" :disabled="calendarBusy">
           {{ calendarBusy ? "Connecting…" : "Connect" }}
         </button>
       </form>
@@ -185,7 +189,7 @@ function verifiedDate(timestamp: string): string {
       <p v-else class="cal-status">No Google accounts connected</p>
       <button
         type="button"
-        class="cal-submit"
+        class="cal-submit df-btn df-btn--primary"
         :disabled="googleBusy"
         @click="handleGoogleConnect"
       >
@@ -202,6 +206,7 @@ function verifiedDate(timestamp: string): string {
       <p class="section-subtitle">
         Paste a
         <a
+          class="df-link"
           href="https://app.todoist.com/app/settings/integrations/developer"
           target="_blank"
           rel="noopener noreferrer"
@@ -224,6 +229,7 @@ function verifiedDate(timestamp: string): string {
         <label class="cal-field">
           <span>API token</span>
           <input
+            class="df-field"
             v-model="todoistForm.token"
             type="password"
             autocomplete="off"
@@ -231,7 +237,7 @@ function verifiedDate(timestamp: string): string {
             :disabled="todoistBusy"
           />
         </label>
-        <button type="submit" class="cal-submit" :disabled="todoistBusy">
+        <button type="submit" class="cal-submit df-btn df-btn--primary" :disabled="todoistBusy">
           {{ todoistBusy ? "Connecting…" : "Connect" }}
         </button>
       </form>
@@ -255,6 +261,7 @@ function verifiedDate(timestamp: string): string {
       <p class="section-subtitle">
         Find your User ID and API token in
         <a
+          class="df-link"
           href="https://habitica.com/user/settings/api"
           target="_blank"
           rel="noopener noreferrer"
@@ -278,6 +285,7 @@ function verifiedDate(timestamp: string): string {
         <label class="cal-field">
           <span>User ID</span>
           <input
+            class="df-field"
             v-model="habiticaForm.api_user_id"
             type="text"
             autocomplete="off"
@@ -288,6 +296,7 @@ function verifiedDate(timestamp: string): string {
         <label class="cal-field">
           <span>API token</span>
           <input
+            class="df-field"
             v-model="habiticaForm.api_token"
             type="password"
             autocomplete="off"
@@ -295,7 +304,7 @@ function verifiedDate(timestamp: string): string {
             :disabled="habiticaBusy"
           />
         </label>
-        <button type="submit" class="cal-submit" :disabled="habiticaBusy">
+        <button type="submit" class="cal-submit df-btn df-btn--primary" :disabled="habiticaBusy">
           {{ habiticaBusy ? "Connecting..." : "Connect" }}
         </button>
       </form>
@@ -344,4 +353,18 @@ h2:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
 .google-account-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .google-account-email { font-weight: 500; color: var(--text-primary); }
 .google-account-verified { font-size: 11px; color: var(--text-muted); margin-right: auto; }
+
+/* Dark 4a (feature 0106): Disconnect keeps its danger colours at the shared
+   36 px control height; the advanced toggle reads as a link. */
+html[data-theme="dark_4a"] .cal-disconnect {
+  box-sizing: border-box;
+  height: 36px;
+  padding: 0 14px;
+  font-size: 13px;
+}
+html[data-theme="dark_4a"] .cal-advanced-toggle {
+  font-size: 13px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 </style>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useViewport } from "../../composables/useViewport"
+import SettingsLogoutButton from "./SettingsLogoutButton.vue"
 import type { SettingsTopic, SettingsTopicId } from "../../utils/settingsTopics"
 
 const props = defineProps<{
@@ -33,6 +34,7 @@ function onKeydown(event: KeyboardEvent, topic: SettingsTopic): void {
         >{{ topic.label }}</a>
       </li>
     </ul>
+    <SettingsLogoutButton />
   </nav>
 </template>
 

@@ -451,6 +451,13 @@ onUnmounted(() => {
  * component's "cockpit" aesthetic is the canonical example. If a
  * future product decision is to theme the command bar, that's a
  * separate feature — not a regression of 0010 Phase 6.
+ *
+ * Exception — Dark 4a (feature 0106): the html[data-theme="dark_4a"]
+ * rules at the end of this block theme the dock surface and switch the
+ * input to the body font at 14 px (16 px on coarse pointers) with
+ * --text-secondary text and placeholder; the bubbles, privacy hint, Clear
+ * and error text go to 13 px. The transcript keeps its monospace font,
+ * and line-height stays 20px to match LINE_HEIGHT_PX.
  */
 .chat-status-sr {
   position: absolute;
@@ -700,5 +707,35 @@ html[data-theme="dark_4a"] .command-bar.variant-dock {
 
 .variant-sidebar .error-row {
   color: var(--danger-text);
+}
+
+/* Dark 4a chat input (feature 0106): both variants. */
+html[data-theme="dark_4a"] .command-input.command-input {
+  font-family: var(--font-family-body);
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--text-secondary);
+}
+
+html[data-theme="dark_4a"] .command-input::placeholder {
+  font-family: var(--font-family-body);
+  color: var(--text-secondary);
+  opacity: 1;
+}
+
+html[data-theme="dark_4a"] .privacy-hint,
+html[data-theme="dark_4a"] .bubble,
+html[data-theme="dark_4a"] .clear-btn,
+html[data-theme="dark_4a"] .error-row,
+html[data-theme="dark_4a"] .recovery-request,
+html[data-theme="dark_4a"] .discard-confirm {
+  font-size: 13px;
+}
+
+@media (pointer: coarse) {
+  /* 16 px stops iOS zoom-on-focus (plan question 7). */
+  html[data-theme="dark_4a"] .command-input.command-input {
+    font-size: 16px;
+  }
 }
 </style>

@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, watch } from "vue"
+import { computed, ref, watch } from "vue"
 import type { Rule } from "../types"
 import { useRules } from "../composables/useRules"
+import { useActiveTheme } from "../composables/useActiveTheme"
 
 const props = defineProps<{
   rules: Rule[]
@@ -128,6 +129,13 @@ async function confirmDelete(rule: Rule) {
     rowError.value = { id: rule.id, message: "Delete failed" }
   }
 }
+
+// Dark 4a renders the 18 px settings checkbox (feature 0106); other themes
+// keep the native control.
+const activeTheme = useActiveTheme()
+const activeCheckboxClass = computed(() =>
+  activeTheme.value === "dark_4a" ? "df-checkbox df-checkbox--lg" : undefined,
+)
 </script>
 
 <template>
@@ -142,9 +150,9 @@ async function confirmDelete(rule: Rule) {
         type="text"
         maxlength="500"
         placeholder="e.g. No meetings before 9 AM"
-        class="input"
+        class="input df-field"
       />
-      <button type="submit" class="primary-btn" :disabled="submitting">
+      <button type="submit" class="primary-btn df-btn df-btn--primary" :disabled="submitting">
         Add rule
       </button>
     </form>
@@ -155,7 +163,7 @@ async function confirmDelete(rule: Rule) {
         <div class="priority-controls">
           <button
             type="button"
-            class="arrow-btn"
+            class="arrow-btn df-btn df-btn--field"
             :disabled="idx === 0"
             :title="localRules.length === 1 ? 'Add another rule to reorder' : undefined"
             aria-label="Increase priority"
@@ -165,7 +173,7 @@ async function confirmDelete(rule: Rule) {
           </button>
           <button
             type="button"
-            class="arrow-btn"
+            class="arrow-btn df-btn df-btn--field"
             :disabled="idx === localRules.length - 1"
             :title="localRules.length === 1 ? 'Add another rule to reorder' : undefined"
             aria-label="Decrease priority"
@@ -177,6 +185,7 @@ async function confirmDelete(rule: Rule) {
         <input
           type="checkbox"
           class="rule-active"
+          :class="activeCheckboxClass"
           :checked="rule.is_active"
           aria-label="Active"
           @change="toggleActive(rule)"
@@ -184,7 +193,7 @@ async function confirmDelete(rule: Rule) {
         <div v-if="editingId === rule.id" class="rule-edit">
           <input
             v-model="editingText"
-            class="input"
+            class="input df-field"
             maxlength="500"
             @keydown.enter.prevent="saveEdit(rule)"
             @keydown.escape="cancelEdit"
@@ -192,14 +201,14 @@ async function confirmDelete(rule: Rule) {
           <div class="edit-actions">
             <button
               type="button"
-              class="primary-btn"
+              class="primary-btn df-btn df-btn--primary"
               @click="saveEdit(rule)"
             >
               Save
             </button>
             <button
               type="button"
-              class="ghost-btn"
+              class="ghost-btn df-btn df-btn--field"
               @click="cancelEdit"
             >
               Cancel
@@ -221,7 +230,7 @@ async function confirmDelete(rule: Rule) {
         </span>
         <button
           type="button"
-          class="row-delete-btn"
+          class="row-delete-btn df-btn df-btn--field df-btn--danger"
           aria-label="Delete rule"
           @click="confirmDelete(rule)"
         >
@@ -433,5 +442,29 @@ async function confirmDelete(rule: Rule) {
   color: var(--text-faint);
   font-style: italic;
   font-size: 13px;
+}
+
+/* Dark 4a (feature 0106): the shared 36 px field buttons sit side by side so
+   a row does not double in height; the delete × is a square button. */
+html[data-theme="dark_4a"] .priority-controls {
+  flex-direction: row;
+  gap: 4px;
+}
+
+html[data-theme="dark_4a"] .arrow-btn.df-btn.df-btn,
+html[data-theme="dark_4a"] .row-delete-btn.df-btn.df-btn {
+  width: 36px;
+  padding: 0;
+}
+
+/* The wider arrows leave less room at 390 px: let the text / edit column
+   shrink below its content width instead of pushing × off screen. */
+html[data-theme="dark_4a"] .rule-row {
+  grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+}
+
+html[data-theme="dark_4a"] .rule-edit .df-field {
+  width: 100%;
+  min-width: 0;
 }
 </style>

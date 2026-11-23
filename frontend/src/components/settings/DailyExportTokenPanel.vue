@@ -49,12 +49,12 @@ function selectValue(event: Event): void {
       <input
         type="text"
         readonly
-        class="export-token-value"
+        class="export-token-value df-field"
         data-testid="export-token-value"
         :value="token.state.rawToken"
         @click="selectValue"
       />
-      <button type="button" data-testid="export-token-dismiss" @click="handleDismiss">
+      <button type="button" class="df-btn df-btn--field" data-testid="export-token-dismiss" @click="handleDismiss">
         I've saved it
       </button>
     </div>
@@ -75,6 +75,7 @@ function selectValue(event: Event): void {
       <button
         v-if="!token.state.hasToken"
         type="button"
+        class="df-btn df-btn--field"
         data-testid="export-token-create"
         :disabled="token.state.loading"
         @click="handleCreate"
@@ -84,6 +85,7 @@ function selectValue(event: Event): void {
       <button
         v-else
         type="button"
+        class="df-btn df-btn--field df-btn--danger"
         data-testid="export-token-revoke"
         :disabled="token.state.loading"
         @click="handleRevoke"
@@ -115,5 +117,12 @@ function selectValue(event: Event): void {
   border-radius: 4px;
   background: var(--bg-input);
   color: var(--text-primary);
+}
+
+/* Dark 4a (feature 0106): the shared field skin resets margin and font;
+   the one-time token keeps its spacing and monospace digits. */
+html[data-theme="dark_4a"] .export-token-value.df-field.df-field {
+  margin: 8px 0;
+  font-family: monospace;
 }
 </style>

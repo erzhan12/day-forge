@@ -109,41 +109,45 @@ async function reorder(id: number, otherId: number) {
     >
       <span class="swatch" :style="{ background: categoryPalette[category.color_id] }" />
       <input
+        class="df-field"
         :value="drafts[category.id]?.label ?? category.label"
         @input="drafts[category.id].label = ($event.target as HTMLInputElement).value"
         @change="update(category.id, { label: ($event.target as HTMLInputElement).value })"
       />
       <select
+        class="df-field"
         :value="drafts[category.id]?.color_id ?? category.color_id"
         @change="drafts[category.id].color_id = ($event.target as HTMLSelectElement).value; update(category.id, { color_id: ($event.target as HTMLSelectElement).value })"
       >
         <option v-for="(_, id) in categoryPalette" :key="id" :value="id">{{ id }}</option>
       </select>
-      <button @click="update(category.id, { is_new_block_default: true })">
+      <button class="df-btn df-btn--field" @click="update(category.id, { is_new_block_default: true })">
         {{ category.is_new_block_default ? "Default" : "Set default" }}
       </button>
       <button
+        class="df-btn df-btn--field"
         :disabled="index === 0"
         @click="reorder(category.id, orderedCategories(props.categories)[index - 1].id)"
       >
         ↑
       </button>
       <button
+        class="df-btn df-btn--field"
         :disabled="index === props.categories.length - 1"
         @click="reorder(category.id, orderedCategories(props.categories)[index + 1].id)"
       >
         ↓
       </button>
-      <button v-if="!category.is_sink" :disabled="deleting" @click="remove(category)">Delete</button>
+      <button v-if="!category.is_sink" class="df-btn df-btn--field" :disabled="deleting" @click="remove(category)">Delete</button>
       <span v-else>Sink</span>
     </div>
 
     <form @submit.prevent="add">
-      <input v-model="label" placeholder="New category" />
-      <select v-model="newColor" aria-label="New category color">
+      <input v-model="label" class="df-field" placeholder="New category" />
+      <select v-model="newColor" class="df-field" aria-label="New category color">
         <option v-for="(_, id) in categoryPalette" :key="id" :value="id">{{ id }}</option>
       </select>
-      <button :disabled="props.categories.length >= 8">Add</button>
+      <button class="df-btn df-btn--primary" :disabled="props.categories.length >= 8">Add</button>
     </form>
     <DeleteConfirmationDialog
       v-if="pendingDelete"
@@ -186,5 +190,9 @@ form input {
 }
 .error-text {
   color: var(--danger, #b91c1c);
+}
+
+html[data-theme="dark_4a"] .error-text {
+  color: var(--danger-text);
 }
 </style>

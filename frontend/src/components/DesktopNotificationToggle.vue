@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { computed } from "vue"
 import { useDesktopNotificationSetting } from "../composables/useDesktopNotifications"
+import { useActiveTheme } from "../composables/useActiveTheme"
 
 // Presentational toggle for the opt-in desktop-notification feature (issue
 // #100 / feature 0028). All state + persistence + the permission request live
@@ -19,6 +21,13 @@ async function onChange(event: Event) {
   // no reactive ref changed.
   el.checked = enabled.value
 }
+
+// Dark 4a renders the shared 18 px settings checkbox (feature 0106); other
+// themes keep the native control.
+const activeTheme = useActiveTheme()
+const checkboxClass = computed(() =>
+  activeTheme.value === "dark_4a" ? "df-checkbox df-checkbox--lg" : undefined,
+)
 </script>
 
 <template>
@@ -34,6 +43,7 @@ async function onChange(event: Event) {
       <input
         type="checkbox"
         role="switch"
+        :class="checkboxClass"
         :checked="enabled"
         :aria-checked="enabled"
         :disabled="notSupported"

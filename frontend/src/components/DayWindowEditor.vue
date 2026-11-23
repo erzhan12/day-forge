@@ -54,10 +54,10 @@ async function save() {
     <h3 class="section-title">Day window</h3>
     <p class="section-subtitle">Choose the hours used for scheduling and timeline gaps.</p>
     <div class="inputs">
-      <label>Start <input v-model="start" type="time" step="300" :disabled="saving" /></label>
-      <label>End <input v-model="end" type="time" step="300" :disabled="saving" /></label>
-      <label>Timezone <select v-model="timeZone" :disabled="saving"><option v-for="zone in zoneOptions" :key="zone" :value="zone">{{ zone }}</option></select></label>
-      <button type="button" :disabled="saving" @click="save">{{ saving ? "Saving…" : "Save" }}</button>
+      <label>Start <input v-model="start" class="df-field" type="time" step="300" :disabled="saving" /></label>
+      <label>End <input v-model="end" class="df-field" type="time" step="300" :disabled="saving" /></label>
+      <label>Timezone <select v-model="timeZone" class="df-field" :disabled="saving"><option v-for="zone in zoneOptions" :key="zone" :value="zone">{{ zone }}</option></select></label>
+      <button type="button" class="df-btn df-btn--primary" :disabled="saving" @click="save">{{ saving ? "Saving…" : "Save" }}</button>
     </div>
     <p v-for="(message, field) in errors" :key="field" class="error">{{ Array.isArray(message) ? message.join(" ") : message }}</p>
   </section>

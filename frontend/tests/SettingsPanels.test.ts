@@ -254,3 +254,21 @@ it.each([0, 20, 120, undefined, 7])("Rules help uses configured gap %s", (raw) =
   if (raw === 0) expect(wrapper.text()).toContain("back-to-back")
   aiMocks.gap = undefined
 })
+
+describe("SettingsIntegrationsPanel shared controls (0106)", () => {
+  it("marks Integrations help links with df-link", () => {
+    const wrapper = mount(SettingsIntegrationsPanel, {
+      props: integrationProps({ showAdvanced: true }),
+      global: { stubs: { ExternalCalendarPlacementToggle: true } },
+    })
+    const links = wrapper.findAll("a[target=_blank]")
+    expect(links).toHaveLength(3)
+    for (const link of links) expect(link.classes()).toContain("df-link")
+    const inputs = wrapper.findAll(".cal-field input")
+    expect(inputs.length).toBeGreaterThanOrEqual(6)
+    for (const input of inputs) expect(input.classes()).toContain("df-field")
+    for (const submit of wrapper.findAll(".cal-submit")) {
+      expect(submit.classes()).toEqual(expect.arrayContaining(["df-btn", "df-btn--primary"]))
+    }
+  })
+})

@@ -477,7 +477,8 @@ defineExpose({
       @add-to-schedule="handleAddToSchedule"
     />
 
-    <div class="logout-footer">
+    <!-- Dark 4a moves Log out into Settings (feature 0106). -->
+    <div v-if="layout !== '4a'" class="logout-footer">
       <button class="logout-btn" @click="logout">Logout</button>
     </div>
 

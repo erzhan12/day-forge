@@ -1509,3 +1509,50 @@ describe("Schedule.vue Dark 4a narrow calendar fallback (0106)", () => {
     expect(w.find('section[aria-label="External calendar events"]').exists()).toBe(false)
   })
 })
+
+describe("Schedule.vue logout footer by theme (0106)", () => {
+  afterEach(() => {
+    wrapper?.unmount()
+    wrapper = null
+    delete document.documentElement.dataset.theme
+    vi.unstubAllGlobals()
+    vi.clearAllMocks()
+  })
+
+  function mountTheme(theme: "dark_4a" | "classic") {
+    vi.stubGlobal("matchMedia", vi.fn().mockImplementation((query: string) => ({
+      matches: true, media: query, onchange: null,
+      addEventListener: vi.fn(), removeEventListener: vi.fn(), dispatchEvent: vi.fn(),
+      addListener: vi.fn(), removeListener: vi.fn(),
+    })))
+    stubLocalStorage()
+    resetExternalProviderMocks()
+    document.documentElement.dataset.theme = theme
+    wrapper = mount(Schedule, {
+      props: {
+        categories: makeCategories(),
+        schedule: makeSchedule("2026-05-04", "active"),
+        blocks: [],
+        date: "2026-05-04",
+        has_template_for_type: true,
+        external_tasks_poll_interval: 0,
+        schedule_window: { start: "06:00", end: "23:00", time_zone: "UTC" },
+        auth_user_id: 1,
+        integration_bootstrap: integrationBootstrap("2026-05-04", "UTC"),
+      },
+      global: { stubs: { ...STUBS, AddToScheduleDialog: true } },
+    })
+    return wrapper
+  }
+
+  it("renders no logout control in Dark 4a", () => {
+    const w = mountTheme("dark_4a")
+    expect(w.find(".logout-footer").exists()).toBe(false)
+    expect(w.findAll("button").some((b) => /log ?out/i.test(b.text()))).toBe(false)
+  })
+
+  it("keeps the logout footer in classic", () => {
+    const w = mountTheme("classic")
+    expect(w.get(".logout-footer .logout-btn").text()).toBe("Logout")
+  })
+})

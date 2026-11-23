@@ -191,7 +191,7 @@ function restoreDefaults(): void {
       </div>
       <button
         type="button"
-        class="secondary-button"
+        class="secondary-button df-btn df-btn--field"
         data-testid="add-chat-suggestion"
         :disabled="isSaving || rows.length >= MAX_CHAT_SUGGESTIONS"
         @click="addRow"
@@ -210,6 +210,7 @@ function restoreDefaults(): void {
         <div class="row-controls">
           <input
             :id="`chat-suggestion-${row.id}`"
+            class="df-field"
             v-model="row.text"
             type="text"
             :aria-label="`Suggestion ${index + 1}`"
@@ -219,18 +220,21 @@ function restoreDefaults(): void {
           >
           <button
             type="button"
+            class="df-btn df-btn--field"
             :aria-label="`Move suggestion up ${index + 1}`"
             :disabled="isSaving || index === 0"
             @click="moveRow(index, -1)"
           >↑</button>
           <button
             type="button"
+            class="df-btn df-btn--field"
             :aria-label="`Move suggestion down ${index + 1}`"
             :disabled="isSaving || index === rows.length - 1"
             @click="moveRow(index, 1)"
           >↓</button>
           <button
             type="button"
+            class="df-btn df-btn--field df-btn--danger"
             :aria-label="`Delete suggestion ${index + 1}`"
             :disabled="isSaving"
             @click="deleteRow(index)"
@@ -257,7 +261,7 @@ function restoreDefaults(): void {
     <div class="actions">
       <button
         type="button"
-        class="primary-button"
+        class="primary-button df-btn df-btn--primary"
         data-testid="save-chat-suggestions"
         :disabled="isSaving || !isDirty"
         @click="save"
@@ -266,7 +270,7 @@ function restoreDefaults(): void {
       </button>
       <button
         type="button"
-        class="secondary-button"
+        class="secondary-button df-btn df-btn--field"
         data-testid="restore-chat-suggestions"
         :disabled="isSaving"
         @click="restoreDefaults"

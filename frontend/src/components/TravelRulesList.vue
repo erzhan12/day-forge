@@ -196,7 +196,7 @@ function categoryLabel(category: TravelRule["category"]): string {
         type="text"
         maxlength="100"
         placeholder="Title keyword, e.g. dentist"
-        class="input keyword-input"
+        class="input df-field keyword-input"
         data-testid="keyword-input"
       />
       <input
@@ -204,7 +204,7 @@ function categoryLabel(category: TravelRule["category"]): string {
         type="text"
         maxlength="200"
         placeholder="Calendar name, e.g. Work"
-        class="input calendar-input"
+        class="input df-field calendar-input"
         data-testid="calendar-name-input"
       />
       <label class="minutes-field">
@@ -214,7 +214,7 @@ function categoryLabel(category: TravelRule["category"]): string {
           type="number"
           min="0"
           :max="MAX_TRAVEL_MINUTES"
-          class="input minutes-input"
+          class="input df-field minutes-input"
         />
       </label>
       <label class="minutes-field">
@@ -224,14 +224,14 @@ function categoryLabel(category: TravelRule["category"]): string {
           type="number"
           min="0"
           :max="MAX_TRAVEL_MINUTES"
-          class="input minutes-input"
+          class="input df-field minutes-input"
         />
       </label>
-      <select v-model="newCategory" class="input" aria-label="Category">
+      <select v-model="newCategory" class="input df-field" aria-label="Category">
         <option value="">No override</option>
         <option v-for="item in orderedCategories(props.categories ?? [])" :key="item.id" :value="item.slug">{{ item.label }}</option>
       </select>
-      <button type="submit" class="primary-btn" :disabled="submitting">
+      <button type="submit" class="primary-btn df-btn df-btn--primary" :disabled="submitting">
         Add rule
       </button>
     </form>
@@ -242,7 +242,7 @@ function categoryLabel(category: TravelRule["category"]): string {
         <div class="order-controls">
           <button
             type="button"
-            class="arrow-btn"
+            class="arrow-btn df-btn df-btn--field"
             :disabled="idx === 0"
             aria-label="Move up (match earlier)"
             @click="bumpOrder(rule, 'up')"
@@ -251,7 +251,7 @@ function categoryLabel(category: TravelRule["category"]): string {
           </button>
           <button
             type="button"
-            class="arrow-btn"
+            class="arrow-btn df-btn df-btn--field"
             :disabled="idx === localRules.length - 1"
             aria-label="Move down (match later)"
             @click="bumpOrder(rule, 'down')"
@@ -262,14 +262,14 @@ function categoryLabel(category: TravelRule["category"]): string {
         <div v-if="editingId === rule.id" class="rule-edit">
           <input
             v-model="editKeyword"
-            class="input"
+            class="input df-field"
             maxlength="100"
             @keydown.enter.prevent="saveEdit(rule)"
             @keydown.escape="cancelEdit"
           />
           <input
             v-model="editCalendarName"
-            class="input"
+            class="input df-field"
             maxlength="200"
             placeholder="Calendar name, e.g. Work"
             @keydown.enter.prevent="saveEdit(rule)"
@@ -283,7 +283,7 @@ function categoryLabel(category: TravelRule["category"]): string {
                 type="number"
                 min="0"
                 :max="MAX_TRAVEL_MINUTES"
-                class="input minutes-input"
+                class="input df-field minutes-input"
               />
             </label>
             <label class="minutes-field">
@@ -293,19 +293,19 @@ function categoryLabel(category: TravelRule["category"]): string {
                 type="number"
                 min="0"
                 :max="MAX_TRAVEL_MINUTES"
-                class="input minutes-input"
+                class="input df-field minutes-input"
               />
             </label>
-            <select v-model="editCategory" class="input" aria-label="Category">
+            <select v-model="editCategory" class="input df-field" aria-label="Category">
               <option value="">No override</option>
               <option v-for="item in orderedCategories(props.categories ?? [])" :key="item.id" :value="item.slug">{{ item.label }}</option>
             </select>
           </div>
           <div class="edit-actions">
-            <button type="button" class="primary-btn" @click="saveEdit(rule)">
+            <button type="button" class="primary-btn df-btn df-btn--primary" @click="saveEdit(rule)">
               Save
             </button>
-            <button type="button" class="ghost-btn" @click="cancelEdit">
+            <button type="button" class="ghost-btn df-btn df-btn--field" @click="cancelEdit">
               Cancel
             </button>
           </div>
@@ -327,7 +327,7 @@ function categoryLabel(category: TravelRule["category"]): string {
         </button>
         <button
           type="button"
-          class="row-delete-btn"
+          class="row-delete-btn df-btn df-btn--field df-btn--danger"
           aria-label="Delete travel rule"
           @click="confirmDelete(rule)"
         >
@@ -545,5 +545,18 @@ function categoryLabel(category: TravelRule["category"]): string {
   color: var(--text-faint);
   font-style: italic;
   font-size: 13px;
+}
+
+/* Dark 4a (feature 0106): the shared 36 px field buttons sit side by side so
+   a row does not double in height; the delete × is a square button. */
+html[data-theme="dark_4a"] .order-controls {
+  flex-direction: row;
+  gap: 4px;
+}
+
+html[data-theme="dark_4a"] .arrow-btn.df-btn.df-btn,
+html[data-theme="dark_4a"] .row-delete-btn.df-btn.df-btn {
+  width: 36px;
+  padding: 0;
 }
 </style>

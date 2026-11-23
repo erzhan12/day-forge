@@ -225,3 +225,15 @@ describe("AddBlockForm", () => {
     expect(mockPushUndo).not.toHaveBeenCalled()
   })
 })
+
+describe("AddBlockForm shared controls (0106)", () => {
+  it("tags fields and buttons with df-field / df-btn", async () => {
+    const wrapper = mountForm({ date: "2026-11-22" })
+    await wrapper.get(".add-btn").trigger("click")
+    const fields = wrapper.findAll("form .input")
+    expect(fields).toHaveLength(4)
+    for (const field of fields) expect(field.classes()).toContain("df-field")
+    expect(wrapper.get(".submit-btn").classes()).toEqual(expect.arrayContaining(["df-btn", "df-btn--primary"]))
+    expect(wrapper.get(".cancel-btn").classes()).toEqual(expect.arrayContaining(["df-btn", "df-btn--field"]))
+  })
+})

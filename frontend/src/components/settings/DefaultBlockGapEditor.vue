@@ -89,6 +89,7 @@ async function save(): Promise<void> {
       <label for="default-block-gap">Default gap between blocks (minutes)
         <input
           id="default-block-gap"
+          class="df-field"
           v-model="draft"
           type="number"
           :min="MIN_BLOCK_GAP_MINUTES"
@@ -100,7 +101,7 @@ async function save(): Promise<void> {
           @input="errorMessage = ''; statusMessage = ''"
         >
       </label>
-      <button type="button" :disabled="saving" @click="save">{{ saving ? "Saving…" : "Save" }}</button>
+      <button type="button" class="df-btn df-btn--primary" :disabled="saving" @click="save">{{ saving ? "Saving…" : "Save" }}</button>
     </div>
     <p id="default-block-gap-help" class="help">
       Prefer this gap before and after blocks added through chat without a start time.

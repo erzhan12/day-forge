@@ -187,7 +187,7 @@ async function handleConfirm() {
             type="number"
             min="0"
             :max="MAX_TRAVEL_MINUTES"
-            class="ats-input"
+            class="ats-input df-field"
           />
         </label>
         <label class="ats-field">
@@ -197,12 +197,12 @@ async function handleConfirm() {
             type="number"
             min="0"
             :max="MAX_TRAVEL_MINUTES"
-            class="ats-input"
+            class="ats-input df-field"
           />
         </label>
         <label class="ats-field">
           Category
-          <select v-model="category" class="ats-input">
+          <select v-model="category" class="ats-input df-field">
             <option v-for="item in orderedCategories(props.categories ?? [])" :key="item.id" :value="item.slug">{{ item.label }}</option>
           </select>
         </label>
@@ -230,13 +230,13 @@ async function handleConfirm() {
       <div class="ats-actions">
         <button
           type="button"
-          class="ats-confirm"
+          class="ats-confirm df-btn df-btn--primary"
           :disabled="confirmDisabled"
           @click="handleConfirm"
         >
           {{ submitting ? "Adding…" : "Add block" }}
         </button>
-        <button type="button" class="ats-cancel" @click="emit('close')">
+        <button type="button" class="ats-cancel df-btn df-btn--field" @click="emit('close')">
           Cancel
         </button>
       </div>

@@ -107,30 +107,30 @@ function cancel() {
         v-model="title"
         type="text"
         placeholder="Block title"
-        class="input title-input"
+        class="input df-field title-input"
         required
       />
       <div class="time-row">
         <label>
           Start
-          <input v-model="startTime" type="time" step="300" class="input" />
+          <input v-model="startTime" type="time" step="300" class="input df-field" />
         </label>
         <label>
           End
-          <input v-model="endTime" type="time" step="300" class="input" />
+          <input v-model="endTime" type="time" step="300" class="input df-field" />
         </label>
         <label>
           Category
-          <select v-model="category" class="input">
+          <select v-model="category" class="input df-field">
             <option v-for="item in orderedCategories(props.categories ?? [])" :key="item.id" :value="item.slug">{{ item.label }}</option>
           </select>
         </label>
       </div>
       <div class="form-actions">
-        <button type="submit" class="submit-btn" :disabled="submitting">
+        <button type="submit" class="submit-btn df-btn df-btn--primary" :disabled="submitting">
           {{ submitting ? "Adding..." : "Add" }}
         </button>
-        <button type="button" class="cancel-btn" @click="cancel">Cancel</button>
+        <button type="button" class="cancel-btn df-btn df-btn--field" @click="cancel">Cancel</button>
       </div>
     </form>
   </div>

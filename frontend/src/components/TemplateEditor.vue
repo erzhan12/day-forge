@@ -156,7 +156,7 @@ async function confirmDelete() {
 
     <div v-if="!editing" class="empty-slot">
       <p class="empty-text">No {{ slotLabel }} template yet.</p>
-      <button class="primary-btn" type="button" @click="startCreate">
+      <button class="primary-btn df-btn df-btn--primary" type="button" @click="startCreate">
         Create template
       </button>
     </div>
@@ -171,14 +171,14 @@ async function confirmDelete() {
           type="text"
           maxlength="100"
           required
-          class="input"
+          class="input df-field"
         />
       </label>
 
       <div class="blocks-section">
         <div class="blocks-header">
           <span>Blocks</span>
-          <button type="button" class="add-row-btn" @click="addBlock">
+          <button type="button" class="add-row-btn df-btn df-btn--field" @click="addBlock">
             + Add block
           </button>
         </div>
@@ -200,36 +200,39 @@ async function confirmDelete() {
                   type="text"
                   maxlength="255"
                   required
-                  class="input"
+                  aria-label="Title"
+                  class="input df-field"
                 />
               </td>
               <td>
                 <input
                   v-model="b.start_time"
+                  aria-label="Start"
                   type="time"
                   step="300"
                   required
-                  class="input"
+                  class="input df-field"
                 />
               </td>
               <td>
                 <input
                   v-model="b.end_time"
+                  aria-label="End"
                   type="time"
                   step="300"
                   required
-                  class="input"
+                  class="input df-field"
                 />
               </td>
               <td>
-                <select v-model="b.category" class="input">
+                <select v-model="b.category" aria-label="Category" class="input df-field">
                   <option v-for="item in orderedCategories(props.categories ?? [])" :key="item.id" :value="item.slug">{{ item.label }}</option>
                 </select>
               </td>
               <td>
                 <button
                   type="button"
-                  class="row-delete-btn"
+                  class="row-delete-btn df-btn df-btn--field df-btn--danger"
                   @click="removeBlock(idx)"
                   aria-label="Delete block"
                 >
@@ -248,13 +251,13 @@ async function confirmDelete() {
       </div>
 
       <div class="form-actions">
-        <button class="primary-btn" type="submit" :disabled="submitting">
+        <button class="primary-btn df-btn df-btn--primary" type="submit" :disabled="submitting">
           {{ submitting ? "Saving..." : "Save" }}
         </button>
         <button
           v-if="!isCreate"
           type="button"
-          class="danger-btn"
+          class="danger-btn df-btn df-btn--field df-btn--danger"
           :disabled="submitting"
           @click="confirmDelete"
         >
@@ -455,5 +458,54 @@ async function confirmDelete() {
   padding: 8px 12px;
   border-radius: 6px;
   font-size: 13px;
+}
+
+/* Dark 4a (feature 0106): the block-row delete × is a square field button. */
+html[data-theme="dark_4a"] .row-delete-btn.df-btn.df-btn {
+  width: 36px;
+  padding: 0;
+}
+
+/* Dark 4a, narrow: five 36 px controls do not fit one table row at 390 px,
+   so each block becomes a small grid — title; start and end; category and
+   ×. The header row is kept for screen readers only; each input carries
+   its own aria-label. */
+@media (max-width: 640px) {
+  html[data-theme="dark_4a"] .blocks-table,
+  html[data-theme="dark_4a"] .blocks-table tbody {
+    display: block;
+  }
+
+  html[data-theme="dark_4a"] .blocks-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  html[data-theme="dark_4a"] .blocks-table tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 36px;
+    gap: 6px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  html[data-theme="dark_4a"] .blocks-table td {
+    display: block;
+    min-width: 0;
+    padding: 0;
+  }
+
+  html[data-theme="dark_4a"] .blocks-table td:nth-child(1) { grid-column: 1 / -1; }
+  html[data-theme="dark_4a"] .blocks-table td:nth-child(3) { grid-column: 2 / -1; }
+  html[data-theme="dark_4a"] .blocks-table td:nth-child(4) { grid-column: 1 / 3; }
+
+  html[data-theme="dark_4a"] .blocks-table .df-field {
+    width: 100%;
+    min-width: 0;
+  }
 }
 </style>

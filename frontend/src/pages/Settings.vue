@@ -13,6 +13,7 @@ import SettingsNotificationsPanel from "../components/settings/SettingsNotificat
 import SettingsSchedulePanel from "../components/settings/SettingsSchedulePanel.vue"
 import SettingsTemplatesRulesPanel from "../components/settings/SettingsTemplatesRulesPanel.vue"
 import SettingsTopicSelect from "../components/settings/SettingsTopicSelect.vue"
+import SettingsLogoutButton from "../components/settings/SettingsLogoutButton.vue"
 import { useCalendarAccount } from "../composables/useCalendarAccount"
 import { useGoogleAccount } from "../composables/useGoogleAccount"
 import { useHabiticaAccount } from "../composables/useHabiticaAccount"
@@ -371,6 +372,9 @@ async function handleHabiticaDisconnect(): Promise<void> {
             />
           </div>
         </main>
+        <!-- Narrow viewports have no SettingsNav; Log out follows the
+             content there (Dark 4a only, feature 0106). -->
+        <SettingsLogoutButton narrow-only />
       </div>
     </div>
   </div>
@@ -385,6 +389,8 @@ async function handleHabiticaDisconnect(): Promise<void> {
 .page-header { display: flex; flex-direction: column; gap: 8px; margin-bottom: 28px; }
 .back-link { font-size: 13px; color: var(--accent); text-decoration: none; }
 .back-link:hover { text-decoration: underline; }
+/* Dark 4a (feature 0106): a permanent underline, colour unchanged. */
+html[data-theme="dark_4a"] .back-link { text-decoration: underline; text-underline-offset: 2px; }
 .page-header h1 { margin: 0; font-size: 26px; color: var(--text-primary); font-family: var(--font-family-display); }
 .settings-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-items: start; }
 .settings-main { min-width: 0; width: 100%; max-width: 760px; }

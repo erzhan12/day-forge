@@ -106,3 +106,23 @@ describe("DesktopNotificationToggle", () => {
 function readStored(): string | null {
   return localStorage.getItem(DESKTOP_NOTIFICATIONS_KEY)
 }
+
+describe("DesktopNotificationToggle Dark 4a checkbox (0106)", () => {
+  afterEach(() => {
+    delete document.documentElement.dataset.theme
+  })
+
+  it("binds df-checkbox--lg only in dark_4a", () => {
+    document.documentElement.dataset.theme = "dark_4a"
+    const dark = mount(DesktopNotificationToggle)
+    const darkInput = dark.get("input[type=checkbox]")
+    expect(darkInput.classes()).toEqual(expect.arrayContaining(["df-checkbox", "df-checkbox--lg"]))
+    expect(darkInput.attributes("role")).toBe("switch")
+    dark.unmount()
+
+    document.documentElement.dataset.theme = "classic"
+    const classic = mount(DesktopNotificationToggle)
+    expect(classic.get("input[type=checkbox]").classes()).not.toContain("df-checkbox")
+    classic.unmount()
+  })
+})

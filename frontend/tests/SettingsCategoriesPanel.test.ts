@@ -231,3 +231,21 @@ describe("SettingsCategoriesPanel", () => {
     expect(wrapper.find(".error-text").exists()).toBe(false)
   })
 })
+
+describe("SettingsCategoriesPanel shared controls (0106)", () => {
+  it("tags fields and buttons with the shared control classes", () => {
+    const wrapper = mount(SettingsCategoriesPanel, { props: { categories: SEED } })
+    const row = wrapper.findAll(".category-row")[1]
+    expect(row.get("input").classes()).toContain("df-field")
+    expect(row.get("select").classes()).toContain("df-field")
+    const rowButtons = row.findAll("button")
+    expect(rowButtons.map((b) => b.text())).toEqual(["Set default", "↑", "↓", "Delete"])
+    for (const button of rowButtons) {
+      expect(button.classes()).toEqual(expect.arrayContaining(["df-btn", "df-btn--field"]))
+    }
+    const form = wrapper.get("form")
+    expect(form.get("input").classes()).toContain("df-field")
+    expect(form.get("select").classes()).toContain("df-field")
+    expect(form.get("button").classes()).toEqual(expect.arrayContaining(["df-btn", "df-btn--primary"]))
+  })
+})

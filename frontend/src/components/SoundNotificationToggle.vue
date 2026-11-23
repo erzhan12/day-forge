@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { computed } from "vue"
 import { useSoundNotificationSetting } from "../composables/useSoundNotifications"
+import { useActiveTheme } from "../composables/useActiveTheme"
 
 // Presentational toggle for the opt-in sound-notification feature (issue
 // #56). All state + persistence + the autoplay unlock live in the
@@ -11,6 +13,13 @@ const { enabled, setEnabled } = useSoundNotificationSetting()
 function onChange(event: Event) {
   setEnabled((event.target as HTMLInputElement).checked)
 }
+
+// Dark 4a renders the shared 18 px settings checkbox (feature 0106); other
+// themes keep the native control.
+const activeTheme = useActiveTheme()
+const checkboxClass = computed(() =>
+  activeTheme.value === "dark_4a" ? "df-checkbox df-checkbox--lg" : undefined,
+)
 </script>
 
 <template>
@@ -26,6 +35,7 @@ function onChange(event: Event) {
       <input
         type="checkbox"
         role="switch"
+        :class="checkboxClass"
         :checked="enabled"
         :aria-checked="enabled"
         @change="onChange"
