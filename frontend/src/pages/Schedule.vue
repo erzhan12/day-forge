@@ -23,7 +23,7 @@ import { FocusIndicatorControllerKey, useFocusIndicatorController } from "../com
 import { useViewport } from "../composables/useViewport"
 import { readChatSidebarOpen, writeChatSidebarOpen } from "../utils/chatSidebarStorage"
 import { readExternalTasksSidebarOpen, writeExternalTasksSidebarOpen } from "../utils/externalTasksSidebarStorage"
-import { formatDurationMinutes, timeToMinutes, type ScheduleWindowBounds } from "../utils/scheduleTime"
+import { timeToMinutes, type ScheduleWindowBounds } from "../utils/scheduleTime"
 import { useSchedulePageController } from "../composables/useSchedulePageController"
 import { ScheduleDragKey, ScheduleContainerKey } from "../composables/scheduleContext"
 import { useDrag } from "../composables/useDrag"
@@ -95,7 +95,7 @@ const todayNowMinutes = computed(() => nowDate.value === null ? null : nowMinute
 let drag: ReturnType<typeof useDrag> | undefined
 const {
   renderBounds, timelineOriginMinutes, effectiveBlocks,
-  currentBlock, currentBlockRemaining, displayList, ghostHeight,
+  currentBlock, currentBlockRemaining, displayList, ghostHeight, ghostDuration, axisMap,
   itemHeight, nowOffsetPercent, presentation,
 } = useTimelinePresentation({
   getBlocks,
@@ -104,6 +104,8 @@ const {
   getNowMinutes: () => nowMinutes.value,
   getNowDate: () => nowDate.value,
   getPxPerMinute: () => pxPerMinute.value,
+  // Dark 4a stacks the column (feature 0106); classic keeps the linear flow.
+  getLayoutMode: () => layout.value === "4a" ? "stack" : "linear",
   getDragState: () => drag ? {
     isDragging: drag.isDragging.value,
     previewBlocks: drag.previewBlocks.value,
@@ -122,21 +124,18 @@ drag = useDrag(
   () => pxPerMinute.value,
   () => layout.value === "4a" ? timelineOriginMinutes.value : null,
   () => `${props.date}|${props.schedule_window.time_zone}|${activeTheme.value}`,
+  () => layout.value === "4a" ? axisMap.value : null,
 )
-const { isDragging, dragBlockId, ghostTop, previewStartTime, previewEndTime, shiftedBlockIds, startDrag } = drag
+const {
+  isDragging, dragBlockId, ghostTop, previewStartTime, previewEndTime, shiftedBlockIds, startDrag,
+  previewBlocks, dropInvalid,
+} = drag
 watch(categoryCatalogValid, (valid) => {
   if (!valid && drag?.isDragging.value) drag.cancelDrag()
 }, { flush: "sync" })
-provide(ScheduleDragKey, { startDrag, isDragging, dragBlockId, shiftedBlockIds })
+provide(ScheduleDragKey, { startDrag, isDragging, dragBlockId, shiftedBlockIds, previewBlocks })
 provide(ScheduleContainerKey, scheduleBodyRef)
 const draggedBlock = computed(() => canonicalBlocks.value.find(block => block.id === dragBlockId.value) ?? null)
-// A drag keeps the block's length, so the ghost shows the same duration as the card.
-const ghostDuration = computed(() => {
-  const block = draggedBlock.value
-  return block
-    ? formatDurationMinutes(timeToMinutes(block.end_time) - timeToMinutes(block.start_time))
-    : ""
-})
 
 const { isWide } = useViewport()
 const chatDockHeight = ref(0)
@@ -208,6 +207,13 @@ const openFocusIndicator = focusIndicator.open
 function handleAddHere(payload: { start_time: string; end_time: string }) {
   prefillStart.value = payload.start_time
   prefillEnd.value = payload.end_time
+}
+// Dark 4a gap rows: a new request id reopens the form even when the same gap
+// (same prefill) is activated again after Cancel.
+const addRequestId = ref(0)
+function handleAddHere4a(payload: { start_time: string; end_time: string }) {
+  handleAddHere(payload)
+  addRequestId.value += 1
 }
 function logout() {
   resetSession()
@@ -291,6 +297,7 @@ defineExpose({
       :date="date"
       :initial-start-time="prefillStart"
       :initial-end-time="prefillEnd"
+      :add-request-id="layout === '4a' ? addRequestId : undefined"
       :categories="categories"
     />
 
@@ -307,7 +314,20 @@ defineExpose({
       </div>
       <!-- Drag ghost element -->
       <div
-        v-if="isDragging && draggedBlock"
+        v-if="isDragging && draggedBlock && layout === '4a'"
+        class="drag-ghost ghost-4a"
+        :class="{ 'is-invalid': dropInvalid }"
+        :style="{ top: ghostTop + 'px', height: ghostHeight + 'px' }"
+        data-testid="drag-ghost-4a"
+      >
+        <span class="ghost-handle">&#x2807;</span>
+        <input type="checkbox" class="ghost-checkbox df-checkbox" disabled />
+        <span class="ghost-time">{{ previewStartTime }}</span>
+        <span class="ghost-duration">{{ ghostDuration }}</span>
+        <span class="ghost-title">{{ dropInvalid ? "Can't drop here" : draggedBlock.title }}</span>
+      </div>
+      <div
+        v-else-if="isDragging && draggedBlock"
         class="drag-ghost"
         :style="{ top: ghostTop + 'px', height: ghostHeight + 'px' }"
       >
@@ -325,7 +345,7 @@ defineExpose({
         :current-h-h-m-m="currentHHMM"
         :disabled="scheduleDisabled"
         :categories="categories"
-        @add-here="handleAddHere"
+        @add-here-4a="handleAddHere4a"
       />
 
       <template v-if="layout === 'classic'" v-for="(item, idx) in displayList" :key="idx">
@@ -536,7 +556,7 @@ defineExpose({
    content-box padding approach makes the content itself shrink and shifts its
    midpoint when a rail is open, so 4a uses explicit width/offset geometry. */
 .schedule-page.layout-4a {
-  --timeline-4a-axis-gutter: 42px;
+  --timeline-4a-axis-gutter: 48px;
   --timeline-4a-item-inset: 12px;
   box-sizing: border-box;
   width: min(
@@ -673,6 +693,39 @@ defineExpose({
 /* 4a ghost: 16px body padding + gutter + item inset (classic is padding-only). */
 .schedule-page.layout-4a .drag-ghost {
   left: calc(16px + var(--timeline-4a-axis-gutter) + var(--timeline-4a-item-inset));
+}
+
+/* Dark 4a ghost mirrors the compact row: one centred 13 px line inside the
+   dragged item's stacked height (feature 0106). */
+.drag-ghost.ghost-4a {
+  padding: 0 8px 0 30px;
+  background: color-mix(in oklab, var(--accent) 14%, var(--bg-schedule-block));
+  border: 1px dashed var(--accent);
+  box-shadow: var(--shadow-card);
+  line-height: 16px;
+}
+
+.drag-ghost.ghost-4a .ghost-handle {
+  color: var(--text-secondary);
+}
+
+.drag-ghost.ghost-4a .ghost-time,
+.drag-ghost.ghost-4a .ghost-duration,
+.drag-ghost.ghost-4a .ghost-title {
+  font-size: 13px;
+}
+
+.drag-ghost.ghost-4a .ghost-duration {
+  color: var(--text-secondary);
+}
+
+.drag-ghost.ghost-4a.is-invalid {
+  background: var(--danger-surface);
+  border-color: var(--danger-border);
+}
+
+.drag-ghost.ghost-4a.is-invalid .ghost-title {
+  color: var(--danger-text);
 }
 
 .ghost-handle {

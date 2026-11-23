@@ -4,6 +4,7 @@ import {
   buildBaseDisplayItems,
   computeRenderBounds,
   findCurrentBlock,
+  formatDurationMinutes,
   nowOffsetPercent as computeNowOffsetPercent,
   remainingMinutesForBlock,
   spliceNowMarker,
@@ -13,6 +14,13 @@ import {
   type ScheduleWindowBounds,
 } from "../utils/scheduleTime"
 import { clampedDragDuration } from "./useDrag"
+import { buildTimelineStack, type AxisMap } from "../utils/timelineStack"
+
+export type TimelineLayoutMode = "linear" | "stack"
+
+// The now label and an hour label share the axis gutter; an hour label
+// closer than this to the now line is hidden so the now label wins (0106).
+export const NOW_LABEL_CLEARANCE_PX = 18
 
 export interface TimelineDragState {
   isDragging: boolean
@@ -36,12 +44,20 @@ export interface TimelinePresentationInput {
   liveRenderBounds?: RenderBounds
   axisOriginMinutes?: number
   axisEndMinutes?: number
+  /** "stack" is the Dark 4a layout (feature 0106); "linear" is the default. */
+  layoutMode?: TimelineLayoutMode
 }
 
 export interface PositionedTimelineItem {
   item: ScheduleDisplayItem
   topPx: number
   heightPx: number
+  /** Stack mode: a block rendered below the compact threshold. */
+  compact?: boolean
+  /** Stack mode: rendered shorter than its true scale. */
+  compressed?: boolean
+  /** Stack mode: "earlier" / "later" on a compressed edge gap. */
+  edgeHint?: "earlier" | "later" | null
 }
 
 export interface TimelinePresentation {
@@ -60,6 +76,9 @@ export interface TimelinePresentation {
   currentBlockRemaining: number | null
   nowVisible: boolean
   nowLineTopPx: number
+  layoutMode: TimelineLayoutMode
+  /** Piecewise minute↔pixel map; null in linear mode. */
+  axisMap: AxisMap | null
 }
 
 function renderedMinutes(item: ScheduleDisplayItem): number {
@@ -86,6 +105,52 @@ export function createTimelinePresentation(input: TimelinePresentationInput): Ti
     (drag?.frozenRenderBounds ? drag.frozenRenderBounds.renderStart : input.axisOriginMinutes ?? bounds.renderStart)
   const axisEndMinutes = drag?.frozenRenderBounds?.renderEnd ?? input.axisEndMinutes ?? bounds.renderEnd
   const pxPerMinute = drag ? drag.frozenPxPerMinute : input.pxPerMinute
+  const currentBlock = input.nowMinutes === null
+    ? null
+    : findCurrentBlock(effectiveBlocks, input.nowMinutes, input.nowDate)
+  const currentBlockRemaining = currentBlock && input.nowMinutes !== null
+    ? remainingMinutesForBlock(currentBlock, input.nowMinutes)
+    : null
+
+  if (input.layoutMode === "stack") {
+    // The stacked column stays frozen for the whole gesture: it is built from
+    // the canonical blocks with the drag-start clock, and the ghost floats
+    // over it (feature 0106). Preview blocks only feed effectiveBlocks.
+    const stackBlocks = input.blocks
+    const stackBounds = drag?.frozenRenderBounds ??
+      computeRenderBounds(stackBlocks, geometryNow, window)
+    const baseItems = buildBaseDisplayItems(
+      stackBlocks, stackBounds.renderStart, stackBounds.renderEnd, geometryNow, window,
+    )
+    const stack = buildTimelineStack(baseItems, pxPerMinute, window)
+    const positionedItems = stack.items.map((entry) => ({
+      item: entry.item,
+      topPx: entry.topPx,
+      heightPx: entry.heightPx,
+      compact: entry.compact,
+      compressed: entry.compressed,
+      edgeHint: entry.edgeHint,
+    }))
+    const nowSegment = todayNow === null ? null : stack.segmentAt(todayNow)
+    const nowVisible = nowSegment !== null && nowSegment.kind !== "spacer"
+    const nowLineTopPx = todayNow === null ? 0 : stack.timeToPx(todayNow)
+    const hourTicks = nowVisible
+      ? stack.hourTicks.filter((tick) => Math.abs(tick.topPx - nowLineTopPx) >= NOW_LABEL_CLEARANCE_PX)
+      : stack.hourTicks
+    return {
+      bounds: stackBounds, window,
+      axisOriginMinutes: stack.segments[0]?.startMin ?? window.startMinutes,
+      axisEndMinutes: stack.segments.at(-1)?.endMin ?? window.endMinutes,
+      pxPerMinute,
+      canvasHeightPx: stack.canvasHeightPx,
+      effectiveBlocks, baseItems,
+      displayList: spliceNowMarker(baseItems, input.nowMinutes, input.nowDate),
+      positionedItems, hourTicks, currentBlock, currentBlockRemaining,
+      nowVisible, nowLineTopPx,
+      layoutMode: "stack",
+      axisMap: { segments: stack.segments, timeToPx: stack.timeToPx, pxToTime: stack.pxToTime },
+    }
+  }
 
   const baseItems = buildBaseDisplayItems(
     effectiveBlocks, axisOriginMinutes, axisEndMinutes, geometryNow, window,
@@ -102,13 +167,6 @@ export function createTimelinePresentation(input: TimelinePresentationInput): Ti
   for (let minute = Math.ceil(axisOriginMinutes / 60) * 60; minute < axisEndMinutes; minute += 60) {
     hourTicks.push({ minute, topPx: (minute - axisOriginMinutes) * pxPerMinute })
   }
-
-  const currentBlock = input.nowMinutes === null
-    ? null
-    : findCurrentBlock(effectiveBlocks, input.nowMinutes, input.nowDate)
-  const currentBlockRemaining = currentBlock && input.nowMinutes !== null
-    ? remainingMinutesForBlock(currentBlock, input.nowMinutes)
-    : null
 
   const leadingStub = baseItems.find((item) =>
     item.type === "gap" && item.compact && item.start_time === window.start,
@@ -134,6 +192,7 @@ export function createTimelinePresentation(input: TimelinePresentationInput): Ti
     canvasHeightPx: (axisEndMinutes - axisOriginMinutes) * pxPerMinute,
     effectiveBlocks, baseItems, displayList, positionedItems, hourTicks,
     currentBlock, currentBlockRemaining, nowVisible, nowLineTopPx,
+    layoutMode: "linear", axisMap: null,
   }
 }
 
@@ -145,6 +204,7 @@ export interface UseTimelinePresentationOptions {
   getNowDate: () => string | null
   getPxPerMinute: () => number
   getDragState: () => TimelineDragState | null
+  getLayoutMode?: () => TimelineLayoutMode
 }
 
 export function useTimelinePresentation(options: UseTimelinePresentationOptions) {
@@ -162,18 +222,33 @@ export function useTimelinePresentation(options: UseTimelinePresentationOptions)
     pxPerMinute: options.getPxPerMinute(),
     drag: options.getDragState(),
     liveRenderBounds: renderBounds.value,
+    layoutMode: options.getLayoutMode?.() ?? "linear",
   }))
   const timelineOriginMinutes = computed(() => presentation.value.axisOriginMinutes)
   const effectiveBlocks = computed(() => presentation.value.effectiveBlocks)
   const currentBlock = computed(() => presentation.value.currentBlock)
   const currentBlockRemaining = computed(() => presentation.value.currentBlockRemaining)
   const displayList = computed(() => presentation.value.displayList)
-  const ghostHeight = computed(() => {
+  const draggedBlock = computed(() => {
     const drag = options.getDragState()
-    const block = drag?.dragBlockId === null || drag?.dragBlockId === undefined
-      ? null : options.getBlocks().find((item) => item.id === drag.dragBlockId)
-    return block ? clampedDragDuration(block) * presentation.value.pxPerMinute : 0
+    return drag?.dragBlockId === null || drag?.dragBlockId === undefined
+      ? null : options.getBlocks().find((item) => item.id === drag.dragBlockId) ?? null
   })
+  // Stack mode keeps the dragged item's rendered height at drag start (a
+  // 5-minute block is 28 px, not 10); linear mode draws duration × scale.
+  const ghostHeight = computed(() => {
+    const block = draggedBlock.value
+    if (!block) return 0
+    if (presentation.value.layoutMode === "stack") {
+      const stacked = presentation.value.positionedItems.find((entry) => entry.item.block?.id === block.id)
+      if (stacked) return stacked.heightPx
+    }
+    return clampedDragDuration(block) * presentation.value.pxPerMinute
+  })
+  // The ghost readout shows the snapped, rounded duration a drop submits.
+  const ghostDuration = computed(() =>
+    draggedBlock.value ? formatDurationMinutes(clampedDragDuration(draggedBlock.value)) : "")
+  const axisMap = computed(() => presentation.value.axisMap)
   const itemHeight = (item: ScheduleDisplayItem): string =>
     `${renderedMinutes(item) * presentation.value.pxPerMinute}px`
   const nowOffsetPercent = (item: ScheduleDisplayItem): string =>
@@ -182,6 +257,6 @@ export function useTimelinePresentation(options: UseTimelinePresentationOptions)
   return {
     renderBounds, timelineOriginMinutes,
     effectiveBlocks, currentBlock, currentBlockRemaining, displayList,
-    ghostHeight, itemHeight, nowOffsetPercent, presentation,
+    ghostHeight, ghostDuration, axisMap, itemHeight, nowOffsetPercent, presentation,
   }
 }

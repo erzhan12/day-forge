@@ -11,6 +11,8 @@ const props = defineProps<{
   initialStartTime?: string
   initialEndTime?: string
   categories?: UserCategory[]
+  /** Dark 4a gap rows bump this to reopen the form with the same prefill. */
+  addRequestId?: number
 }>()
 
 const { createBlock } = useSchedule(() => props.date)
@@ -36,6 +38,12 @@ watch(
     if (s || e) showForm.value = true
   },
 )
+watch(() => props.addRequestId, (id) => {
+  if (id === undefined) return
+  if (props.initialStartTime) startTime.value = props.initialStartTime
+  if (props.initialEndTime) endTime.value = props.initialEndTime
+  showForm.value = true
+})
 watch(() => props.categories, (categories) => { if (categories?.length) category.value = defaultCategory(categories)?.slug ?? category.value }, { immediate: true })
 
 async function handleSubmit() {

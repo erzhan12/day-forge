@@ -1,8 +1,11 @@
 import { acceptedMutation } from "./helpers/mutation"
-import { describe, it, expect, vi } from "vitest"
+import { afterEach, beforeEach, describe, it, expect, vi } from "vitest"
 import { mount } from "@vue/test-utils"
+import { ref } from "vue"
+import { createTimelinePresentation } from "../src/composables/useTimelinePresentation"
 import {
   blocksExternallyMutated,
+  hasOverlappingBlocks,
   resolveConflicts,
   roundUpDuration,
   useDrag,
@@ -13,6 +16,7 @@ import {
   DAY_START_MINUTES,
   PX_PER_MINUTE,
   computeRenderBounds,
+  timeToMinutes,
 } from "../src/utils/scheduleTime"
 
 function makeBlock(overrides: Partial<TimeBlock> & { id: number }): TimeBlock {
@@ -1048,5 +1052,174 @@ describe("useDrag off-grid geometry and payload (feature 0026)", () => {
     fireMove(container, 0)
     expect(toMinutes(drag.previewStartTime.value)).toBeGreaterThanOrEqual(480)
     vi.unstubAllGlobals()
+  })
+})
+
+describe("useDrag on the stack axis map (0106)", () => {
+  const WINDOW = { start: "05:00", end: "22:00", startMinutes: 300, endMinutes: 1320 }
+  function fixture(): TimeBlock[] {
+    return [
+      makeBlock({ id: 1, start_time: "09:40", end_time: "10:05", sort_order: 0 }),
+      makeBlock({ id: 2, start_time: "11:15", end_time: "11:40", sort_order: 1 }),
+      makeBlock({ id: 3, start_time: "11:40", end_time: "11:45", sort_order: 2 }),
+      makeBlock({ id: 4, start_time: "11:45", end_time: "12:10", sort_order: 3 }),
+      makeBlock({ id: 5, start_time: "15:00", end_time: "16:00", sort_order: 4 }),
+    ]
+  }
+  function mapFor(blocks: TimeBlock[]) {
+    return createTimelinePresentation({
+      blocks, date: "2026-11-22", window: WINDOW, nowMinutes: null, nowDate: null,
+      pxPerMinute: 2, layoutMode: "stack",
+    }).axisMap!
+  }
+  function realContainer(paddingTop = 0) {
+    const el = document.createElement("div")
+    el.style.paddingTop = `${paddingTop}px`
+    el.setPointerCapture = vi.fn()
+    el.releasePointerCapture = vi.fn()
+    el.getBoundingClientRect = () => ({
+      top: 0, left: 0, right: 600, bottom: 800, width: 600, height: 800, x: 0, y: 0, toJSON: () => ({}),
+    }) as DOMRect
+    return el
+  }
+  function move(el: HTMLElement, clientY: number) {
+    const event = new Event("pointermove")
+    Object.defineProperty(event, "clientY", { value: clientY })
+    el.dispatchEvent(event)
+  }
+  function makeStackDrag(blocks: TimeBlock[], reorder = vi.fn(async () => ({ ok: true as const })), mapOverride?: () => ReturnType<typeof mapFor> | null) {
+    const map = mapFor(blocks)
+    const context = ref("dark_4a")
+    const drag = useDrag(
+      "2026-11-22", () => blocks, reorder, vi.fn(), () => blocks.map((b) => ({ ...b })),
+      undefined, () => computeRenderBounds(blocks, null, WINDOW), () => null, () => WINDOW,
+      () => 2, () => null, () => context.value, mapOverride ?? (() => map),
+    )
+    return { drag, map, reorder, context }
+  }
+
+  beforeEach(() => {
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => { cb(0); return 0 })
+  })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it("converts pointer pixels through the frozen axis map", () => {
+    const blocks = fixture()
+    const { drag, map } = makeStackDrag(blocks)
+    const el = realContainer()
+    const startPx = map.timeToPx(timeToMinutes("15:00"))
+    drag.startDrag({ pointerId: 1, clientY: startPx } as PointerEvent, blocks[4], el)
+    expect(drag.frozenAxisMap.value).toBe(map)
+    // Move to the middle of the 12:10–15:00 capped gap (60 px for 170 min).
+    const gapTop = map.timeToPx(timeToMinutes("12:10"))
+    move(el, gapTop + 30)
+    expect(drag.previewStartTime.value).toBe("13:35")
+    drag.cancelDrag()
+  })
+
+  it("falls back to the linear formula without a map", () => {
+    const blocks = fixture()
+    const { drag } = makeStackDrag(blocks, undefined, () => null)
+    const el = realContainer()
+    const origin = computeRenderBounds(blocks, null, WINDOW).renderStart
+    drag.startDrag({ pointerId: 1, clientY: (timeToMinutes("15:00") - origin) * 2 } as PointerEvent, blocks[4], el)
+    move(el, (timeToMinutes("16:00") - origin) * 2)
+    expect(drag.previewStartTime.value).toBe("16:00")
+    expect(drag.frozenAxisMap.value).toBeNull()
+    drag.cancelDrag()
+  })
+
+  it("reaches the window start through the leading stub", () => {
+    const blocks = fixture()
+    const { drag, map } = makeStackDrag(blocks)
+    const el = realContainer()
+    drag.startDrag({ pointerId: 1, clientY: map.timeToPx(timeToMinutes("09:40")) } as PointerEvent, blocks[0], el)
+    move(el, 0)
+    expect(drag.previewStartTime.value).toBe("05:00")
+    drag.cancelDrag()
+  })
+
+  it("keeps the grabbed block in place on the first move below a capped gap", () => {
+    const blocks = fixture()
+    const { drag, map } = makeStackDrag(blocks)
+    const el = realContainer()
+    const y = map.timeToPx(timeToMinutes("15:00")) + 10
+    drag.startDrag({ pointerId: 1, clientY: y } as PointerEvent, blocks[4], el)
+    move(el, y)
+    expect(drag.previewStartTime.value).toBe("15:00")
+    expect(drag.ghostTop.value).toBe(map.timeToPx(timeToMinutes("15:00")))
+    drag.cancelDrag()
+  })
+
+  it("aligns the ghost with the container padding", () => {
+    const blocks = fixture()
+    const { drag, map } = makeStackDrag(blocks)
+    const el = realContainer(16)
+    const top = map.timeToPx(timeToMinutes("15:00"))
+    drag.startDrag({ pointerId: 1, clientY: 16 + top } as PointerEvent, blocks[4], el)
+    expect(drag.ghostTop.value).toBe(16 + top)
+    move(el, 16 + top)
+    expect(drag.ghostTop.value).toBe(16 + top)
+    drag.cancelDrag()
+  })
+
+  it("commits the ghost label time for a drop near the end of a capped gap", async () => {
+    const blocks = fixture()
+    const { drag, map, reorder } = makeStackDrag(blocks)
+    const el = realContainer()
+    drag.startDrag({ pointerId: 1, clientY: map.timeToPx(timeToMinutes("09:40")) } as PointerEvent, blocks[0], el)
+    move(el, map.timeToPx(timeToMinutes("14:20")))
+    const shown = drag.previewStartTime.value
+    expect(shown).toBe("14:20")
+    await drag.endDrag()
+    const payload = (reorder.mock.calls[0] as unknown as [Array<{ id: number; start_time: string }>])[0]
+    expect(payload.find((u) => u.id === 1)?.start_time).toBe(shown)
+  })
+
+  it("is disabled on a day with overlapping blocks", () => {
+    const blocks = [
+      makeBlock({ id: 1, start_time: "10:00", end_time: "14:00", sort_order: 0 }),
+      makeBlock({ id: 2, start_time: "11:00", end_time: "12:00", sort_order: 1 }),
+    ]
+    const { drag } = makeStackDrag(blocks)
+    drag.startDrag({ pointerId: 1, clientY: 0 } as PointerEvent, blocks[0], realContainer())
+    expect(drag.isDragging.value).toBe(false)
+    expect(hasOverlappingBlocks(blocks)).toBe(true)
+    expect(hasOverlappingBlocks(fixture())).toBe(false)
+  })
+
+  it("clears the frozen map on drop, cancel and context change", async () => {
+    const blocks = fixture()
+    const { drag, context } = makeStackDrag(blocks)
+    drag.startDrag({ pointerId: 1, clientY: 0 } as PointerEvent, blocks[4], realContainer())
+    expect(drag.frozenAxisMap.value).not.toBeNull()
+    await drag.endDrag()
+    expect(drag.frozenAxisMap.value).toBeNull()
+
+    drag.startDrag({ pointerId: 1, clientY: 0 } as PointerEvent, blocks[4], realContainer())
+    drag.cancelDrag()
+    expect(drag.frozenAxisMap.value).toBeNull()
+
+    drag.startDrag({ pointerId: 1, clientY: 0 } as PointerEvent, blocks[4], realContainer())
+    context.value = "classic"
+    expect(drag.isDragging.value).toBe(false)
+    expect(drag.frozenAxisMap.value).toBeNull()
+  })
+
+  it("marks an overflowing cascade invalid and sends no reorder on release", async () => {
+    const blocks = [
+      makeBlock({ id: 1, start_time: "20:00", end_time: "21:00", sort_order: 0 }),
+      makeBlock({ id: 2, start_time: "21:00", end_time: "22:00", sort_order: 1 }),
+    ]
+    const { drag, map, reorder } = makeStackDrag(blocks)
+    const el = realContainer()
+    drag.startDrag({ pointerId: 1, clientY: map.timeToPx(timeToMinutes("20:00")) } as PointerEvent, blocks[0], el)
+    move(el, map.timeToPx(timeToMinutes("21:00")))
+    expect(drag.dropInvalid.value).toBe(true)
+    await drag.endDrag()
+    expect(reorder).not.toHaveBeenCalled()
+    expect(drag.dropInvalid.value).toBe(false)
   })
 })

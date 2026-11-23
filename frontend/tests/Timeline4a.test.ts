@@ -40,6 +40,7 @@ function mountTimeline(overrides: TimelineFixture = {}) {
     nowMinutes: 10 * 60,
     nowDate: "2026-08-22",
     pxPerMinute: 2,
+    layoutMode: "stack" as const,
     ...overrides,
   }
   wrapper = mount(Timeline4a, {
@@ -67,11 +68,11 @@ describe("Timeline4a now-line", () => {
   })
 })
 
-describe("Timeline4a absolute axis", () => {
+describe("Timeline4a stack axis (0106)", () => {
   it("keeps drag geometry frozen when the parent updates the clock and scale", async () => {
     const input: TimelinePresentationInput = {
       blocks: [BLOCK], date: "2026-08-22", window: DEFAULT_SCHEDULE_WINDOW,
-      nowMinutes: 630, nowDate: "2026-08-22", pxPerMinute: 1.6,
+      nowMinutes: 630, nowDate: "2026-08-22", pxPerMinute: 1.6, layoutMode: "stack",
       drag: {
         isDragging: true, previewBlocks: [], dragBlockId: 1,
         frozenRenderBounds: computeRenderBounds([BLOCK], 630, DEFAULT_SCHEDULE_WINDOW),
@@ -93,51 +94,52 @@ describe("Timeline4a absolute axis", () => {
     expect(wrapper!.get('[data-testid="now-line-4a"]').text()).toContain("10:45")
   })
 
-  it("positions a block from the axis origin at 2 px/min, not flow layout", () => {
-    mountTimeline({
-      axisOriginMinutes: 6 * 60,
-      axisEndMinutes: 23 * 60,
-      pxPerMinute: 2,
-    })
+  it("stacks a block below a capped leading stub at 2 px/min", () => {
+    mountTimeline({ nowDate: null, nowMinutes: null })
     const item = wrapper!.get(".time-block-4a").element.parentElement as HTMLElement
-    expect(item.style.top).toBe(`${(9 * 60 - 6 * 60) * 2}px`)
+    // 06:00–09:00 leading gap capped at 60 px, then the 60-minute block.
+    expect(item.style.top).toBe(`${STUB_MINUTES * 2}px`)
     expect(item.style.height).toBe(`${60 * 2}px`)
   })
 
-  it("sizes the canvas from axis end minus origin", () => {
-    mountTimeline({
-      axisOriginMinutes: 6 * 60,
-      axisEndMinutes: 23 * 60,
-      pxPerMinute: 2,
-    })
-    expect(wrapper!.get('[data-testid="timeline-4a"]').element.style.height).toBe(
-      `${(23 * 60 - 6 * 60) * 2}px`,
-    )
+  it("sizes the canvas from the stacked items", () => {
+    mountTimeline({ nowDate: null, nowMinutes: null })
+    // 60 px leading stub + 120 px block + 60 px trailing stub.
+    expect(wrapper!.get('[data-testid="timeline-4a"]').element.style.height).toBe("240px")
   })
 
   it("gives an out-of-window early block a non-negative top", () => {
-    mountTimeline({
-      blocks: [{ ...BLOCK, start_time: "05:00", end_time: "06:00" }],
-      axisOriginMinutes: 5 * 60,
-      axisEndMinutes: 23 * 60,
-      pxPerMinute: 2,
-    })
+    mountTimeline({ blocks: [{ ...BLOCK, start_time: "05:00", end_time: "06:00" }] })
     const item = wrapper!.get(".time-block-4a").element.parentElement as HTMLElement
     expect(Number.parseFloat(item.style.top)).toBeGreaterThanOrEqual(0)
   })
 
   it("does not render spacer slots", () => {
-    mountTimeline({
-      axisOriginMinutes: 6 * 60,
-      axisEndMinutes: 23 * 60,
-    })
+    mountTimeline()
     const items = wrapper!.findAll(".timeline-item")
     expect(items.length).toBeGreaterThan(0)
     for (const item of items) {
       const hasBlock = item.find(".time-block-4a").exists()
-      const hasGap = item.find(".gap-slot-4a").exists()
+      const hasGap = item.find('[data-testid="gap-row-4a"]').exists()
       expect(hasBlock || hasGap).toBe(true)
     }
+  })
+
+  it("renders a 5-minute block 28px tall without overlapping its neighbours", () => {
+    const blocks: TimeBlock[] = [
+      { ...BLOCK, id: 1, start_time: "11:15", end_time: "11:40", sort_order: 0 },
+      { ...BLOCK, id: 2, start_time: "11:40", end_time: "11:45", sort_order: 1 },
+      { ...BLOCK, id: 3, start_time: "11:45", end_time: "12:10", sort_order: 2 },
+    ]
+    mountTimeline({ blocks, nowDate: null, nowMinutes: null })
+    const boxes = wrapper!.findAll(".time-block-4a").map((b) => {
+      const el = b.element.parentElement as HTMLElement
+      return { top: Number.parseFloat(el.style.top), height: Number.parseFloat(el.style.height) }
+    })
+    expect(boxes.map((b) => b.height)).toEqual([50, 28, 50])
+    expect(boxes[1].top).toBe(boxes[0].top + boxes[0].height)
+    expect(boxes[2].top).toBe(boxes[1].top + boxes[1].height)
+    expect(wrapper!.findAll(".time-block-4a")[1].classes()).toContain("is-compact")
   })
 })
 
@@ -148,109 +150,53 @@ const AFTERNOON: TimeBlock = {
 }
 
 function gapItem(index: number): HTMLElement {
-  const gaps = wrapper!.findAll(".gap-slot-4a")
+  const gaps = wrapper!.findAll('[data-testid="gap-row-4a"]')
   return gaps[index].element.parentElement as HTMLElement
 }
 
-describe("Timeline4a edge stubs (0017)", () => {
+describe("Timeline4a edge stubs (0017, stacked in 0106)", () => {
   const px = 2
 
   it("collapses the leading gap to a 30-minute stub above a late first block", () => {
-    const bounds = computeRenderBounds([AFTERNOON], null, DEFAULT_SCHEDULE_WINDOW)
-    mountTimeline({
-      blocks: [AFTERNOON],
-      axisOriginMinutes: bounds.renderStart,
-      axisEndMinutes: bounds.renderEnd,
-      nowDate: null,
-      nowMinutes: null,
-      pxPerMinute: px,
-    })
+    mountTimeline({ blocks: [AFTERNOON], nowDate: null, nowMinutes: null, pxPerMinute: px })
     const leading = gapItem(0)
     expect(Number.parseFloat(leading.style.top)).toBe(0)
     expect(leading.style.height).toBe(`${STUB_MINUTES * px}px`)
     expect(wrapper!.text()).toContain("earlier")
-    expect(wrapper!.text()).toContain("06:00 – 14:00")
+    expect(wrapper!.text()).toContain("06:00\u201314:00")
   })
 
   it("collapses the trailing gap to a 30-minute stub after an early last block", () => {
-    const bounds = computeRenderBounds([AFTERNOON], null, DEFAULT_SCHEDULE_WINDOW)
-    mountTimeline({
-      blocks: [AFTERNOON],
-      axisOriginMinutes: bounds.renderStart,
-      axisEndMinutes: bounds.renderEnd,
-      nowDate: null,
-      nowMinutes: null,
-      pxPerMinute: px,
-    })
-    const trailing = gapItem(wrapper!.findAll(".gap-slot-4a").length - 1)
+    mountTimeline({ blocks: [AFTERNOON], nowDate: null, nowMinutes: null, pxPerMinute: px })
+    const trailing = gapItem(wrapper!.findAll('[data-testid="gap-row-4a"]').length - 1)
     expect(trailing.style.height).toBe(`${STUB_MINUTES * px}px`)
     expect(wrapper!.text()).toContain("later")
-    expect(wrapper!.text()).toContain("15:00 – 23:00")
+    expect(wrapper!.text()).toContain("15:00\u201323:00")
   })
 
   it("emits the full semantic leading range from a compressed stub", async () => {
-    const bounds = computeRenderBounds([AFTERNOON], null, DEFAULT_SCHEDULE_WINDOW)
-    mountTimeline({
-      blocks: [AFTERNOON],
-      axisOriginMinutes: bounds.renderStart,
-      axisEndMinutes: bounds.renderEnd,
-      nowDate: null,
-      nowMinutes: null,
-      pxPerMinute: px,
-    })
-    await wrapper!.findAll(".gap-slot")[0].trigger("click")
-    expect(wrapper!.emitted("add-here")).toEqual([
+    mountTimeline({ blocks: [AFTERNOON], nowDate: null, nowMinutes: null, pxPerMinute: px })
+    await wrapper!.findAll('[data-testid="gap-row-4a"]')[0].trigger("click")
+    expect(wrapper!.emitted("add-here-4a")).toEqual([
       [{ start_time: "06:00", end_time: "14:00" }],
     ])
   })
 
-  it("places the now-line inside the leading stub when now is before the compressed origin", () => {
-    const bounds = computeRenderBounds([AFTERNOON], null, DEFAULT_SCHEDULE_WINDOW)
-    mountTimeline({
-      blocks: [AFTERNOON],
-      axisOriginMinutes: bounds.renderStart,
-      axisEndMinutes: bounds.renderEnd,
-      nowMinutes: 10 * 60,
-      nowDate: "2026-08-22",
-      pxPerMinute: px,
-    })
+  it("places the now-line inside the leading stub when now is before the first block", () => {
+    mountTimeline({ blocks: [AFTERNOON], nowMinutes: 10 * 60, nowDate: "2026-08-22", pxPerMinute: px })
     const nowLine = wrapper!.get('[data-testid="now-line-4a"]').element as HTMLElement
-    // 10:00 sits halfway through the semantic 06:00–14:00 leading gap, mapped
-    // onto the 30-minute stub (origin-shift, not a linear pre-origin top).
+    // 10:00 sits halfway through the semantic 06:00–14:00 leading gap.
     expect(nowLine.style.top).toBe(`${0.5 * STUB_MINUTES * px}px`)
   })
 
-  it("keeps a mid-day gap at full scale", () => {
+  it("caps a mid-day gap at 60px", () => {
     const morning: TimeBlock = { ...BLOCK, id: 1, start_time: "09:00", end_time: "10:00" }
     const afternoon: TimeBlock = { ...BLOCK, id: 2, start_time: "12:00", end_time: "13:00", sort_order: 10 }
-    const bounds = computeRenderBounds([morning, afternoon], null, DEFAULT_SCHEDULE_WINDOW)
-    mountTimeline({
-      blocks: [morning, afternoon],
-      axisOriginMinutes: bounds.renderStart,
-      axisEndMinutes: bounds.renderEnd,
-      nowDate: null,
-      nowMinutes: null,
-      pxPerMinute: px,
-    })
-    const mid = wrapper!.findAll(".timeline-item").find((item) => {
-      const slot = item.find(".gap-slot")
-      return slot.exists() && slot.text().includes("10:00 – 12:00")
-    })
+    mountTimeline({ blocks: [morning, afternoon], nowDate: null, nowMinutes: null, pxPerMinute: px })
+    const mid = wrapper!.findAll(".timeline-item").find((item) =>
+      item.find('[data-testid="gap-4a-range"]').exists() &&
+      item.get('[data-testid="gap-4a-range"]').text() === "10:00\u201312:00")
     expect(mid).toBeTruthy()
-    expect((mid!.element as HTMLElement).style.height).toBe(`${120 * px}px`)
-  })
-
-  it("renders compact bounds supplied by the shared presentation builder", () => {
-    mountTimeline({
-      blocks: [AFTERNOON],
-      nowDate: null,
-      nowMinutes: null,
-      pxPerMinute: px,
-    })
-    const bounds = computeRenderBounds([AFTERNOON], null, DEFAULT_SCHEDULE_WINDOW)
-    expect(wrapper!.get('[data-testid="timeline-4a"]').element.style.height).toBe(
-      `${(bounds.renderEnd - bounds.renderStart) * px}px`,
-    )
-    expect(gapItem(0).style.height).toBe(`${STUB_MINUTES * px}px`)
+    expect((mid!.element as HTMLElement).style.height).toBe("60px")
   })
 })

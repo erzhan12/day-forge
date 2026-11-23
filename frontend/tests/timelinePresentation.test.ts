@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 import { ref } from "vue"
 import type { TimeBlock } from "../src/types"
 import { useDrag } from "../src/composables/useDrag"
-import { useTimelinePresentation } from "../src/composables/useTimelinePresentation"
+import { createTimelinePresentation, useTimelinePresentation } from "../src/composables/useTimelinePresentation"
 import { timeToMinutes, type ScheduleWindowBounds } from "../src/utils/scheduleTime"
 
 const block: TimeBlock = {
@@ -136,5 +136,128 @@ describe("timeline presentation during drag", () => {
     if (change === "viewport") window.dispatchEvent(new Event("resize"))
     expect(state.drag.isDragging.value).toBe(false)
     expect(state.drag.frozenWindow.value).toBeNull()
+  })
+})
+
+describe("timeline presentation in stack mode (0106)", () => {
+  const WINDOW: ScheduleWindowBounds = { start: "05:00", end: "22:00", startMinutes: 300, endMinutes: 1320 }
+  const m = timeToMinutes
+  function b(id: number, start: string, end: string, extra: Partial<TimeBlock> = {}): TimeBlock {
+    return { id, title: `B${id}`, start_time: start, end_time: end, category: "work", is_completed: false, sort_order: id, ...extra }
+  }
+  const FIXTURE = [
+    b(1, "09:40", "10:05"), b(2, "11:15", "11:40"), b(3, "11:40", "11:45"),
+    b(4, "11:45", "12:10"), b(5, "15:00", "16:00"),
+  ]
+  function present(overrides: Partial<Parameters<typeof createTimelinePresentation>[0]> = {}) {
+    return createTimelinePresentation({
+      blocks: FIXTURE, date: "2026-11-22", window: WINDOW,
+      nowMinutes: null, nowDate: null, pxPerMinute: 2, layoutMode: "stack", ...overrides,
+    })
+  }
+
+  it("stack mode positions items from the stack", () => {
+    const model = present()
+    expect(model.canvasHeightPx).toBe(538)
+    expect(model.positionedItems.map((p) => p.heightPx)).toEqual([60, 50, 60, 50, 28, 50, 60, 120, 60])
+    expect(model.positionedItems.find((p) => p.item.block?.id === 3)?.compact).toBe(true)
+    expect(model.axisMap).not.toBeNull()
+  })
+
+  it("linear mode is unchanged", () => {
+    const linear = createTimelinePresentation({
+      blocks: FIXTURE, date: "2026-11-22", window: WINDOW, nowMinutes: null, nowDate: null, pxPerMinute: 2,
+    })
+    expect(linear.axisMap).toBeNull()
+    expect(linear.positionedItems.find((p) => p.item.block?.id === 3)?.heightPx).toBe(10)
+    expect(linear.canvasHeightPx).toBe((linear.axisEndMinutes - linear.axisOriginMinutes) * 2)
+  })
+
+  it("places the now line inside a capped gap proportionally", () => {
+    const model = present({ nowMinutes: m("13:35"), nowDate: "2026-11-22" })
+    const gap = model.positionedItems.find((p) => p.item.type === "gap" && p.item.start_time === "12:10")!
+    expect(model.nowVisible).toBe(true)
+    expect(model.nowLineTopPx).toBeCloseTo(gap.topPx + 30)
+  })
+
+  it("keeps the trailing row's height, range and later hint before, during and after the old split (13:00, 17:00, 21:30)", () => {
+    for (const now of ["13:00", "17:00", "21:30"]) {
+      const model = present({ nowMinutes: m(now), nowDate: "2026-11-22" })
+      const trailing = model.positionedItems.at(-1)!
+      expect(trailing.item, now).toMatchObject({ type: "gap", start_time: "16:00", end_time: "22:00" })
+      expect(trailing.heightPx, now).toBe(60)
+      expect(trailing.edgeHint, now).toBe("later")
+      expect(model.canvasHeightPx, now).toBe(538)
+    }
+  })
+
+  it("renders an empty templated day as one capped gap", () => {
+    const model = present({ blocks: [], nowMinutes: m("13:00"), nowDate: "2026-11-22" })
+    expect(model.positionedItems).toHaveLength(1)
+    expect(model.positionedItems[0].item).toMatchObject({ type: "gap", start_time: "05:00", end_time: "22:00" })
+    expect(model.positionedItems[0].heightPx).toBe(60)
+    expect(model.positionedItems[0].edgeHint).toBeNull()
+  })
+
+  it("hides an hour label that intersects the now label at an exact hour and a nearby minute", () => {
+    const exact = present({ nowMinutes: m("10:00"), nowDate: "2026-11-22" })
+    expect(exact.hourTicks.map((t) => t.minute)).not.toContain(m("10:00"))
+    const near = present({ nowMinutes: m("10:02"), nowDate: "2026-11-22" })
+    expect(near.hourTicks.map((t) => t.minute)).not.toContain(m("10:00"))
+    const far = present({ nowMinutes: m("15:30"), nowDate: "2026-11-22" })
+    expect(far.hourTicks.map((t) => t.minute)).toContain(m("10:00"))
+  })
+
+  it("hides the now line before the window, after its end and off today", () => {
+    expect(present({ nowMinutes: m("04:30"), nowDate: "2026-11-22" }).nowVisible).toBe(false)
+    expect(present({ nowMinutes: m("22:30"), nowDate: "2026-11-22" }).nowVisible).toBe(false)
+    expect(present({ nowMinutes: m("13:00"), nowDate: "2026-11-21" }).nowVisible).toBe(false)
+    expect(present({ nowMinutes: m("13:00"), nowDate: "2026-11-22" }).nowVisible).toBe(true)
+  })
+
+  it("ghost height equals the stacked height (28px for a 5-minute block)", () => {
+    const blocks = ref([...FIXTURE])
+    const presentation = useTimelinePresentation({
+      getBlocks: () => blocks.value, getDate: () => "2026-11-22", getWindow: () => WINDOW,
+      getNowMinutes: () => null, getNowDate: () => null, getPxPerMinute: () => 2,
+      getLayoutMode: () => "stack",
+      getDragState: () => ({
+        isDragging: true, previewBlocks: [], dragBlockId: 3,
+        frozenRenderBounds: null, frozenNowMinutes: null, frozenPxPerMinute: 2,
+        frozenTimelineOriginMinutes: null, frozenWindow: WINDOW,
+      }),
+    })
+    expect(presentation.ghostHeight.value).toBe(28)
+  })
+
+  it("ghost readout uses the rounded duration of an off-grid import", () => {
+    const blocks = ref([b(9, "14:07", "14:33")])
+    const presentation = useTimelinePresentation({
+      getBlocks: () => blocks.value, getDate: () => "2026-11-22", getWindow: () => WINDOW,
+      getNowMinutes: () => null, getNowDate: () => null, getPxPerMinute: () => 2,
+      getLayoutMode: () => "stack",
+      getDragState: () => ({
+        isDragging: true, previewBlocks: [], dragBlockId: 9,
+        frozenRenderBounds: null, frozenNowMinutes: null, frozenPxPerMinute: 2,
+        frozenTimelineOriginMinutes: null, frozenWindow: WINDOW,
+      }),
+    })
+    expect(presentation.ghostDuration.value).toBe("30m")
+  })
+
+  it("freezes the axis map during drag and keeps untouched blocks in place", () => {
+    const frozenBefore = present({ nowMinutes: m("13:00"), nowDate: "2026-11-22" })
+    const dragging = present({
+      nowMinutes: m("14:00"), nowDate: "2026-11-22",
+      drag: {
+        isDragging: true, dragBlockId: 3,
+        previewBlocks: [b(1, "09:40", "10:05"), b(2, "11:15", "11:40"), b(4, "11:45", "12:10"), b(3, "13:00", "13:05"), b(5, "15:00", "16:00")],
+        frozenRenderBounds: null, frozenNowMinutes: m("13:00"), frozenPxPerMinute: 2,
+        frozenTimelineOriginMinutes: null, frozenWindow: WINDOW,
+      },
+    })
+    expect(dragging.positionedItems.map((p) => [p.item.type, p.item.start_time, p.topPx, p.heightPx]))
+      .toEqual(frozenBefore.positionedItems.map((p) => [p.item.type, p.item.start_time, p.topPx, p.heightPx]))
+    expect(dragging.effectiveBlocks.find((x) => x.id === 3)?.start_time).toBe("13:00")
   })
 })

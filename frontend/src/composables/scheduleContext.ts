@@ -8,6 +8,7 @@ export interface ScheduleUndoContext {
 
 export type ScheduleDragContext = Pick<ReturnType<typeof useDrag>,
   "startDrag" | "isDragging" | "dragBlockId" | "shiftedBlockIds">
+  & Partial<Pick<ReturnType<typeof useDrag>, "previewBlocks">>
 
 export const ScheduleDisabledKey: InjectionKey<Readonly<Ref<boolean>>> = Symbol("scheduleDisabled")
 export const ScheduleUndoKey: InjectionKey<ScheduleUndoContext> = Symbol("scheduleUndo")

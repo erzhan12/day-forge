@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, nextTick, inject, watch } from "vue"
+import { ref, computed, nextTick, inject, onBeforeUnmount, useId, watch } from "vue"
 import type { TimeBlock, UserCategory } from "../types"
 import { ScheduleContainerKey, ScheduleDisabledKey, ScheduleDragKey, ScheduleUndoKey } from "../composables/scheduleContext"
 import { useSchedule } from "../composables/useSchedule"
@@ -8,6 +8,7 @@ import { useBlockCompletion } from "../composables/useBlockCompletion"
 import { getCategoryColor, tickVariantFor } from "../utils/categoryColors"
 import { useActiveTheme } from "../composables/useActiveTheme"
 import DeleteConfirmationDialog from "./DeleteConfirmationDialog.vue"
+import BlockTooltip from "./BlockTooltip.vue"
 import {
   formatDurationMinutes,
   formatRemainingMinutes,
@@ -21,12 +22,22 @@ const props = withDefaults(
     isCurrent?: boolean
     remainingMinutes?: number | null
     categories?: UserCategory[]
+    /** "compact" is the one-line Dark 4a row for short blocks (0106). */
+    density?: "full" | "compact"
+    /** Opt-in hover/focus/long-press tooltip (Dark 4a only, 0106). */
+    tooltip?: boolean
+    /** Show a cascaded block's new start while a drag is in progress. */
+    shiftPreview?: boolean
   }>(),
   {
     isCurrent: false,
     remainingMinutes: null,
+    density: "full",
+    tooltip: false,
+    shiftPreview: false,
   },
 )
+const compact = computed(() => props.density === "compact")
 
 const { updateBlock, deleteBlock } = useSchedule(() => props.date)
 // Tracks the active theme reactively so the left-border color updates
@@ -109,6 +120,7 @@ const durationMinutes = computed(() => {
 const duration = computed(() => formatDurationMinutes(durationMinutes.value))
 
 const remainingLabel = computed(() => {
+  if (compact.value) return null
   if (!props.isCurrent || props.remainingMinutes === null || props.remainingMinutes <= 0) {
     return null
   }
@@ -185,6 +197,94 @@ async function toggleCompleted() {
   }
 }
 
+// ----- Tooltip and long press (opt-in, feature 0106) -----------------------
+const rootRef = ref<HTMLElement | null>(null)
+const titleRef = ref<HTMLElement | null>(null)
+const tooltipId = `block-tip-${useId()}`
+const errorId = `block-err-${useId()}`
+const tooltipOpen = ref(false)
+const LONG_PRESS_MS = 500
+const LONG_PRESS_SLOP_PX = 8
+let longPressTimer: ReturnType<typeof setTimeout> | null = null
+let longPressOrigin: { x: number; y: number } | null = null
+let suppressNextClick = false
+
+const categoryLabel = computed(() =>
+  props.categories?.find((item) => item.slug === props.block.category)?.label ?? props.block.category)
+const tooltipRange = computed(() =>
+  `${props.block.start_time}–${props.block.end_time} · ${duration.value}`)
+
+function titleTruncated(): boolean {
+  const el = titleRef.value
+  return Boolean(el && el.scrollWidth > el.clientWidth)
+}
+
+function showTooltip() {
+  if (!props.tooltip || editing.value) return
+  if (compact.value || titleTruncated()) tooltipOpen.value = true
+}
+
+function hideTooltip() {
+  tooltipOpen.value = false
+}
+
+function onFocusOut(event: FocusEvent) {
+  const next = event.relatedTarget as Node | null
+  if (!next || !rootRef.value?.contains(next)) hideTooltip()
+}
+
+function clearLongPress() {
+  if (longPressTimer !== null) clearTimeout(longPressTimer)
+  longPressTimer = null
+  longPressOrigin = null
+}
+
+function onPointerDown(event: PointerEvent) {
+  if (!props.tooltip || event.pointerType !== "touch" || editing.value) return
+  clearLongPress()
+  longPressOrigin = { x: event.clientX, y: event.clientY }
+  longPressTimer = setTimeout(() => {
+    longPressTimer = null
+    longPressOrigin = null
+    suppressNextClick = true
+    showTooltip()
+  }, LONG_PRESS_MS)
+}
+
+function onPointerMove(event: PointerEvent) {
+  if (!longPressOrigin) return
+  const dx = event.clientX - longPressOrigin.x
+  const dy = event.clientY - longPressOrigin.y
+  if (Math.hypot(dx, dy) > LONG_PRESS_SLOP_PX) clearLongPress()
+}
+
+// Only a completed long press swallows the click that follows it, so an
+// ordinary tap still opens the title editor.
+function onClickCapture(event: MouseEvent) {
+  if (!suppressNextClick) return
+  suppressNextClick = false
+  event.preventDefault()
+  event.stopPropagation()
+}
+
+watch(editing, (value) => {
+  if (value) {
+    clearLongPress()
+    hideTooltip()
+  }
+})
+watch(() => props.block, () => {
+  clearLongPress()
+  suppressNextClick = false
+  hideTooltip()
+})
+onBeforeUnmount(clearLongPress)
+
+const shiftTarget = computed(() => {
+  if (!props.shiftPreview || !drag?.shiftedBlockIds.value.has(props.block.id)) return null
+  return drag.previewBlocks?.value.find((item) => item.id === props.block.id)?.start_time ?? null
+})
+
 async function handleDelete() {
   if (isDisabled() || !confirmingDelete.value) return
   confirmingDelete.value = false
@@ -207,13 +307,25 @@ async function handleDelete() {
 
 <template>
   <div
+    ref="rootRef"
     class="time-block"
     :class="{
       completed: displayedCompleted,
       dragging: drag?.isDragging.value && drag?.dragBlockId.value === block.id,
       shifting: drag?.shiftedBlockIds.value.has(block.id),
+      'density-compact': compact,
     }"
     :style="{ borderLeftColor: categoryColor }"
+    :aria-describedby="tooltipOpen ? tooltipId : (compact && errorMessage ? errorId : undefined)"
+    @mouseenter="showTooltip"
+    @mouseleave="hideTooltip"
+    @focusin="showTooltip"
+    @focusout="onFocusOut"
+    @pointerdown="onPointerDown"
+    @pointermove="onPointerMove"
+    @pointerup="clearLongPress"
+    @pointercancel="clearLongPress"
+    @click.capture="onClickCapture"
   >
     <div
       class="drag-handle"
@@ -223,17 +335,21 @@ async function handleDelete() {
     </div>
     <!-- One row for every duration so short and long cards line up. -->
     <div class="block-row">
-      <input
-        type="checkbox"
-        :checked="displayedCompleted"
-        class="checkbox df-checkbox"
-        :class="{ saving }"
-        :style="checkboxStyle"
-        :disabled="disabled"
-        @change="toggleCompleted"
-      />
-      <span class="time-badge">{{ block.start_time }}–{{ block.end_time }}</span>
+      <label class="check-hit">
+        <input
+          type="checkbox"
+          :checked="displayedCompleted"
+          class="checkbox df-checkbox"
+          :class="{ saving }"
+          :style="checkboxStyle"
+          :disabled="disabled"
+          :aria-label="`Complete ${block.title}`"
+          @change="toggleCompleted"
+        />
+      </label>
+      <span class="time-badge"><span class="time-start">{{ block.start_time }}</span><span v-if="!compact" class="time-end">–{{ block.end_time }}</span></span>
       <span class="duration">{{ duration }}</span>
+      <span v-if="shiftTarget" class="shift-badge" data-testid="shift-badge">→ {{ shiftTarget }}</span>
       <span v-if="remainingLabel" class="remaining-badge">{{ remainingLabel }}</span>
       <input
         v-if="editing"
@@ -246,6 +362,7 @@ async function handleDelete() {
       />
       <span
         v-else
+        ref="titleRef"
         class="title"
         :class="{ 'title-completed': displayedCompleted }"
         @click="startEditing"
@@ -259,7 +376,16 @@ async function handleDelete() {
         @click="confirmingDelete = true"
       >&times;</button>
     </div>
-    <div v-if="errorMessage" class="block-error">{{ errorMessage }}</div>
+    <div v-if="errorMessage && !compact" class="block-error">{{ errorMessage }}</div>
+    <!-- A one-line compact card would clip the error, so it floats below. -->
+    <BlockTooltip v-if="errorMessage && compact" :id="errorId" :anchor="rootRef" role="alert">
+      {{ errorMessage }}
+    </BlockTooltip>
+    <BlockTooltip v-if="tooltipOpen" :id="tooltipId" :anchor="rootRef">
+      <strong class="tip-title">{{ block.title }}</strong>
+      <span class="tip-line">{{ tooltipRange }}</span>
+      <span class="tip-line">{{ categoryLabel }}</span>
+    </BlockTooltip>
     <DeleteConfirmationDialog
       v-if="confirmingDelete"
       heading="Delete block?"
@@ -419,12 +545,90 @@ async function handleDelete() {
   padding: 2px 6px;
 }
 
+/* Full density: the checkbox label is layout-neutral. */
+.check-hit {
+  display: contents;
+}
+
+.shift-badge {
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.tip-title,
+.tip-line {
+  display: block;
+}
+
+.tip-title {
+  font-weight: 600;
+}
+
+/* Compact density (feature 0106, Dark 4a only): one centred line inside a
+   28 px card. Hit areas come from real 24 px boxes, not padding. */
+.time-block.density-compact {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.density-compact .block-row {
+  line-height: 16px;
+  gap: 6px;
+}
+
+.density-compact .check-hit {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  /* Starts right after the 24 px drag handle; never overlaps it. */
+  margin-right: -4px;
+  cursor: pointer;
+}
+
+.density-compact .time-badge,
+.density-compact .duration {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.density-compact .title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.density-compact .title-input {
+  box-sizing: border-box;
+  height: 20px;
+  padding: 0 6px;
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.density-compact .delete-btn {
+  width: 24px;
+  height: 24px;
+  font-size: 16px;
+  color: var(--text-secondary);
+}
+
 /* Phone-width cards: the time range already implies the duration, and on
    the current block the countdown matters more than the range. */
 @container (max-width: 300px) {
   .duration,
   .block-row:has(.remaining-badge) .time-badge {
     display: none;
+  }
+
+  /* Compact rows keep start time, duration and × at every width. */
+  .density-compact .duration,
+  .density-compact .time-badge {
+    display: inline;
   }
 }
 </style>

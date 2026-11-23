@@ -16,6 +16,7 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.now-line-4a { display:flex; align-items:center; gap:8px; color:var(--accent); font-size:11px; font-weight:600; pointer-events:none; }
+.now-line-4a { display:flex; align-items:center; gap:8px; color:var(--accent); font-size:13px; line-height:16px; font-weight:600; font-variant-numeric:tabular-nums; pointer-events:none; }
+.now-line-4a span { width:calc(var(--timeline-4a-axis-gutter, 42px) - 8px); flex-shrink:0; text-align:right; }
 .now-line-4a i { height:2px; flex:1; background:var(--accent); border-radius:2px; }
 </style>

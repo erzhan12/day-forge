@@ -655,3 +655,181 @@ describe("TimeBlock", () => {
     expect(mockPushUndo).not.toHaveBeenCalled()
   })
 })
+
+describe("TimeBlock compact density and tooltip (0106)", () => {
+  const CATS = [
+    { id: 1, slug: "work", label: "Work", color_id: "blue", sort_order: 0, is_sink: false, is_new_block_default: true },
+    { id: 4, slug: "other", label: "Other", color_id: "gray", sort_order: 1, is_sink: true, is_new_block_default: false },
+  ]
+
+  function mountBlock(props: Record<string, unknown> = {}, extraProvide: Record<symbol, unknown> = {}) {
+    return mount(TimeBlock, {
+      attachTo: document.body,
+      props: {
+        block: makeBlock({ start_time: "11:40", end_time: "11:45", title: "Short call" }),
+        date: "2026-11-22",
+        categories: CATS,
+        ...props,
+      },
+      global: {
+        provide: {
+          [ScheduleUndoKey]: { pushUndo: mockPushUndo },
+          [ScheduleDragKey]: {
+            startDrag: vi.fn(),
+            isDragging: ref(false),
+            dragBlockId: ref(null),
+            shiftedBlockIds: ref(new Set()),
+          },
+          [ScheduleContainerKey]: ref(null),
+          ...extraProvide,
+        },
+      },
+    })
+  }
+
+  async function pointer(el: Element, type: string, init: { pointerType?: string; clientX?: number; clientY?: number } = {}) {
+    const event = new Event(type, { bubbles: true, cancelable: true })
+    for (const [key, value] of Object.entries({ pointerType: "touch", clientX: 0, clientY: 0, ...init })) {
+      Object.defineProperty(event, key, { value })
+    }
+    el.dispatchEvent(event)
+    await Promise.resolve()
+  }
+
+  function tooltipText(): string | null {
+    return document.body.querySelector('[data-testid="block-tooltip"]')?.textContent ?? null
+  }
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it("compact density shows start time and duration without the end time", () => {
+    const w = mountBlock({ density: "compact" })
+    expect(w.find(".time-badge").text()).toBe("11:40")
+    expect(w.find(".duration").text()).toBe("5m")
+    expect(w.find(".time-end").exists()).toBe(false)
+  })
+
+  it("compact density keeps the delete button rendered", () => {
+    const w = mountBlock({ density: "compact" })
+    expect(w.find(".delete-btn").exists()).toBe(true)
+  })
+
+  it("full density is unchanged by default", () => {
+    const w = mountBlock({ block: makeBlock() })
+    expect(w.find(".time-badge").text()).toBe("09:00–10:00")
+    expect(w.classes()).not.toContain("density-compact")
+  })
+
+  it("keeps start time, duration and × on a compact current block", () => {
+    const w = mountBlock({ density: "compact", isCurrent: true, remainingMinutes: 3 })
+    expect(w.find(".remaining-badge").exists()).toBe(false)
+    expect(w.find(".time-badge").text()).toBe("11:40")
+    expect(w.find(".duration").text()).toBe("5m")
+    expect(w.find(".delete-btn").exists()).toBe(true)
+  })
+
+  it("shows the tooltip for a compact block on hover and focus", async () => {
+    const w = mountBlock({ density: "compact", tooltip: true })
+    await w.trigger("mouseenter")
+    expect(tooltipText()).toContain("Short call")
+    expect(w.attributes("aria-describedby")).toBeTruthy()
+    await w.trigger("mouseleave")
+    expect(tooltipText()).toBeNull()
+    await w.find("input[type=checkbox]").trigger("focusin")
+    expect(tooltipText()).toContain("Short call")
+  })
+
+  it("shows no tooltip for a full, untruncated block", async () => {
+    const w = mountBlock({ block: makeBlock(), tooltip: true })
+    await w.trigger("mouseenter")
+    expect(tooltipText()).toBeNull()
+  })
+
+  it("tooltip lists title, 11:40–11:45 · 5m and category", async () => {
+    const w = mountBlock({ density: "compact", tooltip: true })
+    await w.trigger("mouseenter")
+    const text = tooltipText()!
+    expect(text).toContain("Short call")
+    expect(text).toContain("11:40–11:45 · 5m")
+    expect(text).toContain("Work")
+  })
+
+  it("shows no tooltip for a truncated title without the tooltip prop", async () => {
+    const w = mountBlock({ block: makeBlock({ title: "x".repeat(200) }) })
+    const title = w.find(".title").element as HTMLElement
+    Object.defineProperty(title, "scrollWidth", { value: 500 })
+    Object.defineProperty(title, "clientWidth", { value: 100 })
+    await w.trigger("mouseenter")
+    expect(tooltipText()).toBeNull()
+  })
+
+  it("a long press shows the tooltip and does not start editing", async () => {
+    vi.useFakeTimers()
+    const w = mountBlock({ density: "compact", tooltip: true })
+    const title = w.find(".title")
+    await pointer(title.element, "pointerdown", { pointerType: "touch", clientX: 10, clientY: 10 })
+    vi.advanceTimersByTime(520)
+    await w.vm.$nextTick()
+    expect(tooltipText()).toContain("Short call")
+    await pointer(title.element, "pointerup", { pointerType: "touch" })
+    await title.trigger("click")
+    expect(w.find(".title-input").exists()).toBe(false)
+  })
+
+  it("a cancelled long press shows no tooltip and a tap still edits", async () => {
+    vi.useFakeTimers()
+    const w = mountBlock({ density: "compact", tooltip: true })
+    const title = w.find(".title")
+    await pointer(title.element, "pointerdown", { pointerType: "touch", clientX: 10, clientY: 10 })
+    await pointer(title.element, "pointermove", { pointerType: "touch", clientX: 30, clientY: 10 })
+    vi.advanceTimersByTime(600)
+    expect(tooltipText()).toBeNull()
+    await pointer(title.element, "pointerup", { pointerType: "touch" })
+    await title.trigger("click")
+    await w.vm.$nextTick()
+    expect(w.find(".title-input").exists()).toBe(true)
+  })
+
+  it("a short tap past the long-press threshold opens editing without a tooltip", async () => {
+    vi.useFakeTimers()
+    const w = mountBlock({ density: "compact", tooltip: true })
+    const title = w.find(".title")
+    await pointer(title.element, "pointerdown", { pointerType: "touch", clientX: 10, clientY: 10 })
+    vi.advanceTimersByTime(200)
+    await pointer(title.element, "pointerup", { pointerType: "touch" })
+    vi.advanceTimersByTime(600)
+    expect(tooltipText()).toBeNull()
+    await title.trigger("click")
+    await w.vm.$nextTick()
+    expect(w.find(".title-input").exists()).toBe(true)
+  })
+
+  it("compact density surfaces a mutation error outside the clipped row", async () => {
+    mockDeleteBlock.mockResolvedValueOnce({ ok: false, errors: {} })
+    const w = mountBlock({ density: "compact" })
+    await w.find(".delete-btn").trigger("click")
+    await w.findComponent(DeleteBlockDialog).vm.$emit("confirm")
+    await flushPromises()
+    expect(w.find(".block-error").exists()).toBe(false)
+    const alert = document.body.querySelector('[data-testid="block-alert"]')
+    expect(alert?.getAttribute("role")).toBe("alert")
+    expect(alert?.textContent).toContain("Failed to delete")
+  })
+
+  it("marks a cascaded block with its new start in 4a", () => {
+    const shifted = makeBlock({ id: 7, start_time: "12:00", end_time: "12:30" })
+    const w = mountBlock({ block: shifted, shiftPreview: true }, {
+      [ScheduleDragKey]: {
+        startDrag: vi.fn(),
+        isDragging: ref(true),
+        dragBlockId: ref(3),
+        shiftedBlockIds: ref(new Set([7])),
+        previewBlocks: ref([{ ...shifted, start_time: "12:05", end_time: "12:35" }]),
+      },
+    })
+    expect(w.classes()).toContain("shifting")
+    expect(w.get('[data-testid="shift-badge"]').text()).toBe("→ 12:05")
+  })
+})

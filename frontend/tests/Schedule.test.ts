@@ -1232,3 +1232,75 @@ describe("Schedule.vue calendar events stay off the timeline (0106)", () => {
     expect(blockIds).toEqual([1, 2])
   })
 })
+
+describe("Schedule.vue Dark 4a gap add (0106)", () => {
+  const DATE = "2026-05-04"
+  const blocks: TimeBlock[] = [
+    { ...makeBlock(1), start_time: "11:45", end_time: "12:10", sort_order: 0 },
+    { ...makeBlock(2), start_time: "15:00", end_time: "16:00", sort_order: 1 },
+  ]
+
+  beforeEach(() => {
+    stubLocalStorage()
+    stubMatchMedia(true)
+    resetExternalProviderMocks()
+  })
+
+  afterEach(() => {
+    wrapper?.unmount()
+    wrapper = null
+    localStorage.clear()
+    delete document.documentElement.dataset.theme
+    vi.unstubAllGlobals()
+    vi.clearAllMocks()
+  })
+
+  function mountWithForm(theme: "dark_4a" | "classic") {
+    document.documentElement.dataset.theme = theme
+    const { AddBlockForm: _form, ...stubs } = STUBS
+    void _form
+    wrapper = mount(Schedule, {
+      props: {
+        categories: makeCategories(),
+        schedule: makeSchedule(DATE, "active"),
+        blocks,
+        date: DATE,
+        schedule_window: { start: "06:00", end: "23:00", time_zone: "UTC" },
+        auth_user_id: 1,
+        integration_bootstrap: integrationBootstrap(DATE, "UTC"),
+      },
+      global: { stubs: { ...stubs, GapSlot: false } },
+    })
+    return wrapper
+  }
+
+  function midDayRow(w: VueWrapper) {
+    return w.findAll('[data-testid="gap-row-4a"]').find((row) => row.text().includes("12:10–15:00"))!
+  }
+
+  it("reopens the form when the same gap is activated after Cancel", async () => {
+    const w = mountWithForm("dark_4a")
+    await flushPromises()
+    await midDayRow(w).trigger("click")
+    expect(w.find(".add-form").exists()).toBe(true)
+    const times = w.findAll('.add-form input[type="time"]').map((i) => (i.element as HTMLInputElement).value)
+    expect(times).toEqual(["12:10", "15:00"])
+    await w.get(".add-form .cancel-btn").trigger("click")
+    expect(w.find(".add-form").exists()).toBe(false)
+    await midDayRow(w).trigger("click")
+    expect(w.find(".add-form").exists()).toBe(true)
+  })
+
+  it("keeps the classic gap handler unchanged", async () => {
+    const w = mountWithForm("classic")
+    await flushPromises()
+    expect(w.find('[data-testid="gap-row-4a"]').exists()).toBe(false)
+    const gap = w.findAll(".gap-slot").find((g) => g.text().includes("12:10 – 15:00"))!
+    await gap.trigger("click")
+    expect(w.find(".add-form").exists()).toBe(true)
+    await w.get(".add-form .cancel-btn").trigger("click")
+    await gap.trigger("click")
+    // Classic keeps today's behaviour: unchanged props do not reopen the form.
+    expect(w.find(".add-form").exists()).toBe(false)
+  })
+})

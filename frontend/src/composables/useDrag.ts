@@ -1,8 +1,9 @@
-import { getCurrentScope, onScopeDispose, ref, watch } from "vue"
+import { getCurrentScope, onScopeDispose, ref, shallowRef, watch } from "vue"
 import type { TimeBlock, UndoAction } from "../types"
 import type { ApiResult } from "./useSchedule"
 import { registerMutationUndo } from "./useMutationUndo"
 import { type DateSource, readDate } from "../utils/dateSource"
+import type { AxisMap } from "../utils/timelineStack"
 import {
   DAY_START_MINUTES,
   DAY_END_MINUTES,
@@ -233,6 +234,22 @@ export function resolveConflicts(
  * Changes to is_completed or category do not affect drag collision
  * resolution and are intentionally ignored.
  */
+/**
+ * True when two blocks share time. Legacy rows can overlap (the DB constraint
+ * checks each row alone); the stack's axis map is not invertible there, so
+ * stack-mode drag is disabled on such a day (feature 0106).
+ */
+export function hasOverlappingBlocks(blocks: TimeBlock[]): boolean {
+  const sorted = [...blocks].sort((a, b) =>
+    timeToMinutes(a.start_time) - timeToMinutes(b.start_time) || a.sort_order - b.sort_order)
+  let maxEnd = Number.NEGATIVE_INFINITY
+  for (const block of sorted) {
+    if (timeToMinutes(block.start_time) < maxEnd) return true
+    maxEnd = Math.max(maxEnd, timeToMinutes(block.end_time))
+  }
+  return false
+}
+
 export function blocksExternallyMutated(
   savedSnapshot: TimeBlock[],
   currentBlocks: TimeBlock[],
@@ -288,6 +305,9 @@ export function useDrag(
   getPxPerMinute?: () => number,
   getTimelineOriginMinutes?: () => number | null,
   getDragContextKey?: () => string,
+  // Stack layout (feature 0106): the piecewise minute↔pixel map. When it
+  // returns a map, pointer pixels convert through it, frozen at drag start.
+  getAxisMap?: () => AxisMap | null,
 ) {
   const isDragging = ref(false)
   const frozenRenderBounds = ref<RenderBounds | null>(null)
@@ -300,6 +320,10 @@ export function useDrag(
   const frozenPxPerMinute = ref(PX_PER_MINUTE)
   const frozenTimelineOriginMinutes = ref<number | null>(null)
   const frozenWindow = ref<ScheduleWindowBounds | null>(null)
+  const frozenAxisMap = shallowRef<AxisMap | null>(null)
+  // Reactive mirror of the cascade check so the 4a ghost can say a drop
+  // would be refused.
+  const dropInvalid = ref(false)
   const dragBlockId = ref<number | null>(null)
   const ghostTop = ref(0)
   const previewStartTime = ref("")
@@ -365,6 +389,7 @@ export function useDrag(
     const blockTopPx = cursorY - grabOffsetY
     const pxPerMinute = frozenPxPerMinute.value
     const minuteOffset = blockTopPx / pxPerMinute
+    const axisMap = frozenAxisMap.value
 
     const renderStart = frozenRenderBounds.value?.renderStart ?? DAY_START_MINUTES
     const axisOrigin = frozenTimelineOriginMinutes.value ?? renderStart
@@ -379,9 +404,13 @@ export function useDrag(
     const dayStartMinutes = frozenWindow.value?.startMinutes ?? DEFAULT_SCHEDULE_WINDOW.startMinutes
     const dayEndMinutes = frozenWindow.value?.endMinutes ?? DEFAULT_SCHEDULE_WINDOW.endMinutes
 
-    let newStart =
-      Math.round((axisOrigin + minuteOffset) / SNAP_MINUTES) * SNAP_MINUTES
-    if (newStart < axisOrigin)
+    // Stack mode converts through the frozen axis map and skips the
+    // axis-origin floor: the leading stub maps the whole early range, so the
+    // window-start clamp below is the only floor.
+    let newStart = axisMap
+      ? Math.round(axisMap.pxToTime(blockTopPx) / SNAP_MINUTES) * SNAP_MINUTES
+      : Math.round((axisOrigin + minuteOffset) / SNAP_MINUTES) * SNAP_MINUTES
+    if (!axisMap && newStart < axisOrigin)
       newStart = Math.ceil(axisOrigin / SNAP_MINUTES) * SNAP_MINUTES
     if (newStart + blockDuration > dayEndMinutes)
       newStart = dayEndMinutes - blockDuration
@@ -398,8 +427,9 @@ export function useDrag(
 
     previewStartTime.value = minutesToTime(newStart)
     previewEndTime.value = minutesToTime(newEnd)
-    ghostTop.value =
-      containerPaddingTop + (newStart - axisOrigin) * pxPerMinute
+    ghostTop.value = containerPaddingTop + (axisMap
+      ? axisMap.timeToPx(newStart)
+      : (newStart - axisOrigin) * pxPerMinute)
 
     // Resolve conflicts — cascade caps at the user's window end (feature 0053),
     // not the hardcoded 23:00, so a widened window can shift blocks later.
@@ -413,10 +443,12 @@ export function useDrag(
 
     if (resolved === null) {
       dropValid = false
+      dropInvalid.value = true
       shiftedBlockIds.value = new Set()
       previewBlocks.value = []
     } else {
       dropValid = true
+      dropInvalid.value = false
       previewBlocks.value = resolved
 
       // Compute which blocks shifted
@@ -457,6 +489,8 @@ export function useDrag(
     // disable signal). Without this, the disable on TimeBlock /
     // GapSlot would be decorative — drag bypasses click-based mutation.
     if (isDisabled && isDisabled()) return
+    const axisMapAtStart = getAxisMap?.() ?? null
+    if (axisMapAtStart && hasOverlappingBlocks(getCurrentBlocks())) return
     snapshot = snapshotBlocks()
     snapshotDate = readDate(date)
     originalBlock = block
@@ -488,6 +522,8 @@ export function useDrag(
     frozenPxPerMinute.value = getPxPerMinute?.() ?? PX_PER_MINUTE
     frozenTimelineOriginMinutes.value = getTimelineOriginMinutes?.() ?? null
     frozenWindow.value = { ...(getWindow?.() ?? DEFAULT_SCHEDULE_WINDOW) }
+    frozenAxisMap.value = axisMapAtStart
+    dropInvalid.value = false
     dragContextSignature = currentContextSignature()
     const renderStart = frozenRenderBounds.value.renderStart
     const axisOrigin = frozenTimelineOriginMinutes.value ?? renderStart
@@ -497,7 +533,9 @@ export function useDrag(
     // relative to the schedule-body content area. Reused in
     // updatePreview so the ghost follows the cursor from the same
     // relative position (cursor doesn't teleport to block top).
-    const blockTopPx = (startMinutes - axisOrigin) * frozenPxPerMinute.value
+    const blockTopPx = axisMapAtStart
+      ? axisMapAtStart.timeToPx(startMinutes)
+      : (startMinutes - axisOrigin) * frozenPxPerMinute.value
     const cursorY =
       event.clientY - containerRect.top - containerPaddingTop + container.scrollTop
     grabOffsetY = cursorY - blockTopPx
@@ -645,6 +683,8 @@ export function useDrag(
     frozenPxPerMinute.value = PX_PER_MINUTE
     frozenTimelineOriginMinutes.value = null
     frozenWindow.value = null
+    frozenAxisMap.value = null
+    dropInvalid.value = false
     dragBlockId.value = null
     ghostTop.value = 0
     previewStartTime.value = ""
@@ -676,6 +716,8 @@ export function useDrag(
     frozenPxPerMinute,
     frozenTimelineOriginMinutes,
     frozenWindow,
+    frozenAxisMap,
+    dropInvalid,
     dragBlockId,
     ghostTop,
     previewStartTime,
