@@ -309,4 +309,9 @@ async function onMarkReviewed() {
   resize: vertical;
   box-sizing: border-box;
 }
+
+/* Dark 4a text floor (feature 0106): nothing below 13 px. */
+html[data-theme="dark_4a"] .status-badge {
+  font-size: 13px;
+}
 </style>

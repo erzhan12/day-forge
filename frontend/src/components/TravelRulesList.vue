@@ -559,4 +559,13 @@ html[data-theme="dark_4a"] .row-delete-btn.df-btn.df-btn {
   width: 36px;
   padding: 0;
 }
+
+/* Dark 4a text floor (feature 0106): nothing below 13 px. */
+html[data-theme="dark_4a"] .hint-text,
+html[data-theme="dark_4a"] .minutes-field,
+html[data-theme="dark_4a"] .arrow-btn,
+html[data-theme="dark_4a"] .rule-details,
+html[data-theme="dark_4a"] .row-error {
+  font-size: 13px;
+}
 </style>

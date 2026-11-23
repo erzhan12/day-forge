@@ -186,4 +186,11 @@ function formatMinutes(m: number): string {
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
 }
+
+/* Dark 4a text floor (feature 0106): nothing below 13 px. */
+html[data-theme="dark_4a"] .total,
+html[data-theme="dark_4a"] .label,
+html[data-theme="dark_4a"] .minutes {
+  font-size: 13px;
+}
 </style>

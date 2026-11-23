@@ -124,4 +124,9 @@ function navigate(date: string) {
   background: var(--bg-schedule-gap);
 }
 
+
+/* Dark 4a text floor (feature 0106): nothing below 13 px. */
+html[data-theme="dark_4a"] .today-btn {
+  font-size: 13px;
+}
 </style>

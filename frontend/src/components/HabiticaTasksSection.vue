@@ -165,4 +165,11 @@ const emit = defineEmits<{
   border-radius: 4px;
   opacity: 0.6;
 }
+
+/* Dark 4a text floor (feature 0106): nothing below 13 px. */
+html[data-theme="dark_4a"] .habitica-loading,
+html[data-theme="dark_4a"] .habitica-empty,
+html[data-theme="dark_4a"] .habitica-retry {
+  font-size: 13px;
+}
 </style>

@@ -154,3 +154,22 @@ export function cleanupSchedules(dates, username = USERNAME) {
     SEED_DATES_JSON: JSON.stringify(dates),
   })
 }
+
+// Pin the playwright user's theme for one run and return the previous theme
+// so the caller can restore it in `finally` (feature 0106). Scripts whose
+// selectors belong to one layout pin it instead of assuming the default.
+export function pinTheme(theme, username = USERNAME) {
+  const output = seed(
+    "seed_prefs",
+    { SEED_MODE: "set_theme", SEED_USERNAME: username, SEED_THEME: theme },
+    { encoding: "utf8" },
+  )
+  const match = output.match(/^PREVIOUS_THEME (\S+)$/m)
+  if (!match) throw new Error(`could not parse previous theme from:\n${output}`)
+  return match[1]
+}
+
+export function restoreTheme(previous, username = USERNAME) {
+  if (!previous) return
+  pinTheme(previous, username)
+}

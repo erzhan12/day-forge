@@ -405,6 +405,26 @@ def test_preferences_seeder_resets_existing_rows_in_both_modes(user, monkeypatch
 
 
 @pytest.mark.django_db
+def test_preferences_seeder_sets_a_theme_and_reports_the_previous_one(user, monkeypatch, capsys):
+    # Feature 0106: smoke scripts pin a theme and restore the owner's choice.
+    UserPreferences.objects.create(user=user, theme="strategic")
+    _setenv(monkeypatch, SEED_USERNAME=user.username, SEED_MODE="set_theme", SEED_THEME="dark_4a")
+    seed_prefs.main()
+    assert capsys.readouterr().out == "PREVIOUS_THEME strategic\n"
+    assert UserPreferences.objects.get(user=user).theme == "dark_4a"
+
+    UserPreferences.objects.filter(user=user).delete()
+    monkeypatch.setenv("SEED_THEME", "classic")
+    seed_prefs.main()
+    assert capsys.readouterr().out == "PREVIOUS_THEME classic\n"
+    assert UserPreferences.objects.get(user=user).theme == "classic"
+
+    monkeypatch.setenv("SEED_THEME", "neon")
+    with pytest.raises(RuntimeError, match="Unknown SEED_THEME"):
+        seed_prefs.main()
+
+
+@pytest.mark.django_db
 def test_todoist_seeder_preserves_strict_ensure_and_disconnect_markers(
     production_password_hashers, user, monkeypatch, capsys
 ):

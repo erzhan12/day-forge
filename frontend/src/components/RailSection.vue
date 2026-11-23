@@ -162,7 +162,7 @@ function toggle() {
 .counter {
   margin-left: auto;
   flex-shrink: 0;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
 }
@@ -188,7 +188,7 @@ function toggle() {
 
 .peek {
   padding: 0 6px 10px 28px;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;

@@ -34,4 +34,9 @@ const tooltip = computed(
 .emoji {
   font-size: 13px;
 }
+
+/* Dark 4a text floor (feature 0106): nothing below 13 px. */
+html[data-theme="dark_4a"] .streak-pill {
+  font-size: 13px;
+}
 </style>

@@ -467,4 +467,11 @@ html[data-theme="dark_4a"] .rule-edit .df-field {
   width: 100%;
   min-width: 0;
 }
+
+/* Dark 4a text floor (feature 0106): nothing below 13 px. */
+html[data-theme="dark_4a"] .arrow-btn,
+html[data-theme="dark_4a"] .priority-badge,
+html[data-theme="dark_4a"] .row-error {
+  font-size: 13px;
+}
 </style>

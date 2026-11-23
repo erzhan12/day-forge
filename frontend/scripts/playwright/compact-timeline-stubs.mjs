@@ -8,6 +8,9 @@
 //   node scripts/playwright/compact-timeline-stubs.mjs
 //
 // Pre-reqs: Django :8006, Vite :5173, playwright user. No LLM key.
+//
+// The selectors belong to the linear (Classic) timeline, so the run pins
+// Classic and restores the user's theme afterwards (feature 0106).
 
 import { chromium } from "@playwright/test"
 import {
@@ -18,7 +21,9 @@ import {
   cleanupSchedules,
   failFast,
   login,
+  pinTheme,
   preflight,
+  restoreTheme,
   seed,
 } from "./test-utils.mjs"
 const SCHEDULE_DATE = "2027-03-15"
@@ -32,7 +37,9 @@ await preflight()
 const fail = failFast
 
 let browser
+let previousTheme
 try {
+  previousTheme = pinTheme("classic")
   console.log("→ Seeding 09:00–18:00 schedule…")
   seed("seed_schedule", {
     SEED_MODE: "schedules",
@@ -133,4 +140,5 @@ try {
 } finally {
   await browser?.close()
   cleanupSchedules([SCHEDULE_DATE])
+  restoreTheme(previousTheme)
 }

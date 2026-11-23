@@ -367,4 +367,11 @@ html[data-theme="dark_4a"] .cal-advanced-toggle {
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+
+/* Dark 4a text floor (feature 0106): nothing below 13 px. */
+html[data-theme="dark_4a"] .cal-message,
+html[data-theme="dark_4a"] .cal-field,
+html[data-theme="dark_4a"] .google-account-verified {
+  font-size: 13px;
+}
 </style>

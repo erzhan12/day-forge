@@ -868,4 +868,9 @@ defineExpose({
   background: var(--bg-schedule-gap);
   color: var(--text-primary);
 }
+
+/* Dark 4a text floor (feature 0106): nothing below 13 px. */
+html[data-theme="dark_4a"] .analytics-link {
+  font-size: 13px;
+}
 </style>

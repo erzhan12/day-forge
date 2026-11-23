@@ -49,4 +49,9 @@ const emit = defineEmits<{ suggestion: [text: string] }>()
 .suggestions { display:flex; flex-wrap:wrap; gap:5px; }
 button { border:1px solid var(--border-strong); border-radius:999px; background:var(--info-surface); color:oklch(0.78 0.09 230); padding:3px 7px; font:inherit; cursor:pointer; }
 button:disabled { cursor:not-allowed; opacity:0.55; }
+
+/* Dark 4a text floor (feature 0106): nothing below 13 px. */
+html[data-theme="dark_4a"] .chat-result-chip {
+  font-size: 13px;
+}
 </style>

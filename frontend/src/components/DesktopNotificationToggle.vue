@@ -112,4 +112,9 @@ const checkboxClass = computed(() =>
   font-size: 12px;
   color: var(--text-muted);
 }
+
+/* Dark 4a text floor (feature 0106): nothing below 13 px. */
+html[data-theme="dark_4a"] .desktop-hint {
+  font-size: 13px;
+}
 </style>

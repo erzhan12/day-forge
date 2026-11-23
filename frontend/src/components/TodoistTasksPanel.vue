@@ -157,4 +157,11 @@ const emit = defineEmits<{
   opacity: 0.6;
   flex-shrink: 0;
 }
+
+/* Dark 4a text floor (feature 0106): nothing below 13 px. */
+html[data-theme="dark_4a"] .todoist-loading,
+html[data-theme="dark_4a"] .todoist-retry,
+html[data-theme="dark_4a"] .todoist-empty {
+  font-size: 13px;
+}
 </style>

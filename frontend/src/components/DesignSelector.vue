@@ -390,4 +390,9 @@ function focusOption(index: number): void {
   color: var(--warning-text);
   border: 1px solid var(--warning-border);
 }
+
+/* Dark 4a text floor (feature 0106): nothing below 13 px. */
+html[data-theme="dark_4a"] .design-card__description {
+  font-size: 13px;
+}
 </style>

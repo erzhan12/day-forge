@@ -238,4 +238,9 @@ function cancel() {
 .cancel-btn:hover {
   background: var(--bg-schedule-gap);
 }
+
+/* Dark 4a text floor (feature 0106): nothing below 13 px. */
+html[data-theme="dark_4a"] .time-row label {
+  font-size: 13px;
+}
 </style>

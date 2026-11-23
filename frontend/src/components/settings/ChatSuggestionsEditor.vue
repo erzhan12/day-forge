@@ -318,4 +318,9 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
   .heading-row { flex-direction: column; }
   .row-controls { grid-template-columns: 1fr repeat(3, auto); }
 }
+
+/* Dark 4a text floor (feature 0106): nothing below 13 px. */
+html[data-theme="dark_4a"] .suggestion-row label {
+  font-size: 13px;
+}
 </style>

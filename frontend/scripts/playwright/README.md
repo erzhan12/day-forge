@@ -29,7 +29,7 @@ part of `make e2e` or CI.
 
 ## Shared-user smoke scripts
 
-These 20 scripts exercise Day Forge through a real browser. They are smoke
+These 21 scripts exercise Day Forge through a real browser. They are smoke
 scenarios rather than an isolated test suite: several call the configured LLM
 or Todoist account, and all use the shared `playwright` Django user.
 
@@ -41,6 +41,10 @@ Start the full development stack in separate terminals:
 make run
 make frontend-dev
 ```
+
+The seeders write to the SQLite database of the checkout the scripts live in
+(`db/day_forge.db` is per checkout), so in a git worktree run Django from that
+worktree too, or the browser will not see the seeded rows.
 
 Create the local-only test user once. The known password and superuser status
 make this command unsafe against any shared or production database:
@@ -107,7 +111,8 @@ than a currency estimate because the configured model can change.
 | `ai-draft-409-on-non-empty` | 0 | 5–20s; pre-seeds today's row to suppress login auto-draft |
 | `ai-draft-on-empty-day` | 1 draft | 30–90s |
 | `analytics-unfreeze-on-edit` | 0 | 15–40s |
-| `compact-timeline-stubs` | 0 | 5–15s |
+| `compact-timeline-stubs` | 0 | 5–15s; pins Classic, restores the theme |
+| `dark4a-day-fit` | 0 | 20–60s; pins Dark 4a, restores the theme, fixes the clock |
 | `draft-prompt-history-suffix` | 1 draft | 30–120s; prompt capture required |
 | `regenerate-422-fallback` | 0 from its explicit 422 request | 10–60s; see auto-draft caveat below |
 | `settings-categories` | 0 | 10–25s |
@@ -129,7 +134,9 @@ state controlled when measuring provider calls there.
 ## Harness layout and adding a scenario
 
 - `test-utils.mjs` owns login, failure styles, the GET server preflight,
-  CSRF POSTs, named waits, seeder invocation, and opt-in cleanup. Shared helper
+  CSRF POSTs, named waits, seeder invocation, opt-in cleanup, and
+  `pinTheme` / `restoreTheme`. A script whose selectors belong to one layout
+  pins that theme and restores the user's previous theme in `finally`. Shared helper
   modules must be named `*-utils.mjs` — the `make e2e` glob skips that suffix so
   helpers aren't executed as smoke scripts.
 - `backend/scripts/seed_*.py` contains importable, pytest-covered database

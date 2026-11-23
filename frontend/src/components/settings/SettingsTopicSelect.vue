@@ -70,4 +70,9 @@ function onTopicChange(event: Event): void {
   color: var(--text-primary);
   font: inherit;
 }
+
+/* Dark 4a text floor (feature 0106): nothing below 13 px. */
+html[data-theme="dark_4a"] .settings-topic-select label {
+  font-size: 13px;
+}
 </style>

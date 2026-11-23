@@ -1,4 +1,4 @@
-"""Reset theme preferences before or after the persistence smoke test."""
+"""Reset or pin theme preferences for the browser smoke scripts."""
 
 from templates_mgr.models import UserPreferences
 
@@ -20,6 +20,19 @@ def main() -> None:
             theme=UserPreferences.Theme.CLASSIC
         )
         print("postflight: theme reset to classic")
+    elif mode == "set_theme":
+        # Feature 0106: pin a theme for a smoke run and print the previous
+        # one so the script can restore the owner's choice afterwards.
+        theme = _required("SEED_THEME")
+        if theme not in UserPreferences.Theme.values:
+            raise RuntimeError(f"Unknown SEED_THEME: {theme}")
+        preferences, _ = UserPreferences.objects.get_or_create(
+            user=user, defaults={"theme": UserPreferences.Theme.CLASSIC}
+        )
+        previous = preferences.theme
+        preferences.theme = theme
+        preferences.save(update_fields=["theme"])
+        print("PREVIOUS_THEME", previous)
     else:
         raise RuntimeError(f"Unknown SEED_MODE: {mode}")
 

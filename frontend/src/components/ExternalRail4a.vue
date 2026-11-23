@@ -304,7 +304,7 @@ const calendarSummary = computed((): { counter: string; counterLabel: string; pe
 .rail-header { flex-shrink:0; display:flex; align-items:center; justify-content:space-between; gap:8px; padding:12px 14px; border-bottom:1px solid var(--border); color:var(--text-primary); }
 .rail-heading { display:flex; flex-direction:column; min-width:0; }
 .rail-heading strong { font-size:14px; font-weight:600; }
-.rail-heading small { font-size:12px; color:var(--text-secondary); }
+.rail-heading small { font-size:13px; color:var(--text-secondary); }
 .rail-actions { display:flex; gap:2px; }
 .icon-btn { display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; padding:0; border:0; border-radius:6px; background:transparent; color:var(--text-secondary); cursor:pointer; }
 .icon-btn:hover { background:var(--bg-elevated); color:var(--text-primary); }

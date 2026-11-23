@@ -8,5 +8,5 @@ Phases follow [the plan](../../../docs/features/0106_PLAN.md#phases).
 - [x] Phase 5: header buttons and empty day
 - [x] Phase 6: calendar card and narrow centre fallback
 - [x] Phase 7: settings controls, chat input, Log out
-- [ ] Phase 8: text floor sweep, smoke script, RULES.md, spec deltas, archive
-- [ ] Run `make check`, `make frontend-build`
+- [x] Phase 8: text floor sweep, smoke script, RULES.md, spec deltas, archive
+- [x] Run `make check`, `make frontend-build`

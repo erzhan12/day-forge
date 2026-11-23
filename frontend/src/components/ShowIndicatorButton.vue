@@ -89,4 +89,10 @@ function handleClick() {
   white-space: normal;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 }
+
+/* Dark 4a text floor (feature 0106): nothing below 13 px. */
+html[data-theme="dark_4a"] .show-indicator-btn,
+html[data-theme="dark_4a"] .show-indicator-error {
+  font-size: 13px;
+}
 </style>

@@ -473,4 +473,19 @@ function sourceTitle(ev: NormalizedEvent): string | undefined {
   border-radius: 4px;
   opacity: 0.6;
 }
+
+/* Dark 4a text floor (feature 0106): nothing below 13 px. */
+html[data-theme="dark_4a"] .ee-title,
+html[data-theme="dark_4a"] .ee-loading,
+html[data-theme="dark_4a"] .ee-retry,
+html[data-theme="dark_4a"] .ee-add-btn,
+html[data-theme="dark_4a"] .ee-time,
+html[data-theme="dark_4a"] .ee-calendar-chip,
+html[data-theme="dark_4a"] .ee-account-chip,
+html[data-theme="dark_4a"] .ee-account-error,
+html[data-theme="dark_4a"] .ee-reconnect,
+html[data-theme="dark_4a"] .ee-empty,
+html[data-theme="dark_4a"] .ee-source {
+  font-size: 13px;
+}
 </style>

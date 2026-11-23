@@ -90,4 +90,10 @@ function handleClick() {
   font-size: 11px;
   color: var(--warning-text);
 }
+
+/* Dark 4a text floor (feature 0106): nothing below 13 px. */
+html[data-theme="dark_4a"] .regen-btn,
+html[data-theme="dark_4a"] .reason {
+  font-size: 13px;
+}
 </style>

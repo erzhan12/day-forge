@@ -395,4 +395,11 @@ async function handleConfirm() {
   color: var(--text-muted);
   cursor: pointer;
 }
+
+/* Dark 4a text floor (feature 0106): nothing below 13 px. */
+html[data-theme="dark_4a"] .ats-rule-hint,
+html[data-theme="dark_4a"] .ats-field,
+html[data-theme="dark_4a"] .ats-hint {
+  font-size: 13px;
+}
 </style>
