@@ -11,7 +11,10 @@ import CommandBar from "./CommandBar.vue"
 defineProps<{
   date: string
   pushUndo: (action: UndoAction) => void
+  focusToken?: number
 }>()
+
+const emit = defineEmits<{ "focus-handled": [] }>()
 
 const open = defineModel<boolean>("open", { required: true })
 
@@ -45,7 +48,9 @@ function toggle(): void {
       <CommandBar
         :date="date"
         :push-undo="pushUndo"
+        :focus-token="focusToken"
         variant="sidebar"
+        @focus-handled="emit('focus-handled')"
       />
     </div>
     <button

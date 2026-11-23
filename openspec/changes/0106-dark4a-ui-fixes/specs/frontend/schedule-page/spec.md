@@ -53,3 +53,25 @@ Tests: frontend/tests/GapSlot4a.test.ts::GapSlot4a (0106)::shows Free · 2h 50m 
 - **THEN** the form opens again in Dark 4a and the classic handler keeps today's behaviour
 
 Tests: frontend/tests/Schedule.test.ts::Schedule.vue Dark 4a gap add (0106)::reopens the form when the same gap is activated after Cancel, frontend/tests/Schedule.test.ts::Schedule.vue Dark 4a gap add (0106)::keeps the classic gap handler unchanged
+
+### Requirement: Dark 4a empty day without a template
+On a Dark 4a day with no slot template, no blocks and no draft generating, the page SHALL show an empty state naming the weekday, linking to the templates settings and offering Plan with AI, which focuses the chat input or, when that input is disabled, the chat status; the header SHALL omit the missing-template warning.
+Enforced: frontend/src/components/EmptyDayState.vue::copy, frontend/src/utils/emptyDayCopy.ts::emptyDayCopy, frontend/src/components/CommandBar.vue::honourFocusRequest
+
+#### Scenario: No template
+- **WHEN** a Dark 4a Sunday has no weekend template and no blocks
+- **THEN** the page shows `No template for Sunday` instead of the timeline and the header shows no warning
+
+Tests: frontend/tests/Schedule.test.ts::Schedule.vue Dark 4a empty day and header (0106)::shows the empty state instead of the timeline on a 4a day with no template and no blocks, frontend/tests/Schedule.test.ts::Schedule.vue Dark 4a empty day and header (0106)::hides the header warning in 4a and keeps it in classic, frontend/tests/emptyDayCopy.test.ts::emptyDayCopy (0106)::names the weekday of the selected date in English
+
+#### Scenario: Plan with AI
+- **WHEN** the user activates Plan with AI
+- **THEN** the chat input receives focus in the sidebar or the dock, or the chat status does when the input is disabled
+
+Tests: frontend/tests/Schedule.test.ts::Schedule.vue Dark 4a empty day and header (0106)::Plan with AI focuses the chat textarea with a collapsed wide sidebar, frontend/tests/Schedule.test.ts::Schedule.vue Dark 4a empty day and header (0106)::Plan with AI focuses the dock below 1024px, frontend/tests/Schedule.test.ts::Schedule.vue Dark 4a empty day and header (0106)::Plan with AI focuses the chat status when the input is disabled
+
+#### Scenario: Template exists
+- **WHEN** the day has a template
+- **THEN** the timeline renders as usual
+
+Tests: frontend/tests/Schedule.test.ts::Schedule.vue Dark 4a empty day and header (0106)::keeps the timeline when a template exists

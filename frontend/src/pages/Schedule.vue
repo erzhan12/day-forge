@@ -6,6 +6,7 @@ import TimeZoneMismatchPrompt from "../components/TimeZoneMismatchPrompt.vue"
 import DateNavigator from "../components/DateNavigator.vue"
 import TimeBlock from "../components/TimeBlock.vue"
 import Timeline4a from "../components/Timeline4a.vue"
+import EmptyDayState from "../components/EmptyDayState.vue"
 import GapSlot from "../components/GapSlot.vue"
 import AddBlockForm from "../components/AddBlockForm.vue"
 import NowLine from "../components/NowLine.vue"
@@ -208,6 +209,21 @@ function handleAddHere(payload: { start_time: string; end_time: string }) {
   prefillStart.value = payload.start_time
   prefillEnd.value = payload.end_time
 }
+// Dark 4a day with no template and no blocks: an empty state replaces the
+// timeline (feature 0106).
+const showEmptyDay = computed(() =>
+  layout.value === "4a" && !props.has_template_for_type &&
+  canonicalBlocks.value.length === 0 && !isGeneratingDraft.value)
+// "Plan with AI": open the wide chat sidebar and focus its input (or the dock
+// below 1024 px). The chat clears the request once it has placed focus.
+const chatFocusToken = ref(0)
+function planWithAi() {
+  if (isWide.value) sidebarOpen.value = true
+  chatFocusToken.value += 1
+}
+function clearChatFocusRequest() {
+  chatFocusToken.value = 0
+}
 // Dark 4a gap rows: a new request id reopens the form even when the same gap
 // (same prefill) is activated again after Cancel.
 const addRequestId = ref(0)
@@ -245,7 +261,7 @@ defineExpose({
       <template #actions>
         <button
           type="button"
-          class="undo-btn"
+          class="undo-btn df-btn df-btn--secondary"
           aria-label="Undo last change"
           title="Undo last change (⌘Z / Ctrl+Z)"
           :disabled="!canUndo || scheduleDisabled"
@@ -255,6 +271,7 @@ defineExpose({
           v-if="canonicalSchedule?.status === 'draft' && canonicalBlocks.length === 0"
           :has-template="has_template_for_type"
           :slot-type="slot_type"
+          :show-reason="layout !== '4a'"
           @click="handleRegenerateClick"
         />
         <ShowIndicatorButton
@@ -268,7 +285,7 @@ defineExpose({
         <Link
           v-if="showAnalyticsLink"
           :href="`/analytics/${date}/`"
-          class="analytics-link"
+          class="analytics-link df-btn df-btn--secondary"
         >
           View analytics
         </Link>
@@ -338,8 +355,14 @@ defineExpose({
         <span class="ghost-title">{{ draggedBlock.title }}</span>
       </div>
 
+      <EmptyDayState
+        v-if="showEmptyDay"
+        :date="date"
+        :slot-type="slot_type"
+        @plan-with-ai="planWithAi"
+      />
       <Timeline4a
-        v-if="layout === '4a'"
+        v-else-if="layout === '4a'"
         :presentation="presentation"
         :date="date"
         :current-h-h-m-m="currentHHMM"
@@ -522,13 +545,17 @@ defineExpose({
       v-model:open="sidebarOpen"
       :date="date"
       :push-undo="pushUndo"
+      :focus-token="chatFocusToken"
+      @focus-handled="clearChatFocusRequest"
     />
     <CommandBar
       v-else
       :date="date"
       :push-undo="pushUndo"
+      :focus-token="chatFocusToken"
       variant="dock"
       @height-change="chatDockHeight = $event"
+      @focus-handled="clearChatFocusRequest"
     />
   </div>
   <div v-else class="schedule-page" role="alert">

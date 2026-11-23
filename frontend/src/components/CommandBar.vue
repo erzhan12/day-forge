@@ -34,9 +34,11 @@ const props = defineProps<{
   date: string
   pushUndo: (action: UndoAction) => void
   variant: Variant
+  /** A positive value asks for focus once; the owner clears it on focus-handled (0106). */
+  focusToken?: number
 }>()
 
-const emit = defineEmits<{ "height-change": [height: number] }>()
+const emit = defineEmits<{ "height-change": [height: number]; "focus-handled": [] }>()
 const barEl = ref<HTMLElement | null>(null)
 let sizeObserver: ResizeObserver | null = null
 
@@ -100,6 +102,25 @@ const activeTheme = useActiveTheme()
 const is4a = computed(() => layoutForTheme(activeTheme.value) === "4a")
 const suggestions = useChatSuggestions()
 const inputEl = ref<HTMLTextAreaElement | null>(null)
+const statusEl = ref<HTMLElement | null>(null)
+const statusText = computed(() =>
+  isProcessing.value ? "AI request in progress."
+    : hasPendingRequest?.value ? "A previous AI request needs recovery."
+      : scheduleDisabled?.value ? "The schedule is busy."
+        : "")
+
+// "Plan with AI" (feature 0106): focus the input, or the status region when
+// the input is disabled. Read on mount too, because the request can mount a
+// collapsed sidebar.
+async function honourFocusRequest(token: number | undefined) {
+  if (!token) return
+  await nextTick()
+  if (inputDisabled.value) statusEl.value?.focus()
+  else inputEl.value?.focus()
+  emit("focus-handled")
+}
+watch(() => props.focusToken, (token) => { void honourFocusRequest(token) })
+onMounted(() => { void honourFocusRequest(props.focusToken) })
 
 const PLACEHOLDERS = [
   "tell me about your day…",
@@ -329,6 +350,13 @@ onUnmounted(() => {
       :disabled="inputDisabled"
       @click="cancelPendingIntent(props.pushUndo)"
     >Cancel clarification</button>
+    <p
+      ref="statusEl"
+      class="chat-status-sr"
+      role="status"
+      tabindex="-1"
+      data-testid="chat-status"
+    >{{ statusText }}</p>
     <form class="command-row" @submit.prevent="handleSubmit">
       <span
         class="status-dot"
@@ -424,6 +452,18 @@ onUnmounted(() => {
  * future product decision is to theme the command bar, that's a
  * separate feature — not a regression of 0010 Phase 6.
  */
+.chat-status-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .command-bar {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   padding: 8px 16px;

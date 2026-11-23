@@ -3,10 +3,12 @@ import { computed } from "vue"
 import { useChat } from "../composables/useChat"
 import { useDraft } from "../composables/useDraft"
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   hasTemplate: boolean
   slotType: "weekday" | "weekend"
-}>()
+  /** Dark 4a explains a missing template in the empty-day state instead. */
+  showReason?: boolean
+}>(), { showReason: true })
 
 const emit = defineEmits<{
   (e: "click"): void
@@ -39,14 +41,14 @@ function handleClick() {
   <div class="regen">
     <button
       type="button"
-      class="regen-btn"
+      class="regen-btn df-btn df-btn--secondary"
       :class="{ disabled }"
       :disabled="disabled"
       @click="handleClick"
     >
       {{ isGeneratingDraft ? "Generating..." : "Regenerate draft" }}
     </button>
-    <p v-if="!hasTemplate" class="reason">
+    <p v-if="!hasTemplate && showReason" class="reason">
       No {{ slotLabel }} template configured.
     </p>
   </div>

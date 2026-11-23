@@ -1304,3 +1304,115 @@ describe("Schedule.vue Dark 4a gap add (0106)", () => {
     expect(w.find(".add-form").exists()).toBe(false)
   })
 })
+
+describe("Schedule.vue Dark 4a empty day and header (0106)", () => {
+  const DATE = "2026-11-22"
+
+  beforeEach(() => {
+    stubLocalStorage()
+    stubMatchMedia(true)
+    resetExternalProviderMocks()
+    Element.prototype.scrollIntoView = vi.fn()
+  })
+
+  afterEach(() => {
+    wrapper?.unmount()
+    wrapper = null
+    localStorage.clear()
+    delete document.documentElement.dataset.theme
+    vi.unstubAllGlobals()
+    vi.clearAllMocks()
+  })
+
+  function mountDay(opts: {
+    theme?: "dark_4a" | "classic"
+    hasTemplate?: boolean
+    blocks?: TimeBlock[]
+    realChat?: boolean
+    realRegen?: boolean
+  } = {}) {
+    document.documentElement.dataset.theme = opts.theme ?? "dark_4a"
+    const stubs: Record<string, unknown> = { ...STUBS }
+    if (opts.realChat) {
+      delete stubs.ChatSidebar
+      delete stubs.CommandBar
+    }
+    if (opts.realRegen) delete stubs.RegenerateDraftButton
+    wrapper = mount(Schedule, {
+      attachTo: document.body,
+      props: {
+        categories: makeCategories(),
+        schedule: makeSchedule(DATE, "draft"),
+        blocks: opts.blocks ?? [],
+        date: DATE,
+        has_template_for_type: opts.hasTemplate ?? false,
+        slot_type: "weekend" as const,
+        schedule_window: { start: "06:00", end: "23:00", time_zone: "UTC" },
+        auth_user_id: 1,
+        integration_bootstrap: integrationBootstrap(DATE, "UTC"),
+      },
+      global: { stubs },
+    })
+    return wrapper
+  }
+
+  it("shows the empty state instead of the timeline on a 4a day with no template and no blocks", async () => {
+    const w = mountDay()
+    await flushPromises()
+    expect(w.find('[data-testid="empty-day-state"]').text()).toContain("No template for Sunday")
+    expect(w.find('[data-testid="timeline-4a"]').exists()).toBe(false)
+  })
+
+  it("keeps the timeline when a template exists", async () => {
+    const w = mountDay({ hasTemplate: true })
+    await flushPromises()
+    expect(w.find('[data-testid="empty-day-state"]').exists()).toBe(false)
+    expect(w.find('[data-testid="timeline-4a"]').exists()).toBe(true)
+  })
+
+  it("hides the header warning in 4a and keeps it in classic", async () => {
+    const dark = mountDay({ realRegen: true })
+    await flushPromises()
+    expect(dark.find(".regen-btn").exists()).toBe(true)
+    expect(dark.find(".reason").exists()).toBe(false)
+    dark.unmount()
+    wrapper = null
+    const classic = mountDay({ theme: "classic", realRegen: true })
+    await flushPromises()
+    expect(classic.find(".reason").text()).toBe("No weekend template configured.")
+  })
+
+  it("Plan with AI focuses the chat textarea with a collapsed wide sidebar", async () => {
+    localStorage.setItem("day-forge:chat-sidebar:open", JSON.stringify(false))
+    const w = mountDay({ realChat: true })
+    await flushPromises()
+    expect(w.find('[data-testid="chat-input"]').exists()).toBe(false)
+    await w.get('[data-testid="empty-day-plan-with-ai"]').trigger("click")
+    await flushPromises()
+    const input = w.get('[data-testid="chat-input"]').element
+    expect(document.activeElement).toBe(input)
+  })
+
+  it("Plan with AI focuses the dock below 1024px", async () => {
+    stubMatchMedia(false)
+    const w = mountDay({ realChat: true })
+    await flushPromises()
+    await w.get('[data-testid="empty-day-plan-with-ai"]').trigger("click")
+    await flushPromises()
+    const input = w.get('[data-testid="chat-input"]')
+    expect(input.classes()).toContain("variant-dock")
+    expect(document.activeElement).toBe(input.element)
+  })
+
+  it("Plan with AI focuses the chat status when the input is disabled", async () => {
+    const { useChat } = await import("../src/composables/useChat")
+    const w = mountDay({ realChat: true })
+    await flushPromises()
+    useChat(revisionOwner).isProcessing.value = true
+    await flushPromises()
+    await w.get('[data-testid="empty-day-plan-with-ai"]').trigger("click")
+    await flushPromises()
+    expect(document.activeElement).toBe(w.get('[data-testid="chat-status"]').element)
+    useChat(revisionOwner).isProcessing.value = false
+  })
+})

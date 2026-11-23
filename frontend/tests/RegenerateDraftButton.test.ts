@@ -58,4 +58,14 @@ describe("RegenerateDraftButton", () => {
     await wrapper.find(".regen-btn").trigger("click")
     expect(wrapper.emitted("click")).toBeUndefined()
   })
+
+  it("omits the reason when showReason is false", () => {
+    const shown = mount(RegenerateDraftButton, { props: { hasTemplate: false, slotType: "weekend" } })
+    expect(shown.find(".reason").text()).toBe("No weekend template configured.")
+    const hidden = mount(RegenerateDraftButton, {
+      props: { hasTemplate: false, slotType: "weekend", showReason: false },
+    })
+    expect(hidden.find(".reason").exists()).toBe(false)
+    expect(hidden.find(".regen-btn").attributes("disabled")).toBeDefined()
+  })
 })

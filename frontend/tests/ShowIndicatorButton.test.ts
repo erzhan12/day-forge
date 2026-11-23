@@ -62,4 +62,11 @@ describe("ShowIndicatorButton", () => {
     await w.get("button").trigger("click")
     expect(w.emitted("open")).toHaveLength(1)
   })
+
+  it("marks the open state with is-on and no aria-pressed", () => {
+    const open = mountBtn({ isOpen: true }).find("button")
+    expect(open.classes()).toContain("is-on")
+    expect(open.attributes("aria-pressed")).toBeUndefined()
+    expect(mountBtn({ isOpen: false }).find("button").classes()).not.toContain("is-on")
+  })
 })

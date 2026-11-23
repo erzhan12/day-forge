@@ -31,7 +31,8 @@ function handleClick() {
   <div class="show-indicator-control">
     <button
       type="button"
-      class="show-indicator-btn"
+      class="show-indicator-btn df-btn df-btn--secondary"
+      :class="{ 'is-on': isOpen }"
       :disabled="disabled"
       :aria-description="shouldRestore && !isOpen ? 'Reopen focus indicator' : undefined"
       :title="!supported ? 'Focus indicator is not supported in this browser.' : undefined"

@@ -81,3 +81,9 @@ export function formatCivilDate(date: string, locale = "en-US"): string {
     month: "long", day: "numeric",
   })
 }
+
+// "Sunday". Formatted in UTC from the noon-UTC civil date, like
+// formatCivilDate, so the weekday never shifts with the browser zone.
+export function weekdayName(date: string): string {
+  return utcCivilDate(date).toLocaleDateString("en-US", { timeZone: "UTC", weekday: "long" })
+}
