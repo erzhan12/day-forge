@@ -16,7 +16,7 @@ export interface ExternalSourcesOptions {
   bootstrap: Ref<IntegrationBootstrap | undefined>
   isWide: Ref<boolean>
   sidebarOpen: Ref<boolean>
-  placement: Ref<ExternalCalendarPlacement>
+  placement: Readonly<Ref<ExternalCalendarPlacement>>
   pollIntervalSeconds: Ref<number>
 }
 

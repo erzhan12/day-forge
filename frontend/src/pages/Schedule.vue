@@ -144,7 +144,14 @@ const sidebarOpen = ref(readChatSidebarOpen())
 watch(sidebarOpen, writeChatSidebarOpen)
 const externalTasksSidebarOpen = ref(readExternalTasksSidebarOpen())
 watch(externalTasksSidebarOpen, writeExternalTasksSidebarOpen)
-const { placement: externalCalendarPlacement } = useExternalCalendarPlacement()
+const { placement: storedCalendarPlacement } = useExternalCalendarPlacement()
+// Below 1024 px the rails unmount. In Dark 4a the calendar panel then falls
+// back to the centre position (under the timeline) so its explicit
+// "Add to schedule" stays reachable; the stored preference is not rewritten
+// (feature 0106). Rendering and polling both read this one value.
+const narrow4aCalendar = computed(() => layout.value === "4a" && !isWide.value)
+const externalCalendarPlacement = computed(() =>
+  narrow4aCalendar.value ? "center" as const : storedCalendarPlacement.value)
 const {
   googleCalendar, todoist, habitica,
   mergedExternalEvents, externalConnected, externalLoading, externalErrorBanners,
@@ -297,8 +304,9 @@ defineExpose({
     <ExternalEventsPanel
       :time-zone="schedule_window.time_zone"
       :today-date="todayDate"
-      v-if="externalConnected && externalCalendarInCenter"
+      v-if="externalConnected && externalCalendarInCenter && !narrow4aCalendar"
       variant="center"
+      :layout="layout"
       :date="date"
       :now-minutes="nowMinutes"
       :events="mergedExternalEvents"
@@ -451,6 +459,23 @@ defineExpose({
         />
       </template>
     </div>
+
+    <ExternalEventsPanel
+      v-if="externalConnected && externalCalendarInCenter && narrow4aCalendar"
+      :time-zone="schedule_window.time_zone"
+      :today-date="todayDate"
+      variant="center"
+      layout="4a"
+      :date="date"
+      :now-minutes="nowMinutes"
+      :events="mergedExternalEvents"
+      :loading="externalLoading"
+      :error-banners="externalErrorBanners"
+      :account-errors="googleCalendar.state.accountErrors"
+      :connected="externalConnected"
+      @retry="retryExternalFetch"
+      @add-to-schedule="handleAddToSchedule"
+    />
 
     <div class="logout-footer">
       <button class="logout-btn" @click="logout">Logout</button>

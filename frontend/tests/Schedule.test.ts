@@ -1416,3 +1416,96 @@ describe("Schedule.vue Dark 4a empty day and header (0106)", () => {
     useChat(revisionOwner).isProcessing.value = false
   })
 })
+
+describe("Schedule.vue Dark 4a narrow calendar fallback (0106)", () => {
+  const { setPlacement, placement } = useExternalCalendarPlacement()
+  let changeHandler: ((e: { matches: boolean }) => void) | null = null
+
+  function stubViewport(wide: boolean) {
+    changeHandler = null
+    vi.stubGlobal("matchMedia", vi.fn().mockImplementation((query: string) => ({
+      matches: wide, media: query, onchange: null,
+      addEventListener: vi.fn((_evt: string, h: (e: { matches: boolean }) => void) => { changeHandler = h }),
+      removeEventListener: vi.fn(), dispatchEvent: vi.fn(), addListener: vi.fn(), removeListener: vi.fn(),
+    })))
+  }
+
+  beforeEach(() => {
+    stubLocalStorage()
+    resetExternalProviderMocks()
+    setPlacement("sidebar")
+    calendarState.statusKnown = true
+    calendarState.connected = true
+    calendarState.events = [{
+      title: "Dentist", start: "2026-05-04T14:00:00Z", end: "2026-05-04T15:00:00Z",
+      calendar_name: "Personal", all_day: false, external_uid: "narrow-event", account_label: "",
+    }]
+  })
+
+  afterEach(() => {
+    wrapper?.unmount()
+    wrapper = null
+    localStorage.clear()
+    delete document.documentElement.dataset.theme
+    vi.unstubAllGlobals()
+    vi.clearAllMocks()
+  })
+
+  function mountNarrow(theme: "dark_4a" | "classic") {
+    document.documentElement.dataset.theme = theme
+    wrapper = mount(Schedule, {
+      props: {
+        categories: makeCategories(),
+        schedule: makeSchedule("2026-05-04", "active"),
+        blocks: [],
+        date: "2026-05-04",
+        has_template_for_type: true,
+        external_tasks_poll_interval: 60,
+        schedule_window: { start: "06:00", end: "23:00", time_zone: "UTC" },
+        auth_user_id: 1,
+        integration_bootstrap: integrationBootstrap("2026-05-04", "UTC"),
+      },
+      global: { stubs: { ...STUBS, AddToScheduleDialog: true } },
+    })
+    return wrapper
+  }
+
+  it("renders and polls the calendar panel below 1024px in Dark 4a with sidebar placement", async () => {
+    stubViewport(false)
+    const w = mountNarrow("dark_4a")
+    await flushPromises()
+    const vm = w.vm as unknown as ScheduleExposed
+    expect(vm.calendarsBranch).toBe(true)
+    expect(vm.externalPollActive).toBe(true)
+    const panel = w.get('section[aria-label="External calendar events"]')
+    // Rendered after the schedule body, with the Dark 4a copy.
+    const body = w.get(".schedule-body").element
+    expect(body.compareDocumentPosition(panel.element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(panel.get('[data-testid="add-to-schedule"]').text()).toBe("Add to schedule")
+    expect(placement.value).toBe("sidebar")
+  })
+
+  it("returns to the stored placement when resized to wide", async () => {
+    stubViewport(false)
+    const w = mountNarrow("dark_4a")
+    await flushPromises()
+    expect(w.find('section[aria-label="External calendar events"]').exists()).toBe(true)
+    changeHandler!({ matches: true })
+    await flushPromises()
+    const vm = w.vm as unknown as ScheduleExposed
+    expect(placement.value).toBe("sidebar")
+    // Wide: the calendar lives in the sources rail again, not the centre.
+    expect(w.find(".schedule-body ~ section[aria-label='External calendar events']").exists()).toBe(false)
+    expect(w.find('[data-testid="external-rail-4a"]').exists()).toBe(true)
+    expect(vm.calendarsBranch).toBe(true)
+  })
+
+  it("keeps narrow behaviour unchanged in classic", async () => {
+    stubViewport(false)
+    const w = mountNarrow("classic")
+    await flushPromises()
+    const vm = w.vm as unknown as ScheduleExposed
+    expect(vm.calendarsBranch).toBe(false)
+    expect(w.find('section[aria-label="External calendar events"]').exists()).toBe(false)
+  })
+})

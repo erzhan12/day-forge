@@ -296,12 +296,22 @@ describe("ExternalEventsPanel embedded (sources rail)", () => {
     expect(wrapper.findAll('[data-testid="add-to-schedule"]')).toHaveLength(1)
   })
 
-  it("shows the calendar name for an Apple row and the account for a Google row", () => {
+  it("shows the calendar name, not the account email, in the rail", () => {
     const wrapper = mount(ExternalEventsPanel, {
       props: { events: [APPLE_EVENT, GOOGLE_EVENT, ALL_DAY_EVENT], loading: false, connected: true, embedded: true, timeZone: "UTC" },
     })
-    const sources = wrapper.findAll('[data-testid="external-event-source"]').map((node) => node.text())
-    expect(sources).toEqual(["Personal · 1h", "alice@gmail.com · 15m", "Work"])
+    const sources = wrapper.findAll('[data-testid="external-event-source"]')
+    expect(sources.map((node) => node.text())).toEqual(["Personal · 1h", "Team · 15m", "Work"])
+    expect(sources[1].attributes("title")).toBe("alice@gmail.com")
+  })
+
+  it("labels the rail button Add to schedule without a plus", () => {
+    const wrapper = mount(ExternalEventsPanel, {
+      props: { events: [APPLE_EVENT], loading: false, connected: true, embedded: true },
+    })
+    const button = wrapper.get('[data-testid="add-to-schedule"]')
+    expect(button.text()).toBe("Add to schedule")
+    expect(button.classes()).toEqual(expect.arrayContaining(["df-btn", "df-btn--secondary"]))
   })
 
   it("announces an empty first load itself when embedded", () => {
@@ -336,5 +346,26 @@ describe("ExternalEventsPanel embedded (sources rail)", () => {
       props: { events: [APPLE_EVENT], loading: false, connected: true },
     })
     expect(wrapper.find(".ee-header").exists()).toBe(true)
+  })
+})
+
+describe("ExternalEventsPanel centre variant by layout (0106)", () => {
+  it("applies the calendar name and Add to schedule to the centre variant in Dark 4a", () => {
+    const wrapper = mount(ExternalEventsPanel, {
+      props: { events: [GOOGLE_EVENT], loading: false, connected: true, variant: "center", layout: "4a", timeZone: "UTC" },
+    })
+    expect(wrapper.find(".ee-header").exists()).toBe(true)
+    expect(wrapper.get('[data-testid="external-event-source"]').text()).toBe("Team · 15m")
+    expect(wrapper.get('[data-testid="add-to-schedule"]').text()).toBe("Add to schedule")
+    expect(wrapper.find(".ee-account-chip").exists()).toBe(false)
+  })
+
+  it("keeps the default-variant copy unchanged outside Dark 4a", () => {
+    const wrapper = mount(ExternalEventsPanel, {
+      props: { events: [GOOGLE_EVENT], loading: false, connected: true, variant: "center", timeZone: "UTC" },
+    })
+    expect(wrapper.get('[data-testid="add-to-schedule"]').text()).toBe("+ Add to schedule")
+    expect(wrapper.get(".ee-account-chip").text()).toBe("alice@gmail.com")
+    expect(wrapper.find('[data-testid="external-event-source"]').exists()).toBe(false)
   })
 })

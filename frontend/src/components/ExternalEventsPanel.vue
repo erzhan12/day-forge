@@ -9,7 +9,7 @@ import type {
 import { todayString, zonedDateTime } from "../utils/date"
 import { isExternalEventPast } from "../utils/externalEventPast"
 import { calendarColorVar } from "../utils/calendarColor"
-import { formatDurationMinutes } from "../utils/scheduleTime"
+import { eventSourceLabel } from "../utils/eventSourceLabel"
 
 const props = withDefaults(
   defineProps<{
@@ -36,6 +36,9 @@ const props = withDefaults(
     // heading, so the panel drops its own header, frame and chips and renders
     // time / calendar stripe / title rows.
     embedded?: boolean
+    // Dark 4a (feature 0106): the centre variant uses the rail's row, copy
+    // and Add to schedule button too. Other layouts keep today's copy.
+    layout?: "4a" | "classic"
   }>(),
   {
     errorBanners: () => [],
@@ -45,8 +48,11 @@ const props = withDefaults(
     nowMinutes: null,
     timeZone: "UTC",
     embedded: false,
+    layout: "classic",
   },
 )
+
+const railRows = computed(() => props.embedded || (props.variant === "center" && props.layout === "4a"))
 
 const viewedDate = toRef(props, "date")
 const today = computed(() => props.todayDate ?? todayString(props.timeZone))
@@ -77,18 +83,10 @@ function formatTime(iso: string): string {
   return zonedDateTime(new Date(iso), props.timeZone).hhmm
 }
 
-// Apple rows carry an empty account_label; fall back to the calendar name,
-// as the chip row does.
-function sourceLabel(ev: NormalizedEvent): string {
-  return ev.account_label || ev.calendar_name
-}
-
-function durationMinutes(ev: NormalizedEvent): number {
-  return Math.round((new Date(ev.end).getTime() - new Date(ev.start).getTime()) / 60_000)
-}
-
-function durationLabel(ev: NormalizedEvent): string {
-  return formatDurationMinutes(durationMinutes(ev))
+// Two Google accounts can hold equally named calendars; the account email
+// stays available on hover (0106 question 16).
+function sourceTitle(ev: NormalizedEvent): string | undefined {
+  return ev.account_label.trim() || undefined
 }
 </script>
 
@@ -149,17 +147,17 @@ function durationLabel(ev: NormalizedEvent): string {
         v-for="ev in events"
         :key="ev.external_uid"
         class="ee-item"
-        :class="{ 'ee-item--past': eventIsPast(ev), 'ee-item--embedded': embedded }"
-        :style="embedded ? { '--ee-stripe': calendarColorVar(ev.calendar_name) } : undefined"
+        :class="{ 'ee-item--past': eventIsPast(ev), 'ee-item--embedded': railRows }"
+        :style="railRows ? { '--ee-stripe': calendarColorVar(ev.calendar_name) } : undefined"
         data-testid="external-event"
       >
         <!-- Rail row: start time | calendar-colour stripe | title + source. -->
-        <template v-if="embedded">
+        <template v-if="railRows">
           <span class="ee-time ee-time-col">{{ ev.all_day ? "All day" : formatTime(ev.start) }}</span>
           <span class="ee-stripe" aria-hidden="true"></span>
           <div class="ee-body">
             <span class="ee-event-title">{{ ev.title }}</span>
-            <span class="ee-source" data-testid="external-event-source">{{ sourceLabel(ev) }}<template v-if="!ev.all_day && durationMinutes(ev) > 0"> · {{ durationLabel(ev) }}</template></span>
+            <span class="ee-source" data-testid="external-event-source" :title="sourceTitle(ev)">{{ eventSourceLabel(ev) }}</span>
           </div>
         </template>
         <template v-else>
@@ -178,12 +176,11 @@ function durationLabel(ev: NormalizedEvent): string {
           v-if="!ev.all_day"
           type="button"
           class="ee-add-btn"
+          :class="{ 'df-btn df-btn--secondary': railRows }"
           :disabled="addDisabled"
           data-testid="add-to-schedule"
           @click="emit('add-to-schedule', ev)"
-        >
-          + Add to schedule
-        </button>
+        >{{ railRows ? "Add to schedule" : "+ Add to schedule" }}</button>
       </li>
     </ul>
 
@@ -449,6 +446,25 @@ function durationLabel(ev: NormalizedEvent): string {
 
 .ee-item--embedded .ee-add-btn {
   grid-column: 3;
+  justify-self: start;
+}
+
+/* Rail rows (embedded and the Dark 4a centre variant, feature 0106): 13 px
+   meta text, and a past event dims only its stripe so the text stays
+   readable. */
+.ee-item--embedded .ee-time,
+.ee-item--embedded .ee-source {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.ee-item--embedded.ee-item--past {
+  opacity: 1;
+  color: var(--text-secondary);
+}
+
+.ee-item--embedded.ee-item--past .ee-stripe {
+  opacity: 0.4;
 }
 
 .ee-skel-row {
