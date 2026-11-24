@@ -27,6 +27,8 @@ class WhoopDay:
     recovery: dict | None
     previous_cycle: dict | None
     workouts: list[dict]
+    # The user's zone; bed/wake fall back to it when a record lacks an offset.
+    tz: datetime.tzinfo = datetime.UTC
 
 
 def parse_timestamp(value) -> datetime.datetime:
@@ -80,7 +82,9 @@ def load_day(account, day: datetime.date, tz: datetime.tzinfo) -> WhoopDay:
     window_end = datetime.datetime.combine(day, NOON, tzinfo=tz)
     sleep = _main_sleep(service.fetch_sleeps(account, window_start, window_end))
     if sleep is None:
-        return WhoopDay(date=day, sleep=None, recovery=None, previous_cycle=None, workouts=[])
+        return WhoopDay(
+            date=day, sleep=None, recovery=None, previous_cycle=None, workouts=[], tz=tz
+        )
 
     sleep_start = parse_timestamp(sleep["start"])
     recovery = service.fetch_recovery(account, sleep["cycle_id"])
@@ -101,5 +105,10 @@ def load_day(account, day: datetime.date, tz: datetime.tzinfo) -> WhoopDay:
             if cycle_start <= start < cycle_end
         ]
     return WhoopDay(
-        date=day, sleep=sleep, recovery=recovery, previous_cycle=previous, workouts=workouts
+        date=day,
+        sleep=sleep,
+        recovery=recovery,
+        previous_cycle=previous,
+        workouts=workouts,
+        tz=tz,
     )
