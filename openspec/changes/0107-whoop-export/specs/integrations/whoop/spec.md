@@ -34,14 +34,19 @@ Tests: backend/tests/test_whoop_sync_views.py::TestCallback::test_reconnect_upda
 
 ### Requirement: WHOOP token refresh is single-flight
 At most one refresh per WHOOP account SHALL run at a time, behind a shared-cache lock. The holder SHALL persist the rotated refresh token immediately; other requests SHALL wait for the stored token and fail as transient (502) if none appears.
+Enforced: backend/whoop_sync/service.py::ensure_access_token, backend/whoop_sync/service.py::_wait_for_refresh
 
 #### Scenario: Concurrent requests with an expired token
 - **WHEN** two requests need a refresh at the same time
 - **THEN** WHOOP's token endpoint is called once and both requests use the stored new token
 
+Tests: backend/tests/test_whoop_sync_tokens.py::test_concurrent_requests_refresh_once_on_separate_sqlite_connections, backend/tests/test_whoop_sync_tokens.py::TestWaiter::test_waiter_picks_up_the_token_the_holder_stores, backend/tests/test_whoop_sync_tokens.py::TestWaiter::test_waiter_times_out_as_transient_not_reconnect
+
 #### Scenario: Refresh rejected
 - **WHEN** the refresh is rejected and no fresher token is stored
 - **THEN** the export reports that WHOOP must be reconnected (409)
+
+Tests: backend/tests/test_whoop_sync_tokens.py::TestLockHolder::test_rejected_refresh_without_fresher_token_requires_reconnect
 
 ### Requirement: WHOOP export route
 `GET /api/export/whoop/<date>/` SHALL authenticate like the daily export and return the day's recovery, sleep, previous-day strain and workouts as Markdown with `Cache-Control: private, no-store`. Statuses: 400 bad date, 401 auth, 404 not connected, 409 reconnect required, 429 WHOOP rate limit, 502 WHOOP failure.
