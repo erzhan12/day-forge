@@ -1,7 +1,10 @@
 # integrations/whoop Specification
 
 ## Purpose
-TBD - created by archiving change 0107-whoop-export. Update Purpose after archive.
+Read-only WHOOP connection for one Day Forge user: the OAuth connect and callback flow, encrypted token
+storage with a single-flight refresh (WHOOP rotates refresh tokens on every use), and a Markdown summary
+of one day's recovery, sleep, previous-day strain and workouts. WHOOP data is fetched on request and never
+stored, cached, logged or sent to AI providers.
 
 ## Requirements
 
