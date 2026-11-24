@@ -345,6 +345,7 @@ async function handleHabiticaDisconnect(): Promise<void> {
               v-if="activeTopic === 'integrations'"
               :key="auth_user_id ?? 'anonymous'"
               :auth-user-id="auth_user_id"
+              :time-zone="schedule_window.time_zone"
             />
           </div>
           <div

@@ -74,6 +74,38 @@ describe("DailyExportTokenPanel", () => {
     expect(wrapper.find('[data-testid="export-token-create"]').exists()).toBe(false)
   })
 
+  it("formats the creation time in the saved time zone, like the verified stamps", async () => {
+    requestJsonMock.mockResolvedValueOnce({
+      ok: true, data: { has_token: true, created_at: "2026-11-05T04:13:12.197189+00:00" },
+    })
+    const wrapper = mount(DailyExportTokenPanel, {
+      props: { authUserId: 7, timeZone: "Asia/Almaty" },
+    })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="export-token-status"]').text()).toBe(
+      "Active since 2026-11-05 09:13",
+    )
+  })
+
+  it("falls back to UTC without a time zone and shows an unparseable value as-is", async () => {
+    requestJsonMock.mockResolvedValueOnce({
+      ok: true, data: { has_token: true, created_at: "2026-11-05T04:13:12+00:00" },
+    })
+    const utc = mountPanel()
+    await flushPromises()
+    expect(utc.get('[data-testid="export-token-status"]').text()).toBe(
+      "Active since 2026-11-05 04:13",
+    )
+    utc.unmount()
+
+    requestJsonMock.mockResolvedValueOnce({
+      ok: true, data: { has_token: true, created_at: "now" },
+    })
+    const raw = mountPanel()
+    await flushPromises()
+    expect(raw.get('[data-testid="export-token-status"]').text()).toBe("Active since now")
+  })
+
   it("creates a token, reveals it once, and lets the user dismiss it", async () => {
     requestJsonMock
       .mockResolvedValueOnce({ ok: true, data: { has_token: false, created_at: null } })

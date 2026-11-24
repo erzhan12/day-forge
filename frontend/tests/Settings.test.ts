@@ -412,6 +412,9 @@ describe("DailyExportTokenPanel wiring (feature 0088)", () => {
     await nextTick()
     const panel = wrapper.findComponent(DailyExportTokenPanel)
     expect(panel.props("authUserId")).toBe(42)
+    expect(panel.props("timeZone")).toBe(
+      (wrapper.props("schedule_window") as { time_zone: string }).time_zone,
+    )
     expect(fetchStatusMock).toHaveBeenCalled()
   })
 
