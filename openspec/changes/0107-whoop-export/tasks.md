@@ -8,7 +8,7 @@ Steps follow [the plan](../../../docs/features/0107_PLAN.md#implementation-steps
 - [x] Step 3: settings, `.env.example`, `deploy.yml` `optional()` secrets, `.claude/rules/project.md`
 - [x] Step 4: `whoop_sync` skeleton: model, crypto, admin, migration, checks
 - [x] Step 5: `build_authorization_url` / `exchange_code`
-- [ ] Step 6: `connect` / `callback` views and urls
+- [x] Step 6: `connect` / `callback` views and urls
 - [ ] Step 7: token lifecycle with rotation and the single-flight lock
 - [ ] Step 8: sleep, cycle, recovery and workout fetchers
 - [ ] Step 9: date mapping

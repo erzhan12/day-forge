@@ -14,16 +14,23 @@ Tests: backend/tests/test_whoop_sync_models.py::TestE001AllOrNone::test_partial_
 - **WHEN** no `WHOOP_OAUTH_*` setting is set
 - **THEN** the check passes and the WHOOP routes report WHOOP as not configured
 
+Tests: backend/tests/test_whoop_sync_models.py::TestE001AllOrNone::test_none_set_passes_in_production, backend/tests/test_whoop_sync_views.py::TestConnect::test_not_configured
+
 ### Requirement: WHOOP connect and callback
 `connect` SHALL require a logged-in session and redirect to WHOOP consent with an 8-character `state` stored in the session. The callback SHALL accept a code only when `state` matches the stored value (compared in constant time, used once), then store the tokens Fernet-encrypted, replacing any earlier account for that user.
+Enforced: backend/whoop_sync/views.py::connect, backend/whoop_sync/views.py::callback
 
 #### Scenario: State mismatch
 - **WHEN** the callback arrives with a missing or different `state`
 - **THEN** no tokens are exchanged or stored and the result page reports failure
 
+Tests: backend/tests/test_whoop_sync_views.py::TestCallback::test_state_problems_fail_without_exchange, backend/tests/test_whoop_sync_views.py::TestCallback::test_state_is_single_use
+
 #### Scenario: Reconnect
 - **WHEN** a user who already has a WHOOP account completes the flow again
 - **THEN** the existing account row is updated instead of a second one being created
+
+Tests: backend/tests/test_whoop_sync_views.py::TestCallback::test_reconnect_updates_the_existing_row
 
 ### Requirement: WHOOP token refresh is single-flight
 At most one refresh per WHOOP account SHALL run at a time, behind a shared-cache lock. The holder SHALL persist the rotated refresh token immediately; other requests SHALL wait for the stored token and fail as transient (502) if none appears.
