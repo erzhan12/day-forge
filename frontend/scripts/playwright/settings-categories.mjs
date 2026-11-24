@@ -166,18 +166,22 @@ try {
   }
 
   // ── 6. Delete ─────────────────────────────────────────────────────────
-  page.on("dialog", (dialog) => dialog.accept())
-
   const beforeDelete = await findRow(panel, "Smoke Test Renamed")
   if (!beforeDelete) throw new Error("Smoke Test Renamed row not found for delete step")
 
+  // Delete opens the in-app DeleteConfirmationDialog (a modal <dialog>), not
+  // a native confirm(): nothing is sent until its Delete button is pressed.
   const deleteBtn = beforeDelete.row.locator("button", { hasText: "Delete" })
+  await deleteBtn.click()
+  const confirmDialog = page.getByRole("dialog", { name: "Delete category?" })
+  await confirmDialog.waitFor({ state: "visible" })
   await Promise.all([
     page.waitForResponse((r) =>
       r.url().includes("/api/user/categories/") && r.request().method() === "DELETE",
     ),
-    deleteBtn.click(),
+    confirmDialog.getByRole("button", { name: "Delete", exact: true }).click(),
   ])
+  await confirmDialog.waitFor({ state: "detached" })
   await page.waitForTimeout(WAIT_FOR_INERTIA_SETTLE_MS)
 
   const afterDelete = await rows.count()
