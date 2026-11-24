@@ -88,9 +88,7 @@ def callback(request: HttpRequest) -> HttpResponse:
         return _plain(FAILED, 502)
 
     with transaction.atomic():
-        account = WhoopAccount.objects.filter(user=request.user).first()
-        if account is None:
-            account = WhoopAccount(user=request.user)
+        account, _ = WhoopAccount.objects.get_or_create(user=request.user)
         account.set_refresh_token(grant.refresh_token)
         account.set_access_token(grant.access_token)
         account.access_token_expiry = grant.expiry
@@ -109,6 +107,7 @@ _EXPORT_ERRORS = (
     (service.WhoopProviderError, 502, "WHOOP is unavailable. Try again later."),
     (OperationalError, 502, "WHOOP is unavailable. Try again later."),
 )
+_EXPORT_EXCEPTION_TYPES = tuple(error for error, _, _ in _EXPORT_ERRORS)
 
 
 @require_http_methods(["GET"])
@@ -136,7 +135,7 @@ def whoop_export(request: HttpRequest, date: str) -> HttpResponse:
         markdown = format_whoop_day(
             load_day(account, parsed_date, user_time_zone_readonly(owner))
         )
-    except tuple(error for error, _, _ in _EXPORT_ERRORS) as exc:
+    except _EXPORT_EXCEPTION_TYPES as exc:
         status, detail = next((s, d) for e, s, d in _EXPORT_ERRORS if isinstance(exc, e))
         logger.info("WHOOP export failed for user %s (%s)", owner.pk, type(exc).__name__)
         return _error(detail, status)
