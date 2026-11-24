@@ -260,7 +260,12 @@ def _wait_for_refresh(account_id: int, rejected: str | None, lock_key: str) -> s
         if token is not None:
             return token
         if cache.get(lock_key) is None:
-            break  # the holder finished without storing a usable token
+            # The holder is done. It may have stored its token right after
+            # our read, so look once more before reporting a failure.
+            token = _usable_access_token(_reload(account_id), rejected)
+            if token is not None:
+                return token
+            break
     raise WhoopProviderError("WHOOP token refresh did not complete")
 
 

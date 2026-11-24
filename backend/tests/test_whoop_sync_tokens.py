@@ -204,6 +204,28 @@ class TestWaiter:
             service.ensure_access_token(account)
 
 
+    @respx.mock
+    def test_waiter_rechecks_the_row_when_the_lock_disappears(self, no_sleep, monkeypatch):
+        # The holder can store its token and release the lock between the
+        # waiter's row read and its lock check; that must not become a 502.
+        account = _account()
+        key = service.refresh_lock_key(account.pk)
+        cache.add(key, "fast-holder", timeout=60)
+        real_reload = service._reload
+        reads = []
+
+        def reload_then_holder_finishes(account_id):
+            row = real_reload(account_id)
+            reads.append(account_id)
+            if len(reads) == 1:
+                _store(account, access="stored-just-now", refresh="rotated")
+                cache.delete(key)
+            return row
+
+        monkeypatch.setattr(service, "_reload", reload_then_holder_finishes)
+        assert service.ensure_access_token(account) == "stored-just-now"
+
+
 class TestRejectedAccessToken:
     @respx.mock
     def test_forced_refresh_ignores_a_valid_looking_rejected_token(self):
