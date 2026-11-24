@@ -1,7 +1,9 @@
-"""Restricted Bearer authentication for the daily export API only (feature 0088).
+"""Restricted Bearer authentication for the read-only export routes.
 
-A personal export token authenticates reads on the export views alone,
-through this module's explicit per-view check. It is never wired into
+A personal export token (feature 0088) authenticates reads on exactly the
+routes named in ``BEARER_ROUTE_NAMES``, through this module's explicit
+per-view check: the daily schedule export and, since feature 0107, the WHOOP
+morning summary (health data). It is never wired into
 ``AUTHENTICATION_BACKENDS`` or middleware, so it can never authenticate any
 other route, call Django ``login()``, or establish a session.
 """
@@ -11,6 +13,12 @@ from django.http import JsonResponse
 from schedules.export_tokens import authenticate as authenticate_export_token
 
 _BEARER_PREFIX = "Bearer "
+
+# The only URL names whose views call ``resolve_export_owner``. Widening this
+# set widens what a leaked export token can read: review it as a security
+# change. ``tests/test_daily_export_api.py`` builds its Bearer matrix
+# exclusions from this constant.
+BEARER_ROUTE_NAMES = frozenset({"daily_export", "whoop_export"})
 
 
 def _unauthorized() -> JsonResponse:

@@ -13,8 +13,9 @@ Thin, **stateless** [Model Context Protocol](https://modelcontextprotocol.io/) p
 |---|---|---|
 | `ping` | _(none)_ | `"pong"` — connectivity check |
 | `get_daily_report` | `date` (`"today"` or `YYYY-MM-DD`, default `today`); `format` (`"markdown"` \| `"json"`, default `markdown`) | Report body as text, or a tool error |
+| `get_whoop_day` | `date` (`"today"` or `YYYY-MM-DD`, default `today`) | WHOOP morning summary as Markdown (feature 0107), or a tool error |
 
-`get_daily_report` requires an `Authorization: Bearer <export token>` **request header** on the MCP call. The proxy forwards it verbatim and never logs the value (only `auth=present/absent` if logging is added later). Mint a token in Settings → Integrations, or `POST /api/user/export-token/` (session-only) — see [api.md](api.md#daily-export--feature-0088).
+Both data tools require an `Authorization: Bearer <export token>` **request header** on the MCP call and share one forwarding helper (`_forward`); `get_whoop_day` calls `GET /api/export/whoop/<date>/` (see [api.md](api.md#whoop-morning-summary--feature-0107)). The proxy forwards it verbatim and never logs the value (only `auth=present/absent` if logging is added later). Mint a token in Settings → Integrations, or `POST /api/user/export-token/` (session-only) — see [api.md](api.md#daily-export--feature-0088).
 
 ### Error semantics
 
@@ -25,7 +26,9 @@ Business failures are MCP **tool errors** (`isError: true` + human text), not JS
 | Missing `Authorization` | `missing Authorization header` |
 | Bad `date` | `date must be 'today' or YYYY-MM-DD` |
 | Upstream 401 / 403 | `invalid or missing day-forge export token` |
-| Upstream 404 | `no report for this date` |
+| Upstream 404 | `no report for this date`; `get_whoop_day`: `WHOOP is not connected` |
+| Upstream 409 (`get_whoop_day`) | `WHOOP needs to be reconnected` |
+| Upstream 502 (`get_whoop_day`) | `WHOOP is unavailable, try later` |
 | Upstream 429 | `rate limited, try later` |
 | Other non-2xx | `day-forge error {status}` |
 | Timeout / connect error | `day-forge is unreachable` |
@@ -58,7 +61,7 @@ Add a custom MCP connector with the same URL and the same `Authorization: Bearer
 
 ## Privacy
 
-Schedule text flows **client → MCP proxy → export API** only. Day Forge never sends the report to an LLM provider; the client's own model sees it because the client asked. Revoke the export token in Settings to cut off every connector at once.
+Schedule text flows **client → MCP proxy → export API** only. Day Forge never sends the report to an LLM provider; the client's own model sees it because the client asked. The same holds for WHOOP summaries (feature 0107): Day Forge reads them from WHOOP on request, returns them to the connector and stores none of them. Revoke the export token in Settings to cut off every connector at once, including WHOOP reads.
 
 ## Local development
 

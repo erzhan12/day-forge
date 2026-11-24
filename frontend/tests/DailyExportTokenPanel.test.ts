@@ -33,6 +33,14 @@ describe("DailyExportTokenPanel", () => {
   beforeEach(() => requestJsonMock.mockReset())
   afterEach(() => vi.restoreAllMocks())
 
+  it("names both export routes the token reads and flags WHOOP health data", () => {
+    requestJsonMock.mockReturnValueOnce(new Promise(() => {}))
+    const text = mountPanel().text()
+    expect(text).toContain("GET /api/export/daily/<date>/")
+    expect(text).toContain("GET /api/export/whoop/<date>/")
+    expect(text).toContain("health data")
+  })
+
   it("shows a loading state before the status request resolves", async () => {
     const deferred = defer<{ ok: boolean; data?: object }>()
     requestJsonMock.mockReturnValueOnce(deferred.promise)

@@ -39,3 +39,6 @@ staticfiles/
 
 # Git worktrees (local feature checkouts)
 .worktrees/
+
+# Real WHOOP days are health data (feature 0107); keep them local
+backend/tests/fixtures/whoop/real_*.json

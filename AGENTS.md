@@ -27,7 +27,7 @@ The reusable PR/deploy workflow in `.github/workflows/ci.yml` also runs `npm aud
 - `backend/templates_mgr/`: templates, rules, preferences, and the seed command.
 - `backend/ai/`: chat and draft services, request validation, and AI interaction records.
 - `backend/analytics/`: current daily statistics and reviewed snapshots.
-- `backend/{calendar_sync,gcal_sync,todoist_sync,habitica_sync}/`: external integrations; `backend/common/` holds shared infrastructure.
+- `backend/{calendar_sync,gcal_sync,todoist_sync,habitica_sync,whoop_sync}/`: external integrations; `backend/common/` holds shared infrastructure.
 - `frontend/src/pages/`: Inertia pages for login, schedule, settings, and analytics.
 - `frontend/src/composables/useSchedulePageController.ts`: schedule page state and mutation owner; `useScheduleRevision.ts` holds the canonical revision and blocks.
 - `backend/tests/` and `frontend/tests/`: application tests.

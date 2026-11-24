@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.14"
 
 [[package]]
@@ -242,6 +242,7 @@ dependencies = [
 dev = [
     { name = "pytest" },
     { name = "pytest-django" },
+    { name = "respx" },
     { name = "ruff" },
 ]
 mcp = [
@@ -276,6 +277,7 @@ requires-dist = [
 dev = [
     { name = "pytest", specifier = ">=8.0" },
     { name = "pytest-django", specifier = ">=4.8" },
+    { name = "respx", specifier = ">=0.21" },
     { name = "ruff", specifier = ">=0.4" },
 ]
 mcp = [

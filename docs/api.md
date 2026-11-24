@@ -815,13 +815,52 @@ Every response — success or error — sends `Cache-Control: private, no-store`
 
 ### `GET` / `POST` / `DELETE /api/user/export-token/`
 
-Session-only management of the same credential — any `Authorization` header here is rejected with `401`, even with a valid session, so a leaked token alone can never inspect, mint, or revoke itself. One active token per user; the raw value is persisted nowhere — only its SHA-256 digest.
+Session-only management of the same credential — which authorizes exactly `GET /api/export/daily/{date}/` and `GET /api/export/whoop/{date}/` (`export_auth.BEARER_ROUTE_NAMES`), so it can also read WHOOP health summaries. Any `Authorization` header here is rejected with `401`, even with a valid session, so a leaked token alone can never inspect, mint, or revoke itself. One active token per user; the raw value is persisted nowhere — only its SHA-256 digest.
 
 - `GET` → `{"has_token": bool, "created_at": "<iso>"|null}`. Never the raw token or its digest.
 - `POST` → `201 {"token": "<raw, shown once>", "has_token": true, "created_at": "<iso>"}` on success. `409 {"errors": {...}, "code": "token_exists"}` if one already exists — revoke it first.
 - `DELETE` → `204`, including when no token exists (idempotent).
 
 CSRF, the frontend-release handshake and `X-Schedule-User` identity all apply normally (unlike the export read above). Every response is `Cache-Control: private, no-store`. Anonymous or Bearer-only requests return `401` JSON, never a login redirect.
+
+## WHOOP morning summary — feature 0107
+
+A read-only Markdown summary of one day's WHOOP recovery, sleep, previous-day strain and workouts, for the planning coach through the MCP `get_whoop_day` tool ([mcp.md](mcp.md)). WHOOP data is fetched on each request and is never stored, cached or logged; only the OAuth tokens are stored, Fernet-encrypted under `WHOOP_OAUTH_TOKEN_KEY`. WHOOP is optional: with no `WHOOP_OAUTH_*` setting it is disabled.
+
+### `GET /api/whoop/connect/`
+
+Session only (`@login_required`). Stores an 8-character `state` (WHOOP's fixed length) in the session and redirects (`302`) to WHOOP consent with scopes `offline read:recovery read:cycles read:sleep read:workout`. `503` plain text `WHOOP is not configured` when the settings are absent. There is no Settings UI: open this URL while signed in.
+
+### `GET /api/whoop/callback/?code=&state=`
+
+Session only. The stored `state` is popped before it is compared (single use) with `secrets.compare_digest`. On success the code is exchanged, the user's single `WhoopAccount` is created or updated, and the response is plain text `WHOOP connected` (`200`). Failures answer plain text `WHOOP connection failed`: `400` for a missing or mismatched state, a denied consent or a missing code, `502` when the exchange fails. Codes, tokens and provider bodies are never logged. Disconnect by deleting the `WhoopAccount` row in admin; that does not revoke the grant at WHOOP.
+
+### `GET /api/export/whoop/{date}/`
+
+Authentication and `{date}` parsing are identical to `GET /api/export/daily/{date}/` (Bearer export token first, then session; `today` in the owner's saved zone without writes). Markdown only:
+
+```
+## whoop · 2026-11-23
+recovery: 73% · RHR 56 · HRV 31.1 · SpO2 95%
+sleep: 21:49–06:57 · asleep 7:43 / need 8:16 · deep 1:16 · REM 1:18 · eff 97% · disturbances 9
+strain (prev day): 16.4 · workouts: HIIT 15.2, walk 4.6
+```
+
+The day's sleep is the longest non-nap sleep between the previous day's 12:00 and the day's 12:00 in the owner's zone; recovery belongs to that sleep's cycle; strain and workouts come from the cycle that ended when the sleep began. Missing or unscored records render as `none recorded`, `pending` or `unscorable`. Bed and wake times use the record's own UTC offset.
+
+Every response sends `Cache-Control: private, no-store`; errors use `{"errors": {"detail": "..."}}` and never include a WHOOP response body.
+
+| Status | Cause |
+|---|---|
+| 400 | Invalid date. |
+| 401 | Missing/malformed/invalid/revoked Bearer, or no session. |
+| 404 | WHOOP is not configured, or the owner has not connected WHOOP. |
+| 405 | Method other than GET. |
+| 409 | WHOOP rejected the stored grant (or it cannot be decrypted): reconnect. |
+| 429 | WHOOP rate limit. |
+| 502 | WHOOP failed or was unreachable, or a concurrent token refresh did not finish in time; retry. |
+
+Token refresh is single-flight per account (WHOOP rotates refresh tokens and rejects concurrent refreshes); see `RULES.md`, External integrations.
 
 ---
 

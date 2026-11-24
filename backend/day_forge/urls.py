@@ -16,6 +16,7 @@ from schedules import views as schedules_views
 from templates_mgr import api as templates_api
 from templates_mgr import views as templates_views
 from todoist_sync import views as todoist_views
+from whoop_sync import views as whoop_views
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -102,6 +103,13 @@ urlpatterns = [
         schedules_export_api.daily_export,
         name="daily_export",
     ),
+    # WHOOP morning summary (feature 0107): the second and last route the
+    # personal export token may read (export_auth.BEARER_ROUTE_NAMES).
+    path(
+        "api/export/whoop/<str:date>/",
+        whoop_views.whoop_export,
+        name="whoop_export",
+    ),
     # Session-only management of that same credential (feature 0088) —
     # a Bearer token must never be usable here (see export_token_api.py).
     path(
@@ -149,6 +157,9 @@ urlpatterns = [
         name="travel_rule_detail",
     ),
     # API: Google Calendar (feature 0022)
+    # WHOOP (feature 0107): one-time OAuth connect; session only.
+    path("api/whoop/connect/", whoop_views.connect, name="whoop_connect"),
+    path("api/whoop/callback/", whoop_views.callback, name="whoop_callback"),
     path(
         "api/calendar/google/connect/",
         gcal_views.connect,
