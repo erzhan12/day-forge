@@ -283,3 +283,89 @@ def ensure_access_token(account: WhoopAccount, *, rejected: str | None = None) -
     finally:
         if cache.get(lock_key) == owner:
             cache.delete(lock_key)
+
+
+# ----- REST fetchers --------------------------------------------------------
+#
+# Each returns the provider's JSON records in memory for the caller to
+# format. Nothing here is stored, cached or logged.
+
+PAGE_LIMIT = 25
+MAX_PAGES = 8
+
+
+def _iso_utc(value: datetime.datetime) -> str:
+    return value.astimezone(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+
+def _send_get(path: str, params: dict | None, access_token: str) -> httpx.Response:
+    try:
+        return httpx.get(
+            f"{settings.WHOOP_API_BASE}{path}",
+            params=params,
+            headers={**_headers(), "Authorization": f"Bearer {access_token}"},
+            timeout=settings.WHOOP_REQUEST_TIMEOUT,
+        )
+    except httpx.HTTPError:
+        raise WhoopProviderError("WHOOP API unreachable") from None
+
+
+def _api_get(
+    account: WhoopAccount, path: str, params: dict | None = None, *, allow_404: bool = False
+) -> dict | None:
+    """GET a WHOOP API path. A 401 forces one refresh (through the lock) and
+    one retry; a second 401 means the grant is gone."""
+    access_token = ensure_access_token(account)
+    response = _send_get(path, params, access_token)
+    if response.status_code == 401:
+        access_token = ensure_access_token(account, rejected=access_token)
+        response = _send_get(path, params, access_token)
+    if allow_404 and response.status_code == 404:
+        return None
+    _raise_for_status(response.status_code, auth_statuses=(401, 403))
+    try:
+        body = response.json()
+    except ValueError:
+        raise WhoopProviderError("WHOOP API response is not JSON") from None
+    if not isinstance(body, dict):
+        raise WhoopProviderError("WHOOP API response is malformed")
+    return body
+
+
+def _collection(account: WhoopAccount, path: str, params: dict, *, max_pages: int) -> list[dict]:
+    records: list[dict] = []
+    next_token = None
+    for _ in range(max_pages):
+        page_params = {**params, **({"nextToken": next_token} if next_token else {})}
+        body = _api_get(account, path, page_params)
+        page = body.get("records")
+        if not isinstance(page, list) or not all(isinstance(r, dict) for r in page):
+            raise WhoopProviderError("WHOOP collection response is malformed")
+        records.extend(page)
+        next_token = body.get("next_token")
+        if not next_token or max_pages == 1:
+            return records
+    raise WhoopProviderError("WHOOP collection did not end")
+
+
+def _window(start: datetime.datetime, end: datetime.datetime) -> dict:
+    return {"start": _iso_utc(start), "end": _iso_utc(end), "limit": PAGE_LIMIT}
+
+
+def fetch_sleeps(account, start: datetime.datetime, end: datetime.datetime) -> list[dict]:
+    return _collection(account, "/v2/activity/sleep", _window(start, end), max_pages=MAX_PAGES)
+
+
+def fetch_workouts(account, start: datetime.datetime, end: datetime.datetime) -> list[dict]:
+    return _collection(account, "/v2/activity/workout", _window(start, end), max_pages=MAX_PAGES)
+
+
+def fetch_cycles_ending_by(account, end: datetime.datetime, *, limit: int) -> list[dict]:
+    """Newest cycles that end before or intersect ``end`` (one page)."""
+    params = {"end": _iso_utc(end), "limit": limit}
+    return _collection(account, "/v2/cycle", params, max_pages=1)
+
+
+def fetch_recovery(account, cycle_id) -> dict | None:
+    """Recovery for one cycle, or ``None`` when WHOOP has none for it."""
+    return _api_get(account, f"/v2/cycle/{int(cycle_id)}/recovery", allow_404=True)

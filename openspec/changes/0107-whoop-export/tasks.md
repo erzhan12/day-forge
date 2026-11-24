@@ -10,7 +10,7 @@ Steps follow [the plan](../../../docs/features/0107_PLAN.md#implementation-steps
 - [x] Step 5: `build_authorization_url` / `exchange_code`
 - [x] Step 6: `connect` / `callback` views and urls
 - [x] Step 7: token lifecycle with rotation and the single-flight lock
-- [ ] Step 8: sleep, cycle, recovery and workout fetchers
+- [x] Step 8: sleep, cycle, recovery and workout fetchers
 - [ ] Step 9: date mapping
 - [ ] Step 10: Markdown formatter
 - [ ] Step 11: `BEARER_ROUTE_NAMES`, `whoop_export` route, Bearer matrix, RULES.md, docs/api.md, dialog copy, privacy page, spec deltas
