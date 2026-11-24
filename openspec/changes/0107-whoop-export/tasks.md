@@ -14,5 +14,5 @@ Steps follow [the plan](../../../docs/features/0107_PLAN.md#implementation-steps
 - [x] Step 9: date mapping
 - [x] Step 10: Markdown formatter
 - [x] Step 11: `BEARER_ROUTE_NAMES`, `whoop_export` route, Bearer matrix, RULES.md, docs/api.md, dialog copy, privacy page, spec deltas
-- [ ] Step 12: MCP `_forward` refactor and `get_whoop_day`
+- [x] Step 12: MCP `_forward` refactor and `get_whoop_day`
 - [ ] Step 13: `make check`, `make frontend-build`, deploy, live check, archive this change
