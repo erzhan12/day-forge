@@ -76,7 +76,7 @@ function selectValue(event: Event): void {
 
     <div v-else class="export-token-controls">
       <p v-if="token.state.hasToken === true" class="export-token-status" data-testid="export-token-status">
-        Active since {{ createdAtLabel }}
+        Active since {{ createdAtLabel ?? "—" }}
       </p>
       <p
         v-else-if="token.state.hasToken === false"

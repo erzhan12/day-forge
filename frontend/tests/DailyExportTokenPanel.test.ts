@@ -87,23 +87,33 @@ describe("DailyExportTokenPanel", () => {
     )
   })
 
-  it("falls back to UTC without a time zone and shows an unparseable value as-is", async () => {
+  it("falls back to UTC when no timeZone prop is supplied", async () => {
     requestJsonMock.mockResolvedValueOnce({
       ok: true, data: { has_token: true, created_at: "2026-11-05T04:13:12+00:00" },
     })
-    const utc = mountPanel()
+    const wrapper = mountPanel()
     await flushPromises()
-    expect(utc.get('[data-testid="export-token-status"]').text()).toBe(
+    expect(wrapper.get('[data-testid="export-token-status"]').text()).toBe(
       "Active since 2026-11-05 04:13",
     )
-    utc.unmount()
+  })
 
+  it("shows an unparseable createdAt value as-is", async () => {
     requestJsonMock.mockResolvedValueOnce({
       ok: true, data: { has_token: true, created_at: "now" },
     })
-    const raw = mountPanel()
+    const wrapper = mountPanel()
     await flushPromises()
-    expect(raw.get('[data-testid="export-token-status"]').text()).toBe("Active since now")
+    expect(wrapper.get('[data-testid="export-token-status"]').text()).toBe("Active since now")
+  })
+
+  it("shows a dash when an active token has no createdAt", async () => {
+    requestJsonMock.mockResolvedValueOnce({
+      ok: true, data: { has_token: true, created_at: null },
+    })
+    const wrapper = mountPanel()
+    await flushPromises()
+    expect(wrapper.get('[data-testid="export-token-status"]').text()).toBe("Active since —")
   })
 
   it("creates a token, reveals it once, and lets the user dismiss it", async () => {
