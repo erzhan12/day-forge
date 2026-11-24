@@ -2,6 +2,7 @@
 
   - GET /api/whoop/connect/   — login required; 302 → WHOOP consent
   - GET /api/whoop/callback/  — login required; code → tokens, upsert, plain page
+  - GET /api/export/whoop/<date>/ — Bearer export token or session; Markdown
 
 There is no Settings UI in the MVP (D4), so the callback answers with a
 plain-text "WHOOP connected" / "WHOOP connection failed" page instead of a
@@ -14,12 +15,18 @@ import logging
 import secrets
 
 from django.contrib.auth.decorators import login_required
-from django.db import transaction
+from django.core.exceptions import ImproperlyConfigured
+from django.db import OperationalError, transaction
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
+from schedules.export_api import _error, _parse_date
+from schedules.export_auth import resolve_export_owner
+from schedules.window import user_time_zone_readonly
 
 from whoop_sync import service
+from whoop_sync.day import load_day
+from whoop_sync.formatting import format_whoop_day
 from whoop_sync.models import WhoopAccount
 
 logger = logging.getLogger(__name__)
@@ -91,3 +98,49 @@ def callback(request: HttpRequest) -> HttpResponse:
         account.last_verified_at = timezone.now()
         account.save()
     return _plain(CONNECTED, 200)
+
+
+# ----- Export read: GET /api/export/whoop/<date>/ --------------------------
+
+_EXPORT_ERRORS = (
+    (service.WhoopAuthError, 409, "WHOOP needs to be reconnected."),
+    (ImproperlyConfigured, 409, "WHOOP needs to be reconnected."),
+    (service.WhoopRateLimitError, 429, "WHOOP rate limit reached. Try again later."),
+    (service.WhoopProviderError, 502, "WHOOP is unavailable. Try again later."),
+    (OperationalError, 502, "WHOOP is unavailable. Try again later."),
+)
+
+
+@require_http_methods(["GET"])
+def whoop_export(request: HttpRequest, date: str) -> HttpResponse:
+    """Markdown WHOOP summary for one date (feature 0107).
+
+    Authenticates exactly like the daily export (Bearer export token or an
+    active session) and shares its date parsing. Every response is
+    ``private, no-store``; WHOOP data is not stored, cached or logged, and
+    provider bodies never reach the client.
+    """
+    owner, error_response = resolve_export_owner(request)
+    if error_response is not None:
+        return error_response
+    parsed_date, error_response = _parse_date(date, owner)
+    if error_response is not None:
+        return error_response
+    if not service.is_configured():
+        return _error("WHOOP is not configured.", 404)
+    account = WhoopAccount.objects.filter(user=owner).first()
+    if account is None:
+        return _error("WHOOP is not connected.", 404)
+
+    try:
+        markdown = format_whoop_day(
+            load_day(account, parsed_date, user_time_zone_readonly(owner))
+        )
+    except tuple(error for error, _, _ in _EXPORT_ERRORS) as exc:
+        status, detail = next((s, d) for e, s, d in _EXPORT_ERRORS if isinstance(exc, e))
+        logger.info("WHOOP export failed for user %s (%s)", owner.pk, type(exc).__name__)
+        return _error(detail, status)
+
+    response = HttpResponse(markdown, content_type="text/markdown; charset=utf-8")
+    response["Cache-Control"] = "private, no-store"
+    return response

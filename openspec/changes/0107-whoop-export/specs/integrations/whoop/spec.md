@@ -46,22 +46,30 @@ Tests: backend/tests/test_whoop_sync_tokens.py::test_concurrent_requests_refresh
 - **WHEN** the refresh is rejected and no fresher token is stored
 - **THEN** the export reports that WHOOP must be reconnected (409)
 
-Tests: backend/tests/test_whoop_sync_tokens.py::TestLockHolder::test_rejected_refresh_without_fresher_token_requires_reconnect
+Tests: backend/tests/test_whoop_sync_tokens.py::TestLockHolder::test_rejected_refresh_without_fresher_token_requires_reconnect, backend/tests/test_whoop_export_api.py::TestErrors::test_rejected_refresh_is_409
 
 ### Requirement: WHOOP export route
 `GET /api/export/whoop/<date>/` SHALL authenticate like the daily export and return the day's recovery, sleep, previous-day strain and workouts as Markdown with `Cache-Control: private, no-store`. Statuses: 400 bad date, 401 auth, 404 not connected, 409 reconnect required, 429 WHOOP rate limit, 502 WHOOP failure.
+Enforced: backend/whoop_sync/views.py::whoop_export, backend/schedules/export_auth.py::resolve_export_owner
 
 #### Scenario: Not connected
 - **WHEN** the owner has no WHOOP account
 - **THEN** the response is 404 and no WHOOP call is made
 
+Tests: backend/tests/test_whoop_export_api.py::TestErrors::test_not_connected_is_404_without_whoop_calls
+
 #### Scenario: Provider failure
 - **WHEN** WHOOP returns a 5xx or is unreachable
 - **THEN** the response is 502 and the WHOOP response body is not passed on
 
+Tests: backend/tests/test_whoop_export_api.py::TestErrors::test_provider_failure_is_502_without_the_body
+
 ### Requirement: WHOOP data is not retained
 WHOOP health data SHALL NOT be stored, cached, logged or sent to the AI chat or draft providers. Only the encrypted tokens and their metadata are stored.
+Enforced: backend/whoop_sync/models.py::WhoopAccount, backend/whoop_sync/views.py::whoop_export
 
 #### Scenario: Export request
 - **WHEN** a WHOOP summary is served
 - **THEN** no WHOOP payload is written to the database, cache or logs
+
+Tests: backend/tests/test_whoop_export_api.py::TestSuccess::test_stores_caches_and_logs_no_whoop_data, backend/tests/test_whoop_export_api.py::test_ai_packages_never_import_whoop

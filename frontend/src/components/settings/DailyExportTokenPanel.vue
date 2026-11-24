@@ -33,9 +33,11 @@ function selectValue(event: Event): void {
   <section class="settings-panel daily-export-token-panel" data-testid="settings-integration-export-token">
     <h3 class="subsection-title">Daily export API token</h3>
     <p class="section-subtitle">
-      A personal, read-only token for <code>GET /api/export/daily/&lt;date&gt;/</code>.
-      It only authorizes that export endpoint — it cannot edit your schedule
-      or manage this token itself.
+      A personal, read-only token for <code>GET /api/export/daily/&lt;date&gt;/</code>
+      and <code>GET /api/export/whoop/&lt;date&gt;/</code>. It only authorizes these two
+      export endpoints — it cannot edit your schedule or manage this token itself.
+      If WHOOP is connected, it also reads your WHOOP sleep and recovery summary,
+      so treat it as access to health data.
     </p>
 
     <p v-if="token.state.error" role="alert" class="export-token-error">

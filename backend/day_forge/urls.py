@@ -103,6 +103,13 @@ urlpatterns = [
         schedules_export_api.daily_export,
         name="daily_export",
     ),
+    # WHOOP morning summary (feature 0107): the second and last route the
+    # personal export token may read (export_auth.BEARER_ROUTE_NAMES).
+    path(
+        "api/export/whoop/<str:date>/",
+        whoop_views.whoop_export,
+        name="whoop_export",
+    ),
     # Session-only management of that same credential (feature 0088) —
     # a Bearer token must never be usable here (see export_token_api.py).
     path(

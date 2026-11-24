@@ -170,6 +170,18 @@ def user_local_date(user) -> datetime.date:
     return user_local_now(user).date()
 
 
+def user_time_zone_readonly(user) -> datetime.tzinfo:
+    """The user's saved zone without creating a settings row (feature 0107).
+
+    Falls back to UTC when no settings row exists or the stored zone is
+    invalid. Never reserves the SQLite writer.
+    """
+    time_zone = (
+        UserScheduleSettings.objects.filter(user=user).values_list("time_zone", flat=True).first()
+    )
+    return resolve_time_zone(time_zone)
+
+
 def user_local_date_readonly(user) -> datetime.date:
     """Non-creating ``today`` resolution for read-only callers (feature 0088).
 
@@ -178,10 +190,7 @@ def user_local_date_readonly(user) -> datetime.date:
     reserves the SQLite writer. Falls back to UTC when no settings row
     exists or the stored zone is invalid.
     """
-    time_zone = (
-        UserScheduleSettings.objects.filter(user=user).values_list("time_zone", flat=True).first()
-    )
-    return timezone.localtime(timezone.now(), resolve_time_zone(time_zone)).date()
+    return timezone.localtime(timezone.now(), user_time_zone_readonly(user)).date()
 
 
 def get_schedule_window(user) -> ScheduleWindow:

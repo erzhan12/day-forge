@@ -155,8 +155,16 @@ class TestPrivacyDisclosures:
         return _prose(client.get("/privacy/"))
 
     def test_names_every_stored_credential_integration(self, body):
-        for provider in ("CalDAV", "Todoist", "Habitica", "Google Calendar"):
+        for provider in ("CalDAV", "Todoist", "Habitica", "Google Calendar", "WHOOP"):
             assert provider in body
+
+    def test_states_what_whoop_data_is_read_and_where_it_goes(self, body):
+        assert (
+            "With them Day Forge reads your WHOOP sleep, recovery, cycle strain and workouts"
+            " only when you request a daily summary (for example through your own MCP"
+            " connector to Claude); it returns the summary to you and does not store"
+            " those readings."
+        ) in body
 
     def test_states_credentials_are_encrypted_at_rest(self, body):
         assert "encrypted at rest" in body

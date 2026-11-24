@@ -13,7 +13,7 @@ import zoneinfo
 import pytest
 from django.contrib.auth.models import User
 from django.urls import get_resolver
-from schedules import window
+from schedules import export_auth, window
 from schedules.export_tokens import create_token
 from schedules.models import Schedule, TimeBlock, UserScheduleSettings
 
@@ -365,7 +365,8 @@ class TestUnsupportedMethods:
 
 _INT_PLACEHOLDER = "999999999"
 _STR_PLACEHOLDER = "placeholder-value"
-_EXCLUDED_ROUTE_NAMES = {"daily_export"}
+# Routes that intentionally accept the export token; one reviewed constant.
+_EXCLUDED_ROUTE_NAMES = export_auth.BEARER_ROUTE_NAMES
 
 
 def _concrete_api_paths():
@@ -406,8 +407,17 @@ def test_matrix_covers_every_other_api_route_in_the_urlconf():
         "create_block", "schedule_settings", "templates_collection", "rules_collection",
         "user_preferences", "categories_collection", "ai_generate_draft", "caldav_account",
         "gcal_connect", "todoist_account", "habitica_account", "mark_reviewed",
+        "whoop_connect", "whoop_callback",
     } <= names
     assert "daily_export" not in names
+    assert "whoop_export" not in names
+
+
+def test_bearer_allowlist_is_exactly_the_two_export_routes():
+    assert export_auth.BEARER_ROUTE_NAMES == frozenset({"daily_export", "whoop_export"})
+    resolver = get_resolver()
+    named = {getattr(pattern, "name", None) for pattern in resolver.url_patterns}
+    assert export_auth.BEARER_ROUTE_NAMES <= named
 
 
 @pytest.mark.parametrize("method", ["get", "post", "patch", "put", "delete"])
