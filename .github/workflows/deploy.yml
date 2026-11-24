@@ -133,6 +133,10 @@ jobs:
           GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
           GOOGLE_OAUTH_REDIRECT_URI: ${{ secrets.GOOGLE_OAUTH_REDIRECT_URI }}
           GOOGLE_OAUTH_TOKEN_KEY: ${{ secrets.GOOGLE_OAUTH_TOKEN_KEY }}
+          WHOOP_OAUTH_CLIENT_ID: ${{ secrets.WHOOP_OAUTH_CLIENT_ID }}
+          WHOOP_OAUTH_CLIENT_SECRET: ${{ secrets.WHOOP_OAUTH_CLIENT_SECRET }}
+          WHOOP_OAUTH_REDIRECT_URI: ${{ secrets.WHOOP_OAUTH_REDIRECT_URI }}
+          WHOOP_OAUTH_TOKEN_KEY: ${{ secrets.WHOOP_OAUTH_TOKEN_KEY }}
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
           LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
           LLM_MODEL: ${{ secrets.LLM_MODEL }}
@@ -220,6 +224,19 @@ jobs:
           _legal_email = optional("LEGAL_CONTACT_EMAIL")
           if _legal_email is not None:
               lines.append(dotenv_line("LEGAL_CONTACT_EMAIL", _legal_email))
+          # Optional WHOOP (feature 0107): all unset -> WHOOP disabled and boot
+          # unaffected. Never require(): WHOOP is not a boot dependency. If any
+          # is set, whoop_sync.E001 requires all four. Wholesale .env rewrite —
+          # omitted here means erased on the droplet.
+          _whoop = {
+              "WHOOP_OAUTH_CLIENT_ID": optional("WHOOP_OAUTH_CLIENT_ID"),
+              "WHOOP_OAUTH_CLIENT_SECRET": optional("WHOOP_OAUTH_CLIENT_SECRET"),
+              "WHOOP_OAUTH_REDIRECT_URI": optional("WHOOP_OAUTH_REDIRECT_URI"),
+              "WHOOP_OAUTH_TOKEN_KEY": optional("WHOOP_OAUTH_TOKEN_KEY"),
+          }
+          for _name, _value in _whoop.items():
+              if _value is not None:
+                  lines.append(dotenv_line(_name, _value))
           path = "/tmp/day-forge.env"
           with open(path, "w", encoding="utf-8") as f:
               f.write("\n".join(lines) + "\n")

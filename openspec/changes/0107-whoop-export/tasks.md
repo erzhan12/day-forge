@@ -4,8 +4,8 @@ Steps follow [the plan](../../../docs/features/0107_PLAN.md#implementation-steps
 
 - [x] Step 0: second-grant check (D3), passed 2026-11-24
 - [x] Step 1: plan committed, feature branch, this change
-- [ ] Step 2: WHOOP dashboard redirect URI (owner)
-- [ ] Step 3: settings, `.env.example`, `deploy.yml` `optional()` secrets, `.claude/rules/project.md`
+- [x] Step 2: WHOOP dashboard redirect URI (owner), added 2026-11-24
+- [x] Step 3: settings, `.env.example`, `deploy.yml` `optional()` secrets, `.claude/rules/project.md`
 - [ ] Step 4: `whoop_sync` skeleton: model, crypto, admin, migration, checks
 - [ ] Step 5: `build_authorization_url` / `exchange_code`
 - [ ] Step 6: `connect` / `callback` views and urls

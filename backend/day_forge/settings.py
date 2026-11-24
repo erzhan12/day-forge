@@ -486,6 +486,32 @@ if GOOGLE_REQUEST_TIMEOUT <= 0:
         f"got {GOOGLE_REQUEST_TIMEOUT!r}"
     )
 
+# ---------------------------------------------------------------------------
+# WHOOP (feature 0107)
+# ---------------------------------------------------------------------------
+# OAuth client of the WHOOP developer app. Optional at boot, unlike Google:
+# with all four empty WHOOP is disabled; once any is set, ``whoop_sync.E001``
+# requires all four and a valid Fernet key. The redirect URI is server config
+# only. The token key is WHOOP's own Fernet key (never shared with another
+# provider); rotating it means reconnecting WHOOP.
+WHOOP_OAUTH_CLIENT_ID = os.environ.get("WHOOP_OAUTH_CLIENT_ID", "")
+WHOOP_OAUTH_CLIENT_SECRET = os.environ.get("WHOOP_OAUTH_CLIENT_SECRET", "")
+WHOOP_OAUTH_REDIRECT_URI = os.environ.get("WHOOP_OAUTH_REDIRECT_URI", "")
+WHOOP_OAUTH_TOKEN_KEY = os.environ.get("WHOOP_OAUTH_TOKEN_KEY", "")
+# Fixed provider endpoints and scopes (not env-configurable).
+WHOOP_OAUTH_AUTH_URI = "https://api.prod.whoop.com/oauth/oauth2/auth"
+WHOOP_OAUTH_TOKEN_URI = "https://api.prod.whoop.com/oauth/oauth2/token"
+WHOOP_API_BASE = "https://api.prod.whoop.com/developer"
+WHOOP_OAUTH_SCOPE = "offline read:recovery read:cycles read:sleep read:workout"
+WHOOP_USER_AGENT = "day-forge"
+# Hard cap on each WHOOP HTTP call; also sizes the single-flight refresh lock.
+WHOOP_REQUEST_TIMEOUT = float(os.environ.get("WHOOP_REQUEST_TIMEOUT", "10"))
+if WHOOP_REQUEST_TIMEOUT <= 0:
+    raise ValueError(
+        "WHOOP_REQUEST_TIMEOUT must be a positive number; "
+        f"got {WHOOP_REQUEST_TIMEOUT!r}"
+    )
+
 # Analytics / streak. Validated at import time so a misconfigured value
 # fails the worker boot loudly instead of silently producing ``streak=0``
 # forever. ``ANALYTICS_STREAK_THRESHOLD`` is the per-day completion ratio
