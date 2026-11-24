@@ -2,10 +2,13 @@
 
 ### Requirement: WHOOP settings are all or none
 WHOOP SHALL be disabled when no `WHOOP_OAUTH_*` setting is set, without blocking boot. When any is set, a system check SHALL require all four and a valid Fernet key.
+Enforced: backend/whoop_sync/checks.py::error_whoop_oauth_partial_config
 
 #### Scenario: Partial configuration
 - **WHEN** only some `WHOOP_OAUTH_*` settings are set
 - **THEN** the WHOOP system check reports an error
+
+Tests: backend/tests/test_whoop_sync_models.py::TestE001AllOrNone::test_partial_config_errors_in_every_mode
 
 #### Scenario: No configuration
 - **WHEN** no `WHOOP_OAUTH_*` setting is set

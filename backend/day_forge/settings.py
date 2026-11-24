@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     "todoist_sync",
     "habitica_sync",
     "gcal_sync",
+    "whoop_sync",
 ]
 
 MIDDLEWARE = [
