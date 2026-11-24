@@ -233,6 +233,8 @@ def _refresh_as_lock_holder(account_id: int, rejected: str | None) -> str:
         return token
     refresh_token = row.get_refresh_token()
     try:
+        # WHOOP's refresh flow takes scope=offline, and the refreshed token
+        # keeps the read scopes of the original grant.
         grant = _token_request(
             {"grant_type": "refresh_token", "refresh_token": refresh_token, "scope": "offline"}
         )

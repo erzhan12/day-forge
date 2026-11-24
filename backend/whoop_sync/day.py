@@ -69,7 +69,7 @@ def _previous_cycle(cycles: list[dict], sleep: dict, sleep_start) -> dict | None
     """Newest cycle other than the sleep's own that ended by the sleep start."""
     current = sleep["cycle_id"]
     for cycle in cycles:
-        if cycle.get("id") == current or cycle.get("end") is None:
+        if _cycle_id(cycle.get("id")) == current or cycle.get("end") is None:
             continue
         parse_timestamp(cycle.get("start"))
         if parse_timestamp(cycle["end"]) <= sleep_start:
