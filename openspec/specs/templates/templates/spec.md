@@ -96,7 +96,7 @@ Enforced: backend/templates_mgr/api.py::_parse_template_payload, backend/common/
 Tests: backend/tests/test_http_json.py::test_invalid_encoding_uses_existing_endpoint_envelope
 
 ### Requirement: Template block validation
-The system SHALL accept `blocks` only as a list of at most 50 objects, each with a non-empty `title` of at most 255 characters, `%H:%M` start and end times on a 5-minute grid inside the user's schedule window (inclusive), start before end, and a `category` slug from the user's catalog. Failures SHALL return `400` with `errors.blocks` as a list of messages.
+The system SHALL accept `blocks` only as a list of at most `MAX_TEMPLATE_BLOCKS` (50) objects, each with a non-empty `title` of at most 255 characters, `%H:%M` start and end times on a 5-minute grid inside the user's schedule window (inclusive), start before end, and a `category` slug from the user's catalog. Failures SHALL return `400` with `errors.blocks` as a list of messages.
 Enforced: backend/templates_mgr/api.py::validate_template_blocks
 
 #### Scenario: Empty block title via the API
@@ -142,8 +142,16 @@ Tests: backend/tests/test_templates_api.py::TestTemplatesCreate::test_out_of_win
 Tests: backend/tests/test_categories.py::TestValidateTemplateBlocks::test_start_after_end_rejected
 
 #### Scenario: Too many blocks
-- **WHEN** a template is saved with 51 blocks
-- **THEN** validation reports that templates may not contain more than 50 blocks
+- **WHEN** a template is created or updated with 51 blocks
+- **THEN** the response is `400` with `templates may not contain more than 50 blocks` and the stored template is unchanged
+
+Tests: backend/tests/test_templates_api.py::TestTemplateBlockCap::test_create_one_over_cap_returns_400, backend/tests/test_templates_api.py::TestTemplateBlockCap::test_update_one_over_cap_returns_400_and_keeps_template
+
+#### Scenario: Exactly the block limit
+- **WHEN** a template is created or updated with 50 valid blocks
+- **THEN** it is saved
+
+Tests: backend/tests/test_templates_api.py::TestTemplateBlockCap::test_create_at_cap_succeeds, backend/tests/test_templates_api.py::TestTemplateBlockCap::test_update_at_cap_succeeds
 
 ### Requirement: Template blocks must not overlap
 The system SHALL reject a template whose blocks overlap, treating each block as a half-open interval so a block may end exactly when the next starts. The overlap check SHALL run only when every block passed its individual checks.

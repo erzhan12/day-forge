@@ -16,4 +16,4 @@
 ## 4. Finish
 - [x] Update `RULES.md`, `docs/api.md`, `.claude/rules/project.md`, `README.md`, `.env.example`
 - [x] Run `make lint`, the backend suite and `make spec-check`
-- [ ] Archive the change on the feature branch before merge
+- [x] Archive the change on the feature branch before merge

@@ -144,7 +144,7 @@ Enforced: backend/ai/prompts.py::_runtime_block_to_dict
 Tests: backend/tests/test_ai_calendar_privacy.py::test_imported_title_is_absent_from_draft_history
 
 ### Requirement: Draft provider call
-The system SHALL refuse with `AIUnavailableError` when `LLM_API_KEY` is empty or whitespace. Otherwise it SHALL call the provider once with `LLM_DRAFT_MODEL` (default `gpt-4o`), the draft system prompt for the user's day window and categories, JSON-object response format, temperature 0 and `LLM_REQUEST_TIMEOUT`.
+The system SHALL refuse with `AIUnavailableError` when `LLM_API_KEY` is empty or whitespace. Otherwise it SHALL call the provider once with `LLM_DRAFT_MODEL` (default `gpt-4o`), the draft system prompt for the user's day window and categories, JSON-object response format, temperature 0 and the draft-only `LLM_DRAFT_REQUEST_TIMEOUT` (default 60 seconds).
 Enforced: backend/ai/service.py::run_draft
 
 #### Scenario: Draft model used
@@ -159,8 +159,14 @@ Tests: backend/tests/test_ai_service_draft.py::test_run_draft_uses_draft_model_a
 
 Tests: backend/tests/test_ai_service_draft.py::test_run_draft_raises_unavailable_without_key
 
+#### Scenario: Draft timeout
+- **WHEN** a draft calls the provider
+- **THEN** the request carries `LLM_DRAFT_REQUEST_TIMEOUT`, not the chat `LLM_REQUEST_TIMEOUT`
+
+Tests: backend/tests/test_ai_draft_action_cap.py::test_run_draft_uses_draft_timeout_and_accepts_cap, backend/tests/test_settings_validation.py::test_draft_request_timeout_default_is_sixty
+
 ### Requirement: Draft response validation
-The system MUST parse the reply as a JSON object with an `actions` array of at most 20 items and a string `explanation` within `LLM_MAX_EXPLANATION_CHARS`. Every action MUST be an `add` with title, category and explicit HH:MM start and end. Category labels are resolved to slugs first; an unresolvable add category falls back to the sink category.
+The system MUST parse the reply as a JSON object with an `actions` array of at most `MAX_DRAFT_ACTIONS` (60) items and a string `explanation` within `LLM_MAX_EXPLANATION_CHARS`. Every action MUST be an `add` with title, category and explicit HH:MM start and end. Category labels are resolved to slugs first; an unresolvable add category falls back to the sink category.
 Enforced: backend/ai/service.py::run_draft, backend/ai/schemas.py::validate_draft_response
 
 #### Scenario: Non-add action
@@ -186,6 +192,12 @@ Tests: backend/tests/test_ai_schemas_draft.py::test_envelope_check_runs_first
 - **THEN** the label resolves to its slug and the unknown category resolves to the sink slug
 
 Tests: backend/tests/test_ai_service_draft.py::test_run_draft_resolves_category_label_to_slug, backend/tests/test_ai_service_draft.py::test_run_draft_unresolved_category_falls_back_to_sink
+
+#### Scenario: Action count at and over the cap
+- **WHEN** the reply has exactly `MAX_DRAFT_ACTIONS` valid adds, or one more
+- **THEN** the first is accepted; the second fails validation and the endpoint returns 502 with the generic parse detail and writes no blocks
+
+Tests: backend/tests/test_ai_draft_action_cap.py::test_validator_accepts_draft_at_cap, backend/tests/test_ai_draft_action_cap.py::test_validator_rejects_one_over_cap, backend/tests/test_ai_draft_action_cap.py::test_run_draft_rejects_one_over_cap, backend/tests/test_ai_draft_action_cap.py::TestDraftEndpointCap::test_draft_one_over_cap_returns_502_without_writes
 
 ### Requirement: Draft AI error responses
 The system SHALL write a best-effort `kind=draft` audit row with command `[DRAFT]` and the raw reply (or error text) for every AI error, then respond with the shared error-status mapping. For `AIParseError` the client detail MUST be the fixed generic parse message, never the validation text.
@@ -236,6 +248,12 @@ Tests: backend/tests/test_ai_views_draft.py::test_gap_change_during_draft_does_n
 - **THEN** the response is 400 with detail `Blocks would overlap.` and no blocks are written
 
 Tests: backend/tests/test_ai_views_draft.py::TestDraftDayWindow::test_overlapping_draft_is_rejected_without_partial_writes
+
+#### Scenario: Maximum-size draft
+- **WHEN** a draft with `MAX_DRAFT_ACTIONS` adds is applied, or one whose last add overlaps another
+- **THEN** all adds persist with a single revision bump, or none persist and the revision is unchanged
+
+Tests: backend/tests/test_ai_draft_action_cap.py::TestDraftEndpointCap::test_draft_at_cap_is_applied_in_one_revision, backend/tests/test_ai_draft_action_cap.py::TestDraftEndpointCap::test_draft_at_cap_with_overlap_writes_nothing
 
 ### Requirement: Draft blocks must fit the day window
 The system MUST reject a draft containing a block outside the user's configured day window with 400 and the block's `action_index`. The detail SHALL name the block title, its attempted interval and the window bounds and say the draft was not saved.
@@ -308,3 +326,25 @@ Tests: backend/tests/test_checks.py::TestDraftCaptureProductionError::test_error
 - **THEN** `ai.E002` is silent
 
 Tests: backend/tests/test_checks.py::TestDraftCaptureProductionError::test_silent_when_path_unset, backend/tests/test_checks.py::TestDraftCaptureProductionError::test_silent_when_setting_not_defined, backend/tests/test_checks.py::TestDraftCaptureProductionError::test_silent_when_debug_true
+
+### Requirement: Draft action cap covers a full template
+The system SHALL derive `MAX_DRAFT_ACTIONS` as `MAX_TEMPLATE_BLOCKS` plus 10 headroom actions, independent of the chat cap, and state it in the draft system prompt with an instruction to leave out history-derived additions, never template blocks, to stay under it.
+Enforced: backend/ai/schemas.py::MAX_DRAFT_ACTIONS, backend/templates_mgr/limits.py::MAX_TEMPLATE_BLOCKS, backend/ai/prompts.py::build_system_prompt_draft
+
+#### Scenario: Derived cap
+- **WHEN** the caps are read
+- **THEN** `MAX_DRAFT_ACTIONS` equals `MAX_TEMPLATE_BLOCKS` plus the headroom, template validation uses the same constant, and chat stays at 20
+
+Tests: backend/tests/test_ai_draft_action_cap.py::test_draft_cap_derives_from_template_limit
+
+#### Scenario: Cap in the prompt
+- **WHEN** the draft system prompt is rendered
+- **THEN** it states the cap and forbids dropping a template block to meet it
+
+Tests: backend/tests/test_ai_draft_action_cap.py::test_draft_prompt_states_cap_and_keeps_template_blocks
+
+#### Scenario: Full template
+- **WHEN** the template holds `MAX_TEMPLATE_BLOCKS` blocks and the provider returns all of them
+- **THEN** the draft returns 200 and every template block is stored
+
+Tests: backend/tests/test_ai_draft_action_cap.py::TestDraftEndpointCap::test_full_template_generates_complete_draft
