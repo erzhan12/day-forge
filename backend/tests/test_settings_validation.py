@@ -158,3 +158,17 @@ def test_secure_proxy_ssl_header_set_in_production(monkeypatch):
     )
     assert ns["SECURE_PROXY_SSL_HEADER"] == ("HTTP_X_FORWARDED_PROTO", "https")
     assert ns["SECURE_SSL_REDIRECT"] is True  # guard: the setting this protects
+
+
+def test_draft_request_timeout_default_is_sixty(monkeypatch):
+    """Issue #222: a full draft needs longer than the 15 s chat timeout."""
+    monkeypatch.delenv("LLM_DRAFT_REQUEST_TIMEOUT", raising=False)
+    ns = _exec_settings(monkeypatch)
+    assert ns["LLM_DRAFT_REQUEST_TIMEOUT"] == 60.0
+    assert ns["LLM_DRAFT_REQUEST_TIMEOUT"] > ns["LLM_REQUEST_TIMEOUT"]
+
+
+@pytest.mark.parametrize("value", ["0", "-1"])
+def test_non_positive_draft_request_timeout_raises_at_import(monkeypatch, value):
+    with pytest.raises(ValueError, match="LLM_DRAFT_REQUEST_TIMEOUT"):
+        _exec_settings(monkeypatch, LLM_DRAFT_REQUEST_TIMEOUT=value)

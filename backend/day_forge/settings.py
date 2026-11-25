@@ -197,6 +197,18 @@ LLM_MAX_COMMAND_CHARS = int(os.environ.get("LLM_MAX_COMMAND_CHARS", "500"))
 # (~5-10x cost of LLM_MODEL) since drafts shape a whole day from history
 # and benefit from the larger context window.
 LLM_DRAFT_MODEL = os.environ.get("LLM_DRAFT_MODEL", "gpt-4o")
+# Per-attempt timeout (seconds) for the draft provider call only (issue #222).
+# A full draft (up to ai.schemas.MAX_DRAFT_ACTIONS = 60 adds) is ~1.8k-2.9k
+# output tokens, about 20-50 s at 60-100 tokens/s, so the 15 s chat
+# LLM_REQUEST_TIMEOUT would cut it off. The OpenAI SDK retries a timeout
+# (max_retries=2 by default), so the worst-case wall time is about three
+# times this value plus backoff; the async view holds no DB lock meanwhile.
+LLM_DRAFT_REQUEST_TIMEOUT = float(os.environ.get("LLM_DRAFT_REQUEST_TIMEOUT", "60"))
+if LLM_DRAFT_REQUEST_TIMEOUT <= 0:
+    raise ValueError(
+        "LLM_DRAFT_REQUEST_TIMEOUT must be a positive number; "
+        f"got {LLM_DRAFT_REQUEST_TIMEOUT!r}"
+    )
 # Independent fixed-window counter for the draft endpoint. Drafts are
 # billed against a separate budget so a misbehaving auto-trigger loop
 # can't drain the chat budget too. Default 10/hr is well above realistic

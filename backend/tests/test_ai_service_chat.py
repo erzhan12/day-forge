@@ -360,6 +360,27 @@ class TestParsing:
         assert result.ask is None
         assert result.unresolved_categories == ()
 
+    def test_chat_action_cap_stays_at_twenty(self, patch_client, fake_schedule, now, settings):
+        """Issue #222 raised only the draft cap; chat keeps its own 20-action limit."""
+        from ai.schemas import MAX_ACTIONS_PER_COMMAND, MAX_DRAFT_ACTIONS
+
+        assert MAX_ACTIONS_PER_COMMAND == 20
+        assert MAX_DRAFT_ACTIONS > MAX_ACTIONS_PER_COMMAND
+        messages = [{"role": "user", "content": "add notes"}]
+        actions = [{"type": "add", "title": f"Notes {i}", "category": "work"} for i in range(20)]
+
+        completions = patch_client(_ok_response(actions=actions, explanation="Added"))
+        result = run_chat(messages, fake_schedule, [], [], now)
+        assert len(result.parsed_actions) == 20
+        # Chat keeps the short timeout; only drafts use LLM_DRAFT_REQUEST_TIMEOUT.
+        assert completions.calls[0]["timeout"] == settings.LLM_REQUEST_TIMEOUT
+
+        over = actions + [{"type": "add", "title": "Notes 20", "category": "work"}]
+        patch_client(_ok_response(actions=over, explanation="Added"))
+        with pytest.raises(AIParseError) as exc:
+            run_chat(messages, fake_schedule, [], [], now)
+        assert "too many actions (21 > 20)" in str(exc.value)
+
     def test_invalid_json_raises_parse(self, patch_client, fake_schedule, now):
         patch_client("not-json")
         with pytest.raises(AIParseError) as exc:

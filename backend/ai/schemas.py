@@ -13,10 +13,19 @@ import re
 
 from django.conf import settings
 from schedules.http import is_plain_int
+from templates_mgr.limits import MAX_TEMPLATE_BLOCKS
 
 from ai.free_slot import GRID_MINUTES
 
+# Chat (and pending-intent) cap: one user turn rarely needs more than 20 edits.
 MAX_ACTIONS_PER_COMMAND = 20
+
+# Draft cap (issue #222). A draft emits one ``add`` per block and must be able
+# to return every block of a full template, so the cap is derived from the
+# template limit plus headroom for history-derived additions. Never lower it
+# below ``MAX_TEMPLATE_BLOCKS``; change the template limit instead.
+DRAFT_ACTION_HEADROOM = 10
+MAX_DRAFT_ACTIONS = MAX_TEMPLATE_BLOCKS + DRAFT_ACTION_HEADROOM
 
 ALLOWED_ACTION_TYPES = {"add", "move", "remove", "resize", "update"}
 
@@ -251,7 +260,7 @@ def validate_action_shape(
     return errors
 
 
-def validate_response_envelope(parsed) -> list[str]:
+def validate_response_envelope(parsed, *, max_actions: int) -> list[str]:
     """Sanity-check the top-level shape before inspecting individual actions.
 
     Internal helper — after the ``/command/`` endpoint was removed (feature
@@ -259,7 +268,8 @@ def validate_response_envelope(parsed) -> list[str]:
     ``validate_draft_response``. ``validate_chat_response_envelope``
     re-implements the same checks inline to accommodate the extra ``ask`` field.
     The explanation cap is read from ``settings.LLM_MAX_EXPLANATION_CHARS`` so
-    every AI envelope shares a single tunable.
+    every AI envelope shares a single tunable. ``max_actions`` is explicit so
+    the caller states which action cap applies.
     """
     if not isinstance(parsed, dict):
         return ["response must be a JSON object"]
@@ -268,8 +278,8 @@ def validate_response_envelope(parsed) -> list[str]:
     actions = parsed.get("actions")
     if not isinstance(actions, list):
         errors.append("'actions' must be an array")
-    elif len(actions) > MAX_ACTIONS_PER_COMMAND:
-        errors.append(f"too many actions ({len(actions)} > {MAX_ACTIONS_PER_COMMAND})")
+    elif len(actions) > max_actions:
+        errors.append(f"too many actions ({len(actions)} > {max_actions})")
 
     explanation = parsed.get("explanation", "")
     if not isinstance(explanation, str):
@@ -355,11 +365,11 @@ def validate_draft_response(parsed, allowed_categories) -> list[str]:
     Same envelope + per-action shape checks as ``validate_response_envelope``
     + ``validate_action_shape``, plus an extra rule: only ``add`` actions
     are valid in a draft (the schedule is empty by construction, so there
-    are no ``task_id``s to reference). The cap on action count reuses
-    ``MAX_ACTIONS_PER_COMMAND`` — a 20-block day is plausible
-    (06:00-23:00 in 50-min slices). Bump only when real drafts need more.
+    are no ``task_id``s to reference). The action count is capped by
+    ``MAX_DRAFT_ACTIONS`` (derived from ``MAX_TEMPLATE_BLOCKS``), not the
+    chat cap, so a full template fits in one draft (issue #222).
     """
-    envelope_errors = validate_response_envelope(parsed)
+    envelope_errors = validate_response_envelope(parsed, max_actions=MAX_DRAFT_ACTIONS)
     if envelope_errors:
         return envelope_errors
 

@@ -316,7 +316,8 @@ async def run_draft(
             ],
             response_format={"type": "json_object"},
             temperature=0,
-            timeout=settings.LLM_REQUEST_TIMEOUT,
+            # Draft-only timeout: a full draft is far longer than a chat reply.
+            timeout=settings.LLM_DRAFT_REQUEST_TIMEOUT,
         )
     except openai.APITimeoutError as e:
         logger.warning("AI draft timeout: %s", e)
