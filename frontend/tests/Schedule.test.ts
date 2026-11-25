@@ -247,9 +247,11 @@ vi.mock("../src/composables/useExternalSourcePoll", () => ({
 
 // Import AFTER all mocks so the SUT picks them up.
 import Schedule from "../src/pages/Schedule.vue"
+import ExternalEventsPanel from "../src/components/ExternalEventsPanel.vue"
 import type { Schedule as ScheduleType, TimeBlock, UserCategory } from "../src/types"
 import { useExternalCalendarPlacement } from "../src/composables/useExternalCalendarPlacement"
 import { EXTERNAL_TASKS_SIDEBAR_OPEN_KEY } from "../src/utils/externalTasksSidebarStorage"
+import { todayString } from "../src/utils/date"
 
 // --- helpers -------------------------------------------------------------
 
@@ -1554,5 +1556,138 @@ describe("Schedule.vue logout footer by theme (0106)", () => {
   it("keeps the logout footer in classic", () => {
     const w = mountTheme("classic")
     expect(w.get(".logout-footer .logout-btn").text()).toBe("Logout")
+  })
+})
+
+// Feature 0112 / issue #229: Schedule left open across saved-zone midnight
+// must restyle external events from the page clock, not a cached todayString().
+describe("Schedule.vue external calendar past-state at midnight (0112)", () => {
+  const { setPlacement } = useExternalCalendarPlacement()
+  const ZONE = "Asia/Qatar"
+  const MAY_7 = "2026-05-07"
+  // 23:59:30 on 7 May in Asia/Qatar. Sixty seconds later is 00:00:30 on
+  // 8 May there, while UTC is still 7 May 21:00 — so a browser/UTC today
+  // would stay stale.
+  const BEFORE_QATAR_MIDNIGHT = "2026-05-07T20:59:30Z"
+  const overnight = {
+    title: "Late standup",
+    start: "2026-05-07T20:00:00Z",
+    end: "2026-05-07T21:30:00Z",
+    calendar_name: "Team",
+    all_day: false,
+    external_uid: "overnight-qatar",
+    account_label: "",
+  }
+  const evening = {
+    title: "Dinner",
+    start: "2026-05-07T13:00:00Z",
+    end: "2026-05-07T14:00:00Z",
+    calendar_name: "Personal",
+    all_day: false,
+    external_uid: "dinner-qatar",
+    account_label: "",
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(BEFORE_QATAR_MIDNIGHT))
+    stubLocalStorage()
+    stubMatchMedia(false)
+    resetExternalProviderMocks()
+    setPlacement("center")
+    calendarState.statusKnown = true
+    calendarState.connected = true
+    calendarState.events = [overnight]
+    document.documentElement.dataset.theme = "classic"
+  })
+
+  afterEach(() => {
+    wrapper?.unmount()
+    wrapper = null
+    localStorage.clear()
+    delete document.documentElement.dataset.theme
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+    vi.clearAllMocks()
+  })
+
+  function mountOpenSchedule(opts: { placement: "center" | "sidebar"; wide: boolean }) {
+    setPlacement(opts.placement)
+    stubMatchMedia(opts.wide)
+    if (opts.wide) {
+      localStorage.setItem(EXTERNAL_TASKS_SIDEBAR_OPEN_KEY, JSON.stringify(true))
+    }
+    wrapper = mount(Schedule, {
+      props: {
+        categories: makeCategories(),
+        schedule: makeSchedule(MAY_7),
+        blocks: [],
+        date: MAY_7,
+        auto_draft_pending: false,
+        has_template_for_type: true,
+        slot_type: "weekday" as const,
+        schedule_window: { start: "06:00", end: "23:00", time_zone: ZONE },
+        external_tasks_poll_interval: 60,
+        auth_user_id: 1,
+        integration_bootstrap: integrationBootstrap(MAY_7, ZONE),
+      },
+      global: {
+        stubs: {
+          ...STUBS,
+          ChatSidebar: true,
+          AddToScheduleDialog: true,
+        },
+      },
+    })
+    return wrapper
+  }
+
+  async function crossSavedZoneMidnight() {
+    vi.advanceTimersByTime(60_000)
+    await nextTick()
+  }
+
+  it("center panel marks an overnight event past after saved-zone midnight without remounting", async () => {
+    const w = mountOpenSchedule({ placement: "center", wide: false })
+    const panel = w.getComponent(ExternalEventsPanel)
+    expect(panel.props("todayDate")).toBe(MAY_7)
+    expect(panel.props("variant")).toBe("center")
+    const item = w.get('[data-testid="external-event"]')
+    expect(item.classes()).not.toContain("ee-item--past")
+
+    await crossSavedZoneMidnight()
+
+    expect(todayString("UTC")).toBe(MAY_7)
+    expect(todayString(ZONE)).toBe("2026-05-08")
+    expect(panel.props("todayDate")).toBe("2026-05-08")
+    expect(item.classes()).toContain("ee-item--past")
+  })
+
+  it("sidebar panel supplies todayDate and restyles after the same rollover", async () => {
+    const w = mountOpenSchedule({ placement: "sidebar", wide: true })
+    const panel = w.getComponent(ExternalEventsPanel)
+    expect(panel.props("todayDate")).toBe(MAY_7)
+    expect(panel.props("variant")).toBe("sidebar")
+    const item = w.get('[data-testid="external-event"]')
+    expect(item.classes()).not.toContain("ee-item--past")
+
+    await crossSavedZoneMidnight()
+
+    expect(panel.props("todayDate")).toBe("2026-05-08")
+    expect(item.classes()).toContain("ee-item--past")
+  })
+
+  it("same-day clock ticks keep a later event unfaded", async () => {
+    vi.setSystemTime(new Date("2026-05-07T12:00:00Z"))
+    calendarState.events = [evening]
+    const w = mountOpenSchedule({ placement: "center", wide: false })
+    const item = w.get('[data-testid="external-event"]')
+    expect(item.classes()).not.toContain("ee-item--past")
+
+    vi.advanceTimersByTime(60_000)
+    await nextTick()
+
+    expect(item.classes()).not.toContain("ee-item--past")
+    expect(w.getComponent(ExternalEventsPanel).props("todayDate")).toBe(MAY_7)
   })
 })

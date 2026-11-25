@@ -3,9 +3,11 @@
 // added the account email chip + per-account error banners.
 
 import { ScheduleDisabledKey } from "../src/composables/scheduleContext"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { mount } from "@vue/test-utils"
 import { ref } from "vue"
+
+import type { NormalizedEvent } from "../src/types/calendar"
 
 import ExternalEventsPanel from "../src/components/ExternalEventsPanel.vue"
 import { todayString } from "../src/utils/date"
@@ -221,6 +223,137 @@ describe("ExternalEventsPanel", () => {
     const items = wrapper.findAll('[data-testid="external-event"]')
     expect(items[0].classes()).toContain("ee-item--past")
     expect(items[1].classes()).not.toContain("ee-item--past")
+  })
+})
+
+// Feature 0112 / issue #229: past-state must follow a reactive saved-zone
+// date, not a computed that caches todayString() for the panel's lifetime.
+describe("ExternalEventsPanel midnight rollover (0112)", () => {
+  const ZONE = "Asia/Qatar"
+  const MAY_7 = "2026-05-07"
+  const MAY_8 = "2026-05-08"
+
+  // 23:00–00:30 in Asia/Qatar. At 23:59 on May 7 this is still current
+  // because the end folds onto May 8; after midnight on the same viewed
+  // date it is past.
+  const overnight: NormalizedEvent = {
+    title: "Late standup",
+    start: "2026-05-07T20:00:00Z",
+    end: "2026-05-07T21:30:00Z",
+    calendar_name: "Team",
+    all_day: false,
+    external_uid: "overnight-1",
+    account_label: "",
+  }
+
+  const afternoon: NormalizedEvent = {
+    title: "Lunch",
+    start: "2026-05-07T11:00:00Z",
+    end: "2026-05-07T11:30:00Z",
+    calendar_name: "Personal",
+    all_day: false,
+    external_uid: "lunch-1",
+    account_label: "",
+  }
+
+  const evening: NormalizedEvent = {
+    title: "Dinner",
+    start: "2026-05-07T13:00:00Z",
+    end: "2026-05-07T14:00:00Z",
+    calendar_name: "Personal",
+    all_day: false,
+    external_uid: "dinner-1",
+    account_label: "",
+  }
+
+  it("re-samples the saved-zone date when nowMinutes ticks across midnight without todayDate", async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-05-07T20:59:30Z"))
+    const wrapper = mount(ExternalEventsPanel, {
+      props: {
+        events: [overnight],
+        loading: false,
+        connected: true,
+        date: MAY_7,
+        timeZone: ZONE,
+        nowMinutes: 23 * 60 + 59,
+      },
+    })
+    expect(wrapper.get('[data-testid="external-event"]').classes()).not.toContain("ee-item--past")
+
+    vi.setSystemTime(new Date("2026-05-07T21:00:10Z"))
+    await wrapper.setProps({ nowMinutes: null })
+
+    expect(todayString("UTC")).toBe(MAY_7)
+    expect(todayString(ZONE)).toBe(MAY_8)
+    expect(wrapper.get('[data-testid="external-event"]').classes()).toContain("ee-item--past")
+    wrapper.unmount()
+    vi.useRealTimers()
+  })
+
+  it("adds ee-item--past when todayDate rolls to the next day without remounting", async () => {
+    const wrapper = mount(ExternalEventsPanel, {
+      props: {
+        events: [overnight],
+        loading: false,
+        connected: true,
+        date: MAY_7,
+        timeZone: ZONE,
+        todayDate: MAY_7,
+        nowMinutes: 23 * 60 + 59,
+      },
+    })
+    const item = wrapper.get('[data-testid="external-event"]')
+    expect(item.classes()).not.toContain("ee-item--past")
+
+    await wrapper.setProps({ todayDate: MAY_8, nowMinutes: null })
+
+    expect(item.classes()).toContain("ee-item--past")
+    expect(wrapper.findAll('[data-testid="external-event"]')).toHaveLength(1)
+  })
+
+  it("does not mark an in-progress overnight event past when its day becomes today", async () => {
+    const wrapper = mount(ExternalEventsPanel, {
+      props: {
+        events: [overnight],
+        loading: false,
+        connected: true,
+        date: MAY_8,
+        timeZone: ZONE,
+        todayDate: MAY_7,
+        nowMinutes: null,
+      },
+    })
+    expect(wrapper.get('[data-testid="external-event"]').classes()).not.toContain("ee-item--past")
+
+    await wrapper.setProps({ todayDate: MAY_8, nowMinutes: 0 })
+
+    expect(wrapper.get('[data-testid="external-event"]').classes()).not.toContain("ee-item--past")
+  })
+
+  it("keeps same-day fading in sync with nowMinutes without remounting", async () => {
+    const wrapper = mount(ExternalEventsPanel, {
+      props: {
+        events: [afternoon, evening],
+        loading: false,
+        connected: true,
+        date: MAY_7,
+        timeZone: ZONE,
+        todayDate: MAY_7,
+        nowMinutes: 15 * 60,
+      },
+    })
+    const items = wrapper.findAll('[data-testid="external-event"]')
+    expect(items[0].classes()).toContain("ee-item--past")
+    expect(items[1].classes()).not.toContain("ee-item--past")
+
+    await wrapper.setProps({ nowMinutes: 15 * 60 + 1 })
+    expect(items[0].classes()).toContain("ee-item--past")
+    expect(items[1].classes()).not.toContain("ee-item--past")
+
+    await wrapper.setProps({ nowMinutes: 17 * 60 })
+    expect(items[0].classes()).toContain("ee-item--past")
+    expect(items[1].classes()).toContain("ee-item--past")
   })
 })
 

@@ -151,7 +151,11 @@ function toggleSection(section: ExternalRailSection) {
   writeExternalRailCollapsed(collapsed.value)
 }
 
-const today = computed(() => props.todayDate ?? todayString(props.timeZone ?? "UTC"))
+const today = computed(() => {
+  if (props.todayDate) return props.todayDate
+  void props.nowMinutes
+  return todayString(props.timeZone ?? "UTC")
+})
 const railTitle = computed(() => (props.activeDate === today.value ? "Today" : formatShortCivilDate(props.activeDate)))
 const railSubtitle = computed(() => formatShortCivilDate(props.activeDate))
 

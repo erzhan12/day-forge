@@ -55,7 +55,15 @@ const props = withDefaults(
 const railRows = computed(() => props.embedded || (props.variant === "center" && props.layout === "4a"))
 
 const viewedDate = toRef(props, "date")
-const today = computed(() => props.todayDate ?? todayString(props.timeZone))
+// todayDate is the saved-zone civil date from Schedule's useNowMinutes.
+// todayString() has no Vue dependency, so a computed that only calls it
+// freezes the first render's date until remount (issue #229). Re-read it
+// when the page clock ticks so a missing todayDate still rolls over.
+const today = computed(() => {
+  if (props.todayDate) return props.todayDate
+  void props.nowMinutes
+  return todayString(props.timeZone)
+})
 
 function eventIsPast(ev: NormalizedEvent): boolean {
   return isExternalEventPast(
