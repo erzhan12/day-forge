@@ -264,7 +264,7 @@ Tests: frontend/tests/useFocusIndicator.test.ts::useFocusIndicator::exposes a st
 Tests: frontend/tests/focusIndicatorStorage.test.ts::focus indicator restore storage::accepts only literal JSON true and safely clears intent
 
 ### Requirement: Root ownership and publication generation
-The app root SHALL own the PiP and retain copied snapshots published by Schedule through generation-matched publication only; on Login, a null user or a user change it SHALL advance the generation, clear the snapshot and close the PiP clearing intent, rejecting later stale publications and any write while Login or null-user remains in force.
+The app root SHALL own the PiP and retain Schedule snapshots via generation-matched publication only; on Login, null user or user change it SHALL bump generation, clear the snapshot, close the PiP (clearing intent), and refuse stale or Login/null-user writes.
 Enforced: frontend/src/composables/useFocusIndicatorController.ts::useFocusIndicatorController, frontend/src/composables/useFocusIndicatorController.ts::publishIfGenerationMatches
 
 #### Scenario: Login transition
