@@ -238,10 +238,10 @@ Tests: frontend/tests/useDrag.test.ts::useDrag frozen render bounds::sets frozen
 Tests: frontend/tests/useDrag.test.ts::useDrag off-grid geometry and payload (feature 0026)::clamps the drop preview to the window start under a narrowed window (feature 0053)
 
 #### Scenario: Pointer through the stack map
-- **WHEN** the pointer moves over a capped gap or the leading stub in the stack layout
+- **WHEN** the pointer moves over a gap or the leading stub in the stack layout
 - **THEN** the preview time comes from the frozen map, reaches the window start, and the drop commits the shown time
 
-Tests: frontend/tests/useDrag.test.ts::useDrag on the stack axis map (0106)::converts pointer pixels through the frozen axis map, frontend/tests/useDrag.test.ts::useDrag on the stack axis map (0106)::reaches the window start through the leading stub, frontend/tests/useDrag.test.ts::useDrag on the stack axis map (0106)::commits the ghost label time for a drop near the end of a capped gap
+Tests: frontend/tests/useDrag.test.ts::useDrag on the stack axis map (0106)::converts pointer pixels through the frozen axis map, frontend/tests/useDrag.test.ts::useDrag on the stack axis map (0106)::reaches the window start through the leading stub, frontend/tests/useDrag.test.ts::useDrag on the stack axis map (0106)::commits the ghost label time for a drop near the end of a long mid-day gap
 
 #### Scenario: Overlapping legacy blocks
 - **WHEN** stored blocks overlap in time

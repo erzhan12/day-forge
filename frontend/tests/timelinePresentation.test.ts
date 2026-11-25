@@ -158,8 +158,8 @@ describe("timeline presentation in stack mode (0106)", () => {
 
   it("stack mode positions items from the stack", () => {
     const model = present()
-    expect(model.canvasHeightPx).toBe(538)
-    expect(model.positionedItems.map((p) => p.heightPx)).toEqual([60, 50, 60, 50, 28, 50, 60, 120, 60])
+    expect(model.canvasHeightPx).toBe(898)
+    expect(model.positionedItems.map((p) => p.heightPx)).toEqual([60, 50, 140, 50, 28, 50, 340, 120, 60])
     expect(model.positionedItems.find((p) => p.item.block?.id === 3)?.compact).toBe(true)
     expect(model.axisMap).not.toBeNull()
   })
@@ -173,10 +173,17 @@ describe("timeline presentation in stack mode (0106)", () => {
     expect(linear.canvasHeightPx).toBe((linear.axisEndMinutes - linear.axisOriginMinutes) * 2)
   })
 
-  it("places the now line inside a capped gap proportionally", () => {
+  it("places the now line on the true scale inside a mid-day gap", () => {
     const model = present({ nowMinutes: m("13:35"), nowDate: "2026-11-22" })
     const gap = model.positionedItems.find((p) => p.item.type === "gap" && p.item.start_time === "12:10")!
     expect(model.nowVisible).toBe(true)
+    expect(model.nowLineTopPx).toBeCloseTo(gap.topPx + 85 * 2)
+  })
+
+  it("places the now line inside a capped trailing gap proportionally", () => {
+    const model = present({ nowMinutes: m("19:00"), nowDate: "2026-11-22" })
+    const gap = model.positionedItems.find((p) => p.item.type === "gap" && p.item.start_time === "16:00")!
+    expect(gap.heightPx).toBe(60)
     expect(model.nowLineTopPx).toBeCloseTo(gap.topPx + 30)
   })
 
@@ -187,7 +194,7 @@ describe("timeline presentation in stack mode (0106)", () => {
       expect(trailing.item, now).toMatchObject({ type: "gap", start_time: "16:00", end_time: "22:00" })
       expect(trailing.heightPx, now).toBe(60)
       expect(trailing.edgeHint, now).toBe("later")
-      expect(model.canvasHeightPx, now).toBe(538)
+      expect(model.canvasHeightPx, now).toBe(898)
     }
   })
 

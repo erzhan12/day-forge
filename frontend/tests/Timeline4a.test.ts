@@ -189,7 +189,7 @@ describe("Timeline4a edge stubs (0017, stacked in 0106)", () => {
     expect(nowLine.style.top).toBe(`${0.5 * STUB_MINUTES * px}px`)
   })
 
-  it("caps a mid-day gap at 60px", () => {
+  it("keeps a mid-day gap on the true scale", () => {
     const morning: TimeBlock = { ...BLOCK, id: 1, start_time: "09:00", end_time: "10:00" }
     const afternoon: TimeBlock = { ...BLOCK, id: 2, start_time: "12:00", end_time: "13:00", sort_order: 10 }
     mountTimeline({ blocks: [morning, afternoon], nowDate: null, nowMinutes: null, pxPerMinute: px })
@@ -197,6 +197,6 @@ describe("Timeline4a edge stubs (0017, stacked in 0106)", () => {
       item.find('[data-testid="gap-4a-range"]').exists() &&
       item.get('[data-testid="gap-4a-range"]').text() === "10:00\u201312:00")
     expect(mid).toBeTruthy()
-    expect((mid!.element as HTMLElement).style.height).toBe("60px")
+    expect((mid!.element as HTMLElement).style.height).toBe(`${120 * px}px`)
   })
 })

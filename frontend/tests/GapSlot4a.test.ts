@@ -19,7 +19,7 @@ function mountGap(props: Partial<InstanceType<typeof GapSlot4a>["$props"]> = {})
 }
 
 describe("GapSlot4a (0106)", () => {
-  it("shows Free · 2h 50m and 12:10–15:00 on a capped row", () => {
+  it("shows Free · 2h 50m and 12:10–15:00 on a gap row", () => {
     const w = mountGap()
     expect(w.get('[data-testid="gap-4a-label"]').text()).toBe("Free · 2h 50m")
     expect(w.get('[data-testid="gap-4a-range"]').text()).toBe("12:10–15:00")

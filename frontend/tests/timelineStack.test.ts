@@ -75,10 +75,27 @@ describe("buildTimelineStack (0106)", () => {
       expect(stack.items[0].heightPx).toBe(36)
     })
 
-    it("caps a 170-minute gap at 60px", () => {
+    it("keeps a 170-minute mid-day gap on the scale", () => {
       const stack = buildTimelineStack([gap("12:10", "15:00")], PPM, FIXTURE_WINDOW)
-      expect(stack.items[0].heightPx).toBe(60)
-      expect(stack.items[0].compressed).toBe(true)
+      expect(stack.items[0].heightPx).toBe(340)
+      expect(stack.items[0].compressed).toBe(false)
+    })
+
+    it("caps a long gap at 60px when it touches a window edge", () => {
+      const leading = buildTimelineStack([gap("05:00", "07:50"), blockItem("07:50", "08:15")], PPM, FIXTURE_WINDOW)
+      expect(leading.items[0].heightPx).toBe(60)
+      expect(leading.items[0].compressed).toBe(true)
+      const trailing = buildTimelineStack([blockItem("18:45", "19:10"), gap("19:10", "22:00")], PPM, FIXTURE_WINDOW)
+      expect(trailing.items[1].heightPx).toBe(60)
+      expect(trailing.items[1].compressed).toBe(true)
+    })
+
+    it("caps a spacer at 60px", () => {
+      const stack = buildTimelineStack([
+        { type: "spacer", start_time: "02:00", end_time: "05:00", duration_minutes: 180 },
+        gap("05:00", "06:00"),
+      ], PPM, FIXTURE_WINDOW)
+      expect(stack.segments[0].heightPx).toBe(60)
     })
 
     it("keeps a 25-minute gap on the scale", () => {
@@ -157,13 +174,13 @@ describe("buildTimelineStack (0106)", () => {
       expect(stack.items[1].heightPx).toBeGreaterThanOrEqual(stack.items[0].heightPx)
     })
 
-    it("lets the cap win over a 40-minute block (documented limit)", () => {
+    it("renders a 70-minute mid-day gap taller than a 40-minute block", () => {
       const stack = buildTimelineStack([
         blockItem("09:00", "09:40"),
         gap("09:40", "10:50"),
         blockItem("10:50", "11:00"),
       ], PPM, FIXTURE_WINDOW)
-      expect(stack.items[1].heightPx).toBe(60)
+      expect(stack.items[1].heightPx).toBe(140)
       expect(stack.items[0].heightPx).toBe(80)
     })
 
@@ -248,15 +265,15 @@ describe("buildTimelineStack (0106)", () => {
       expect(stack.canvasHeightPx).toBe(linear.canvasHeightPx)
     })
 
-    it("lays out the 22 Nov 2026 fixture in 538px", () => {
+    it("lays out the 22 Nov 2026 fixture in 898px", () => {
       const stack = stackFor(fixtureBlocks(), FIXTURE_WINDOW)
-      expect(heights(stack)).toEqual([60, 50, 60, 50, 28, 50, 60, 120, 60])
-      expect(stack.canvasHeightPx).toBe(538)
+      expect(heights(stack)).toEqual([60, 50, 140, 50, 28, 50, 340, 120, 60])
+      expect(stack.canvasHeightPx).toBe(898)
     })
 
-    it("keeps the fixture at 538px at any clock time", () => {
+    it("keeps the fixture at 898px at any clock time", () => {
       for (const now of ["04:30", "11:42", "13:00", "15:30", "17:00", "21:59"]) {
-        expect(stackFor(fixtureBlocks(), FIXTURE_WINDOW, m(now)).canvasHeightPx, now).toBe(538)
+        expect(stackFor(fixtureBlocks(), FIXTURE_WINDOW, m(now)).canvasHeightPx, now).toBe(898)
       }
     })
 
@@ -273,10 +290,17 @@ describe("buildTimelineStack (0106)", () => {
   })
 
   describe("axis map", () => {
-    it("maps a time inside a capped gap proportionally", () => {
+    it("maps a time inside a capped edge gap proportionally", () => {
       const stack = stackFor(fixtureBlocks(), FIXTURE_WINDOW)
-      const capped = stack.segments.find((s) => s.startMin === m("12:10"))!
-      expect(stack.timeToPx(m("13:35"))).toBeCloseTo(capped.topPx + 30)
+      const capped = stack.segments.find((s) => s.startMin === m("16:00"))!
+      expect(capped.compressed).toBe(true)
+      expect(stack.timeToPx(m("19:00"))).toBeCloseTo(capped.topPx + 30)
+    })
+
+    it("maps a time inside a mid-day gap on the true scale", () => {
+      const stack = stackFor(fixtureBlocks(), FIXTURE_WINDOW)
+      const midDay = stack.segments.find((s) => s.startMin === m("12:10"))!
+      expect(stack.timeToPx(m("13:35"))).toBeCloseTo(midDay.topPx + 85 * PPM)
     })
 
     it("maps a time inside a stretched block proportionally", () => {
@@ -313,11 +337,11 @@ describe("buildTimelineStack (0106)", () => {
       expect(stack.hourTicks.map((t) => t.topPx)).toEqual([60, 180])
     })
 
-    it("omits hour ticks strictly inside a capped gap", () => {
+    it("emits hour ticks inside a long mid-day gap", () => {
       const stack = stackFor(fixtureBlocks(), FIXTURE_WINDOW)
       const minutes = stack.hourTicks.map((t) => t.minute)
-      expect(minutes).not.toContain(m("13:00"))
-      expect(minutes).not.toContain(m("14:00"))
+      expect(minutes).toContain(m("13:00"))
+      expect(minutes).toContain(m("14:00"))
     })
 
     it("omits hour ticks inside compressed leading and trailing stubs", () => {
@@ -325,7 +349,7 @@ describe("buildTimelineStack (0106)", () => {
       for (const hour of ["06:00", "07:00", "08:00", "09:00", "17:00", "21:00"]) {
         expect(minutes).not.toContain(m(hour))
       }
-      expect(minutes).toEqual(["05:00", "10:00", "12:00", "15:00", "16:00"].map(m))
+      expect(minutes).toEqual(["05:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00"].map(m))
     })
 
     it("keeps a tick that falls on a segment start", () => {

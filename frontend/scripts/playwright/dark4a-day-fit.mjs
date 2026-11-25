@@ -1,11 +1,13 @@
 // Feature 0106 — Dark 4a day fit, controls and text floor.
+// Feature 0110 — mid-day gaps keep the true scale; only edge gaps are capped.
 //
 // Pins the playwright user to Dark 4a, seeds the fixture Sunday 22 Nov 2026
 // (Planning 09:40–10:05, Email 11:15–11:40, Short call 11:40–11:45, Lunch
 // Walk 11:45–12:10, Deep work 15:00–16:00) and an empty draft Saturday
 // 21 Nov 2026, fixes the browser clock at 11:42 in the user's zone, and
 // checks at 1440 × 900 and 390 × 844:
-//   - the whole day fits the schedule column at scrollTop 0 (wide);
+//   - the 12:10–15:00 mid-day gap renders on the true scale (340 px at
+//     2 px/min) and the edge gaps stay capped at 60 px (wide);
 //   - header secondary buttons are 32 px;
 //   - the 5-minute block is a 28 px compact row with its checkbox, handle,
 //     title, duration and × inside the card, each hit-testable on its own;
@@ -230,19 +232,20 @@ try {
   await page.waitForSelector('[data-testid="timeline-4a"]', { timeout: ELEMENT_TIMEOUT_MS })
 
   const wide = await page.evaluate(() => {
-    const timeline = document.querySelector('[data-testid="timeline-4a"]')
     const scheme = getComputedStyle(document.documentElement).colorScheme
     const header = [...document.querySelectorAll(".df-btn--secondary")]
       .filter((el) => el.offsetParent && !el.closest('[data-testid="timeline-4a"], .settings-page'))
       .map((el) => `${el.textContent.trim()}:${Math.round(el.getBoundingClientRect().height)}`)
     const labels = [...document.querySelectorAll('[data-testid="gap-4a-label"]')].map((el) => el.textContent.trim())
     const ranges = [...document.querySelectorAll('[data-testid="gap-4a-range"]')].map((el) => el.textContent.trim())
+    const gapRows = [...document.querySelectorAll('[data-testid="gap-row-4a"]')].map((el) => ({
+      range: el.querySelector('[data-testid="gap-4a-range"]')?.textContent.trim() ?? "",
+      height: Math.round(el.getBoundingClientRect().height),
+    }))
     return {
       theme: document.documentElement.dataset.theme,
       scheme,
-      timelineBottom: Math.round(timeline.getBoundingClientRect().bottom),
-      viewport: window.innerHeight,
-      scrollY: window.scrollY,
+      gapRows,
       header,
       labels,
       ranges,
@@ -251,8 +254,13 @@ try {
   })
   check(wide.theme === "dark_4a", `theme is ${wide.theme}, want dark_4a`)
   check(wide.scheme === "dark", `root color-scheme is ${wide.scheme}, want dark`)
-  check(wide.scrollY === 0 && wide.timelineBottom <= wide.viewport,
-    `day does not fit at 1440×900: timeline bottom ${wide.timelineBottom}px, viewport ${wide.viewport}px, scrollY ${wide.scrollY}`)
+  const midDay = wide.gapRows.find((g) => g.range === "12:10–15:00")
+  check(midDay && Math.abs(midDay.height - 340) <= 1,
+    `12:10–15:00 gap is not on the true scale: ${midDay?.height ?? "missing"}px, want 340px`)
+  // The user's day window decides the edge times, so take the first and last rows.
+  const edges = [wide.gapRows.at(0), wide.gapRows.at(-1)].filter((g) => g && !g.range.startsWith("12:10"))
+  check(edges.length === 2 && edges.every((g) => g.height <= 61),
+    `edge gaps not capped at 60 px: ${wide.gapRows.map((g) => `${g.range}:${g.height}`).join(", ")}`)
   check(wide.header.length >= 2 && wide.header.every((h) => h.endsWith(":32")),
     `header secondary buttons not all 32 px: ${wide.header.join(", ")}`)
   check(wide.labels.some((l) => l.includes("Free · 2h 50m")), `no "Free · 2h 50m" gap label: ${wide.labels.join(" | ")}`)
@@ -345,7 +353,9 @@ try {
   await page.waitForSelector('[data-testid="timeline-4a"]', { timeout: ELEMENT_TIMEOUT_MS })
   check(await page.evaluate(horizontalOverflow) === 0, "schedule scrolls sideways at 390 px")
 
-  await page.locator(".title", { hasText: "Short call" }).scrollIntoViewIfNeeded()
+  // Centre the row: the day no longer fits (0110), and a minimal scroll would
+  // leave it under the fixed chat dock at the bottom of the narrow viewport.
+  await page.locator(".title", { hasText: "Short call" }).evaluate((el) => el.scrollIntoView({ block: "center" }))
   const rowNarrow = await compactRow()
   if (!rowNarrow.missing) {
     check(rowNarrow.outside.length === 0, `390 compact row parts outside the card: ${rowNarrow.outside.join("; ")}`)

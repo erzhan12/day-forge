@@ -1112,9 +1112,9 @@ describe("useDrag on the stack axis map (0106)", () => {
     const startPx = map.timeToPx(timeToMinutes("15:00"))
     drag.startDrag({ pointerId: 1, clientY: startPx } as PointerEvent, blocks[4], el)
     expect(drag.frozenAxisMap.value).toBe(map)
-    // Move to the middle of the 12:10–15:00 capped gap (60 px for 170 min).
+    // 85 minutes into the 12:10–15:00 mid-day gap, which keeps the true scale.
     const gapTop = map.timeToPx(timeToMinutes("12:10"))
-    move(el, gapTop + 30)
+    move(el, gapTop + 85 * 2)
     expect(drag.previewStartTime.value).toBe("13:35")
     drag.cancelDrag()
   })
@@ -1141,7 +1141,7 @@ describe("useDrag on the stack axis map (0106)", () => {
     drag.cancelDrag()
   })
 
-  it("keeps the grabbed block in place on the first move below a capped gap", () => {
+  it("keeps the grabbed block in place on the first move below a long mid-day gap", () => {
     const blocks = fixture()
     const { drag, map } = makeStackDrag(blocks)
     const el = realContainer()
@@ -1165,7 +1165,7 @@ describe("useDrag on the stack axis map (0106)", () => {
     drag.cancelDrag()
   })
 
-  it("commits the ghost label time for a drop near the end of a capped gap", async () => {
+  it("commits the ghost label time for a drop near the end of a long mid-day gap", async () => {
     const blocks = fixture()
     const { drag, map, reorder } = makeStackDrag(blocks)
     const el = realContainer()

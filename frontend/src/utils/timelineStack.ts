@@ -3,8 +3,10 @@
 // The linear layout places every item at `(start − origin) × pxPerMinute`, so a
 // 5-minute block is 10 px tall and a free afternoon takes hundreds of pixels.
 // The stack walks the display items in order instead: blocks get a 28 px
-// floor, gaps and spacers are capped at the edge-stub height, and each item
-// starts where the previous one ended. A piecewise-linear axis map built from
+// floor, gaps touching a window edge and spacers are capped at the edge-stub
+// height, and each item starts where the previous one ended. A gap between two
+// blocks stays on the true scale (feature 0110) so the amount of free time
+// stays visible. A piecewise-linear axis map built from
 // the same segments converts minutes to pixels and back for hour labels, the
 // now line and drag.
 //
@@ -29,7 +31,7 @@ export interface StackSegment {
   endMin: number
   topPx: number
   heightPx: number
-  /** Rendered shorter than its true scale (a capped gap or edge stub). */
+  /** Rendered shorter than its true scale (an edge stub or a spacer). */
   compressed: boolean
   /** Rendered taller than its true scale (a block raised to the floor). */
   stretched: boolean
@@ -139,7 +141,9 @@ export function buildTimelineStack(
     const raw = (end - start) * pxPerMinute
     const isBlock = item.type === "block" || item.type === "block-with-now"
     const kind: StackSegmentKind = isBlock ? "block" : item.type === "spacer" ? "spacer" : "gap"
-    const heightPx = isBlock ? Math.max(raw, MIN_BLOCK_PX) : Math.min(raw, gapCapPx)
+    // Only edge gaps and spacers are capped; a mid-day gap keeps its scale.
+    const capped = kind === "spacer" || start === window.startMinutes || end === window.endMinutes
+    const heightPx = isBlock ? Math.max(raw, MIN_BLOCK_PX) : capped ? Math.min(raw, gapCapPx) : raw
     const compressed = heightPx < raw
     const stretched = heightPx > raw
     segments.push({ kind, startMin: start, endMin: end, topPx: y, heightPx, compressed, stretched })
