@@ -2,6 +2,17 @@
 
 Patterns and corrections discovered during development. Review at session start.
 
+## Compressing a time axis must keep the quantity the user reads
+
+Feature 0106 capped every free gap in the Dark 4a timeline at 60 px so the day
+fit without scrolling. That followed the design spec, but the owner used gap
+height to judge how much free time the day had, and 70- and 170-minute gaps
+became identical rows. Feature 0110 restored the true scale between blocks and
+kept the cap only on edge gaps, spacers and the block floor. Before shrinking
+or flooring a time-based element, ask which durations the user compares by
+eye and keep those proportional; a duration label alone does not replace
+relative size. Record the trade-off (here: the day scrolls again) in the plan.
+
 ## Python defaults do not support old ORM inserts after image rollback
 
 Adding a non-null field with a Python default backfills existing rows but can
