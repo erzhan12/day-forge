@@ -77,7 +77,8 @@ Day Forge reads configuration from environment variables. The most common ones:
 | `LLM_BASE_URL` | OpenAI-compatible base URL | `https://api.openai.com/v1` |
 | `LLM_MODEL` | Model used by chat | `gpt-4o-mini` |
 | `LLM_DRAFT_MODEL` | Model used by `generate-draft` | `gpt-4o` |
-| `LLM_REQUEST_TIMEOUT` | Hard timeout for LLM HTTP calls (seconds) | `15` |
+| `LLM_REQUEST_TIMEOUT` | Hard timeout for chat LLM HTTP calls (seconds) | `15` |
+| `LLM_DRAFT_REQUEST_TIMEOUT` | Hard timeout for the draft LLM call (seconds); a full draft takes longer than a chat reply | `60` |
 | `LLM_DRAFT_RATE_LIMIT_PER_HOUR` | Per-user limit on `/generate-draft/` | `10` |
 | `LLM_CHAT_RATE_LIMIT_PER_HOUR` | Per-user limit on `/chat/` | `60` |
 | `ANALYTICS_STREAK_THRESHOLD` | Daily completion ratio needed for streak credit | `0.8` |

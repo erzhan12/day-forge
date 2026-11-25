@@ -29,6 +29,8 @@ from analytics.services import compute_review_stats, is_review_snapshot_current
 from schedules.window import DEFAULT_WINDOW
 from templates_mgr.preference_defaults import DEFAULT_BLOCK_GAP_MINUTES
 
+from ai.schemas import MAX_DRAFT_ACTIONS
+
 # Mirror frontend/src/utils/scheduleTime.ts to avoid coupling the backend
 # to the TS module. Update both together if the visible day window changes.
 DAY_START = "06:00"
@@ -371,6 +373,10 @@ Rules:
 6. Keep 'explanation' short (one sentence) describing how the draft
    diverges from the template, if at all. English is fine.
 7. Return STRICT JSON only — no prose, no code fences.
+8. Emit at most {MAX_DRAFT_ACTIONS} add actions; a longer response is rejected
+   as a whole. Every template block fits within this limit, so never drop a
+   template block to stay under it. If blocks added from history would exceed
+   the limit, leave out those additions instead.
 
 Response schema:
 {{

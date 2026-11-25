@@ -7,6 +7,7 @@ import pytest
 from django.contrib.auth.models import User
 from django.test import Client
 from schedules.models import UserScheduleSettings
+from templates_mgr.limits import MAX_TEMPLATE_BLOCKS
 from templates_mgr.models import Rule, Template
 
 
@@ -172,6 +173,84 @@ class TestTemplatesCreate:
             },
         )
         assert resp.status_code == 400
+
+
+def _touching_blocks(count):
+    """``count`` touching 15-minute blocks from 06:00 inside the default window."""
+    blocks = []
+    for i in range(count):
+        start = 6 * 60 + 15 * i
+        end = start + 15
+        blocks.append(
+            {
+                "title": f"Block {i + 1}",
+                "start_time": f"{start // 60:02d}:{start % 60:02d}",
+                "end_time": f"{end // 60:02d}:{end % 60:02d}",
+                "category": "work",
+            }
+        )
+    return blocks
+
+
+@pytest.mark.django_db
+class TestTemplateBlockCap:
+    """``MAX_TEMPLATE_BLOCKS`` boundary on create and update (issue #222)."""
+
+    def test_create_at_cap_succeeds(self, auth_client, user):
+        blocks = _touching_blocks(MAX_TEMPLATE_BLOCKS)
+        resp = _post(
+            auth_client, "/api/templates/", {"name": "Full", "type": "weekday", "blocks": blocks}
+        )
+        assert resp.status_code == 201, resp.content
+        assert Template.objects.get(user=user, type="weekday").blocks == blocks
+
+    def test_create_one_over_cap_returns_400(self, auth_client, user):
+        resp = _post(
+            auth_client,
+            "/api/templates/",
+            {
+                "name": "Too many",
+                "type": "weekday",
+                "blocks": _touching_blocks(MAX_TEMPLATE_BLOCKS + 1),
+            },
+        )
+        assert resp.status_code == 400
+        assert resp.json()["errors"]["blocks"] == [
+            f"templates may not contain more than {MAX_TEMPLATE_BLOCKS} blocks"
+        ]
+        assert not Template.objects.filter(user=user).exists()
+
+    def test_update_at_cap_succeeds(self, auth_client, user):
+        tpl = Template.objects.create(user=user, name="WD", type="weekday", blocks=[])
+        blocks = _touching_blocks(MAX_TEMPLATE_BLOCKS)
+        resp = _put(
+            auth_client,
+            f"/api/templates/{tpl.id}/",
+            {"name": "WD", "type": "weekday", "blocks": blocks},
+        )
+        assert resp.status_code == 200, resp.content
+        tpl.refresh_from_db()
+        assert tpl.blocks == blocks
+
+    def test_update_one_over_cap_returns_400_and_keeps_template(
+        self, auth_client, user, good_blocks
+    ):
+        tpl = Template.objects.create(user=user, name="WD", type="weekday", blocks=good_blocks)
+        resp = _put(
+            auth_client,
+            f"/api/templates/{tpl.id}/",
+            {
+                "name": "WD",
+                "type": "weekday",
+                "blocks": _touching_blocks(MAX_TEMPLATE_BLOCKS + 1),
+            },
+        )
+        assert resp.status_code == 400
+        assert resp.json()["errors"]["blocks"] == [
+            f"templates may not contain more than {MAX_TEMPLATE_BLOCKS} blocks"
+        ]
+        tpl.refresh_from_db()
+        assert tpl.blocks == good_blocks
 
 
 @pytest.mark.django_db

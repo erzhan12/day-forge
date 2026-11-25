@@ -30,6 +30,7 @@ from schedules.http import (
 from schedules.mutations import ScheduleChanged, run_user_maintenance, schedule_changed_response
 from schedules.window import DEFAULT_WINDOW, ScheduleWindow, get_schedule_window
 
+from templates_mgr.limits import MAX_TEMPLATE_BLOCKS
 from templates_mgr.models import Rule, Template, UserPreferences
 from templates_mgr.preferences import (
     MAX_CHAT_SUGGESTION_LENGTH,
@@ -45,7 +46,6 @@ from templates_mgr.preferences import (
 logger = logging.getLogger(__name__)
 
 MAX_TEMPLATE_NAME_LEN = 100
-MAX_TEMPLATE_BLOCKS = 50
 MAX_RULE_TEXT_LEN = 500
 MAX_RULES_PER_USER = 100
 # Bound the priority field to stay well within Django's 32-bit IntegerField

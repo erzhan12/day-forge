@@ -448,6 +448,9 @@ Rules are injected into the LLM prompt context via the same shared
 `_format_rules_section` formatter the draft and chat endpoints use,
 so both endpoints can't drift on rule rendering. The LLM fills the
 day with `add` actions only — no `task_id`s exist on an empty schedule.
+A reply may hold at most `MAX_DRAFT_ACTIONS` (60) adds: `MAX_TEMPLATE_BLOCKS`
+(50) plus 10 for blocks derived from history, so a full template always fits.
+The draft prompt states this cap. Chat replies keep their own 20-action cap.
 The draft does **not** flip `Schedule.status`; the badge stays `draft`
 until the user makes a real edit.
 
@@ -481,9 +484,9 @@ until the user makes a real edit.
 | `413` | `body` | Request body exceeds 100 KB. |
 | `422` | `detail` | No template configured for this day's slot type. |
 | `429` | `detail` | Draft rate limit (`LLM_DRAFT_RATE_LIMIT_PER_HOUR`, default 10/hr) exceeded. Counter is independent from the chat bucket. |
-| `502` | `detail` | LLM provider returned an error, or response failed JSON / schema validation. On any JSON / envelope / schema-validation failure (`AIParseError`) `detail` is the fixed generic string `AI_PARSE_ERROR_DETAIL` ("The assistant's reply couldn't be applied. Try rephrasing.") — the real validation message (which can echo model-supplied text) goes only to the server log at `DEBUG` (a `WARNING` line logs that a draft parse failure happened, with no message text), never to the client (feature 0084). |
+| `502` | `detail` | LLM provider returned an error, or response failed JSON / schema validation, including more than `MAX_DRAFT_ACTIONS` adds. No blocks are written. On any JSON / envelope / schema-validation failure (`AIParseError`) `detail` is the fixed generic string `AI_PARSE_ERROR_DETAIL` ("The assistant's reply couldn't be applied. Try rephrasing.") — the real validation message (which can echo model-supplied text) goes only to the server log at `DEBUG` (a `WARNING` line logs that a draft parse failure happened, with no message text), never to the client (feature 0084). |
 | `503` | `detail` | `LLM_API_KEY` is not configured. |
-| `504` | `detail` | LLM provider timed out. |
+| `504` | `detail` | LLM provider timed out (>`LLM_DRAFT_REQUEST_TIMEOUT` seconds per attempt, default 60; chat uses `LLM_REQUEST_TIMEOUT`). |
 
 The `409` and `422` checks both run before any LLM call, so neither burns the rate-limit budget. Revision, empty-day status and the prompt-context fingerprint are checked again under the shared mutation executor after the provider call. A conflict rejects the returned plan without applying it.
 
@@ -518,7 +521,7 @@ Create or replace a template. The unique `(user, type)` constraint means each us
 |-------|------|-------|
 | `name` | string | 1–100 chars. |
 | `type` | string | `"weekday"` or `"weekend"`. |
-| `blocks` | array | Up to 50 entries. Each entry: `{title, start_time, end_time, category}`, validated against the same HH:MM regex, 5-minute granularity, day-window, no-overlap rules used by `_apply_add`. |
+| `blocks` | array | Up to `MAX_TEMPLATE_BLOCKS` (50) entries; 51 or more returns `400` with `errors.blocks`. The draft action cap is derived from this limit. Each entry: `{title, start_time, end_time, category}`, validated against the same HH:MM regex, 5-minute granularity, day-window, no-overlap rules used by `_apply_add`. |
 
 **Errors**: `400` for shape/validation issues; `404` for cross-user PK access on PUT (id enumeration guard); `409` on unique-constraint violation.
 
