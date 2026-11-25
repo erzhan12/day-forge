@@ -17,6 +17,12 @@ import {
 } from "../utils/focusIndicator"
 import { remainingMinutesForBlock, timeToMinutes } from "../utils/scheduleTime"
 
+export interface FocusIndicatorRetainedSnapshot {
+  date: string
+  blocks: TimeBlock[]
+  categories: UserCategory[]
+}
+
 export interface FocusIndicatorController {
   focusIndicator: ReturnType<typeof useFocusIndicator>
   indicatorActive: ComputedRef<boolean>
@@ -26,7 +32,6 @@ export interface FocusIndicatorController {
   indicatorNextBlockRemaining: ComputedRef<number | null>
   indicatorPausePercent: ComputedRef<number | null>
   indicatorDayFinished: ComputedRef<boolean>
-  publish: (date: string, blocks: TimeBlock[], categories?: UserCategory[], timeZone?: string) => void
   publicationGeneration: () => number
   publishIfGenerationMatches: (
     generation: number,
@@ -36,6 +41,7 @@ export interface FocusIndicatorController {
     timeZone?: string,
   ) => boolean
   clearSnapshot: () => void
+  retainedSnapshot: () => FocusIndicatorRetainedSnapshot
 }
 
 export const FocusIndicatorControllerKey: InjectionKey<FocusIndicatorController> = Symbol("focusIndicatorController")
@@ -132,13 +138,29 @@ export function useFocusIndicatorController(): FocusIndicatorController {
     }),
   })
 
-  function publish(date: string, blocks: TimeBlock[], categories?: UserCategory[], timeZone?: string): void {
+  function sessionRefusesPublication(): boolean {
+    // Mirror the definite Login / null-user clear predicates. An uninitialized
+    // component is not logout and must not refuse authenticated publishers.
+    if (page?.component === "Login") return true
+    if (page?.props?.auth_user_id === null) return true
+    return false
+  }
+
+  /** Internal write. Returns false when Login / null-user refuse the snapshot. */
+  function applySnapshot(
+    date: string,
+    blocks: TimeBlock[],
+    categories?: UserCategory[],
+    timeZone?: string,
+  ): boolean {
+    if (sessionRefusesPublication()) return false
     if (timeZone !== undefined) retainedTimeZone.value = timeZone
     retainedDate.value = date
     retainedBlocks.value = copiedBlocks(blocks)
     // Explicit undefined check: an empty array is a real value here (it clears
     // the retained list), and only an omitted argument leaves it untouched.
     if (categories !== undefined) retainedCategories.value = copiedCategories(categories)
+    return true
   }
 
   function clearSnapshot(): void {
@@ -146,6 +168,14 @@ export function useFocusIndicatorController(): FocusIndicatorController {
     retainedTimeZone.value = "UTC"
     retainedBlocks.value = []
     retainedCategories.value = []
+  }
+
+  function retainedSnapshot(): FocusIndicatorRetainedSnapshot {
+    return {
+      date: retainedDate.value,
+      blocks: copiedBlocks(retainedBlocks.value),
+      categories: copiedCategories(retainedCategories.value),
+    }
   }
 
   function publishIfGenerationMatches(
@@ -156,8 +186,7 @@ export function useFocusIndicatorController(): FocusIndicatorController {
     timeZone?: string,
   ): boolean {
     if (generation !== publicationGeneration) return false
-    publish(date, blocks, categories, timeZone)
-    return true
+    return applySnapshot(date, blocks, categories, timeZone)
   }
 
   watch(
@@ -203,10 +232,10 @@ export function useFocusIndicatorController(): FocusIndicatorController {
     indicatorNextBlockRemaining,
     indicatorPausePercent,
     indicatorDayFinished,
-    publish,
     publicationGeneration: () => publicationGeneration,
     publishIfGenerationMatches,
     clearSnapshot,
+    retainedSnapshot,
   }
 }
 

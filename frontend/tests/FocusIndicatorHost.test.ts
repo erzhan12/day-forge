@@ -250,11 +250,98 @@ describe("FocusIndicatorHost", () => {
     page.component = "Login"
     await nextTick()
     expect(controller!.indicatorActive.value).toBe(false)
+    expect(controller!.retainedSnapshot()).toEqual({ date: "", blocks: [], categories: [] })
 
     wrapper.unmount()
 
     expect(controller!.indicatorActive.value).toBe(false)
     expect(controller!.indicatorNextBlock.value).toBeNull()
+    expect(controller!.retainedSnapshot()).toEqual({ date: "", blocks: [], categories: [] })
+  })
+
+  it("refuses an ungated publish after Login (issue #212)", async () => {
+    page.props.auth_user_id = 1
+    const wrapper = mount(FocusIndicatorHost, {
+      slots: { default: () => h(Publisher, { blocks: [block()] }) },
+    })
+    expect(controller!.indicatorActive.value).toBe(true)
+
+    page.component = "Login"
+    await nextTick()
+    expect(controller!.indicatorActive.value).toBe(false)
+
+    // Desired privacy: no public ungated write; session gate refuses current generation.
+    expect("publish" in controller!).toBe(false)
+    const generationAfterClear = controller!.publicationGeneration()
+    expect(
+      controller!.publishIfGenerationMatches(generationAfterClear, "2026-08-12", [block()]),
+    ).toBe(false)
+    expect(controller!.retainedSnapshot()).toEqual({ date: "", blocks: [], categories: [] })
+    wrapper.unmount()
+  })
+
+  it("refuses an ungated publish after an account switch (issue #212)", async () => {
+    page.props.auth_user_id = 1
+    const wrapper = mount(FocusIndicatorHost, {
+      slots: { default: () => h(Publisher, { blocks: [block()] }) },
+    })
+    expect(controller!.indicatorActive.value).toBe(true)
+    const staleGeneration = controller!.publicationGeneration()
+
+    page.props = { auth_user_id: 2, categories: catalogWith("work", "rose") }
+    await nextTick()
+    expect(controller!.indicatorActive.value).toBe(false)
+
+    expect("publish" in controller!).toBe(false)
+    expect(controller!.publishIfGenerationMatches(staleGeneration, "2026-08-12", [block()])).toBe(false)
+    expect(controller!.retainedSnapshot()).toEqual({ date: "", blocks: [], categories: [] })
+    wrapper.unmount()
+  })
+
+  it("returns false from publishIfGenerationMatches after Login with the post-clear generation", async () => {
+    page.props.auth_user_id = 1
+    const wrapper = mount(FocusIndicatorHost, {
+      slots: { default: () => h(Publisher, { blocks: [block()] }) },
+    })
+    expect(controller!.indicatorActive.value).toBe(true)
+
+    page.component = "Login"
+    await nextTick()
+    const generationAfterClear = controller!.publicationGeneration()
+    expect(
+      controller!.publishIfGenerationMatches(generationAfterClear, "2026-08-12", [block()]),
+    ).toBe(false)
+    expect(controller!.indicatorActive.value).toBe(false)
+    expect(controller!.retainedSnapshot().blocks).toEqual([])
+    expect(controller!.retainedSnapshot().categories).toEqual([])
+    wrapper.unmount()
+  })
+
+  it("closes PiP and clears on null auth_user_id alone, then refuses a current-generation publish", async () => {
+    page.props.auth_user_id = 1
+    const win = makeFakeWindow()
+    installFakePip(win)
+    const wrapper = mount(FocusIndicatorHost, {
+      slots: { default: () => h(Publisher, { blocks: [block()] }) },
+    })
+    await controller!.focusIndicator.open()
+    await flushPromises()
+    expect(controller!.indicatorActive.value).toBe(true)
+    const generationBefore = controller!.publicationGeneration()
+
+    page.props.auth_user_id = null
+    await nextTick()
+    expect(win.close).toHaveBeenCalledTimes(1)
+    expect(controller!.indicatorActive.value).toBe(false)
+    expect(controller!.publicationGeneration()).toBeGreaterThan(generationBefore)
+
+    const generationAfterClear = controller!.publicationGeneration()
+    expect(
+      controller!.publishIfGenerationMatches(generationAfterClear, "2026-08-12", [block()]),
+    ).toBe(false)
+    expect(controller!.retainedSnapshot().blocks).toEqual([])
+    expect(controller!.retainedSnapshot().categories).toEqual([])
+    wrapper.unmount()
   })
 
   it("accepts observed route updates before Login and rejects them after the root clears the session", async () => {
@@ -383,16 +470,20 @@ describe("FocusIndicatorHost", () => {
     await nextTick()
     expect(controller!.indicatorActive.value).toBe(false)
     expect(controller!.indicatorNextBlock.value).toBeNull()
+    expect(controller!.retainedSnapshot().blocks).toEqual([])
+    expect(controller!.retainedSnapshot().categories).toEqual([])
 
-    // A snapshot exists again while the page is still Login with an id, so only
-    // the Login guard can stop the catalogue below from being copied.
-    controller!.publish("2026-08-12", [block()])
-    expect(controller!.indicatorActive.value).toBe(true)
+    // Login refuses every publication entry point; a leftover rose catalogue on
+    // the page must not repopulate retained colours.
+    const generationAfterClear = controller!.publicationGeneration()
+    expect(
+      controller!.publishIfGenerationMatches(generationAfterClear, "2026-08-12", [block()]),
+    ).toBe(false)
     page.props.categories = catalogWith("work", "rose")
     await nextTick()
 
     const reopened = await reopenPip()
-    expect(railStyle(reopened)).toContain(BLUE)
+    expect(controller!.indicatorActive.value).toBe(false)
     expect(railStyle(reopened)).not.toContain(ROSE)
     wrapper.unmount()
   })
@@ -400,6 +491,7 @@ describe("FocusIndicatorHost", () => {
   it("does not restore the previous user's colours after an account switch", async () => {
     const { win, wrapper } = await mountPublisherWithPip(catalogWith("work", "blue"))
     expect(railStyle(win)).toContain(BLUE)
+    const staleGeneration = controller!.publicationGeneration()
 
     // One assignment, as Inertia replaces the whole props object.
     page.props = { auth_user_id: 2, categories: catalogWith("work", "rose") }
@@ -407,11 +499,25 @@ describe("FocusIndicatorHost", () => {
     expect(win.close).toHaveBeenCalledTimes(1)
     expect(controller!.indicatorActive.value).toBe(false)
     expect(controller!.indicatorNextBlock.value).toBeNull()
+    expect(controller!.retainedSnapshot().blocks).toEqual([])
+    expect(controller!.retainedSnapshot().categories).toEqual([])
 
-    controller!.publish("2026-08-12", [block()])
+    expect(
+      controller!.publishIfGenerationMatches(staleGeneration, "2026-08-12", [block()]),
+    ).toBe(false)
+    expect(controller!.retainedSnapshot().blocks).toEqual([])
+
+    // A fresh publisher for user 2 may publish again; omit categories so the
+    // leftover rose page catalogue is not adopted until it changes again.
+    const freshGeneration = controller!.publicationGeneration()
+    expect(
+      controller!.publishIfGenerationMatches(freshGeneration, "2026-08-12", [block()]),
+    ).toBe(true)
     const reopened = await reopenPip()
     expect(railStyle(reopened)).toContain(BLUE)
     expect(railStyle(reopened)).not.toContain(ROSE)
+    expect(controller!.retainedSnapshot().blocks).toHaveLength(1)
+    expect(controller!.retainedSnapshot().categories).toEqual([])
     wrapper.unmount()
   })
 
@@ -422,17 +528,23 @@ describe("FocusIndicatorHost", () => {
     showingSchedule.value = false
     await nextTick()
     expect(controller!.indicatorActive.value).toBe(false)
+    expect(controller!.retainedSnapshot().blocks).toEqual([])
 
     // Authenticated again, but no snapshot is retained yet.
     page.component = "Settings"
+    page.props.auth_user_id = 1
     await nextTick()
     page.props.categories = catalogWith("work", "rose")
     await nextTick()
 
-    controller!.publish("2026-08-12", [block()])
+    const freshGeneration = controller!.publicationGeneration()
+    expect(
+      controller!.publishIfGenerationMatches(freshGeneration, "2026-08-12", [block()]),
+    ).toBe(true)
     const reopened = await reopenPip()
     expect(railStyle(reopened)).toContain(BLUE)
     expect(railStyle(reopened)).not.toContain(ROSE)
+    expect(controller!.retainedSnapshot().categories).toEqual([])
     wrapper.unmount()
   })
 
