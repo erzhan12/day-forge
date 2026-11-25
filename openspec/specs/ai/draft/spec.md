@@ -235,7 +235,7 @@ Tests: backend/tests/test_ai_revision.py::test_draft_rejects_concurrent_create_w
 - **WHEN** the template, a rule, the day window, time zone or categories change while the provider call runs
 - **THEN** the apply is rejected with 409 `schedule_changed` and the revision is unchanged
 
-Tests: backend/tests/test_ai_revision.py::test_draft_rejects_template_changed_during_provider, backend/tests/test_ai_revision.py::test_ai_rejects_prompt_policy_changes
+Tests: backend/tests/test_ai_revision.py::test_draft_rejects_template_changed_during_provider, backend/tests/test_ai_revision.py::test_draft_rejects_template_blocks_changed_during_provider, backend/tests/test_ai_revision.py::test_ai_rejects_prompt_policy_changes, backend/tests/test_ai_revision.py::test_draft_retry_after_conflict_uses_updated_template
 
 #### Scenario: Default gap change does not invalidate
 - **WHEN** only the user's default block gap preference changes during the provider call

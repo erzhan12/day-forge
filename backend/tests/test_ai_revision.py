@@ -122,6 +122,60 @@ def test_draft_rejects_template_changed_during_provider(user, revision_client, m
     assert not TimeBlock.objects.exists()
 
 
+NEW_TEMPLATE_BLOCKS = [
+    {"title": "Gym", "start_time": "07:00", "end_time": "08:00", "category": "health"}
+]
+
+
+@pytest.mark.django_db
+def test_draft_rejects_template_blocks_changed_during_provider(user, revision_client, monkeypatch):
+    """Issue #221: a block edit alone (same template name) invalidates the draft."""
+    schedule = Schedule.objects.create(user=user, date="2026-04-18")
+    template = draft_template(user)
+
+    async def run(*args):
+        await sync_to_async(Template.objects.filter(pk=template.pk).update)(
+            blocks=NEW_TEMPLATE_BLOCKS
+        )
+        return result(True)
+
+    monkeypatch.setattr("ai.views.run_draft", run)
+    response = post(revision_client, DRAFT, {"expected_revision": 0})
+    assert response.status_code == 409, response.content
+    assert response.json()["code"] == "schedule_changed"
+    schedule.refresh_from_db()
+    assert schedule.revision == 0
+    assert not TimeBlock.objects.exists()
+
+
+@pytest.mark.django_db
+def test_draft_retry_after_conflict_uses_updated_template(user, revision_client, monkeypatch):
+    """Issue #221: a fresh request after a 409 sees the saved template and applies."""
+    schedule = Schedule.objects.create(user=user, date="2026-04-18")
+    template = draft_template(user)
+    prompted_blocks = []
+
+    async def run(*args):
+        prompted_blocks.append(args[1].blocks)
+        if len(prompted_blocks) == 1:
+            await sync_to_async(Template.objects.filter(pk=template.pk).update)(
+                blocks=NEW_TEMPLATE_BLOCKS
+            )
+        return result(True)
+
+    monkeypatch.setattr("ai.views.run_draft", run)
+    first = post(revision_client, DRAFT, {"expected_revision": 0})
+    assert first.status_code == 409, first.content
+    assert not TimeBlock.objects.exists()
+
+    retry = post(revision_client, DRAFT, {"expected_revision": 0})
+    assert retry.status_code == 200, retry.content
+    assert prompted_blocks == [[], NEW_TEMPLATE_BLOCKS]
+    schedule.refresh_from_db()
+    assert schedule.revision == 1
+    assert list(TimeBlock.objects.values_list("title", flat=True)) == ["Work"]
+
+
 @pytest.mark.django_db
 def test_draft_rejects_concurrent_create_with_expected_revision(user, revision_client, monkeypatch):
     schedule = Schedule.objects.create(user=user, date="2026-04-18")
