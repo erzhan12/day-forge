@@ -8,7 +8,7 @@ import { resolve } from "node:path"
 // would not propagate ui_preferences changes to <html data-theme>.
 //
 // If you add a new authenticated Inertia page, add its file path here.
-// The rule is documented in RULES.md.
+// The rule is documented in `.claude/rules/frontend-undo.md`.
 
 const AUTHENTICATED_PAGES = [
   "src/pages/Schedule.vue",

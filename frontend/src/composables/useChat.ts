@@ -27,7 +27,7 @@ export interface ChatMessage {
   // Feature 0083 (issue #219): set only on the two synthetic failure
   // bubbles below. Sent to the server as `is_error` so the replay guard
   // can exclude a never-applied failed turn from its evidence — see
-  // RULES.md "Chat replay guard".
+  // `.claude/rules/ai-safety.md` (chat replay guard).
   isError?: boolean
 }
 

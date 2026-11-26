@@ -287,7 +287,7 @@ def _build_category_ask(
 ) -> str | None:
     """Server-owned follow-up for an ``update`` dropped for its category
     (feature 0084, issue #209). English-only, like ``_build_resolution_ask``
-    and ``build_guard_ask`` — see RULES.md.
+    and ``build_guard_ask`` — see `.claude/rules/ai-safety.md`.
 
     Only the FIRST unresolved record is asked about (accepted precedent —
     same "first of several" choice ``_build_resolution_ask`` makes). The
@@ -890,7 +890,7 @@ def _validate_chat_messages(messages: object) -> str | None:
             return f"messages[{idx}].role must be 'user' or 'assistant'"
         # Optional replay-guard wire markers (feature 0083): client-supplied
         # correctness/UX hints, not a security boundary — see
-        # ``ai.replay_guard`` and RULES.md. Only valid on assistant turns.
+        # ``ai.replay_guard`` and `.claude/rules/ai-safety.md`. Only valid on assistant turns.
         for flag_name in ("is_ask", "is_error"):
             if flag_name not in msg:
                 continue

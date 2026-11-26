@@ -1,0 +1,62 @@
+---
+paths:
+  - "backend/calendar_sync/**"
+  - "backend/gcal_sync/**"
+  - "backend/todoist_sync/**"
+  - "backend/habitica_sync/**"
+  - "backend/whoop_sync/**"
+  - "backend/common/integration_*.py"
+  - "backend/tests/test_calendar_*.py"
+  - "backend/tests/test_caldav_*.py"
+  - "backend/tests/test_gcal_*.py"
+  - "backend/tests/test_todoist_*.py"
+  - "backend/tests/test_habitica_*.py"
+  - "backend/tests/test_whoop_*.py"
+  - "backend/tests/test_travel_rules.py"
+  - "backend/tests/test_integration_*.py"
+  - "backend/tests/test_from_event.py"
+  - "frontend/src/composables/useDatedResource.ts"
+  - "frontend/src/composables/useCalendar.ts"
+  - "frontend/src/composables/useCalendarAccount.ts"
+  - "frontend/src/composables/useGoogleAccount.ts"
+  - "frontend/src/composables/useGoogleCalendar.ts"
+  - "frontend/src/composables/useTodoist.ts"
+  - "frontend/src/composables/useTodoistAccount.ts"
+  - "frontend/src/composables/useHabitica.ts"
+  - "frontend/src/composables/useHabiticaAccount.ts"
+  - "frontend/src/composables/useExternalCalendarPlacement.ts"
+  - "frontend/src/composables/useExternalSourcePoll.ts"
+  - "frontend/src/composables/useExternalSources.ts"
+  - "frontend/src/composables/useEventImport.ts"
+  - "frontend/src/composables/useTravelRules.ts"
+  - "frontend/src/composables/useTaskCompletion.ts"
+  - "frontend/src/composables/useIntegrationAccount.ts"
+  - "frontend/src/composables/useNowMinutes.ts"
+  - "frontend/src/components/External*.vue"
+  - "frontend/src/components/ExternalRail4a.vue"
+  - "frontend/src/components/RailSection.vue"
+  - "frontend/src/components/HabiticaTasksSection.vue"
+  - "frontend/src/components/TodoistTasksPanel.vue"
+  - "frontend/src/components/TravelRulesList.vue"
+  - "frontend/src/components/AddToScheduleDialog.vue"
+  - "frontend/src/components/settings/SettingsIntegrationsPanel.vue"
+  - "frontend/tests/External*.ts"
+  - "frontend/tests/Habitica*.ts"
+  - "frontend/tests/Todoist*.ts"
+  - "frontend/tests/TravelRulesList.test.ts"
+  - "frontend/tests/AddToScheduleDialog.test.ts"
+  - "frontend/tests/external*.ts"
+  - "frontend/tests/useExternal*.ts"
+  - "frontend/tests/calendar*.ts"
+---
+
+## External integrations
+
+- Provider service code owns plaintext credentials. Views pass account objects and return safe errors. Fernet keys remain independent per provider; shared crypto must preserve stored ciphertext. Versioned cache keys must keep provider, account, zone, and filter scope. Account saves that rotate a cache key must update `updated_at`; a partial save can leave stale cached data. Google async cache access belongs outside the event loop.
+- Resource responses use explicit `meta.account_state` and `meta.resource_state`. A bare HTTP status or network failure cannot prove that an account exists. Provider credential failures need the `integration_credentials_error` contract; an unrelated 401 remains an authentication error. `useDatedResource` owns date/context validity, cancellation, and account-read arbitration. Same-date refresh failures retain prior rows and show an error alongside them. Disconnect clears rows and invalidates pending completion mutations as well as reads.
+- Google may return HTTP 200 with empty events and `provider_error` or `credentials_error` when every account fails. Its adapter retains last-good rows only for the active date/context, updates account errors and surfaces a provider banner through the optional `onFailedSuccess` hook. A ready empty response must clear old rows; partial ready results replace them. Never infer all-failed from an empty list or per-account errors alone. Show banners independently of retained events, and clear them on disconnect or scope change.
+- `requestJson` accepts cancellation options as its fourth argument; a GET passes `undefined` for the body. `AbortError` propagates for callers to ignore superseded work. Date, request sequence, context, and account verdict must still gate commits because two requests for the same day can finish out of order. Todoist's filter endpoint is cursor-paginated: follow `next_cursor` until it is null and preserve the nullable `due_date` sort. Today includes overdue tasks; another day uses its exact date filter. A failed page must not silently produce a partial successful task list. See `backend/todoist_sync/service.py` and `frontend/src/composables/useDatedResource.ts`.
+- WHOOP (`backend/whoop_sync/`, feature 0107) deliberately diverges from `gcal_sync` on refresh. WHOOP rotates the refresh token on every refresh and rejects concurrent refreshes, so refresh is single-flight behind a `cache.add` lock on `whoop_refresh:<account_id>` in the shared cache (Redis in production; `whoop_sync.W001` warns otherwise), never a row lock: `select_for_update` is a no-op on SQLite and would hold the writer across a network call. The holder rechecks the row, persists the rotated refresh token at once and releases the lock in `finally`. Waiters poll for the stored token and fail with 502, never 409; 409 means a real reconnect. WHOOP data is not stored, cached, logged or sent to AI providers; only tokens under WHOOP's own Fernet key are stored. Settings are all or none (`whoop_sync.E001`); WHOOP is not a boot dependency.
+- The external task rail groups connected Todoist and Habitica sources. Silent polling fans out only to relevant connected sources while visible and enabled by `EXTERNAL_TASKS_POLL_INTERVAL_SECONDS`; `0` disables it. The interval controls upstream request load. A completion rollback restores only the removed task into the current list, never a stale whole-list snapshot. External task text remains outside AI prompts.
+- Calendar provider requests span the saved-zone local day converted to UTC, including daylight-saving transitions. Timed events carry UTC instants; all-day events carry inclusive start and exclusive end dates. Import computes local block times for the viewed day before POST. Travel rules match keyword rules first, then calendar-only rules, in ascending order within each class. Rule and travel-rule swaps use their atomic swap endpoints rather than two PATCH requests. See [R08](../../docs/REFACTORING_R08.md).
+- External calendar `ee-item--past` uses the saved-zone civil date from `useNowMinutes.todayDate` (`nowDate` is null off-today and cannot classify a yesterday view after midnight). Schedule passes `todayDate` into every `ExternalEventsPanel`. A panel must not cache a one-shot `todayString()` for its lifetime; if `todayDate` is omitted, re-sample `todayString(timeZone)` when `nowMinutes` ticks. See feature 0112 and issue #229.

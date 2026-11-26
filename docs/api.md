@@ -863,7 +863,7 @@ Every response sends `Cache-Control: private, no-store`; errors use `{"errors": 
 | 429 | WHOOP rate limit. |
 | 502 | WHOOP failed or was unreachable, or a concurrent token refresh did not finish in time; retry. |
 
-Token refresh is single-flight per account (WHOOP rotates refresh tokens and rejects concurrent refreshes); see `RULES.md`, External integrations.
+Token refresh is single-flight per account (WHOOP rotates refresh tokens and rejects concurrent refreshes); see `.claude/rules/integrations.md`.
 
 ---
 
