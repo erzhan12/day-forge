@@ -4,7 +4,7 @@ The numbered `*_PLAN.md` files record a feature proposal at the time it was writ
 
 Do not treat the absence of a review file as proof that a plan is still active. Some work was implemented or superseded without a matching review document. Check the current code and tests before using a plan as a specification.
 
-For current work, start with [`tasks/todo.md`](../../tasks/todo.md) and the status in [`docs/REFACTORING_PLAN.md`](../REFACTORING_PLAN.md). For the implemented design, use [`openspec/specs/`](../../openspec/specs/), [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md), [`RULES.md`](../../RULES.md), and [`docs/api.md`](../api.md). [`PHASES.md`](../../PHASES.md) is the original roadmap. A feature plan remains useful for the decision and constraints it documents, but current contracts take precedence when they differ.
+For current work, start with [`tasks/todo.md`](../../tasks/todo.md) and the status in [`docs/REFACTORING_PLAN.md`](../REFACTORING_PLAN.md). For the implemented design, use [`openspec/specs/`](../../openspec/specs/), [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md), [`RULES.md`](../../RULES.md) (index of `.claude/rules/`), and [`docs/api.md`](../api.md). [`PHASES.md`](../../PHASES.md) is the original roadmap. A feature plan remains useful for the decision and constraints it documents, but current contracts take precedence when they differ.
 
 Examples of historical plans:
 
@@ -39,4 +39,4 @@ Spec-writing pitfalls:
 - Python anchors resolve through the AST, including names assigned inside module-level `if`/`try` blocks and test methods inherited from a base class (cite them on the concrete class, as pytest runs them).
 - Do not write a requirement whose `Enforced:` anchor does not actually enforce it. List the gap in the feature's review notes instead. [`0099_SPEC_REVIEW.md`](0099_SPEC_REVIEW.md) holds the open items from the baseline.
 
-A change that alters no specified behavior, such as a refactor, docs edit or dependency bump, needs no OpenSpec change. Until the baseline specs absorb them, [`RULES.md`](../../RULES.md) and [`docs/api.md`](../api.md) remain authoritative where they disagree with a spec. Fix the spec in that case.
+A change that alters no specified behavior, such as a refactor, docs edit or dependency bump, needs no OpenSpec change. Until the baseline specs absorb them, [`RULES.md`](../../RULES.md) (and the rule file it points to) and [`docs/api.md`](../api.md) remain authoritative where they disagree with a spec. Fix the spec in that case.

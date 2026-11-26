@@ -160,7 +160,7 @@ docs/
 ## Key Documents
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): current code map and data flow.
-- [RULES.md](RULES.md): current invariants and conventions.
+- [RULES.md](RULES.md): index of current invariants in `.claude/rules/`.
 - [docs/api.md](docs/api.md): JSON API reference.
 - [tasks/todo.md](tasks/todo.md) and [docs/REFACTORING_PLAN.md](docs/REFACTORING_PLAN.md): tracked work and refactor status.
 - [tasks/lessons.md](tasks/lessons.md): bugs and corrections to review before coding.

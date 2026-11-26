@@ -6,7 +6,7 @@ schema: spec-driven
 # docs/features/README.md for the full workflow.
 context: |
   Day Forge: Django 5 / Python 3.14 (uv) backend, Vue 3 + TypeScript + Inertia frontend, SQLite.
-  RULES.md holds mutation, concurrency, privacy and security invariants; specs must not contradict it.
+  `.claude/rules/` holds mutation, concurrency, privacy and security invariants (see RULES.md for the index); specs must not contradict them.
   docs/api.md is the API contract; docs/ARCHITECTURE.md maps module ownership.
   Never edit tracked files on main; changes are archived on the feature branch before the fast-forward merge.
   Task, calendar and Habitica text never reaches the LLM provider; do not specify behavior that would send it.

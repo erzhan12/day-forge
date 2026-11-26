@@ -2,8 +2,8 @@
 (feature 0107, step 7).
 
 The concurrency tests run in a subprocess on a copy of the test database,
-where each thread holds its own SQLite connection (RULES.md, UI and
-verification exceptions), and include a competing writer reservation.
+where each thread holds its own SQLite connection (`.claude/rules/testing.md`),
+and include a competing writer reservation.
 """
 
 import datetime

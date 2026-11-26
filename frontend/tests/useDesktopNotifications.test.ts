@@ -482,7 +482,7 @@ describe("showDesktopNotification", () => {
 
 // Mounting sound + desktop on the SAME nowMinutes/nowDate/getBlocks refs and
 // disabling one channel must not stop the other — each detector owns its own
-// lastSeenMinute/fired cursor (RULES.md §Desktop notifications). Requires a
+// lastSeenMinute/fired cursor (`.claude/rules/ui.md`, notifications). Requires a
 // Web Audio mock in addition to the Notification mock stubbed above.
 
 class MockOscillator {

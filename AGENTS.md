@@ -32,4 +32,24 @@ The reusable PR/deploy workflow in `.github/workflows/ci.yml` also runs `npm aud
 - `frontend/src/composables/useSchedulePageController.ts`: schedule page state and mutation owner; `useScheduleRevision.ts` holds the canonical revision and blocks.
 - `backend/tests/` and `frontend/tests/`: application tests.
 
-`openspec/specs/` holds the per-capability behavior specs; new features add an OpenSpec change next to their numbered plan (see `docs/features/README.md`). `RULES.md` records current invariants. `docs/ARCHITECTURE.md` maps the current code. `docs/api.md` defines the API. `docs/features/README.md` explains the status of feature plans. `PHASES.md` is the original roadmap and is historical; use `tasks/todo.md` and `docs/REFACTORING_PLAN.md` for tracked work.
+`openspec/specs/` holds the per-capability behavior specs; new features add an OpenSpec change next to their numbered plan (see `docs/features/README.md`). `docs/ARCHITECTURE.md` maps the current code. `docs/api.md` defines the API. `docs/features/README.md` explains the status of feature plans. `PHASES.md` is the original roadmap and is historical; use `tasks/todo.md` and `docs/REFACTORING_PLAN.md` for tracked work.
+
+## Rules
+
+Development rules live in `.claude/rules/`. Codex does not load them by path, so always read `workflow.md`, then the file for the area you change:
+
+| Area / paths | Rule file |
+| --- | --- |
+| OpenSpec, `docs/features/`, spec anchors | `.claude/rules/openspec.md` |
+| `deployment/`, `.github/`, Docker, Caddy, static assets | `.claude/rules/repo-deploy.md` |
+| Schedule mutations, revisions, window validation | `.claude/rules/schedule-writes.md` |
+| Analytics, review snapshots, notes, streak | `.claude/rules/analytics.md` |
+| Daily export and the personal export token | `.claude/rules/export.md` |
+| `backend/ai/`, chat, draft, pending intent, replay guard | `.claude/rules/ai-safety.md` |
+| Page ownership, Undo, Inertia release, theme bootstrap | `.claude/rules/frontend-undo.md` |
+| Calendar, Google, Todoist, Habitica, WHOOP, external rail | `.claude/rules/integrations.md` |
+| PiP, notifications, Dark 4a, Settings typography | `.claude/rules/ui.md` |
+| Playwright smoke, seeders, SQLite lock tests | `.claude/rules/testing.md` |
+| Environment variables, legal pages, key-rotation notes | `.claude/rules/project.md` |
+
+Add new pitfalls to the matching rule file; [RULES.md](RULES.md) is only the index.

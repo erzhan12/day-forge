@@ -1,10 +1,28 @@
+---
+paths:
+  - "backend/day_forge/settings.py"
+  - ".env.example"
+  - "backend/**/checks.py"
+  - ".github/workflows/deploy.yml"
+  - "deployment/README.md"
+  - "deployment/docker/**"
+  - "deployment/scripts/entrypoint.sh"
+  - "backend/schedules/legal_views.py"
+  - "backend/templates/legal/**"
+  - "backend/calendar_sync/crypto.py"
+  - "backend/gcal_sync/crypto.py"
+  - "backend/todoist_sync/crypto.py"
+  - "backend/habitica_sync/crypto.py"
+  - "backend/whoop_sync/crypto.py"
+  - "backend/tests/test_settings_validation.py"
+  - "backend/tests/test_checks.py"
+  - "backend/tests/test_legal_pages.py"
+  - "README.md"
+---
+
 # Architecture Decisions
 
 These are non-obvious conventions that can't be inferred from code alone.
-
-**Package manager**: `uv` (not pip/poetry). Run everything via `uv run`.
-
-**Python version**: 3.14 (pinned in `.python-version`).
 
 ## Environment Variables
 - `DJANGO_SECRET_KEY` — Django secret key (required in production, has insecure fallback for dev)
@@ -60,8 +78,6 @@ These are non-obvious conventions that can't be inferred from code alone.
 
 **Public legal pages (feature 0078)**: `/privacy/` and `/terms/` are the only page routes besides `root_redirect` that are **not** `@login_required` — the Google OAuth consent screen for `dayforge.habitreward.org` links to them, so Google's reviewers and pre-signup users must reach them anonymously. The views live in their own `backend/schedules/legal_views.py` (not `schedules/views.py`) because they share nothing with schedule rendering. They are **plain Django templates** (`backend/templates/legal/`), not Inertia pages: static content with no props, and they must keep rendering when the Vue bundle has not been rebuilt. They deliberately do **not** extend `base.html` (the Inertia layout, which boots the app bundle) and inline their own CSS rather than using `{% static %}`, because `STATICFILES_DIRS` points at `frontend/dist`, which does not exist before `npm run build`. `frontend/vite.config.ts` proxies `/privacy` and `/terms` to Django so the Login-page footer links work in dev. The privacy copy encodes the CLAUDE.md privacy notes (verbatim AI command logging, the full-transcript chat egress, "task and calendar text never reaches the LLM") plus the Google API Services User Data Policy **Limited Use** disclosure that consent-screen review requires; `backend/tests/test_legal_pages.py` pins those statements so a copy edit cannot silently drop one.
 
-**`SEED_*` variables (feature 0039 — test-only, never read in production)**: the Playwright smoke harness passes scenario parameters to the `backend/scripts/seed_*.py` seeders as environment variables (never interpolated into Python source or the `shell -c` command) via `frontend/scripts/playwright/test-utils.mjs`'s `seed()` helper. They are consumed **only** by those seed scripts and by `backend/tests/test_seed_scripts.py`; no production code path reads them. `SEED_MODE` selects the seeder branch; `SEED_USERNAME` / `SEED_PASSWORD` identify (and, in `reset-ensure` mode, provision) the test user; `SEED_DATE` / `SEED_DATES_JSON` / `SEED_HISTORY_WITH_REVIEW` / `SEED_HISTORY_NO_REVIEW` target schedule dates; `SEED_SCHEDULES_JSON` / `SEED_BLOCKS_JSON` / `SEED_TEMPLATE_JSON` carry the JSON payloads to upsert; `SEED_SNAPSHOT` picks the audit read-back format; `SEED_MARKER` templates the confirmation line the `.mjs` script parses.
-
 **Google Calendar token rotation note (feature 0022)**: rotating `GOOGLE_OAUTH_TOKEN_KEY` invalidates all stored `GoogleCalendarAccount.refresh_token_encrypted` / `access_token_encrypted` ciphertext. The next `GET /api/calendar/google/events/<date>/` per affected user surfaces a `500 {"errors": {"detail": "Google Calendar service is misconfigured. Contact the administrator."}}` (the events view short-circuits the whole response on `ImproperlyConfigured` — a server-wide key problem, not per-account). Recovery: re-encrypt rows `Fernet(old)`→`Fernet(new)`, or instruct users to reconnect via Settings (`DELETE /api/calendar/google/accounts/<id>/` then re-run Connect). `gcal_sync.E001` validates only the *current* key. **Multi-account divergence**: unlike CalDAV/Todoist (one row per user, `OneToOne`), `GoogleCalendarAccount` is **multi-row** (`ForeignKey` + `UniqueConstraint(user, google_account_id)`); reconnecting the same Google account **upserts** the existing row. **No AI provider-egress**: Google event titles are display-only, never fed to draft/chat prompts.
 
 **CalDAV key rotation note (feature 0011)**: rotating `CALDAV_ENCRYPTION_KEY` invalidates all stored `CalDAVAccount.password_encrypted` ciphertext. The next `GET /api/calendar/events/<date>/` per affected user surfaces a `500 {"errors": {"detail": "Calendar service is misconfigured..."}}` (the view's explicit `ImproperlyConfigured` catch — see `backend/calendar_sync/views.py:events`). Recovery options: (1) keep the old key accessible and re-encrypt rows with a one-off management command that loads with `Fernet(old)` and saves with `Fernet(new)`; (2) easier for small deployments — instruct all users to reconnect via Settings (`DELETE /api/calendar/account/` then `POST` with current credentials). The `calendar_sync.E001` startup check only validates the *current* key — it cannot detect mismatched ciphertext from a previous key.
@@ -69,11 +85,3 @@ These are non-obvious conventions that can't be inferred from code alone.
 **Todoist token rotation note (features 0020, 0021)**: rotating `TODOIST_ENCRYPTION_KEY` invalidates all stored `TodoistAccount.token_encrypted` ciphertext. The next `GET /api/todoist/tasks/<date>/` (or `POST /api/todoist/tasks/<id>/complete/`) per affected user surfaces a `500 {"errors": {"detail": "Todoist service is misconfigured. Contact the administrator."}}` (the view's explicit `ImproperlyConfigured` catch — mirrors the CalDAV one). Recovery: re-encrypt rows with `Fernet(old)`→`Fernet(new)`, or instruct users to reconnect via Settings (`DELETE /api/todoist/account/` then `POST` with the current token). The `todoist_sync.E001` startup check only validates the *current* key. **Write surface (feature 0021)**: `POST /api/todoist/tasks/<id>/complete/` completes a task — it is the **second** token-decryption call site (after `fetch_tasks_for_date`), still service-boundary-owned (`complete_task` lives in `service.py`; views pass the `TodoistAccount` through and never touch plaintext). A successful complete invalidates the user's task cache by bumping `account.updated_at` (`cache.invalidate_tasks` → plain `account.save()`; same `auto_now` footgun as `set_token`). `GET /api/todoist/tasks/<date>/?refresh=1` force-refetches bypassing the read cache (still re-warms it). **No AI provider-egress**: task text is never fed into draft/chat prompts — display + complete only, never sent to the LLM provider.
 
 **Habitica token rotation note (feature 0024)**: rotating `HABITICA_ENCRYPTION_KEY` invalidates all stored `HabiticaAccount.api_token_encrypted` ciphertext. The next `GET /api/habitica/tasks/<date>/` or `POST /api/habitica/tasks/<id>/complete/` surfaces a config-shaped 500. Recovery: re-encrypt rows with `Fernet(old)`→`Fernet(new)`, or instruct users to reconnect via Settings (`DELETE /api/habitica/account/` then `POST`). Habitica task text is display-only and never sent to draft/chat prompts. Habitica's daily-list query value is spelled `dailys`; dailies show only in the client-today/overdue-carry scope and only when Habitica marks `isDue`.
-
-**Performance note (draft history)**: PR #15 added `select_related("daily_review")` to the draft-history query in `ai_generate_draft` (`backend/ai/views.py`). `prompts.build_draft_user_message` reads `past.daily_review` for each past schedule to embed the per-day completion ratio in the LLM prompt; without the `select_related`, that's an N+1 — one extra query per past day. This fix predates the multi-turn chat feature (Phase-6 leftover) and applies regardless of whether chat is enabled.
-
-**Privacy note**: User commands submitted via the AI endpoint are logged verbatim to the `AIInteraction` table for audit purposes (PRD §6.5). Users should avoid entering sensitive data (passwords, API keys) in command prompts.
-
-**Privacy note (chat — feature 0007)**: The multi-turn chat endpoint (`POST /api/ai/schedules/<date>/chat/`) re-sends the **full prior client-supplied transcript** to the LLM provider on every turn — not just the latest message. This is a strictly larger provider-egress surface than the one-shot endpoint, even though the per-row DB log only stores the latest user turn (plus a `transcript_sha256` fingerprint of the whole transcript, see `backend/ai/views.py:_build_chat_audit_response`). Users should clear the thread (Clear button or page reload — thread state is in-memory per tab, no server-side persistence) before discussing anything sensitive. The thread is also auto-reset on date navigation (see `frontend/src/composables/useChat.ts:setActiveDate`).
-
-**Privacy note (chat — wire-format detail)**: prior client-supplied turns are NOT forwarded to the provider under the privileged `assistant` role. They are flattened into a single user-role message prefixed with an "Untrusted prior transcript" header (see `backend/ai/service.py:run_chat` and `backend/ai/prompts.py:serialise_prior_turns`) so a tampered client cannot inject privileged assistant pre-commitments that bias the model toward destructive actions. The security invariant is regression-tested by `backend/tests/test_ai_service_chat.py::TestUntrustedTranscript::test_assistant_role_never_forwarded`.

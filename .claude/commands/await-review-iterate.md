@@ -1,6 +1,6 @@
 Run the PR review iteration loop on the current branch's open PR: push → wait `claude-review` → triage → fix valid P0/P1 / push back on false-positives / defer P2/P3 → push fixes → repeat → STOP at the merge boundary.
 
-This is the **iterate-and-fix** variant of a read-only PR-review triage skill — same parsing logic for the bot's comment, but here we actually push commits and loop. The merge step is **never** automatic — see RULES.md § "PR review iteration loop (AI-driven changes)" for the rationale.
+This is the **iterate-and-fix** variant of a read-only PR-review triage skill — same parsing logic for the bot's comment, but here we actually push commits and loop. The merge step is **never** automatic — see docs/archive/RULES_HISTORY.md § "PR review iteration loop (AI-driven changes)" for the rationale.
 
 **Iteration cap — `max_iter`, default 5, parametrized.** The push→wait→triage→fix loop runs at most `max_iter` cycles. A caller (review-ship, issue-to-pr, or a direct invocation) may set it explicitly; honor the passed value over the default. It bounds runaway loops — a well-behaved PR converges in 1–2 cycles.
 
@@ -97,13 +97,13 @@ Bucket by priority. Also extract `## Merge Verdict` (APPROVED / CHANGES REQUESTE
 
 ## Step 6 — Triage by **severity AND validity**
 
-For each P0 / P1 finding, decide one of three verdicts (read the cited file, cross-check against `RULES.md` and `CLAUDE.md`):
+For each P0 / P1 finding, decide one of three verdicts (read the cited file, cross-check against `CLAUDE.md`, `RULES.md` (the index) and the matching `.claude/rules/` file):
 
 - **valid** — real bug / measurable issue / missing test for new logic. Apply.
 - **disputable** — kernel of truth but contextual. Apply if cheap (≤ 15 min); otherwise note in PR comment + defer.
 - **false-positive** — bot misread / repeating a previously rejected finding / contradicts project conventions.
 
-**Before deciding "valid"**, check the false-positive catalogue in `RULES.md` § "Recurring claude-review false-positives in this project":
+**Before deciding "valid"**, check the false-positive catalogue in `docs/archive/RULES_HISTORY.md` § "Reviewer false-positive patterns observed (don't auto-comply)":
 - env-var-for-fixture credentials
 - DB-size "production-detection" guards
 - Replacing idempotent Django shell snippets with `createsuperuser`
@@ -165,7 +165,7 @@ Awaiting explicit `merge` / `ok merge` from the user before running `gh pr merge
 - All-green CI
 - The user having said "fix the review" or "apply the suggestions" earlier — those authorize code changes only
 
-The user retains the merge decision. See RULES.md § "PR review iteration loop (AI-driven changes) → The merge step is NOT in the loop" — that section is the canonical, in-repo source of the merge-safety rule.
+The user retains the merge decision. See docs/archive/RULES_HISTORY.md § "PR review iteration loop (AI-driven changes) → The merge step is NOT in the loop" — that section is the canonical, in-repo source of the merge-safety rule. The always-loaded `.claude/rules/workflow.md` also restates that a passing review does not authorize merging.
 
 ## Constraints
 

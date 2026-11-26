@@ -1,0 +1,57 @@
+---
+paths:
+  - "frontend/src/app.css"
+  - "frontend/src/components/DeleteConfirmationDialog.vue"
+  - "frontend/src/components/DesktopNotificationToggle.vue"
+  - "frontend/src/components/SoundNotificationToggle.vue"
+  - "frontend/src/components/FocusIndicatorHost.vue"
+  - "frontend/src/components/FocusIndicatorView.vue"
+  - "frontend/src/components/ShowIndicatorButton.vue"
+  - "frontend/src/components/TimeBlock.vue"
+  - "frontend/src/components/TimeBlock4a.vue"
+  - "frontend/src/components/Timeline4a.vue"
+  - "frontend/src/components/GapSlot.vue"
+  - "frontend/src/components/GapSlot4a.vue"
+  - "frontend/src/components/NowLine.vue"
+  - "frontend/src/components/NowLine4a.vue"
+  - "frontend/src/components/ExternalRail4a.vue"
+  - "frontend/src/components/RailSection.vue"
+  - "frontend/src/components/settings/**"
+  - "frontend/src/pages/Settings.vue"
+  - "frontend/src/composables/useFocusIndicator.ts"
+  - "frontend/src/composables/useFocusIndicatorController.ts"
+  - "frontend/src/composables/useDesktopNotifications.ts"
+  - "frontend/src/composables/useSoundNotifications.ts"
+  - "frontend/src/composables/useBlockBoundaryDetector.ts"
+  - "frontend/src/composables/useTimelinePresentation.ts"
+  - "frontend/src/composables/useCategories.ts"
+  - "frontend/src/composables/useNowMinutes.ts"
+  - "frontend/src/composables/useSettingsTopic.ts"
+  - "frontend/src/utils/scheduleTime.ts"
+  - "frontend/src/utils/timelineStack.ts"
+  - "frontend/tests/dark4a*.ts"
+  - "frontend/tests/scheduleFocusIndicator*.ts"
+  - "frontend/tests/FocusIndicator*.ts"
+  - "frontend/tests/useFocusIndicator.test.ts"
+  - "frontend/tests/useDesktopNotifications.test.ts"
+  - "frontend/tests/DesktopNotificationToggle.test.ts"
+  - "frontend/tests/SoundNotificationToggle.test.ts"
+  - "frontend/tests/Settings*.ts"
+  - "frontend/tests/settingsTopics.test.ts"
+  - "frontend/scripts/playwright/dark4a-*.mjs"
+  - "docs/AUDIT_FIXES_A06_A07.md"
+---
+
+## UI and verification exceptions
+
+- Page-owned delete confirmation stays in the shared DOM dialog for blocks and categories. Preserve focus and keyboard behavior; block deletion keeps Undo. Dismiss confirmation if its target changes, and submit only once. Category deletion explicitly warns that references move to the sink and cannot be undone. `window.confirm` blocks the browser smoke harness.
+- Sound and desktop notifications share the existing minute sampler through the block-boundary detector. Keep separate fired cursors per channel; their keys include date and boundary minute so a retimed block can notify again. First registration checks the current minute only; a bounded coalescing horizon prevents a long-suspended tab from replaying old alerts. Desktop permission grants are checked after the asynchronous request returns, so a late grant cannot reverse a later off toggle.
+- The focus indicator is owned above Inertia pages. Its separate PiP document needs its own injected styles and a reactive view; the body is display-only. An active block may show its title and category color. Never expose the date, wall-clock times, raw category slug, or unrelated block identity in PiP text, attributes, or title. Its open request must come from a user gesture; persisted intent offers a restore control, not automatic opening. Header Hide and a definite Login transition clear intent. Browser window close preserves restore intent. See `frontend/src/composables/useFocusIndicator.ts` and `frontend/tests/scheduleFocusIndicator.test.ts`.
+- Settings category fields show accepted server state after every rejected update, even if the same error text was already displayed. Prefer `errors.category`, then `errors.detail` for conflict and rate-limit responses. The PiP owner advances a publication generation and clears retained data at Login, null-user, or account-switch boundaries. Retained writes go only through generation-matched publication (`publishIfGenerationMatches`); there is no public ungated `publish`. Apply also refuses definite Login or null `auth_user_id` and reports failure (`false`) when refused. Ordinary route changes retain the snapshot. Privacy tests may use read-only `retainedSnapshot()`. See `SettingsCategoriesPanel.vue`, `useFocusIndicatorController.ts`, and A06/A07 in `docs/AUDIT_FIXES_A06_A07.md`.
+- PiP root disposal and hard reload close the window without clearing restore intent. An open request that resolves after cleanup or disposal must close its orphan window. The page publishes copied snapshots to the root owner; a route swap must not tear the PiP down. While a snapshot is retained, the root also copies a valid category catalogue from the current authenticated, non-Login page, so a colour changed in Settings reaches an open PiP without returning to Schedule. That refresh never changes the retained date, blocks or time zone and ignores a missing or malformed catalogue. Schedule's unmount publication protects only the step away from Schedule; a later Back/Forward to an older non-Schedule entry copies that entry's historical catalogue (accepted). Login, null-user and account-switch boundaries still clear everything and reject stale publications. Use the single saved-zone minute clock for timeline, notifications, and PiP presentation.
+- Task and block completion checkboxes use the global `.df-checkbox` (`frontend/src/app.css`): a native `<input type="checkbox">` keeps its `change` event and keyboard behavior; callers set `--checkbox-color` and `--checkbox-tick` (`tickVariantFor` for category fills). Draw the tick with `background-image`, never `::after` or `mask-image`. The Dark 4a sources rail (`ExternalRail4a.vue`, `RailSection.vue`) uses theme tokens only. A collapsed section's body is `inert`, and its peek line must state any error or first load the hidden body shows. Task panels keep an always-mounted `TransitionGroup`; a leaving row's controls are disabled so it cannot emit `complete` twice. See feature 0105.
+- Any Inertia reload that returns a new `categories` list must also request `auth_user_id`. A partial reload's `only` list filters shared props too, so a categories-only reload would apply the catalogue under a stale identity. Precedent: `refreshSchedule` in `useScheduleRevision.ts`; see `useCategories.ts` and feature 0103.
+- Timeline render bounds and trailing gap use the same anchor calculation. Freeze geometry while dragging; the now marker may move without shifting blocks. `nowMinutes: null` means the viewed day is not today. See `frontend/src/utils/scheduleTime.ts` and `frontend/src/composables/useTimelinePresentation.ts`.
+- The Dark 4a timeline uses the stack layout (`frontend/src/utils/timelineStack.ts`): blocks get a 28 px floor, a gap between two blocks keeps the true scale, gaps touching a window edge and spacers cap at 60 px, and hour ticks, the now line and gap rows read positions from the same axis map. Rows below 36 px render compact (`TimeBlock.vue` `density`). Drag freezes the axis map at drag start and converts pointer positions through it; stack-mode drag is disabled while blocks overlap. Calendar events reach the timeline only through an explicit Add to schedule import. Classic keeps the linear axis. See features 0106 and 0110.
+- Dark 4a styling stays inside `html[data-theme="dark_4a"]`. Shared controls take the control skin classes from `app.css` (`df-btn` and its variants, `df-field`, `df-link`, `df-checkbox--lg`); skin selectors double their class to out-specify scoped rules. Scoped component rules for Dark 4a are written `html[data-theme="dark_4a"] .x`; `:global(html…) .x` leaks the rule to every theme and is banned. A 4a-only change to a shared component goes behind an opt-in prop or a theme check whose default keeps the other themes unchanged. No Dark 4a text is below 13 px: a shared component that declares a smaller size adds a Dark 4a floor rule in the same file. `tests/dark4aScope.test.ts`, `tests/dark4aTextFloor.test.ts` and `scripts/playwright/dark4a-day-fit.mjs` enforce this.
+- Settings section type styles (`.subsection-title`, `.section-subtitle`, `.cal-status`, `.cal-disconnect`) are scoped to the component that declares them. A section mounted as its own component, such as `DailyExportTokenPanel.vue` beside `SettingsIntegrationsPanel.vue`, gets browser defaults unless it declares matching rules: 18 px section titles, 13 px muted subtitles and status text, the `border-top` divider from `ExternalCalendarPlacementToggle.vue`, and destructive actions styled like `.cal-disconnect`. A button without `.df-btn` must restate the Dark 4a `:focus-visible` ring. Timestamps in Settings use the saved zone's `YYYY-MM-DD HH:MM` through `zonedDateTime`, never a raw ISO string. Compare computed styles with a sibling section in the browser.

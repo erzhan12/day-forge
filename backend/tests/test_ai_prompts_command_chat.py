@@ -385,8 +385,9 @@ class TestChatSystemPromptRulePrecedence:
 
 class TestDraftSystemPromptRulePrecedence:
     """Feature 0074 companion: the DRAFT system prompt carries the same
-    higher-priority-wins-on-conflict clause (prompts.py draft rule 3). RULES.md
-    warns not to drop the clause from *either* prompt — guard the draft side too."""
+    higher-priority-wins-on-conflict clause (prompts.py draft rule 3).
+    `.claude/rules/ai-safety.md` warns not to drop the clause from *either*
+    prompt — guard the draft side too."""
 
     @staticmethod
     def _prompt():
@@ -495,7 +496,7 @@ class TestChatCategorySlugRules:
 
     def test_coreference_parentheticals_mention_rule_12(self):
         # The prompt is hard-wrapped, so squash whitespace before asserting
-        # on a multi-word phrase — see RULES.md's draft-prompt note.
+        # on a multi-word phrase — see `.claude/rules/ai-safety.md`.
         squashed = " ".join(self._prompt().split())
         assert "Hard rule 12 when the prior ask was a category question" in squashed
         assert "Hard rules 2(iii), 3, 9b–9d, 12 when the prior ask was a category question" in (

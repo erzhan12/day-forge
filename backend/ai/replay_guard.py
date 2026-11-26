@@ -110,7 +110,7 @@ def truncate_title(title: str) -> str:
 
 def build_guard_ask(title: str) -> str:
     """Server-owned follow-up ask for a tripped guard (English-only, like
-    every other ``_build_resolution_ask`` string — see RULES.md)."""
+    every other ``_build_resolution_ask`` string — see `.claude/rules/ai-safety.md`)."""
     truncated = truncate_title(title)
     return (
         f'{GUARD_ASK_PREFIX} "{truncated}" is not something you asked for in '

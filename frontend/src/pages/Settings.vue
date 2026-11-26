@@ -20,7 +20,7 @@ import { useHabiticaAccount } from "../composables/useHabiticaAccount"
 import { useSettingsTopic } from "../composables/useSettingsTopic"
 import { useTodoistAccount } from "../composables/useTodoistAccount"
 // Keeps `<html data-theme>` in sync with ui_preferences across reloads.
-// Required convention for every authenticated page — see RULES.md.
+// Required convention for every authenticated page — see `.claude/rules/frontend-undo.md`.
 import { useThemeFromProps } from "../composables/useThemeFromProps"
 import { useNowMinutes } from "../composables/useNowMinutes"
 import { zonedDateTime } from "../utils/date"
@@ -36,7 +36,7 @@ const props = defineProps<{
   categories: UserCategory[]
   schedule_window: ScheduleSettingsWire
   // Shared on every Inertia response by InertiaIdentityMiddleware; not
-  // declared by every page, only those that need it (see RULES.md).
+  // declared by every page, only those that need it (see `.claude/rules/frontend-undo.md`).
   auth_user_id?: number | null
 }>()
 const categoryCatalogValid = computed(() => hasValidCategoryCatalog(props.categories))

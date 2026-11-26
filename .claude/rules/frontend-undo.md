@@ -1,0 +1,47 @@
+---
+paths:
+  - "frontend/src/composables/useSchedulePageController.ts"
+  - "frontend/src/composables/useScheduleRevision.ts"
+  - "frontend/src/composables/useSchedule.ts"
+  - "frontend/src/composables/scheduleWriteCoordinator.ts"
+  - "frontend/src/composables/scheduleContext.ts"
+  - "frontend/src/composables/useMutationUndo.ts"
+  - "frontend/src/composables/useUndo.ts"
+  - "frontend/src/composables/useBlockCompletion.ts"
+  - "frontend/src/composables/useDrag.ts"
+  - "frontend/src/composables/useThemeFromProps.ts"
+  - "frontend/src/composables/useActiveTheme.ts"
+  - "frontend/src/composables/useCategories.ts"
+  - "frontend/src/composables/useChat.ts"
+  - "frontend/src/composables/useDraft.ts"
+  - "frontend/src/composables/useFrontendRelease.ts"
+  - "frontend/src/pages/**"
+  - "frontend/src/app.css"
+  - "frontend/src/components/UndoToast.vue"
+  - "frontend/src/components/FrontendReleaseNotice.vue"
+  - "frontend/src/components/TimeBlock.vue"
+  - "backend/templates/base.html"
+  - "backend/day_forge/frontend_release.py"
+  - "backend/common/middleware.py"
+  - "backend/tests/test_frontend_release.py"
+  - "backend/tests/test_inertia_identity.py"
+  - "frontend/tests/themeWiring.test.ts"
+  - "frontend/tests/frontendRelease.test.ts"
+  - "frontend/tests/UndoToast.test.ts"
+  - "frontend/tests/scheduleFocusIndicatorLogoutPrivacy.test.ts"
+---
+
+## Frontend ownership and Undo
+
+- Authenticated page loaders bootstrap the user's category catalog. Do not invent fallback rows, IDs, or writable slugs on the frontend. Schedule, Settings, and Analytics show a reload error for an absent or malformed catalog. Schedule also blocks new mutations and keyboard Undo and cancels active drag when a previously valid catalog becomes invalid. Already-sent writes can still commit and require reconciliation. Theme color fallback is presentation only. See [R12](../../docs/REFACTORING_R12.md).
+- `useSchedulePageController` composes the page's `useScheduleRevision`, Undo, chat, and draft lifecycle. `useScheduleRevision` owns canonical blocks, day status, revision, and the writer phase for one page. Accepted complete responses replace that snapshot atomically. Older Inertia props or stale responses cannot lower its revision, cross a date or user boundary, or overwrite newer blocks. Missing response state, conflicts, and uncertain outcomes require reconciliation. POST and PATCH are not retried automatically.
+- The app-root schedule write coordinator retains pending settlement, revision floors and auxiliary reload fields across page remounts. Gate a returning account/date until its old writes settle and its snapshot is current; reload only the matching current scope. Keep the gate through reload completion, not just prop arrival. Retain accepted floors for stale navigation GETs, and clear records on session/user boundaries. A disposed page must never clear another account's coordinator. This is in-app reconciliation, not cross-tab sync or durable request identity.
+- `auto_draft_pending` is a one-shot first-creation signal; template availability is a separate capability. The page controller watches date, signal, and block count so a partial Inertia reload can trigger once for a newly visited day without remounting. A new date, zone context, user, or session resets or reconciles owner state according to its captured identity.
+- Each Undo entry keeps its own previous snapshot and expected revision. Restore sends that historical expected revision. Rebind only a directly preceding entry in a confirmed continuous chain after successful Undo; a GET cannot rebind the whole stack. Register Undo only for an accepted block diff with confirmed mutation metadata. A partial AI apply records only its accepted subset. External changes, conflicts, and uncertain outcomes invalidate unsafe history. Silent entries support keyboard Undo and the date-scoped toolbar button; disable that button while mutations are busy.
+- Production HTML, Inertia page version and API release headers belong to the immutable frontend build packaged in the application image. Hashed assets must come from its metadata, not a mutable runtime release variable. Reject stale API clients and legacy headerless writes before a view executes; show Reload without automatically repeating or claiming to roll back a write. Stale Inertia GETs refresh before bootstrap. Preserve authentication POST redirects; the following GET negotiates the release.
+- Inertia pages encrypt browser history. Every Login render clears the history key so Back revalidates private pages with the server after logout or session expiry. Resetting page composables alone cannot invalidate cached Inertia snapshots.
+- Serialized blocks include a signed `restore_proof`. Undo copies and sends the original block ID and proof; the server verifies schedule, identity, title and origin before restoring provenance. A raw client origin flag grants no permission. Missing proof restores as `unknown`; a supplied invalid proof rejects the entire operation. Changed restores issue new identities and proofs; authenticated identical snapshots remain no-ops.
+- `useBlockCompletion` owns each call site's completion intent queue. Capture the block identity, title, date, snapshot, and revision when the queued intent begins. Stop the queue on failure or uncertain result, then reconcile before a new write. `TimeBlock.vue` may display the checkbox optimistically and must restore the current canonical value on failure. Reset or unmount discards unsent intents without claiming a sent request rolled back.
+- Drag uses a frozen geometry and drag-start block snapshot. Before posting, compare live block IDs and each neighbor's start, end, and sort order; abort if another mutation changed them. The shared busy state prevents new writes while an AI request or reconciliation owns the schedule.
+- `integration_bootstrap` carries snapshot, user, date, and saved-zone identity. Apply a fresh full-visit result; retained partial props cannot restore an obsolete integration verdict. Explicit null identity clears external source state. Chat and draft state belong to the page controller, so the dock and sidebar share one transcript for that page owner. See [R05](../../docs/REFACTORING_R05.md) and [R09](../../docs/REFACTORING_R09.md).
+- New authenticated Inertia pages resolve preferences once and pass the same theme to `ui_preferences` props and `template_data.initial_theme` for the first paint. Call `useThemeFromProps()` in page setup so partial reloads update `<html data-theme>`. Theme CSS variables in `frontend/src/app.css` share one stable token vocabulary across profiles; use those tokens instead of a fixed theme color. Category colors read the active theme as a reactive input. See `backend/templates/base.html`, `frontend/src/composables/useThemeFromProps.ts`, and the older wiring example in [the archive](../../docs/archive/RULES_HISTORY.md).
