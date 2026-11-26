@@ -386,7 +386,8 @@ class TestChatSystemPromptRulePrecedence:
 class TestDraftSystemPromptRulePrecedence:
     """Feature 0074 companion: the DRAFT system prompt carries the same
     higher-priority-wins-on-conflict clause (prompts.py draft rule 3).
-    `.claude/rules/ai-safety.md` warns not to drop the clause from *either* prompt — guard the draft side too."""
+    `.claude/rules/ai-safety.md` warns not to drop the clause from *either*
+    prompt — guard the draft side too."""
 
     @staticmethod
     def _prompt():
