@@ -103,9 +103,8 @@ function confirmDiscard() {
 }
 
 // The full privacy text stays one string (desktop hint, ⓘ sheet). The phone
-// shows the short form above the field while it is focused (ai-safety.md).
+// reaches it through the ⓘ control at all times (ai-safety.md).
 const PRIVACY_FULL = "Messages and schedule context may be sent to the AI provider. Clear before discussing sensitive data."
-const PRIVACY_SHORT = "Messages may be sent to the AI provider."
 const MOBILE_PLACEHOLDER = "Add standup at 10:00 for 15 min"
 
 const expandedEl = ref<HTMLElement | null>(null)
@@ -322,7 +321,7 @@ onUnmounted(() => {
   >
     <!-- Always visible (not gated on visibleMessages) so the warning
          lands before the user types anything, not after. On the phone the
-         full text moves behind ⓘ and a short form shows while focused. -->
+         full text moves behind ⓘ, which stays on the row in every state. -->
     <div v-if="!mobile" class="privacy-hint" data-testid="chat-privacy-hint">{{ PRIVACY_FULL }}</div>
     <div v-if="visibleMessages.length > 0 && showThread" class="thread" data-testid="chat-thread">
       <div
@@ -352,7 +351,6 @@ onUnmounted(() => {
         :disabled="inputDisabled"
         @suggestion="(text: string) => void submitSuggestion(text)"
       />
-      <p class="privacy-hint-short" data-testid="chat-privacy-hint-short">{{ PRIVACY_SHORT }}</p>
     </div>
     <ChatResultChip
       v-else-if="!mobile && is4a && suggestions.length > 0"
@@ -824,7 +822,7 @@ html[data-theme="dark_4a"] .discard-confirm {
 }
 
 /* Dark 4a phone chat (feature 0113, SPEC 11.5). Rest: one 52px row plus the
- * home-indicator inset. Focused: chips and a one-line disclaimer above the
+ * home-indicator inset. Focused: chips above the
  * field. The panel rides above the keyboard through the visual viewport inset
  * set inline on the root. Panel/chip hexes are the mentor spec's, with no
  * app.css token of the same value. */
@@ -832,7 +830,9 @@ html[data-theme="dark_4a"] .discard-confirm {
   html[data-theme="dark_4a"] .command-bar.command-bar--mobile.variant-dock {
     padding: 0 0 var(--safe-bottom);
     background: #1F2023;
-    border-top: 1px solid #34363B;
+    /* Inset line, not a border: the rest height is exactly 52px + inset. */
+    border-top: 0;
+    box-shadow: inset 0 1px 0 #34363B;
     font-family: var(--font-family-body);
   }
 
@@ -897,15 +897,6 @@ html[data-theme="dark_4a"] .discard-confirm {
     background: var(--accent);
     color: var(--accent-contrast);
     cursor: pointer;
-  }
-
-  html[data-theme="dark_4a"] .command-bar--mobile .privacy-hint-short {
-    margin: 0;
-    padding: 6px 16px 0;
-    font-size: 13px;
-    font-weight: 400;
-    line-height: 18px;
-    color: var(--text-secondary);
   }
 
   html[data-theme="dark_4a"] .command-bar--mobile .thread {

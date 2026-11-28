@@ -865,7 +865,6 @@ describe("CommandBar (chat dock)", () => {
 
 describe("CommandBar on the phone (feature 0113)", () => {
   const FULL = "Messages and schedule context may be sent to the AI provider. Clear before discussing sensitive data."
-  const SHORT = "Messages may be sent to the AI provider."
 
   beforeEach(() => {
     vi.clearAllMocks()
@@ -890,7 +889,6 @@ describe("CommandBar on the phone (feature 0113)", () => {
     messages.value = [{ role: "assistant", content: "hello", ask: null, explanation: null, ts: 1 }]
     const bar = mountBar({ mobile: true })
     expect(bar.find('[data-testid="chat-privacy-hint"]').exists()).toBe(false)
-    expect(bar.find('[data-testid="chat-privacy-hint-short"]').exists()).toBe(false)
     expect(bar.find('[data-testid="chat-result-chip"]').exists()).toBe(false)
     expect(bar.find('[data-testid="chat-thread"]').exists()).toBe(false)
     expect(bar.find('[data-testid="chat-clear"]').exists()).toBe(false)
@@ -901,16 +899,18 @@ describe("CommandBar on the phone (feature 0113)", () => {
     expect(bar.get('[data-testid="chat-send"]').attributes("aria-disabled")).toBe("true")
   })
 
-  it("shows the chips and the one-line disclaimer only while the field is focused", async () => {
+  it("shows the chips while the field is focused and keeps ⓘ as the only privacy control", async () => {
     const bar = mountBar({ mobile: true })
     await input(bar).trigger("focus")
-    expect(bar.get('[data-testid="chat-privacy-hint-short"]').text()).toBe(SHORT)
+    expect(bar.text()).not.toContain("may be sent to the AI provider")
+    expect(bar.find('[data-testid="chat-privacy-hint-short"]').exists()).toBe(false)
+    expect(bar.find('[data-testid="chat-privacy-info"]').exists()).toBe(true)
     const chips = bar.findAll(".suggestions button")
     expect(chips.map((chip) => chip.text())).toEqual(["Plan my day", "Move gym to 18:00"])
     expect(bar.get('[data-testid="chat-result-chip"]').classes()).toContain("chat-result-chip--mobile")
     await input(bar).trigger("blur")
-    expect(bar.find('[data-testid="chat-privacy-hint-short"]').exists()).toBe(false)
     expect(bar.find('[data-testid="chat-result-chip"]').exists()).toBe(false)
+    expect(bar.find('[data-testid="chat-privacy-info"]').exists()).toBe(true)
   })
 
   it("keeps the row while focus moves to a chip, and sends the chip text", async () => {
