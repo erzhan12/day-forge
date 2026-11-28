@@ -5,12 +5,15 @@
 // (Planning 09:40–10:05, Email 11:15–11:40, Short call 11:40–11:45, Lunch
 // Walk 11:45–12:10, Deep work 15:00–16:00) and an empty draft Saturday
 // 21 Nov 2026, fixes the browser clock at 11:42 in the user's zone, and
-// checks at 1440 × 900 and 390 × 844:
+// checks at 1440 × 900 and 390 × 844 (at 390 the schedule is the phone list of
+// feature 0113: 52 px block rows and 48 px free rows, no hour axis):
 //   - the 12:10–15:00 mid-day gap renders on the true scale (340 px at
 //     2 px/min) and the edge gaps stay capped at 60 px (wide);
 //   - header secondary buttons are 32 px;
-//   - the 5-minute block is a 28 px compact row with its checkbox, handle,
-//     title, duration and × inside the card, each hit-testable on its own;
+//   - wide: the 5-minute block is a 28 px compact row with its checkbox,
+//     handle, title, duration and × inside the card, each hit-testable on its
+//     own; 390: it is a full 52 px row with start time, `5m` and × visible,
+//     no end time, 44 px checkbox and × targets, and every free row is 48 px;
 //   - the mid-day gap reads "Free · 2h 50m" and "12:10–15:00";
 //   - the empty-day state shows both actions (stacked at 390 px);
 //   - the Add Block form and every Settings topic use 36 px fields with the
@@ -350,17 +353,57 @@ try {
   // ---- Narrow schedule ----------------------------------------------------
   await page.setViewportSize(NARROW)
   await openSchedule(DAY)
-  await page.waitForSelector('[data-testid="timeline-4a"]', { timeout: ELEMENT_TIMEOUT_MS })
+  await page.waitForSelector('[data-testid="timeline-mobile"]', { timeout: ELEMENT_TIMEOUT_MS })
   check(await page.evaluate(horizontalOverflow) === 0, "schedule scrolls sideways at 390 px")
+  check(await page.locator('[data-testid="timeline-4a"], [data-testid="hour-tick"]').count() === 0,
+    "390 schedule still renders the hour axis")
 
-  // Centre the row: the day no longer fits (0110), and a minimal scroll would
-  // leave it under the fixed chat dock at the bottom of the narrow viewport.
+  // Centre the row: a minimal scroll would leave it under the fixed chat dock.
   await page.locator(".title", { hasText: "Short call" }).evaluate((el) => el.scrollIntoView({ block: "center" }))
-  const rowNarrow = await compactRow()
-  if (!rowNarrow.missing) {
-    check(rowNarrow.outside.length === 0, `390 compact row parts outside the card: ${rowNarrow.outside.join("; ")}`)
-    check(rowNarrow.unhittable.length === 0, `390 compact row controls not independently tappable: ${rowNarrow.unhittable.join("; ")}`)
+  const rowNarrow = await page.evaluate(() => {
+    const title = [...document.querySelectorAll('[data-testid="mobile-block-row"] .title')]
+      .find((el) => el.textContent.trim() === "Short call")
+    const row = title?.closest('[data-testid="mobile-block-row"]')
+    if (!row) return { missing: true }
+    const box = row.getBoundingClientRect()
+    const parts = {
+      checkbox: row.querySelector(".check-hit"),
+      title,
+      time: row.querySelector(".time-badge"),
+      duration: row.querySelector(".duration"),
+      remove: row.querySelector(".delete-btn"),
+    }
+    const problems = []
+    for (const [name, el] of Object.entries(parts)) {
+      if (!el) { problems.push(`${name}: missing`); continue }
+      const r = el.getBoundingClientRect()
+      if (r.width === 0 || r.height === 0) problems.push(`${name}: not visible`)
+      if (r.top < box.top - 0.5 || r.bottom > box.bottom + 0.5) problems.push(`${name} outside the row vertically`)
+      if (r.right > box.right + 0.5) problems.push(`${name} outside the row on the right`)
+      if ((name === "checkbox" || name === "remove") && (Math.round(r.width) < 44 || Math.round(r.height) < 44)) {
+        problems.push(`${name} target ${Math.round(r.width)}×${Math.round(r.height)} < 44`)
+      }
+    }
+    return {
+      problems,
+      height: Math.round(box.height * 10) / 10,
+      duration: parts.duration?.textContent.trim(),
+      time: parts.time?.textContent.trim(),
+      compact: !!row.querySelector(".density-compact"),
+    }
+  })
+  if (rowNarrow.missing) {
+    fail("390 schedule: the Short call row is missing")
+  } else {
+    check(rowNarrow.height === 52, `390 Short call row is ${rowNarrow.height}px, want 52`)
+    check(!rowNarrow.compact, "390 Short call row uses the compact density")
+    check(rowNarrow.duration === "5m", `390 Short call duration ${rowNarrow.duration}, want 5m`)
+    check(rowNarrow.time === "11:40", `390 Short call time ${rowNarrow.time}, want the start only`)
+    check(rowNarrow.problems.length === 0, `390 Short call row: ${rowNarrow.problems.join("; ")}`)
   }
+  const gapHeights = await page.locator('[data-testid="mobile-gap-row"]').evaluateAll(
+    (els) => els.map((el) => Math.round(el.getBoundingClientRect().height)))
+  check(gapHeights.length > 0 && gapHeights.every((h) => h === 48), `390 free rows are not all 48px: ${gapHeights.join(",")}`)
 
   const chatNarrow = await page.evaluate(() => {
     const input = document.querySelector(".command-input")

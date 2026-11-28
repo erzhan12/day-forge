@@ -25,11 +25,65 @@ Enforced: backend/templates/base.html::viewport-fit=cover, frontend/src/app.css:
 - **THEN** content stays inside the safe area and Dark 4a at 640 px and below fills `100dvh`
 
 ### Requirement: Mobile list layout
-At 640 px and below in Dark 4a the Schedule page SHALL render one column of fixed-height rows (block 52 px, free row 48 px, 8 px gap) with no hour axis, no now line and no Add Block bar, and SHALL open Add Block from a 56 px FAB and from a free row.
+At 640 px and below in Dark 4a the Schedule page SHALL render the day as one column of fixed-height rows in time order (block 52 px, free row 48 px, 8 px gap) with no hour axis and no now line, one free row per gap including the edge gaps, and no row for touching blocks.
+Enforced: frontend/src/components/TimelineMobile.vue::timeline-mobile, frontend/src/utils/mobileRows.ts::buildMobileRows, frontend/src/pages/Schedule.vue::TimelineMobile
+
+#### Scenario: Rows of the day
+- **WHEN** a day has blocks with gaps before, between and after them
+- **THEN** each block and each gap is one row, in order, and the trailing gap is not split at the clock
+
+Tests: frontend/tests/MobileList.test.ts::buildMobileRows (feature 0113)::lists edge and inner gaps in time order and none between touching blocks, frontend/tests/MobileList.test.ts::buildMobileRows (feature 0113)::returns one whole free row for an empty day, frontend/tests/MobileList.test.ts::TimelineMobile (feature 0113)::renders a block row per block and a free row per gap, with no axis or now line
+
+#### Scenario: Only Dark 4a on a phone
+- **WHEN** the theme is classic or the viewport is wider than 640 px
+- **THEN** the existing timeline renders instead
+
+Tests: frontend/tests/Schedule.test.ts::Schedule.vue Dark 4a mobile header (0113)::renders the phone list instead of the stacked timeline only in Dark 4a at 640px and below
 
 #### Scenario: Short block
 - **WHEN** a 5-minute block is on the day
-- **THEN** it renders as a full 52 px row with its duration and × visible
+- **THEN** it renders as a full 52 px row with start time, `5m` and × visible and no end time
+
+Tests: frontend/tests/MobileList.test.ts::TimelineMobile (feature 0113)::shows start time, duration and ×, and no end time, for a 5-minute block
+
+### Requirement: Mobile free row
+A free row SHALL show `Free · 1h 45m`, its range and a visible +, and tapping it SHALL offer the gap's 5-minute-grid range to the Add Block form; a gap with no 5-minute slot, or a disabled schedule, SHALL ignore the tap.
+Enforced: frontend/src/components/MobileGapRow.vue::mobile-gap-row
+
+#### Scenario: Label and tap
+- **WHEN** a free row is tapped
+- **THEN** it emits the snapped start and end, and tiny or disabled gaps emit nothing
+
+Tests: frontend/tests/MobileList.test.ts::TimelineMobile (feature 0113)::labels free rows with duration and range, frontend/tests/MobileList.test.ts::TimelineMobile (feature 0113)::emits the grid-snapped range when a free row is tapped, and ignores tiny or disabled gaps
+
+### Requirement: Mobile block row behavior
+A mobile block row SHALL complete through the shared completion queue with the global `.df-checkbox`, delete on the × tap with no dialog and with an Undo entry, keep the title tap as inline rename, and show its grip as inert and hidden from assistive tech until touch drag exists.
+Enforced: frontend/src/components/TimeBlock.vue::onDeleteClick, frontend/src/components/MobileBlockRow.vue::mobile-block-row
+
+#### Scenario: Complete and rename
+- **WHEN** the checkbox is toggled or the title tapped
+- **THEN** the completion write goes through `updateBlock` and the title becomes an input
+
+Tests: frontend/tests/MobileList.test.ts::TimelineMobile (feature 0113)::completes through the shared completion queue, frontend/tests/MobileList.test.ts::TimelineMobile (feature 0113)::keeps the inline title edit on a tap of the title
+
+#### Scenario: Delete without a dialog
+- **WHEN** × is tapped
+- **THEN** the block is deleted at once and an Undo entry is pushed; a failure shows a floating alert
+
+Tests: frontend/tests/MobileList.test.ts::TimelineMobile (feature 0113)::deletes on the × tap without a confirmation dialog and registers Undo, frontend/tests/MobileList.test.ts::TimelineMobile (feature 0113)::floats a delete failure instead of growing the 52 px row
+
+#### Scenario: Inert grip
+- **WHEN** the grip is pressed
+- **THEN** no drag starts
+
+Tests: frontend/tests/MobileList.test.ts::TimelineMobile (feature 0113)::keeps the grip inert: no drag starts from it
+
+### Requirement: Mobile FAB
+At 640 px and below in Dark 4a the dashed Add Block bar SHALL be replaced by a 56 px coral FAB 16 px from the right and 16 px above the chat panel with the safe area, opening the same add form, hidden while the chat field is focused.
+
+#### Scenario: FAB
+- **WHEN** the mobile Schedule page renders
+- **THEN** the FAB opens the add form and the bar is absent
 
 ### Requirement: Mobile header and menu
 At 640 px and below in Dark 4a the header SHALL be one 56 px row: previous, a centered `Fri, Nov 27`, next, and a gear opening a modal menu (Settings, View analytics, Calendars, Log out). It SHALL NOT show Undo, Show indicator, Today, Regenerate draft, the draft badge or the time-zone banner.

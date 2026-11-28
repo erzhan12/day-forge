@@ -13,9 +13,10 @@
 - [x] Calendars sheet (`MobileCalendarsSheet`); choice recorded in design.md
 
 ## 3. List (PR3)
-- [ ] `TimelineMobile`, block row 52 px, free row 48 px, no axis or now line
-- [ ] Completion via `useBlockCompletion`; × deletes without dialog
-- [ ] Update `dark4a-day-fit.mjs` 390 px checks
+- [x] `TimelineMobile`, `MobileBlockRow` 52 px, `MobileGapRow` 48 px, `buildMobileRows`; no axis or now line
+- [x] `TimeBlock` `mobile` prop: completion via `useBlockCompletion`, × deletes without dialog (Undo entry kept), inert grip, floating error
+- [x] Update `dark4a-day-fit.mjs` 390 px checks
+- [ ] Real-browser pass at 390×844 and 375×667 (`dark4a-day-fit.mjs`; needs Django, Vite, test user)
 
 ## 4. Sheets and FAB (PR4)
 - [ ] `BottomSheet`, Add Block sheet, title-only edit sheet (time and category: issue #333), FAB

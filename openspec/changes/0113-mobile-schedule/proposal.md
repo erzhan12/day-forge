@@ -15,7 +15,7 @@ The Dark 4a Schedule page has no phone layout: below 1024 px it shows the deskto
 ## Capabilities
 
 - `frontend/mobile-schedule`: ADDED (breakpoint and scaffold now; layout requirements as stages land)
-- `frontend/undo-and-drag`: ADDED "Mobile delete is immediate with an Undo toast"
+- `frontend/undo-and-drag`: ADDED "Mobile delete is immediate" and "Mobile Undo toast"
 - `frontend/chat-ui`: ADDED "Mobile privacy hint sits behind the info control"
 
 ## Impact
