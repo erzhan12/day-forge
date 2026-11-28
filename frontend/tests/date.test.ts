@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { addCivilDays, civilDayDelta, formatCivilDate, formatShortCivilDate, todayString, zonedDateTime } from "../src/utils/date"
+import { addCivilDays, civilDayDelta, formatCivilDate, formatMobileHeaderDate, formatShortCivilDate, todayString, zonedDateTime } from "../src/utils/date"
 
 describe("saved-zone civil time", () => {
   it.each([
@@ -44,5 +44,15 @@ describe("formatShortCivilDate", () => {
       if (previous === undefined) delete process.env.TZ
       else process.env.TZ = previous
     }
+  })
+})
+
+describe("formatMobileHeaderDate (feature 0113)", () => {
+  it.each([
+    ["2026-11-27", "Fri, Nov 27"],
+    ["2026-03-08", "Sun, Mar 8"],
+    ["2026-12-31", "Thu, Dec 31"],
+  ])("formats %s as %s without year or full weekday", (date, expected) => {
+    expect(formatMobileHeaderDate(date)).toBe(expected)
   })
 })

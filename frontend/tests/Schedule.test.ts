@@ -18,6 +18,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { mount, VueWrapper, flushPromises } from "@vue/test-utils"
 import { runScheduleMutation, type ScheduleRevisionState } from "../src/composables/useScheduleRevision"
 import { makeCategories } from "./helpers/schedule"
+import { router } from "@inertiajs/vue3"
 import { defineComponent, h, nextTick, reactive, ref, type Ref } from "vue"
 
 // --- mocks ---------------------------------------------------------------
@@ -293,7 +294,9 @@ function stubMatchMedia(matches = false): void {
   vi.stubGlobal(
     "matchMedia",
     vi.fn().mockImplementation((query: string) => ({
-      matches,
+      // `matches` stands for the wide query; the mobile query (feature 0113)
+      // is false unless a test stubs it itself.
+      matches: query.includes("max-width") ? false : matches,
       media: query,
       onchange: null,
       addEventListener: vi.fn(),
@@ -805,8 +808,10 @@ describe("Schedule.vue chat surface routing (feature 0008)", () => {
         matches: false,
         media: query,
         onchange: null,
+        // Only the wide query's listener is the one this test flips; the
+        // mobile query (feature 0113) registers its own.
         addEventListener: vi.fn((_evt: string, h: (e: { matches: boolean }) => void) => {
-          changeHandler = h
+          if (query === "(min-width: 1024px)") changeHandler = h
         }),
         removeEventListener: vi.fn(),
         dispatchEvent: vi.fn(),
@@ -1426,8 +1431,11 @@ describe("Schedule.vue Dark 4a narrow calendar fallback (0106)", () => {
   function stubViewport(wide: boolean) {
     changeHandler = null
     vi.stubGlobal("matchMedia", vi.fn().mockImplementation((query: string) => ({
-      matches: wide, media: query, onchange: null,
-      addEventListener: vi.fn((_evt: string, h: (e: { matches: boolean }) => void) => { changeHandler = h }),
+      // The mobile query (feature 0113) is never true in a wide/narrow-rail test.
+      matches: query.includes("max-width") ? false : wide, media: query, onchange: null,
+      addEventListener: vi.fn((_evt: string, h: (e: { matches: boolean }) => void) => {
+        if (!query.includes("max-width")) changeHandler = h
+      }),
       removeEventListener: vi.fn(), dispatchEvent: vi.fn(), addListener: vi.fn(), removeListener: vi.fn(),
     })))
   }
@@ -1523,7 +1531,7 @@ describe("Schedule.vue logout footer by theme (0106)", () => {
 
   function mountTheme(theme: "dark_4a" | "classic") {
     vi.stubGlobal("matchMedia", vi.fn().mockImplementation((query: string) => ({
-      matches: true, media: query, onchange: null,
+      matches: !query.includes("max-width"), media: query, onchange: null,
       addEventListener: vi.fn(), removeEventListener: vi.fn(), dispatchEvent: vi.fn(),
       addListener: vi.fn(), removeListener: vi.fn(),
     })))
@@ -1689,5 +1697,107 @@ describe("Schedule.vue external calendar past-state at midnight (0112)", () => {
 
     expect(item.classes()).not.toContain("ee-item--past")
     expect(w.getComponent(ExternalEventsPanel).props("todayDate")).toBe(MAY_7)
+  })
+})
+
+describe("Schedule.vue Dark 4a mobile header (0113)", () => {
+  const { setPlacement } = useExternalCalendarPlacement()
+
+  function stubViewport(mobile: boolean) {
+    vi.stubGlobal("matchMedia", vi.fn().mockImplementation((query: string) => ({
+      matches: query.includes("max-width") ? mobile : false, media: query, onchange: null,
+      addEventListener: vi.fn(), removeEventListener: vi.fn(), dispatchEvent: vi.fn(),
+      addListener: vi.fn(), removeListener: vi.fn(),
+    })))
+  }
+
+  function mountMobile(theme: "dark_4a" | "classic", mobile: boolean) {
+    stubViewport(mobile)
+    document.documentElement.dataset.theme = theme
+    wrapper = mount(Schedule, {
+      props: {
+        categories: makeCategories(),
+        schedule: makeSchedule("2026-05-04", "active"),
+        blocks: [],
+        date: "2026-05-04",
+        has_template_for_type: true,
+        external_tasks_poll_interval: 60,
+        schedule_window: { start: "06:00", end: "23:00", time_zone: "UTC" },
+        auth_user_id: 1,
+        integration_bootstrap: integrationBootstrap("2026-05-04", "UTC"),
+      },
+      attachTo: document.body,
+      global: { stubs: { ...STUBS, AddToScheduleDialog: true, ShowIndicatorButton: true, TimeZoneMismatchPrompt: true } },
+    })
+    return wrapper
+  }
+
+  beforeEach(() => {
+    stubLocalStorage()
+    resetExternalProviderMocks()
+    setPlacement("sidebar")
+    calendarState.statusKnown = true
+    calendarState.connected = true
+    calendarState.events = [{
+      title: "Dentist", start: "2026-05-04T14:00:00Z", end: "2026-05-04T15:00:00Z",
+      calendar_name: "Personal", all_day: false, external_uid: "mobile-event", account_label: "",
+    }]
+  })
+
+  afterEach(() => {
+    wrapper?.unmount()
+    wrapper = null
+    delete document.documentElement.dataset.theme
+    vi.unstubAllGlobals()
+    vi.clearAllMocks()
+  })
+
+  it("swaps the date navigator for the mobile header and drops the desktop-only controls", async () => {
+    const w = mountMobile("dark_4a", true)
+    await flushPromises()
+    expect(w.find('[data-testid="mobile-header"]').exists()).toBe(true)
+    expect(w.find('[data-testid="mobile-date"]').text()).toBe("Mon, May 4")
+    expect(w.findComponent({ name: "ShowIndicatorButton" }).exists()).toBe(false)
+    expect(w.findComponent({ name: "TimeZoneMismatchPrompt" }).exists()).toBe(false)
+    expect(w.find(".undo-btn").exists()).toBe(false)
+    expect(w.find(".analytics-link").exists()).toBe(false)
+  })
+
+  it("keeps the desktop header in classic and in Dark 4a above 640px", async () => {
+    const classic = mountMobile("classic", true)
+    await flushPromises()
+    expect(classic.find('[data-testid="mobile-header"]').exists()).toBe(false)
+    expect(classic.find(".undo-btn").exists()).toBe(true)
+    classic.unmount()
+    const wide = mountMobile("dark_4a", false)
+    await flushPromises()
+    expect(wide.find('[data-testid="mobile-header"]').exists()).toBe(false)
+    expect(wide.find(".undo-btn").exists()).toBe(true)
+  })
+
+  it("moves the calendar panel into the gear menu's Calendars sheet and keeps polling", async () => {
+    const w = mountMobile("dark_4a", true)
+    await flushPromises()
+    const vm = w.vm as unknown as ScheduleExposed
+    expect(w.find('section[aria-label="External calendar events"]').exists()).toBe(false)
+    expect(vm.externalPollActive).toBe(true)
+    await w.get('[data-testid="mobile-gear"]').trigger("click")
+    await w.get('[data-testid="mobile-menu-calendars"]').trigger("click")
+    await flushPromises()
+    expect(w.find('[data-testid="mobile-menu"]').exists()).toBe(false)
+    const sheet = w.get('[data-testid="mobile-calendars"]')
+    expect(sheet.find('section[aria-label="External calendar events"]').exists()).toBe(true)
+    await sheet.trigger("keydown", { key: "Escape" })
+    await flushPromises()
+    expect(w.find('[data-testid="mobile-calendars"]').exists()).toBe(false)
+    expect(document.activeElement).toBe(w.get('[data-testid="mobile-gear"]').element)
+  })
+
+  it("logs out from the menu", async () => {
+    const w = mountMobile("dark_4a", true)
+    await flushPromises()
+    await w.get('[data-testid="mobile-gear"]').trigger("click")
+    await w.get('[data-testid="mobile-menu-logout"]').trigger("click")
+    expect(router.post).toHaveBeenCalledWith("/accounts/logout/")
   })
 })

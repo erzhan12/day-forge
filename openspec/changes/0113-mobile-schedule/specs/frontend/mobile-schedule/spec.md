@@ -32,11 +32,48 @@ At 640 px and below in Dark 4a the Schedule page SHALL render one column of fixe
 - **THEN** it renders as a full 52 px row with its duration and × visible
 
 ### Requirement: Mobile header and menu
-At 640 px and below in Dark 4a the header SHALL be one 56 px row with previous, a centered `Fri, Nov 27` date, next and a gear that opens a menu of Settings, View analytics, Calendars and Log out. The header SHALL NOT show Undo, Show indicator, Today, Regenerate draft, the draft badge or the time-zone banner.
+At 640 px and below in Dark 4a the header SHALL be one 56 px row: previous, a centered `Fri, Nov 27`, next, and a gear opening a modal menu (Settings, View analytics, Calendars, Log out). It SHALL NOT show Undo, Show indicator, Today, Regenerate draft, the draft badge or the time-zone banner.
+Enforced: frontend/src/components/MobileHeader.vue::mobile-header, frontend/src/pages/Schedule.vue::mobileLayout
 
-#### Scenario: Menu contents
-- **WHEN** the gear is tapped
-- **THEN** the menu lists Settings, View analytics, Calendars and Log out
+#### Scenario: Header contents
+- **WHEN** the mobile Schedule page renders
+- **THEN** it shows the short date and arrows, and none of the desktop-only controls
+
+Tests: frontend/tests/MobileHeader.test.ts::MobileHeader (feature 0113)::shows the short date and nothing from the desktop header, frontend/tests/Schedule.test.ts::Schedule.vue Dark 4a mobile header (0113)::swaps the date navigator for the mobile header and drops the desktop-only controls, frontend/tests/date.test.ts::formatMobileHeaderDate (feature 0113)::formats %s as %s without year or full weekday
+
+#### Scenario: Day arrows
+- **WHEN** next or previous is tapped
+- **THEN** the page visits the adjacent civil day
+
+Tests: frontend/tests/MobileHeader.test.ts::MobileHeader (feature 0113)::moves one civil day with the arrows, across a month end
+
+#### Scenario: Menu contents and logout
+- **WHEN** the gear is tapped and Log out is chosen
+- **THEN** the menu lists its items and the session ends through the page logout
+
+Tests: frontend/tests/MobileHeader.test.ts::MobileHeader (feature 0113)::opens a menu with Settings, View analytics, Calendars and Log out, frontend/tests/MobileHeader.test.ts::MobileHeader (feature 0113)::omits View analytics and Calendars when they do not apply, frontend/tests/Schedule.test.ts::Schedule.vue Dark 4a mobile header (0113)::logs out from the menu
+
+#### Scenario: Focus and dismissal
+- **WHEN** the menu opens, Tab is pressed at its ends, then Escape
+- **THEN** focus moves in, wraps inside the menu, and returns to the gear on close
+
+Tests: frontend/tests/MobileHeader.test.ts::MobileHeader (feature 0113)::moves focus into the menu, wraps Tab, and closes on Escape with focus back on the gear, frontend/tests/MobileHeader.test.ts::MobileHeader (feature 0113)::closes on a backdrop tap
+
+#### Scenario: Other layouts unchanged
+- **WHEN** the theme is classic or the viewport is wider than 640 px
+- **THEN** the desktop date navigator and its controls render
+
+Tests: frontend/tests/Schedule.test.ts::Schedule.vue Dark 4a mobile header (0113)::keeps the desktop header in classic and in Dark 4a above 640px
+
+### Requirement: Mobile Calendars sheet
+On mobile the calendar panel SHALL not render under the timeline; the Calendars menu item SHALL open it in a modal sheet whose Add to schedule closes the sheet, and calendar polling SHALL stay as at widths below 1024 px.
+Enforced: frontend/src/components/MobileCalendarsSheet.vue::useMobileDialog, frontend/src/pages/Schedule.vue::mobileCalendarsOpen
+
+#### Scenario: Open and close
+- **WHEN** Calendars is chosen and then Escape pressed
+- **THEN** the panel shows inside the sheet, polling stays active, and focus returns to the gear
+
+Tests: frontend/tests/Schedule.test.ts::Schedule.vue Dark 4a mobile header (0113)::moves the calendar panel into the gear menu's Calendars sheet and keeps polling
 
 ### Requirement: Mobile edit sheet
 Tapping a block row outside its checkbox, handle and × SHALL open a bottom sheet that edits the title only; time and category editing is out of scope (issue #333).

@@ -7,9 +7,10 @@
 - [x] OpenSpec change, `0113_PLAN.md`, rules (`ui.md`, `ai-safety.md`)
 
 ## 2. Header and menu (PR2)
-- [ ] One-line 56 px header, 44 px targets, centered date
-- [ ] ⚙ menu: Settings, View analytics, Calendars, Log out
-- [ ] Hide Undo, Show indicator, Today, Regenerate draft, draft badge, time-zone banner on mobile
+- [x] One-line 56 px header, 44 px targets, centered date (`MobileHeader`, `formatMobileHeaderDate`)
+- [x] ⚙ menu: Settings, View analytics, Calendars, Log out (`MobileMenu`, `useMobileDialog`)
+- [x] Hide Undo, Show indicator, Today, Regenerate draft, draft badge, time-zone banner on mobile
+- [x] Calendars sheet (`MobileCalendarsSheet`); choice recorded in design.md
 
 ## 3. List (PR3)
 - [ ] `TimelineMobile`, block row 52 px, free row 48 px, no axis or now line

@@ -87,3 +87,11 @@ export function formatCivilDate(date: string, locale = "en-US"): string {
 export function weekdayName(date: string): string {
   return utcCivilDate(date).toLocaleDateString("en-US", { timeZone: "UTC", weekday: "long" })
 }
+
+// "Fri, Nov 27": the mobile header date (feature 0113). Same UTC civil-date
+// rule as formatCivilDate; no year, no full weekday name.
+export function formatMobileHeaderDate(date: string): string {
+  return utcCivilDate(date).toLocaleDateString("en-US", {
+    timeZone: "UTC", weekday: "short", month: "short", day: "numeric",
+  })
+}

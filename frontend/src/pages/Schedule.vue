@@ -18,10 +18,12 @@ import ExternalRail4a from "../components/ExternalRail4a.vue"
 import DraftBadge from "../components/DraftBadge.vue"
 import RegenerateDraftButton from "../components/RegenerateDraftButton.vue"
 import ShowIndicatorButton from "../components/ShowIndicatorButton.vue"
+import MobileHeader from "../components/MobileHeader.vue"
+import MobileCalendarsSheet from "../components/MobileCalendarsSheet.vue"
 import ExternalEventsPanel from "../components/ExternalEventsPanel.vue"
 import AddToScheduleDialog from "../components/AddToScheduleDialog.vue"
 import { FocusIndicatorControllerKey, useFocusIndicatorController } from "../composables/useFocusIndicatorController"
-import { useViewport } from "../composables/useViewport"
+import { useIsMobile, useViewport } from "../composables/useViewport"
 import { readChatSidebarOpen, writeChatSidebarOpen } from "../utils/chatSidebarStorage"
 import { readExternalTasksSidebarOpen, writeExternalTasksSidebarOpen } from "../utils/externalTasksSidebarStorage"
 import { timeToMinutes, type ScheduleWindowBounds } from "../utils/scheduleTime"
@@ -139,6 +141,13 @@ provide(ScheduleContainerKey, scheduleBodyRef)
 const draggedBlock = computed(() => canonicalBlocks.value.find(block => block.id === dragBlockId.value) ?? null)
 
 const { isWide } = useViewport()
+// Dark 4a at max-width 640 px (feature 0113). Other themes and wider screens
+// keep the header and panels below unchanged.
+const { isMobile } = useIsMobile()
+const mobileLayout = computed(() => layout.value === "4a" && isMobile.value)
+const mobileCalendarsOpen = ref(false)
+const mobileHeaderRef = ref<InstanceType<typeof MobileHeader> | null>(null)
+watch(mobileLayout, (on) => { if (!on) mobileCalendarsOpen.value = false })
 const chatDockHeight = ref(0)
 const sidebarOpen = ref(readChatSidebarOpen())
 watch(sidebarOpen, writeChatSidebarOpen)
@@ -258,8 +267,17 @@ defineExpose({
     :class="{ 'layout-4a': layout === '4a' }"
     :style="schedulePageStyle"
   >
-    <TimeZoneMismatchPrompt :time-zone="schedule_window.time_zone" />
-    <DateNavigator :date="date" :today="todayDate">
+    <TimeZoneMismatchPrompt v-if="!mobileLayout" :time-zone="schedule_window.time_zone" />
+    <MobileHeader
+      v-if="mobileLayout"
+      ref="mobileHeaderRef"
+      :date="date"
+      :show-analytics="showAnalyticsLink"
+      :show-calendars="externalConnected"
+      @calendars="mobileCalendarsOpen = true"
+      @logout="logout"
+    />
+    <DateNavigator v-else :date="date" :today="todayDate">
       <template #status>
         <DraftBadge
           :show="canonicalSchedule?.status === 'draft' && canonicalBlocks.length > 0"
@@ -461,7 +479,7 @@ defineExpose({
     </div>
 
     <ExternalEventsPanel
-      v-if="externalConnected && externalCalendarInCenter && narrow4aCalendar"
+      v-if="externalConnected && externalCalendarInCenter && narrow4aCalendar && !mobileLayout"
       :time-zone="schedule_window.time_zone"
       :today-date="todayDate"
       variant="center"
@@ -476,6 +494,30 @@ defineExpose({
       @retry="retryExternalFetch"
       @add-to-schedule="handleAddToSchedule"
     />
+
+    <!-- Mobile: the calendar panel lives in the gear menu's Calendars sheet.
+         The placement stays "center" below 1024 px, so polling is unchanged. -->
+    <MobileCalendarsSheet
+      v-if="mobileLayout && mobileCalendarsOpen"
+      :fallback-focus="() => mobileHeaderRef?.$el?.querySelector('[data-testid=mobile-gear]') ?? null"
+      @close="mobileCalendarsOpen = false"
+    >
+      <ExternalEventsPanel
+        :time-zone="schedule_window.time_zone"
+        :today-date="todayDate"
+        variant="center"
+        layout="4a"
+        :date="date"
+        :now-minutes="nowMinutes"
+        :events="mergedExternalEvents"
+        :loading="externalLoading"
+        :error-banners="externalErrorBanners"
+        :account-errors="googleCalendar.state.accountErrors"
+        :connected="externalConnected"
+        @retry="retryExternalFetch"
+        @add-to-schedule="(event) => { mobileCalendarsOpen = false; handleAddToSchedule(event) }"
+      />
+    </MobileCalendarsSheet>
 
     <!-- Dark 4a moves Log out into Settings (feature 0106). -->
     <div v-if="layout !== '4a'" class="logout-footer">
