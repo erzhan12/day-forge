@@ -28,6 +28,9 @@ const props = withDefaults(
     tooltip?: boolean
     /** Show a cascaded block's new start while a drag is in progress. */
     shiftPreview?: boolean
+    /** Dark 4a phone row (feature 0113): × deletes at once, the handle is inert,
+     *  no end time or countdown, errors float below the 52 px row. */
+    mobile?: boolean
   }>(),
   {
     isCurrent: false,
@@ -35,9 +38,12 @@ const props = withDefaults(
     density: "full",
     tooltip: false,
     shiftPreview: false,
+    mobile: false,
   },
 )
 const compact = computed(() => props.density === "compact")
+// A fixed-height row cannot grow an error line, so it floats like compact.
+const floatingError = computed(() => compact.value || props.mobile)
 
 const { updateBlock, deleteBlock } = useSchedule(() => props.date)
 // Tracks the active theme reactively so the left-border color updates
@@ -66,7 +72,7 @@ function isDisabled(): boolean {
 }
 
 function onDragStart(event: PointerEvent) {
-  if (isDisabled()) return
+  if (props.mobile || isDisabled()) return
   if (drag && scheduleContainer?.value) {
     drag.startDrag(event, props.block, scheduleContainer.value)
   }
@@ -120,7 +126,7 @@ const durationMinutes = computed(() => {
 const duration = computed(() => formatDurationMinutes(durationMinutes.value))
 
 const remainingLabel = computed(() => {
-  if (compact.value) return null
+  if (compact.value || props.mobile) return null
   if (!props.isCurrent || props.remainingMinutes === null || props.remainingMinutes <= 0) {
     return null
   }
@@ -285,6 +291,12 @@ const shiftTarget = computed(() => {
   return drag.previewBlocks?.value.find((item) => item.id === props.block.id)?.start_time ?? null
 })
 
+// Mobile deletes on the tap (feature 0113); the Undo entry is the safety net.
+function onDeleteClick() {
+  confirmingDelete.value = true
+  if (props.mobile) void handleDelete()
+}
+
 async function handleDelete() {
   if (isDisabled() || !confirmingDelete.value) return
   confirmingDelete.value = false
@@ -314,9 +326,10 @@ async function handleDelete() {
       dragging: drag?.isDragging.value && drag?.dragBlockId.value === block.id,
       shifting: drag?.shiftedBlockIds.value.has(block.id),
       'density-compact': compact,
+      'density-mobile': mobile,
     }"
     :style="{ borderLeftColor: categoryColor }"
-    :aria-describedby="tooltipOpen ? tooltipId : (compact && errorMessage ? errorId : undefined)"
+    :aria-describedby="tooltipOpen ? tooltipId : (floatingError && errorMessage ? errorId : undefined)"
     @mouseenter="showTooltip"
     @mouseleave="hideTooltip"
     @focusin="showTooltip"
@@ -329,6 +342,7 @@ async function handleDelete() {
   >
     <div
       class="drag-handle"
+      :aria-hidden="mobile ? 'true' : undefined"
       @pointerdown.stop="onDragStart"
     >
       <span class="grip-icon">&#x2807;</span>
@@ -347,7 +361,7 @@ async function handleDelete() {
           @change="toggleCompleted"
         />
       </label>
-      <span class="time-badge"><span class="time-start">{{ block.start_time }}</span><span v-if="!compact" class="time-end">–{{ block.end_time }}</span></span>
+      <span class="time-badge"><span class="time-start">{{ block.start_time }}</span><span v-if="!compact && !mobile" class="time-end">–{{ block.end_time }}</span></span>
       <span class="duration">{{ duration }}</span>
       <span v-if="shiftTarget" class="shift-badge" data-testid="shift-badge">→ {{ shiftTarget }}</span>
       <span v-if="remainingLabel" class="remaining-badge">{{ remainingLabel }}</span>
@@ -373,12 +387,12 @@ async function handleDelete() {
         class="delete-btn"
         :aria-label="`Delete ${block.title}`"
         :disabled="disabled"
-        @click="confirmingDelete = true"
+        @click="onDeleteClick"
       >&times;</button>
     </div>
-    <div v-if="errorMessage && !compact" class="block-error">{{ errorMessage }}</div>
+    <div v-if="errorMessage && !floatingError" class="block-error">{{ errorMessage }}</div>
     <!-- A one-line compact card would clip the error, so it floats below. -->
-    <BlockTooltip v-if="errorMessage && compact" :id="errorId" :anchor="rootRef" role="alert">
+    <BlockTooltip v-if="errorMessage && floatingError" :id="errorId" :anchor="rootRef" role="alert">
       {{ errorMessage }}
     </BlockTooltip>
     <BlockTooltip v-if="tooltipOpen" :id="tooltipId" :anchor="rootRef">

@@ -1775,6 +1775,22 @@ describe("Schedule.vue Dark 4a mobile header (0113)", () => {
     expect(wide.find(".undo-btn").exists()).toBe(true)
   })
 
+  it("renders the phone list instead of the stacked timeline only in Dark 4a at 640px and below", async () => {
+    const mobile = mountMobile("dark_4a", true)
+    await flushPromises()
+    expect(mobile.find('[data-testid="timeline-mobile"]').exists()).toBe(true)
+    expect(mobile.find('[data-testid="timeline-4a"]').exists()).toBe(false)
+    mobile.unmount()
+    const wide = mountMobile("dark_4a", false)
+    await flushPromises()
+    expect(wide.find('[data-testid="timeline-mobile"]').exists()).toBe(false)
+    expect(wide.find('[data-testid="timeline-4a"]').exists()).toBe(true)
+    wide.unmount()
+    const classic = mountMobile("classic", true)
+    await flushPromises()
+    expect(classic.find('[data-testid="timeline-mobile"]').exists()).toBe(false)
+  })
+
   it("moves the calendar panel into the gear menu's Calendars sheet and keeps polling", async () => {
     const w = mountMobile("dark_4a", true)
     await flushPromises()

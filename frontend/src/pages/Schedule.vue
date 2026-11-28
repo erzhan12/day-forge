@@ -6,6 +6,7 @@ import TimeZoneMismatchPrompt from "../components/TimeZoneMismatchPrompt.vue"
 import DateNavigator from "../components/DateNavigator.vue"
 import TimeBlock from "../components/TimeBlock.vue"
 import Timeline4a from "../components/Timeline4a.vue"
+import TimelineMobile from "../components/TimelineMobile.vue"
 import EmptyDayState from "../components/EmptyDayState.vue"
 import GapSlot from "../components/GapSlot.vue"
 import AddBlockForm from "../components/AddBlockForm.vue"
@@ -386,6 +387,15 @@ defineExpose({
         :date="date"
         :slot-type="slot_type"
         @plan-with-ai="planWithAi"
+      />
+      <TimelineMobile
+        v-else-if="mobileLayout"
+        :blocks="canonicalBlocks"
+        :window="scheduleWindow"
+        :date="date"
+        :disabled="scheduleDisabled"
+        :categories="categories"
+        @add-here-4a="handleAddHere4a"
       />
       <Timeline4a
         v-else-if="layout === '4a'"
