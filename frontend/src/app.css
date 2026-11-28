@@ -658,3 +658,65 @@ html[data-theme="dark_4a"] .df-checkbox.df-checkbox--lg:checked {
   }
 }
 /* == end Dark 4a control skin == */
+
+/* == Mobile scaffold (feature 0113) ======================================== */
+/* The viewport meta in base.html uses viewport-fit=cover, so every theme can
+   draw under the notch and home indicator. Non-4a themes keep their old look
+   by padding the body with the system insets; they are 0 on desktop. */
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --app-height: 100vh;
+}
+
+@supports (height: 100dvh) {
+  :root {
+    --app-height: 100dvh;
+  }
+}
+
+html:not([data-theme="dark_4a"]) body {
+  padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
+}
+
+/* Dark 4a: horizontal insets everywhere (landscape notch). The mobile header
+   and chat panel take the top and bottom insets themselves in later stages
+   (SPEC 11.1); until then the body carries them. */
+html[data-theme="dark_4a"] {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+html[data-theme="dark_4a"] body {
+  padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
+}
+
+/* The fixed bottom dock (shown below 1024 px) would sit under the home
+   indicator now that the viewport covers it; CommandBar measures its own
+   height, so the page reserve follows. */
+@media (max-width: 1023px) {
+  html[data-theme="dark_4a"] .command-bar.variant-dock {
+    padding-bottom: calc(8px + var(--safe-bottom));
+  }
+}
+
+/* dvh, not vh: iOS vh includes the area under the browser toolbar and adds a
+   spurious scroll. `.schedule-page` sets min-height: 100vh in its scoped
+   style, so the doubled class out-specifies it. */
+@media (max-width: 640px) {
+  html[data-theme="dark_4a"],
+  html[data-theme="dark_4a"] body {
+    background-color: #17181a;
+  }
+
+  html[data-theme="dark_4a"] body {
+    min-height: var(--app-height);
+  }
+
+  html[data-theme="dark_4a"] .schedule-page.schedule-page {
+    min-height: var(--app-height);
+  }
+}
+/* == end Mobile scaffold == */

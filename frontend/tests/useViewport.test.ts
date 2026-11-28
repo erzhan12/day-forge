@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { defineComponent, h, nextTick } from "vue"
 import { mount, VueWrapper } from "@vue/test-utils"
 import { clearLocalStorage } from "./helpers/storage"
-import { useViewport, WIDE_VIEWPORT_QUERY } from "../src/composables/useViewport"
+import { MOBILE_VIEWPORT_QUERY, useIsMobile, useViewport, WIDE_VIEWPORT_QUERY } from "../src/composables/useViewport"
 
 type ChangeHandler = (e: { matches: boolean }) => void
 
@@ -124,5 +124,64 @@ describe("useViewport", () => {
 
     wrapper = mountAtWidth(1023)
     expect(wrapper.find('[data-testid="probe"]').text()).toBe("false")
+  })
+})
+
+describe("useIsMobile (feature 0113)", () => {
+  const MobileProbe = defineComponent({
+    setup() {
+      const { isMobile } = useIsMobile()
+      return () => h("div", { "data-testid": "probe" }, String(isMobile.value))
+    },
+  })
+
+  it("pins the breakpoint to `(max-width: 640px)` and queries it", () => {
+    stubMatchMedia(makeMql(true))
+    wrapper = mount(MobileProbe)
+    expect(MOBILE_VIEWPORT_QUERY).toBe("(max-width: 640px)")
+    expect(window.matchMedia as unknown as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
+      "(max-width: 640px)",
+    )
+  })
+
+  it("initial isMobile mirrors matches and follows change events", async () => {
+    const mql = makeMql(false)
+    stubMatchMedia(mql)
+    wrapper = mount(MobileProbe)
+    expect(wrapper.find('[data-testid="probe"]').text()).toBe("false")
+    mql.fire(true)
+    await nextTick()
+    expect(wrapper.find('[data-testid="probe"]').text()).toBe("true")
+  })
+
+  it("treats 640px as inclusive and 641px as not mobile", () => {
+    stubMatchMedia(makeMql(640 <= 640))
+    wrapper = mount(MobileProbe)
+    expect(wrapper.find('[data-testid="probe"]').text()).toBe("true")
+    wrapper.unmount()
+    stubMatchMedia(makeMql(641 <= 640))
+    wrapper = mount(MobileProbe)
+    expect(wrapper.find('[data-testid="probe"]').text()).toBe("false")
+  })
+
+  it("removes the change listener on unmount (no leak)", () => {
+    const mql = makeMql(true)
+    stubMatchMedia(mql)
+    wrapper = mount(MobileProbe)
+    expect(mql.handlers.length).toBe(1)
+    wrapper.unmount()
+    wrapper = null
+    expect(mql.removeEventListener).toHaveBeenCalledTimes(1)
+    expect(mql.handlers.length).toBe(0)
+  })
+
+  it("leaves useViewport isWide on its own 1024px query", () => {
+    const calls: string[] = []
+    vi.stubGlobal("matchMedia", vi.fn().mockImplementation((q: string) => {
+      calls.push(q)
+      return makeMql(false)
+    }))
+    wrapper = mount(Probe)
+    expect(calls).toEqual([WIDE_VIEWPORT_QUERY])
   })
 })
