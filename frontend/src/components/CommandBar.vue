@@ -113,6 +113,8 @@ const infoBtn = ref<HTMLButtonElement | null>(null)
 const focused = ref(false)
 const infoOpen = ref(false)
 const keyboardInset = useVisualViewportInset()
+// Focus goes back to ⓘ when the sheet closes (iOS never focuses a tapped button).
+function infoFallbackFocus(): HTMLElement | null { return infoBtn.value }
 
 function onInputFocus(): void { focused.value = true }
 function leavesChat(e: FocusEvent): boolean {
@@ -479,7 +481,7 @@ onUnmounted(() => {
     <BottomSheet
       v-if="mobile && infoOpen"
       title="AI privacy"
-      :fallback-focus="() => infoBtn"
+      :fallback-focus="infoFallbackFocus"
       @close="infoOpen = false"
     >
       <p class="privacy-full" data-testid="chat-privacy-full">{{ PRIVACY_FULL }}</p>
