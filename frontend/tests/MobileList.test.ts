@@ -140,7 +140,7 @@ describe("TimelineMobile (feature 0113)", () => {
     await flushPromises()
     expect(w.find("dialog").exists()).toBe(false)
     expect(mockDeleteBlock).toHaveBeenCalledWith(7)
-    expect(pushUndo).toHaveBeenCalledWith(expect.objectContaining({ type: "delete", silent: true }))
+    expect(pushUndo).toHaveBeenCalledWith(expect.objectContaining({ type: "delete", silent: false, description: "Block deleted" }))
   })
 
   it("floats a delete failure instead of growing the 52 px row", async () => {

@@ -16,7 +16,7 @@ import AddBlockForm from "../src/components/AddBlockForm.vue"
 
 const mockPushUndo = vi.fn()
 
-function mountForm(props: { date: string; initialStartTime?: string; initialEndTime?: string }, categories = makeCategories()) {
+function mountForm(props: { date: string; initialStartTime?: string; initialEndTime?: string; mobile?: boolean; addRequestId?: number }, categories = makeCategories()) {
   return mount(AddBlockForm, {
     props: { ...props, categories },
     global: {
@@ -128,6 +128,27 @@ describe("AddBlockForm", () => {
     expect(mockPushUndo).toHaveBeenCalledWith(
       expect.objectContaining({ type: "add", description: 'Added "New Block"', silent: true }),
     )
+  })
+
+  it("on mobile registers a non-silent Block added toast (feature 0113)", async () => {
+    mockCreateBlock.mockResolvedValue(acceptedMutation())
+    // The add form is teleported into a sheet; open it the way the FAB does.
+    const w = mount(AddBlockForm, {
+      props: { date: "2026-04-10", categories: makeCategories(), mobile: true },
+      attachTo: document.body,
+      global: { provide: { [ScheduleUndoKey]: { pushUndo: mockPushUndo } } },
+    })
+    await w.setProps({ addRequestId: 1 })
+    const title = document.body.querySelector<HTMLInputElement>(".title-input")
+    expect(title).not.toBeNull()
+    title!.value = "New Block"
+    title!.dispatchEvent(new Event("input", { bubbles: true }))
+    document.body.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
+    await vi.dynamicImportSettled()
+    expect(mockPushUndo).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "add", description: "Block added", silent: false }),
+    )
+    w.unmount()
   })
 
   it("does not create undo for a confirmed no-op", async () => {

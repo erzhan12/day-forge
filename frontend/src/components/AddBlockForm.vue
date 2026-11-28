@@ -4,6 +4,7 @@ import type { UserCategory } from "../types"
 import { ScheduleDisabledKey, ScheduleUndoKey } from "../composables/scheduleContext"
 import { useSchedule } from "../composables/useSchedule"
 import { registerMutationUndo } from "../composables/useMutationUndo"
+import { undoNotice } from "../utils/mobileUndo"
 import { defaultCategory, orderedCategories } from "../utils/categories"
 import BottomSheet from "./BottomSheet.vue"
 
@@ -73,11 +74,11 @@ async function handleSubmit() {
   })
   submitting.value = false
   if (result.ok) {
-    registerMutationUndo(result, undo?.pushUndo, {
-      description: `Added "${blockTitle}"`,
-      type: "add",
-      silent: true,
-    })
+    registerMutationUndo(result, undo?.pushUndo, undoNotice(
+      Boolean(props.mobile),
+      "add",
+      `Added "${blockTitle}"`,
+    ))
     title.value = ""
     showForm.value = false
   } else if (result.code === "outside_window") {

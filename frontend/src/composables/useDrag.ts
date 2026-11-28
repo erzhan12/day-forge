@@ -2,6 +2,7 @@ import { getCurrentScope, onScopeDispose, ref, shallowRef, watch } from "vue"
 import type { TimeBlock, UndoAction } from "../types"
 import type { ApiResult } from "./useSchedule"
 import { registerMutationUndo } from "./useMutationUndo"
+import { undoNotice } from "../utils/mobileUndo"
 import { type DateSource, readDate } from "../utils/dateSource"
 import type { AxisMap } from "../utils/timelineStack"
 import {
@@ -308,6 +309,8 @@ export function useDrag(
   // Stack layout (feature 0106): the piecewise minute↔pixel map. When it
   // returns a map, pointer pixels convert through it, frozen at drag start.
   getAxisMap?: () => AxisMap | null,
+  // Dark 4a phone (feature 0113): a successful move shows "Block moved".
+  isMobileToast?: () => boolean,
 ) {
   const isDragging = ref(false)
   const frozenRenderBounds = ref<RenderBounds | null>(null)
@@ -635,11 +638,11 @@ export function useDrag(
 
     const result = await reorderBlocks(updates)
     if (result.ok) {
-      registerMutationUndo(result, pushUndo, {
-        description: `Moved "${title}" to ${targetTime}`,
-        type: "drag",
-        silent: true,
-      })
+      registerMutationUndo(result, pushUndo, undoNotice(
+        Boolean(isMobileToast?.()),
+        "drag",
+        `Moved "${title}" to ${targetTime}`,
+      ))
     }
   }
 

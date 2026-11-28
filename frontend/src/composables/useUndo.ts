@@ -9,7 +9,8 @@ import { type DateSource, readDate } from "../utils/dateSource"
 // restore chain may move the next entry to the newly committed revision.
 
 const MAX_UNDO_STACK = 20
-const TOAST_DURATION_MS = 8_000
+export const TOAST_DURATION_MS = 8_000
+export const MOBILE_TOAST_DURATION_MS = 5_000
 
 // Most-recent stack index whose action targets `date`, or -1. Single source
 // for the date-match rule shared by `canUndo` and `performUndo` — keep them
@@ -27,6 +28,7 @@ export function useUndo(
   getCurrentBlocks: () => TimeBlock[],
   isDisabled?: () => boolean,
   revision?: ScheduleRevisionState,
+  getToastDurationMs?: () => number,
 ) {
   const owner = useScheduleRevision(revision)
   const { restoreBlocks } = useSchedule(getCurrentDate, owner)
@@ -52,10 +54,11 @@ export function useUndo(
   function showToast(description: string, actionable: boolean) {
     clearToastTimer()
     currentToast.value = { description, actionable }
+    const duration = getToastDurationMs?.() ?? TOAST_DURATION_MS
     toastTimer = setTimeout(() => {
       currentToast.value = null
       toastTimer = null
-    }, TOAST_DURATION_MS)
+    }, duration)
   }
 
   function dismissToast() {

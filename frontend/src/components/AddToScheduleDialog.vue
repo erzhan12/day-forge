@@ -6,6 +6,7 @@ import { sinkCategory, orderedCategories } from "../utils/categories"
 import type { NormalizedEvent } from "../types/calendar"
 import { useSchedule } from "../composables/useSchedule"
 import { registerMutationUndo } from "../composables/useMutationUndo"
+import { undoNotice } from "../utils/mobileUndo"
 import { computeEventBlockTimes } from "../utils/travelRules"
 import {
   DEFAULT_SCHEDULE_WINDOW,
@@ -29,6 +30,8 @@ const props = defineProps<{
   // warning and skip messaging derive from this, not the static 06:00–23:00.
   window?: ScheduleWindowBounds
   categories?: UserCategory[]
+  /** Dark 4a phone (feature 0113): the add is not silent. */
+  mobile?: boolean
 }>()
 const emit = defineEmits<{
   (e: "close"): void
@@ -126,11 +129,11 @@ async function handleConfirm() {
   })
   submitting.value = false
   if (result.ok) {
-    registerMutationUndo(result, undo?.pushUndo, {
-      description: `Added "${blockTitle}"`,
-      type: "add",
-      silent: true,
-    })
+    registerMutationUndo(result, undo?.pushUndo, undoNotice(
+      Boolean(props.mobile),
+      "add",
+      `Added "${blockTitle}"`,
+    ))
     emit("close")
   } else if (result.code === "outside_window") {
     // Deliberate skip (feature 0053): event fell fully outside the day window.

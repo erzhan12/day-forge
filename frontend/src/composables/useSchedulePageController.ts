@@ -15,13 +15,15 @@ export interface SchedulePageControllerOptions {
   getTimeZone: () => string
   getAutoDraftPending: () => boolean | undefined
   getMutationsDisabled?: () => boolean
+  /** Toast lifetime; the phone layout uses 5 s (feature 0113). */
+  getToastDurationMs?: () => number
 }
 
 /** Owns the page's canonical writer, undo history, and AI request lifecycle. */
 export function useSchedulePageController(options: SchedulePageControllerOptions) {
   const {
     getDate, getSchedule, getBlocks: getInitialBlocks, getUserId,
-    getTimeZone, getAutoDraftPending, getMutationsDisabled,
+    getTimeZone, getAutoDraftPending, getMutationsDisabled, getToastDurationMs,
   } = options
   const scheduleRevision = provideScheduleRevision(getDate, getSchedule, {
     getContextKey: getTimeZone,
@@ -39,7 +41,7 @@ export function useSchedulePageController(options: SchedulePageControllerOptions
 
   const {
     canUndo, currentToast, pushUndo, performUndo, snapshotBlocks, dismissToast,
-  } = useUndo(getDate, getBlocks, () => scheduleDisabled.value, scheduleRevision)
+  } = useUndo(getDate, getBlocks, () => scheduleDisabled.value, scheduleRevision, getToastDurationMs)
   provide(ScheduleUndoKey, { pushUndo })
 
   const attemptedAutoDraftDates = new Set<string>()

@@ -30,6 +30,7 @@ import { readChatSidebarOpen, writeChatSidebarOpen } from "../utils/chatSidebarS
 import { readExternalTasksSidebarOpen, writeExternalTasksSidebarOpen } from "../utils/externalTasksSidebarStorage"
 import { timeToMinutes, type ScheduleWindowBounds } from "../utils/scheduleTime"
 import { useSchedulePageController } from "../composables/useSchedulePageController"
+import { MOBILE_TOAST_DURATION_MS, TOAST_DURATION_MS } from "../composables/useUndo"
 import { ScheduleDragKey, ScheduleContainerKey } from "../composables/scheduleContext"
 import { useDrag } from "../composables/useDrag"
 import { useTimelinePresentation } from "../composables/useTimelinePresentation"
@@ -48,6 +49,10 @@ import "../app.css"
 useThemeFromProps()
 const activeTheme = useActiveTheme()
 const layout = computed(() => layoutForTheme(activeTheme.value))
+// Dark 4a at max-width 640 px (feature 0113). Other themes and wider screens
+// keep the header and panels unchanged.
+const { isMobile } = useIsMobile()
+const mobileLayout = computed(() => layout.value === "4a" && isMobile.value)
 const pxPerMinute = computed(() => pxPerMinuteForLayout(layout.value))
 const props = withDefaults(defineProps<{
   auth_user_id?: number | null
@@ -92,6 +97,7 @@ const {
   getTimeZone: () => props.schedule_window.time_zone,
   getAutoDraftPending: () => props.auto_draft_pending && categoryCatalogValid.value,
   getMutationsDisabled: () => !categoryCatalogValid.value,
+  getToastDurationMs: () => mobileLayout.value ? MOBILE_TOAST_DURATION_MS : TOAST_DURATION_MS,
 })
 
 // One saved-zone clock supplies presentation, notifications and the PiP owner.
@@ -130,6 +136,7 @@ drag = useDrag(
   () => layout.value === "4a" ? timelineOriginMinutes.value : null,
   () => `${props.date}|${props.schedule_window.time_zone}|${activeTheme.value}`,
   () => layout.value === "4a" ? axisMap.value : null,
+  () => mobileLayout.value,
 )
 const {
   isDragging, dragBlockId, ghostTop, previewStartTime, previewEndTime, shiftedBlockIds, startDrag,
@@ -143,10 +150,6 @@ provide(ScheduleContainerKey, scheduleBodyRef)
 const draggedBlock = computed(() => canonicalBlocks.value.find(block => block.id === dragBlockId.value) ?? null)
 
 const { isWide } = useViewport()
-// Dark 4a at max-width 640 px (feature 0113). Other themes and wider screens
-// keep the header and panels below unchanged.
-const { isMobile } = useIsMobile()
-const mobileLayout = computed(() => layout.value === "4a" && isMobile.value)
 const mobileCalendarsOpen = ref(false)
 const mobileHeaderRef = ref<InstanceType<typeof MobileHeader> | null>(null)
 watch(mobileLayout, (on) => { if (!on) mobileCalendarsOpen.value = false })
@@ -548,6 +551,7 @@ defineExpose({
       v-if="currentToast"
       :message="currentToast.description"
       :actionable="currentToast.actionable && !scheduleDisabled"
+      :mobile="mobileLayout"
       @undo="performUndo"
       @dismiss="dismissToast"
     />
@@ -626,6 +630,7 @@ defineExpose({
       :rules-unavailable="travelRulesError"
       :window="scheduleWindow"
       :categories="categories"
+      :mobile="mobileLayout"
       @close="closeAddDialog"
     />
     <ChatSidebar

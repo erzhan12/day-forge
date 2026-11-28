@@ -3,6 +3,8 @@ withDefaults(
   defineProps<{
     message: string
     actionable?: boolean
+    /** Dark 4a phone (feature 0113): tokens, 44px Undo, no close, above the FAB. */
+    mobile?: boolean
   }>(),
   { actionable: true },
 )
@@ -15,10 +17,10 @@ const emit = defineEmits<{
 
 <template>
   <Transition name="toast">
-    <div class="undo-toast">
+    <div class="undo-toast" :class="{ 'undo-toast--mobile': mobile }" data-testid="undo-toast">
       <span class="toast-message">{{ message }}</span>
       <button v-if="actionable !== false" class="toast-undo-btn" @click="emit('undo')">Undo</button>
-      <button class="toast-close-btn" @click="emit('dismiss')">&times;</button>
+      <button v-if="!mobile" class="toast-close-btn" @click="emit('dismiss')">&times;</button>
       <div class="toast-progress" />
     </div>
   </Transition>
@@ -86,7 +88,7 @@ const emit = defineEmits<{
   left: 0;
   height: 3px;
   background: var(--accent);
-  animation: shrink 8s linear forwards;
+  animation: shrink var(--toast-duration, 8s) linear forwards;
 }
 
 @keyframes shrink {
@@ -114,5 +116,48 @@ const emit = defineEmits<{
 
 .toast-leave-to {
   opacity: 0;
+}
+
+/* Dark 4a phone (feature 0113, SPEC 11): sits above the FAB, or above the
+ * chat dock when the FAB is hidden, and is shifted left of the 56px button. */
+@media (max-width: 640px) {
+  html[data-theme="dark_4a"] .undo-toast.undo-toast--mobile {
+    --toast-duration: 5s;
+    left: 16px;
+    right: calc(16px + 56px + 16px);
+    bottom: calc(var(--chat-dock-height, calc(52px + var(--safe-bottom))) + 16px + 56px + 16px);
+    min-width: 0;
+    max-width: none;
+    min-height: 44px;
+    padding: 0 16px;
+    background: #1F2023;
+    color: #E5E7EB;
+    border: 1px solid #6A6E75;
+    box-shadow: none;
+  }
+
+  html[data-theme="dark_4a"] .undo-toast.undo-toast--mobile .toast-message {
+    font-size: 14px;
+    font-weight: 500;
+    color: #E5E7EB;
+  }
+
+  html[data-theme="dark_4a"] .undo-toast.undo-toast--mobile .toast-undo-btn {
+    color: #FD7562;
+    font-weight: 500;
+    text-decoration: none;
+    min-height: 44px;
+    min-width: 44px;
+    padding: 0 8px;
+  }
+
+  html[data-theme="dark_4a"] .undo-toast.undo-toast--mobile .toast-undo-btn:hover {
+    color: #FD7562;
+  }
+
+  html[data-theme="dark_4a"] .schedule-page:has(.command-input:focus) .undo-toast.undo-toast--mobile {
+    right: 16px;
+    bottom: calc(var(--chat-dock-height, calc(52px + var(--safe-bottom))) + 16px);
+  }
 }
 </style>
