@@ -25,8 +25,8 @@
 - [x] Mobile Undo toast, 5 s, delete, move and add texts; add `Enforced:`/`Tests:` to the undo-and-drag delta
 
 ## 6. Chat (PR6)
-- [ ] Rest and focus panel, `visualViewport` inset, ⓘ sheet, chips
-- [ ] Update `ai-chat-privacy-hint-always-on.mjs`; add anchors to the chat-ui delta
+- [x] Rest and focus panel, `visualViewport` inset, ⓘ sheet, chips
+- [x] Update `ai-chat-privacy-hint-always-on.mjs`; add anchors to the chat-ui delta
 
 ## 7. Drag (deferred)
 - [ ] Touch drag with 400 ms long press on the handle (not scheduled)

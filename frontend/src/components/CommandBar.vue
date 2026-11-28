@@ -27,6 +27,8 @@ import { useActiveTheme } from "../composables/useActiveTheme"
 import { useChatSuggestions } from "../composables/useChatSuggestions"
 import { layoutForTheme } from "../utils/layoutProfile"
 import ChatResultChip from "./ChatResultChip.vue"
+import BottomSheet from "./BottomSheet.vue"
+import { useVisualViewportInset } from "../composables/useVisualViewportInset"
 
 type Variant = "dock" | "sidebar"
 
@@ -36,6 +38,9 @@ const props = defineProps<{
   variant: Variant
   /** A positive value asks for focus once; the owner clears it on focus-handled (0106). */
   focusToken?: number
+  /** Dark 4a phone (feature 0113): 52px rest row; chips and a short
+   *  disclaimer only while the field is focused; full privacy text behind ⓘ. */
+  mobile?: boolean
 }>()
 
 const emit = defineEmits<{ "height-change": [height: number]; "focus-handled": [] }>()
@@ -96,6 +101,26 @@ function confirmDiscard() {
   confirmingDiscard.value = false
   discardPending()
 }
+
+// The full privacy text stays one string (desktop hint, ⓘ sheet). The phone
+// shows the short form above the field while it is focused (ai-safety.md).
+const PRIVACY_FULL = "Messages and schedule context may be sent to the AI provider. Clear before discussing sensitive data."
+const PRIVACY_SHORT = "Messages may be sent to the AI provider."
+const MOBILE_PLACEHOLDER = "Add standup at 10:00 for 15 min"
+
+const expandedEl = ref<HTMLElement | null>(null)
+const infoBtn = ref<HTMLButtonElement | null>(null)
+const focused = ref(false)
+const infoOpen = ref(false)
+const keyboardInset = useVisualViewportInset()
+
+function onInputFocus(): void { focused.value = true }
+function leavesChat(e: FocusEvent): boolean {
+  const next = e.relatedTarget
+  return !(next instanceof Node && (expandedEl.value?.contains(next) || inputEl.value === next))
+}
+function onInputBlur(e: FocusEvent): void { if (leavesChat(e)) focused.value = false }
+function onExpandedFocusOut(e: FocusEvent): void { if (leavesChat(e)) focused.value = false }
 
 const input = draftInput
 const activeTheme = useActiveTheme()
@@ -175,6 +200,10 @@ const TEXTAREA_LINES: Record<Variant, { min: number; max: number }> = {
 
 const textareaMinLines = computed(() => TEXTAREA_LINES[props.variant].min)
 const textareaMaxLines = computed(() => TEXTAREA_LINES[props.variant].max)
+
+// The phone rest row has no thread; an open question from the AI still shows.
+const showThread = computed(() => !props.mobile || focused.value || Boolean(pendingAsk.value))
+const canSend = computed(() => !inputDisabled.value && input.value.trim().length > 0)
 
 const visibleMessages = computed(() => {
   const arr = messages.value
@@ -285,15 +314,15 @@ onUnmounted(() => {
   <div
     ref="barEl"
     class="command-bar"
-    :class="`variant-${variant}`"
+    :class="[`variant-${variant}`, { 'command-bar--mobile': mobile }]"
+    :style="mobile ? { bottom: `${keyboardInset}px` } : undefined"
     data-testid="command-bar"
   >
     <!-- Always visible (not gated on visibleMessages) so the warning
-         lands before the user types anything, not after. -->
-    <div class="privacy-hint" data-testid="chat-privacy-hint">
-      Messages and schedule context may be sent to the AI provider. Clear before discussing sensitive data.
-    </div>
-    <div v-if="visibleMessages.length > 0" class="thread" data-testid="chat-thread">
+         lands before the user types anything, not after. On the phone the
+         full text moves behind ⓘ and a short form shows while focused. -->
+    <div v-if="!mobile" class="privacy-hint" data-testid="chat-privacy-hint">{{ PRIVACY_FULL }}</div>
+    <div v-if="visibleMessages.length > 0 && showThread" class="thread" data-testid="chat-thread">
       <div
         v-for="(msg, idx) in visibleMessages"
         :key="msg.ts + ':' + idx"
@@ -312,8 +341,19 @@ onUnmounted(() => {
           />
         </div>
     </div>
+    <div v-if="mobile && focused" ref="expandedEl" class="chat-expanded" @focusout="onExpandedFocusOut">
+      <ChatResultChip
+        v-if="is4a && suggestions.length > 0"
+        show-suggestions
+        mobile
+        :suggestions="suggestions"
+        :disabled="inputDisabled"
+        @suggestion="(text: string) => void submitSuggestion(text)"
+      />
+      <p class="privacy-hint-short" data-testid="chat-privacy-hint-short">{{ PRIVACY_SHORT }}</p>
+    </div>
     <ChatResultChip
-      v-if="is4a && suggestions.length > 0"
+      v-else-if="!mobile && is4a && suggestions.length > 0"
       show-suggestions
       :suggestions="suggestions"
       :disabled="inputDisabled"
@@ -358,30 +398,50 @@ onUnmounted(() => {
       data-testid="chat-status"
     >{{ statusText }}</p>
     <form class="command-row" @submit.prevent="handleSubmit">
+      <button
+        v-if="mobile"
+        ref="infoBtn"
+        type="button"
+        class="info-btn"
+        aria-label="About AI privacy"
+        aria-haspopup="dialog"
+        data-testid="chat-privacy-info"
+        @pointerdown.prevent
+        @click="infoOpen = true"
+      >
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="9.5" />
+          <path d="M12 11v5.5M12 7.6v.1" />
+        </svg>
+      </button>
       <span
+        v-if="!mobile"
         class="status-dot"
         :class="{ healthy: apiHealthy, unhealthy: !apiHealthy }"
         :title="apiHealthy ? 'AI online' : 'AI unavailable'"
       />
-      <span class="prompt-marker" aria-hidden="true">›</span>
+      <span v-if="!mobile" class="prompt-marker" aria-hidden="true">›</span>
       <textarea
         ref="inputEl"
         v-model="input"
         :rows="textareaMinLines"
         class="command-input"
         :class="`variant-${variant}`"
-        :placeholder="placeholder + ' (press / to focus, Shift+Enter for newline)'"
+        :placeholder="mobile ? MOBILE_PLACEHOLDER : placeholder + ' (press / to focus, Shift+Enter for newline)'"
         :disabled="inputDisabled"
         autocomplete="off"
         spellcheck="false"
         data-testid="chat-input"
         @input="handleInput"
         @keydown="handleKeydown"
+        @focus="onInputFocus"
+        @blur="onInputBlur"
       />
       <button
-        v-if="messages.length > 0"
+        v-if="messages.length > 0 && (!mobile || focused)"
         type="button"
         class="clear-btn"
+        @pointerdown="mobile && $event.preventDefault()"
         :disabled="!isProcessing && (Boolean(scheduleDisabled) || Boolean(hasPendingRequest))"
         title="Clear thread"
         data-testid="chat-clear"
@@ -390,6 +450,20 @@ onUnmounted(() => {
         clear
       </button>
       <span v-if="isProcessing" class="spinner" aria-label="Processing…" />
+      <button
+        v-if="mobile"
+        type="submit"
+        class="send-btn"
+        :class="{ 'send-btn--ready': canSend }"
+        :aria-disabled="!canSend"
+        aria-label="Send"
+        data-testid="chat-send"
+        @pointerdown.prevent
+      >
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 19V5M5.5 11.5 12 5l6.5 6.5" />
+        </svg>
+      </button>
     </form>
     <div
       v-if="lastError"
@@ -402,6 +476,14 @@ onUnmounted(() => {
     >
       {{ lastError }}
     </div>
+    <BottomSheet
+      v-if="mobile && infoOpen"
+      title="AI privacy"
+      :fallback-focus="() => infoBtn"
+      @close="infoOpen = false"
+    >
+      <p class="privacy-full" data-testid="chat-privacy-full">{{ PRIVACY_FULL }}</p>
+    </BottomSheet>
   </div>
 </template>
 
@@ -736,6 +818,123 @@ html[data-theme="dark_4a"] .discard-confirm {
   /* 16 px stops iOS zoom-on-focus (plan question 7). */
   html[data-theme="dark_4a"] .command-input.command-input {
     font-size: 16px;
+  }
+}
+
+/* Dark 4a phone chat (feature 0113, SPEC 11.5). Rest: one 52px row plus the
+ * home-indicator inset. Focused: chips and a one-line disclaimer above the
+ * field. The panel rides above the keyboard through the visual viewport inset
+ * set inline on the root. Panel/chip hexes are the mentor spec's, with no
+ * app.css token of the same value. */
+@media (max-width: 640px) {
+  html[data-theme="dark_4a"] .command-bar.command-bar--mobile.variant-dock {
+    padding: 0 0 var(--safe-bottom);
+    background: #1F2023;
+    border-top: 1px solid #34363B;
+    font-family: var(--font-family-body);
+  }
+
+  html[data-theme="dark_4a"] .command-bar--mobile .command-row {
+    max-width: none;
+    margin: 0;
+    padding: 0 12px 0 6px;
+    min-height: 52px;
+    align-items: center;
+    gap: 8px;
+  }
+
+  html[data-theme="dark_4a"] .command-bar--mobile .info-btn {
+    flex: 0 0 auto;
+    width: 44px;
+    height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+
+  html[data-theme="dark_4a"] .command-bar--mobile .command-input.command-input {
+    box-sizing: border-box;
+    min-height: 36px;
+    max-height: 96px;
+    padding: 8px 12px;
+    border: 1px solid var(--border-control);
+    border-radius: 12px;
+    background: var(--bg-page);
+    color: #E5E7EB;
+    font-size: 16px;
+    font-weight: 400;
+  }
+
+  html[data-theme="dark_4a"] .command-bar--mobile .command-input:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+    border-radius: 12px;
+  }
+
+  html[data-theme="dark_4a"] .command-bar--mobile .send-btn {
+    flex: 0 0 auto;
+    width: 36px;
+    height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: #2A2C31;
+    color: var(--text-secondary);
+    cursor: default;
+  }
+
+  html[data-theme="dark_4a"] .command-bar--mobile .send-btn.send-btn--ready {
+    background: var(--accent);
+    color: var(--accent-contrast);
+    cursor: pointer;
+  }
+
+  html[data-theme="dark_4a"] .command-bar--mobile .privacy-hint-short {
+    margin: 0;
+    padding: 6px 16px 0;
+    font-size: 13px;
+    font-weight: 400;
+    line-height: 18px;
+    color: var(--text-secondary);
+  }
+
+  html[data-theme="dark_4a"] .command-bar--mobile .thread {
+    max-width: none;
+    margin: 0;
+    padding: 8px 16px 0;
+    max-height: 30dvh;
+  }
+
+  html[data-theme="dark_4a"] .command-bar--mobile .clear-btn {
+    min-height: 36px;
+    padding: 0 8px;
+  }
+
+  html[data-theme="dark_4a"] .command-bar--mobile .error-row,
+  html[data-theme="dark_4a"] .command-bar--mobile .recovery-request,
+  html[data-theme="dark_4a"] .command-bar--mobile .discard-confirm {
+    max-width: none;
+    margin: 0;
+    padding: 8px 16px;
+  }
+
+  html[data-theme="dark_4a"] .command-bar--mobile .spinner {
+    margin-top: 0;
+  }
+
+  html[data-theme="dark_4a"] .command-bar--mobile .privacy-full {
+    margin: 0;
+    font-size: 14px;
+    line-height: 20px;
+    color: var(--text-primary);
   }
 }
 </style>
