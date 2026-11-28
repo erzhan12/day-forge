@@ -1801,11 +1801,13 @@ describe("Schedule.vue Dark 4a mobile header (0113)", () => {
     await w.get('[data-testid="mobile-menu-calendars"]').trigger("click")
     await flushPromises()
     expect(w.find('[data-testid="mobile-menu"]').exists()).toBe(false)
-    const sheet = w.get('[data-testid="mobile-calendars"]')
-    expect(sheet.find('section[aria-label="External calendar events"]').exists()).toBe(true)
-    await sheet.trigger("keydown", { key: "Escape" })
+    // The sheet is teleported to <body>.
+    const sheet = document.body.querySelector('[data-testid="bottom-sheet"]') as HTMLElement
+    expect(sheet.getAttribute("aria-labelledby")).toBeTruthy()
+    expect(sheet.querySelector('section[aria-label="External calendar events"]')).not.toBeNull()
+    sheet.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
     await flushPromises()
-    expect(w.find('[data-testid="mobile-calendars"]').exists()).toBe(false)
+    expect(document.body.querySelector('[data-testid="bottom-sheet"]')).toBeNull()
     expect(document.activeElement).toBe(w.get('[data-testid="mobile-gear"]').element)
   })
 

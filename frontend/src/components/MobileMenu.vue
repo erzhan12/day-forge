@@ -4,6 +4,7 @@
 import { ref } from "vue"
 import { Link } from "@inertiajs/vue3"
 import { useMobileDialog } from "../composables/useMobileDialog"
+import { useBodyScrollLock } from "../composables/useBodyScrollLock"
 
 const props = defineProps<{
   date: string
@@ -14,6 +15,7 @@ const props = defineProps<{
 const emit = defineEmits<{ close: []; calendars: []; logout: [] }>()
 
 const panel = ref<HTMLElement | null>(null)
+useBodyScrollLock()
 useMobileDialog(panel, { onClose: () => emit("close") })
 </script>
 

@@ -21,6 +21,7 @@ import RegenerateDraftButton from "../components/RegenerateDraftButton.vue"
 import ShowIndicatorButton from "../components/ShowIndicatorButton.vue"
 import MobileHeader from "../components/MobileHeader.vue"
 import MobileCalendarsSheet from "../components/MobileCalendarsSheet.vue"
+import MobileFab from "../components/MobileFab.vue"
 import ExternalEventsPanel from "../components/ExternalEventsPanel.vue"
 import AddToScheduleDialog from "../components/AddToScheduleDialog.vue"
 import { FocusIndicatorControllerKey, useFocusIndicatorController } from "../composables/useFocusIndicatorController"
@@ -248,6 +249,12 @@ function handleAddHere4a(payload: { start_time: string; end_time: string }) {
   handleAddHere(payload)
   addRequestId.value += 1
 }
+// The phone FAB opens the add form with its default range (feature 0113).
+function handleFab() {
+  prefillStart.value = undefined
+  prefillEnd.value = undefined
+  addRequestId.value += 1
+}
 function logout() {
   resetSession()
   router.post("/accounts/logout/")
@@ -343,6 +350,7 @@ defineExpose({
       :initial-end-time="prefillEnd"
       :add-request-id="layout === '4a' ? addRequestId : undefined"
       :categories="categories"
+      :mobile="mobileLayout"
     />
 
     <div
@@ -533,6 +541,8 @@ defineExpose({
     <div v-if="layout !== '4a'" class="logout-footer">
       <button class="logout-btn" @click="logout">Logout</button>
     </div>
+
+    <MobileFab v-if="mobileLayout" :disabled="scheduleDisabled" @click="handleFab" />
 
     <UndoToast
       v-if="currentToast"

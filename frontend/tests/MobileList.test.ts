@@ -168,9 +168,63 @@ describe("TimelineMobile (feature 0113)", () => {
     expect(startDrag).not.toHaveBeenCalled()
   })
 
-  it("keeps the inline title edit on a tap of the title", async () => {
+  it("opens the title-only edit sheet on a tap of the row, not of its controls", async () => {
     const w = mountList([block(7, "Gym", "10:00", "11:00")])
     await w.get(".title").trigger("click")
-    expect(w.find(".title-input").exists()).toBe(true)
+    expect(w.find(".title-input").exists()).toBe(false)
+    expect(w.find('[data-testid="edit-block-form"]').exists()).toBe(true)
+    expect((w.get('[data-testid="edit-block-title"]').element as HTMLInputElement).value).toBe("Gym")
+    expect(w.findAll('[data-testid="edit-block-form"] input')).toHaveLength(1)
+    await w.get('[data-testid="edit-block-cancel"]').trigger("click")
+    expect(w.find('[data-testid="edit-block-form"]').exists()).toBe(false)
+
+    mockUpdateBlock.mockResolvedValue(acceptedMutation([], DATE, 2))
+    await w.get(".check-hit").trigger("click")
+    await w.get(".drag-handle").trigger("click")
+    expect(w.find('[data-testid="edit-block-form"]').exists()).toBe(false)
+  })
+
+  it("renames from the sheet through updateBlock and registers Undo", async () => {
+    mockUpdateBlock.mockResolvedValue(acceptedMutation([block(7, "Gym time", "10:00", "11:00")], DATE, 2))
+    const w = mountList([block(7, "Gym", "10:00", "11:00")])
+    await w.get(".title").trigger("click")
+    await w.get('[data-testid="edit-block-title"]').setValue("  Gym time ")
+    await w.get('[data-testid="edit-block-form"]').trigger("submit")
+    await flushPromises()
+    expect(mockUpdateBlock).toHaveBeenCalledWith(7, { title: "Gym time" })
+    expect(pushUndo).toHaveBeenCalledWith(expect.objectContaining({ type: "edit", silent: true }))
+    expect(w.find('[data-testid="edit-block-form"]').exists()).toBe(false)
+  })
+
+  it("closes without a write when the title is empty or unchanged", async () => {
+    const w = mountList([block(7, "Gym", "10:00", "11:00")])
+    await w.get(".title").trigger("click")
+    await w.get('[data-testid="edit-block-form"]').trigger("submit")
+    expect(w.find('[data-testid="edit-block-form"]').exists()).toBe(false)
+    await w.get(".title").trigger("click")
+    await w.get('[data-testid="edit-block-title"]').setValue("   ")
+    await w.get('[data-testid="edit-block-form"]').trigger("submit")
+    expect(mockUpdateBlock).not.toHaveBeenCalled()
+    expect(w.find('[data-testid="edit-block-form"]').exists()).toBe(false)
+  })
+
+  it("keeps the sheet open with an alert when the rename fails", async () => {
+    mockUpdateBlock.mockResolvedValue({ ok: false })
+    const w = mountList([block(7, "Gym", "10:00", "11:00")])
+    await w.get(".title").trigger("click")
+    await w.get('[data-testid="edit-block-title"]').setValue("Run")
+    await w.get('[data-testid="edit-block-form"]').trigger("submit")
+    await flushPromises()
+    expect(w.get('[role="alert"]').text()).toBe("Failed to update title")
+    expect(w.find('[data-testid="edit-block-form"]').exists()).toBe(true)
+    expect(pushUndo).not.toHaveBeenCalled()
+  })
+
+  it("closes the sheet when the block changes under it", async () => {
+    const w = mountList([block(7, "Gym", "10:00", "11:00")])
+    await w.get(".title").trigger("click")
+    await w.setProps({ date: "2026-11-28" })
+    expect(w.find('[data-testid="edit-block-form"]').exists()).toBe(false)
   })
 })
+

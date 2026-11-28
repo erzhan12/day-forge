@@ -5,6 +5,7 @@ import { ScheduleDisabledKey, ScheduleUndoKey } from "../composables/scheduleCon
 import { useSchedule } from "../composables/useSchedule"
 import { registerMutationUndo } from "../composables/useMutationUndo"
 import { defaultCategory, orderedCategories } from "../utils/categories"
+import BottomSheet from "./BottomSheet.vue"
 
 const props = defineProps<{
   date: string
@@ -13,6 +14,9 @@ const props = defineProps<{
   categories?: UserCategory[]
   /** Dark 4a gap rows bump this to reopen the form with the same prefill. */
   addRequestId?: number
+  /** Dark 4a phone (feature 0113): the form opens in a bottom sheet and the
+   *  dashed Add Block bar is not rendered; the FAB opens it. */
+  mobile?: boolean
 }>()
 
 const { createBlock } = useSchedule(() => props.date)
@@ -42,6 +46,11 @@ watch(() => props.addRequestId, (id) => {
   if (id === undefined) return
   if (props.initialStartTime) startTime.value = props.initialStartTime
   if (props.initialEndTime) endTime.value = props.initialEndTime
+  // A request with no range (the phone FAB) opens the same defaults as the bar.
+  if (!props.initialStartTime && !props.initialEndTime) {
+    startTime.value = "09:00"
+    endTime.value = "10:00"
+  }
   showForm.value = true
 })
 watch(() => props.categories, (categories) => { if (categories?.length) category.value = defaultCategory(categories)?.slug ?? category.value }, { immediate: true })
@@ -92,47 +101,49 @@ function cancel() {
 </script>
 
 <template>
-  <div class="add-block">
-    <button
-      v-if="!showForm"
-      class="add-btn"
-      :disabled="isDisabled"
-      @click="showForm = true"
-    >
-      + Add Block
-    </button>
-    <form v-else class="add-form" @submit.prevent="handleSubmit">
-      <div v-if="errorMessage" class="error-banner">{{ errorMessage }}</div>
-      <input
-        v-model="title"
-        type="text"
-        placeholder="Block title"
-        class="input df-field title-input"
-        required
-      />
-      <div class="time-row">
-        <label>
-          Start
-          <input v-model="startTime" type="time" step="300" class="input df-field" />
-        </label>
-        <label>
-          End
-          <input v-model="endTime" type="time" step="300" class="input df-field" />
-        </label>
-        <label>
-          Category
-          <select v-model="category" class="input df-field">
-            <option v-for="item in orderedCategories(props.categories ?? [])" :key="item.id" :value="item.slug">{{ item.label }}</option>
-          </select>
-        </label>
-      </div>
-      <div class="form-actions">
-        <button type="submit" class="submit-btn df-btn df-btn--primary" :disabled="submitting">
-          {{ submitting ? "Adding..." : "Add" }}
-        </button>
-        <button type="button" class="cancel-btn df-btn df-btn--field" @click="cancel">Cancel</button>
-      </div>
-    </form>
+  <div class="add-block" :class="{ 'add-block--mobile': mobile }">
+    <BottomSheet v-if="!mobile || showForm" :inline="!mobile" title="Add block" @close="cancel">
+      <button
+        v-if="!showForm && !mobile"
+        class="add-btn"
+        :disabled="isDisabled"
+        @click="showForm = true"
+      >
+        + Add Block
+      </button>
+      <form v-else-if="showForm" class="add-form" @submit.prevent="handleSubmit">
+        <div v-if="errorMessage" class="error-banner">{{ errorMessage }}</div>
+        <input
+          v-model="title"
+          type="text"
+          placeholder="Block title"
+          class="input df-field title-input"
+          required
+        />
+        <div class="time-row">
+          <label>
+            Start
+            <input v-model="startTime" type="time" step="300" class="input df-field" />
+          </label>
+          <label>
+            End
+            <input v-model="endTime" type="time" step="300" class="input df-field" />
+          </label>
+          <label>
+            Category
+            <select v-model="category" class="input df-field">
+              <option v-for="item in orderedCategories(props.categories ?? [])" :key="item.id" :value="item.slug">{{ item.label }}</option>
+            </select>
+          </label>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="submit-btn df-btn df-btn--primary" :disabled="submitting">
+            {{ submitting ? "Adding..." : "Add" }}
+          </button>
+          <button type="button" class="cancel-btn df-btn df-btn--field" @click="cancel">Cancel</button>
+        </div>
+      </form>
+    </BottomSheet>
   </div>
 </template>
 
@@ -242,5 +253,12 @@ function cancel() {
 /* Dark 4a text floor (feature 0106): nothing below 13 px. */
 html[data-theme="dark_4a"] .time-row label {
   font-size: 13px;
+}
+
+/* Phone: the form lives in a sheet; the empty wrapper must not leave a gap. */
+@media (max-width: 640px) {
+  html[data-theme="dark_4a"] .add-block.add-block--mobile {
+    padding: 0;
+  }
 }
 </style>

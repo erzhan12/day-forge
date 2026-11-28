@@ -19,7 +19,7 @@
 - [ ] Real-browser pass at 390×844 and 375×667 (`dark4a-day-fit.mjs`; needs Django, Vite, test user)
 
 ## 4. Sheets and FAB (PR4)
-- [ ] `BottomSheet`, Add Block sheet, title-only edit sheet (time and category: issue #333), FAB
+- [x] `BottomSheet`, Add Block sheet, title-only edit sheet (time and category: issue #333), FAB
 
 ## 5. Toast (PR5)
 - [ ] Mobile Undo toast, 5 s, delete, move and add texts; add `Enforced:`/`Tests:` to the undo-and-drag delta
