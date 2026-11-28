@@ -59,12 +59,13 @@ function mountUndo(
   blocks: TimeBlock[] = [makeBlock()],
   isDisabled?: () => boolean,
   getCurrentDate: () => string = () => "2026-04-10",
+  getToastDurationMs?: () => number,
 ) {
   let result: ReturnType<typeof useUndo> | undefined
 
   const Wrapper = defineComponent({
     setup() {
-      result = useUndo(getCurrentDate, () => blocks, isDisabled)
+      result = useUndo(getCurrentDate, () => blocks, isDisabled, undefined, getToastDurationMs)
       return {}
     },
     render() {
@@ -231,6 +232,27 @@ describe("useUndo", () => {
     vi.advanceTimersByTime(7999)
     expect(undo.currentToast.value).not.toBeNull()
 
+    vi.advanceTimersByTime(1)
+    expect(undo.currentToast.value).toBeNull()
+  })
+
+  it("honours a 5 second toast duration (feature 0113)", () => {
+    const { undo } = mountUndo(undefined, undefined, undefined, () => 5_000)
+    undo.pushUndo(makeAction({ description: "Block deleted" }))
+    vi.advanceTimersByTime(4999)
+    expect(undo.currentToast.value).not.toBeNull()
+    vi.advanceTimersByTime(1)
+    expect(undo.currentToast.value).toBeNull()
+  })
+
+  it("a new push restarts the 5 second timer (feature 0113)", () => {
+    const { undo } = mountUndo(undefined, undefined, undefined, () => 5_000)
+    undo.pushUndo(makeAction({ description: "Block deleted" }))
+    vi.advanceTimersByTime(3000)
+    undo.pushUndo(makeAction({ description: "Block added" }))
+    expect(undo.currentToast.value?.description).toBe("Block added")
+    vi.advanceTimersByTime(4999)
+    expect(undo.currentToast.value).not.toBeNull()
     vi.advanceTimersByTime(1)
     expect(undo.currentToast.value).toBeNull()
   })

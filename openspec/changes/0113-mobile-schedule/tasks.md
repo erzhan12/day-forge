@@ -22,7 +22,7 @@
 - [x] `BottomSheet`, Add Block sheet, title-only edit sheet (time and category: issue #333), FAB
 
 ## 5. Toast (PR5)
-- [ ] Mobile Undo toast, 5 s, delete, move and add texts; add `Enforced:`/`Tests:` to the undo-and-drag delta
+- [x] Mobile Undo toast, 5 s, delete, move and add texts; add `Enforced:`/`Tests:` to the undo-and-drag delta
 
 ## 6. Chat (PR6)
 - [ ] Rest and focus panel, `visualViewport` inset, ⓘ sheet, chips

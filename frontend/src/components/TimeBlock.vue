@@ -4,6 +4,7 @@ import type { TimeBlock, UserCategory } from "../types"
 import { ScheduleContainerKey, ScheduleDisabledKey, ScheduleDragKey, ScheduleUndoKey } from "../composables/scheduleContext"
 import { useSchedule } from "../composables/useSchedule"
 import { registerMutationUndo } from "../composables/useMutationUndo"
+import { undoNotice } from "../utils/mobileUndo"
 import { useBlockCompletion } from "../composables/useBlockCompletion"
 import { getCategoryColor, tickVariantFor } from "../utils/categoryColors"
 import { useActiveTheme } from "../composables/useActiveTheme"
@@ -313,11 +314,11 @@ async function handleDelete() {
   const blockTitle = props.block.title
   const result = await deleteBlock(blockId)
   if (result.ok) {
-    registerMutationUndo(result, undo?.pushUndo, {
-      description: `Deleted "${blockTitle}"`,
-      type: "delete",
-      silent: true,
-    })
+    registerMutationUndo(result, undo?.pushUndo, undoNotice(
+      Boolean(props.mobile),
+      "delete",
+      `Deleted "${blockTitle}"`,
+    ))
   } else if (props.block.id === blockId && props.date === scheduleDate) {
     errorMessage.value = "Failed to delete"
   }

@@ -372,6 +372,7 @@ describe("useDrag.endDrag (undo snapshot)", () => {
     const action = pushUndo.mock.calls[0][0]
     expect(action.type).toBe("drag")
     expect(action.silent).toBe(true)
+    expect(action.description).toMatch(/^Moved /)
     expect(action.scheduleDate).toBe("2026-04-16")
     expect(action.expected_revision).toBe(4)
     expect(action.previous_revision).toBe(3)
@@ -383,6 +384,38 @@ describe("useDrag.endDrag (undo snapshot)", () => {
     const a = action.previousBlocks.find((b) => b.id === 1)!
     expect(a.start_time).toBe("09:00")
     expect(a.end_time).toBe("10:00")
+  })
+
+
+  it("on mobile registers a non-silent Block moved toast (feature 0113)", async () => {
+    const original: TimeBlock[] = [
+      { id: 1, title: "A", start_time: "09:00", end_time: "10:00",
+        category: "work", is_completed: false, sort_order: 0 },
+      { id: 2, title: "B", start_time: "10:00", end_time: "11:00",
+        category: "work", is_completed: false, sort_order: 1 },
+    ]
+    const reorderBlocks = vi.fn(async () => acceptedMutation(original, "2026-04-16"))
+    const pushUndo = vi.fn<(a: UndoAction) => void>()
+    const drag = useDrag(
+      "2026-04-16",
+      () => original,
+      reorderBlocks,
+      pushUndo,
+      () => original.map((b) => ({ ...b })),
+      undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+      () => true,
+    )
+    const container = makeFakeContainer()
+    drag.startDrag({ pointerId: 1, clientY: 0 } as PointerEvent, original[0], container)
+    drag.previewBlocks.value = [
+      { ...original[1] },
+      { ...original[0], start_time: "11:00", end_time: "12:00" },
+    ]
+    drag.previewStartTime.value = "11:00"
+    await drag.endDrag()
+    expect(pushUndo).toHaveBeenCalledWith(expect.objectContaining({
+      type: "drag", silent: false, description: "Block moved",
+    }))
   })
 
   it("uses the latest date source when pushing drag undo", async () => {
