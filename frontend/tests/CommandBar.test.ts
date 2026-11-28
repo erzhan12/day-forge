@@ -953,6 +953,28 @@ describe("CommandBar on the phone (feature 0113)", () => {
     expect(submitTurn).toHaveBeenCalledWith("Add standup", bar.props("pushUndo"))
   })
 
+  it("returns focus to ⓘ when the privacy sheet closes", async () => {
+    const bar = mountBar({ mobile: true })
+    const info = bar.get('[data-testid="chat-privacy-info"]')
+    await info.trigger("click")
+    document.body.querySelector<HTMLButtonElement>('[data-testid="sheet-close"]')!.click()
+    await nextTick()
+    expect(document.activeElement).toBe(info.element)
+  })
+
+  it("submits from a real tap on send: pointerdown is cancelled but click still fires", async () => {
+    submitTurn.mockResolvedValue(undefined)
+    const bar = mountBar({ mobile: true })
+    await input(bar).setValue("Add standup")
+    const send = bar.get('[data-testid="chat-send"]')
+    const down = new Event("pointerdown", { bubbles: true, cancelable: true })
+    send.element.dispatchEvent(down)
+    expect(down.defaultPrevented).toBe(true)
+    await send.trigger("click")
+    expect(submitTurn).toHaveBeenCalledTimes(1)
+    expect(submitTurn).toHaveBeenCalledWith("Add standup", bar.props("pushUndo"))
+  })
+
   it("keeps an open AI question visible at rest, and Clear while focused", async () => {
     messages.value = [{ role: "assistant", content: "Which day?", ask: "Which day?", explanation: null, ts: 1 }]
     pendingAsk.value = "Which day?"
