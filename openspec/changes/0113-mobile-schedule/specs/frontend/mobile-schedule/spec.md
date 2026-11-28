@@ -57,14 +57,14 @@ Enforced: frontend/src/components/MobileGapRow.vue::mobile-gap-row
 Tests: frontend/tests/MobileList.test.ts::TimelineMobile (feature 0113)::labels free rows with duration and range, frontend/tests/MobileList.test.ts::TimelineMobile (feature 0113)::emits the grid-snapped range when a free row is tapped, and ignores tiny or disabled gaps
 
 ### Requirement: Mobile block row behavior
-A mobile block row SHALL complete through the shared completion queue with the global `.df-checkbox`, delete on the × tap with no dialog and with an Undo entry, keep the title tap as inline rename, and show its grip as inert and hidden from assistive tech until touch drag exists.
+A mobile block row SHALL complete through the shared completion queue with the global `.df-checkbox`, delete on the × tap with no dialog and with an Undo entry, open the title-only edit sheet on a tap outside its controls, and show its grip as inert and hidden from assistive tech until touch drag exists.
 Enforced: frontend/src/components/TimeBlock.vue::onDeleteClick, frontend/src/components/MobileBlockRow.vue::mobile-block-row
 
-#### Scenario: Complete and rename
-- **WHEN** the checkbox is toggled or the title tapped
-- **THEN** the completion write goes through `updateBlock` and the title becomes an input
+#### Scenario: Complete
+- **WHEN** the checkbox is toggled
+- **THEN** the completion write goes through `updateBlock`
 
-Tests: frontend/tests/MobileList.test.ts::TimelineMobile (feature 0113)::completes through the shared completion queue, frontend/tests/MobileList.test.ts::TimelineMobile (feature 0113)::keeps the inline title edit on a tap of the title
+Tests: frontend/tests/MobileList.test.ts::TimelineMobile (feature 0113)::completes through the shared completion queue
 
 #### Scenario: Delete without a dialog
 - **WHEN** × is tapped
@@ -79,11 +79,14 @@ Tests: frontend/tests/MobileList.test.ts::TimelineMobile (feature 0113)::deletes
 Tests: frontend/tests/MobileList.test.ts::TimelineMobile (feature 0113)::keeps the grip inert: no drag starts from it
 
 ### Requirement: Mobile FAB
-At 640 px and below in Dark 4a the dashed Add Block bar SHALL be replaced by a 56 px coral FAB 16 px from the right and 16 px above the chat panel with the safe area, opening the same add form, hidden while the chat field is focused.
+At 640 px and below in Dark 4a the dashed Add Block bar SHALL be replaced by a 56 px coral FAB 16 px from the right and 16 px above the chat panel with the safe area, opening the add form in a bottom sheet, hidden while the chat field is focused.
+Enforced: frontend/src/components/MobileFab.vue::mobile-fab, frontend/src/pages/Schedule.vue::handleFab
 
 #### Scenario: FAB
-- **WHEN** the mobile Schedule page renders
-- **THEN** the FAB opens the add form and the bar is absent
+- **WHEN** the FAB is tapped
+- **THEN** the add form opens in a sheet with the default range and the bar is absent
+
+Tests: frontend/tests/MobileSheets.test.ts::MobileFab (feature 0113)::is a labelled button that emits click, and honours disabled, frontend/tests/MobileSheets.test.ts::AddBlockForm on the phone (feature 0113)::opens the same defaults as the bar for a FAB request with no range
 
 ### Requirement: Mobile header and menu
 At 640 px and below in Dark 4a the header SHALL be one 56 px row: previous, a centered `Fri, Nov 27`, next, and a gear opening a modal menu (Settings, View analytics, Calendars, Log out). It SHALL NOT show Undo, Show indicator, Today, Regenerate draft, the draft badge or the time-zone banner.
@@ -121,7 +124,7 @@ Tests: frontend/tests/Schedule.test.ts::Schedule.vue Dark 4a mobile header (0113
 
 ### Requirement: Mobile Calendars sheet
 On mobile the calendar panel SHALL not render under the timeline; the Calendars menu item SHALL open it in a modal sheet whose Add to schedule closes the sheet, and calendar polling SHALL stay as at widths below 1024 px.
-Enforced: frontend/src/components/MobileCalendarsSheet.vue::useMobileDialog, frontend/src/pages/Schedule.vue::mobileCalendarsOpen
+Enforced: frontend/src/components/MobileCalendarsSheet.vue::BottomSheet, frontend/src/pages/Schedule.vue::mobileCalendarsOpen
 
 #### Scenario: Open and close
 - **WHEN** Calendars is chosen and then Escape pressed
@@ -129,9 +132,22 @@ Enforced: frontend/src/components/MobileCalendarsSheet.vue::useMobileDialog, fro
 
 Tests: frontend/tests/Schedule.test.ts::Schedule.vue Dark 4a mobile header (0113)::moves the calendar panel into the gear menu's Calendars sheet and keeps polling
 
+### Requirement: Mobile bottom sheet
+Every mobile sheet SHALL be a modal dialog named by its title, fixed to the bottom with the safe area, lifted above the on-screen keyboard, closing on Escape, backdrop and Close, with focus in and back, and SHALL lock page scroll until the last overlay closes.
+Enforced: frontend/src/components/BottomSheetFrame.vue::bottom-sheet, frontend/src/composables/useBodyScrollLock.ts::useBodyScrollLock
+
+#### Scenario: Open and close
+- **WHEN** a sheet opens and then closes
+- **THEN** the page does not scroll behind it and prior overflow values return
+
+Tests: frontend/tests/MobileSheets.test.ts::BottomSheet and scroll lock (feature 0113)::locks page scroll while open and restores the prior values, frontend/tests/MobileSheets.test.ts::BottomSheet and scroll lock (feature 0113)::labels the dialog by its title, focuses in, closes on Escape and backdrop, frontend/tests/MobileSheets.test.ts::BottomSheet and scroll lock (feature 0113)::lifts the sheet above the keyboard by the visual viewport inset
+
 ### Requirement: Mobile edit sheet
 Tapping a block row outside its checkbox, handle and × SHALL open a bottom sheet that edits the title only; time and category editing is out of scope (issue #333).
+Enforced: frontend/src/components/EditBlockSheet.vue::edit-block-form, frontend/src/components/MobileBlockRow.vue::EditBlockSheet
 
 #### Scenario: Rename
 - **WHEN** the row is tapped and a new title is saved
 - **THEN** the block is renamed through the page writer and an Undo entry is registered
+
+Tests: frontend/tests/MobileList.test.ts::TimelineMobile (feature 0113)::opens the title-only edit sheet on a tap of the row, not of its controls, frontend/tests/MobileList.test.ts::TimelineMobile (feature 0113)::renames from the sheet through updateBlock and registers Undo

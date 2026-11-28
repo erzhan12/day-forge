@@ -133,6 +133,13 @@ const remainingLabel = computed(() => {
   return formatRemainingMinutes(props.remainingMinutes)
 })
 
+// On the phone a tap anywhere on the row opens the edit sheet, owned by
+// MobileBlockRow; the inline editor stays for desktop.
+function onTitleClick() {
+  if (props.mobile) return
+  void startEditing()
+}
+
 async function startEditing() {
   if (isDisabled()) return
   editTitle.value = props.block.title
@@ -379,7 +386,7 @@ async function handleDelete() {
         ref="titleRef"
         class="title"
         :class="{ 'title-completed': displayedCompleted }"
-        @click="startEditing"
+        @click="onTitleClick"
       >
         {{ block.title }}
       </span>

@@ -3,8 +3,10 @@
 // 52 px, one line, category stripe, no end time. The functional block is
 // reused with `mobile`, so completion, inline title edit, delete and the
 // long-press tooltip keep one implementation.
+import { ref, watch } from "vue"
 import type { TimeBlock, UserCategory } from "../types"
 import TimeBlockClassic from "./TimeBlock.vue"
+import EditBlockSheet from "./EditBlockSheet.vue"
 import { getCategoryColor } from "../utils/categoryColors"
 
 const props = defineProps<{
@@ -12,6 +14,20 @@ const props = defineProps<{
   date: string
   categories?: UserCategory[]
 }>()
+
+// A tap on the row outside its controls opens the title-only edit sheet.
+const editing = ref(false)
+// The sheet is teleported to <body>, but a stubbed or inline sheet must not reopen itself.
+const CONTROLS = ".check-hit, .delete-btn, .drag-handle, [data-testid=\"sheet-backdrop\"]"
+
+function onRowClick(event: MouseEvent): void {
+  const target = event.target
+  if (target instanceof Element && target.closest(CONTROLS)) return
+  editing.value = true
+}
+
+// The sheet belongs to the block and day it was opened for.
+watch([() => props.block.id, () => props.date], () => { editing.value = false })
 </script>
 
 <template>
@@ -19,6 +35,7 @@ const props = defineProps<{
     class="mobile-block-row"
     :style="{ '--category-color': getCategoryColor(block.category, undefined, props.categories) }"
     data-testid="mobile-block-row"
+    @click="onRowClick"
   >
     <TimeBlockClassic
       :block="props.block"
@@ -26,6 +43,12 @@ const props = defineProps<{
       :categories="props.categories"
       tooltip
       mobile
+    />
+    <EditBlockSheet
+      v-if="editing"
+      :block="props.block"
+      :date="props.date"
+      @close="editing = false"
     />
   </div>
 </template>
