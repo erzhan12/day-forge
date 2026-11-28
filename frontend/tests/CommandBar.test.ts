@@ -862,3 +862,135 @@ describe("CommandBar (chat dock)", () => {
     expect(btn.disabled).toBe(true)
   })
 })
+
+describe("CommandBar on the phone (feature 0113)", () => {
+  const FULL = "Messages and schedule context may be sent to the AI provider. Clear before discussing sensitive data."
+  const SHORT = "Messages may be sent to the AI provider."
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    isProcessing.value = false
+    hasPendingRequest.value = false
+    hasPendingIntent.value = false
+    lastError.value = null
+    pendingAsk.value = null
+    draftInput.value = ""
+    messages.value = []
+    page.props.ui_preferences = { theme: "dark_4a", chat_suggestions: ["Plan my day", "Move gym to 18:00"] }
+  })
+  afterEach(() => {
+    wrapper?.unmount()
+    wrapper = null
+    document.body.innerHTML = ""
+  })
+
+  const input = (bar: VueWrapper) => bar.get('[data-testid="chat-input"]')
+
+  it("rests as one row: no hint, chips or thread; ⓘ, field and a muted send", () => {
+    messages.value = [{ role: "assistant", content: "hello", ask: null, explanation: null, ts: 1 }]
+    const bar = mountBar({ mobile: true })
+    expect(bar.find('[data-testid="chat-privacy-hint"]').exists()).toBe(false)
+    expect(bar.find('[data-testid="chat-privacy-hint-short"]').exists()).toBe(false)
+    expect(bar.find('[data-testid="chat-result-chip"]').exists()).toBe(false)
+    expect(bar.find('[data-testid="chat-thread"]').exists()).toBe(false)
+    expect(bar.find('[data-testid="chat-clear"]').exists()).toBe(false)
+    expect(bar.find(".status-dot").exists()).toBe(false)
+    expect(bar.find(".prompt-marker").exists()).toBe(false)
+    expect(bar.get('[data-testid="chat-privacy-info"]').attributes("aria-label")).toBe("About AI privacy")
+    expect(input(bar).attributes("placeholder")).toBe("Add standup at 10:00 for 15 min")
+    expect(bar.get('[data-testid="chat-send"]').attributes("aria-disabled")).toBe("true")
+  })
+
+  it("shows the chips and the one-line disclaimer only while the field is focused", async () => {
+    const bar = mountBar({ mobile: true })
+    await input(bar).trigger("focus")
+    expect(bar.get('[data-testid="chat-privacy-hint-short"]').text()).toBe(SHORT)
+    const chips = bar.findAll(".suggestions button")
+    expect(chips.map((chip) => chip.text())).toEqual(["Plan my day", "Move gym to 18:00"])
+    expect(bar.get('[data-testid="chat-result-chip"]').classes()).toContain("chat-result-chip--mobile")
+    await input(bar).trigger("blur")
+    expect(bar.find('[data-testid="chat-privacy-hint-short"]').exists()).toBe(false)
+    expect(bar.find('[data-testid="chat-result-chip"]').exists()).toBe(false)
+  })
+
+  it("keeps the row while focus moves to a chip, and sends the chip text", async () => {
+    submitTurn.mockResolvedValue(undefined)
+    const bar = mountBar({ mobile: true })
+    await input(bar).trigger("focus")
+    const chip = bar.get(".suggestions button")
+    await input(bar).trigger("blur", { relatedTarget: chip.element })
+    expect(bar.find('[data-testid="chat-result-chip"]').exists()).toBe(true)
+    const down = new Event("pointerdown", { bubbles: true, cancelable: true })
+    chip.element.dispatchEvent(down)
+    expect(down.defaultPrevented).toBe(true)
+    await chip.trigger("click")
+    expect(submitTurn).toHaveBeenCalledWith("Plan my day", bar.props("pushUndo"))
+  })
+
+  it("opens the full privacy text in a sheet behind ⓘ and closes it", async () => {
+    const bar = mountBar({ mobile: true })
+    expect(document.body.querySelector('[data-testid="chat-privacy-full"]')).toBeNull()
+    await bar.get('[data-testid="chat-privacy-info"]').trigger("click")
+    const sheet = document.body.querySelector('[data-testid="bottom-sheet"]') as HTMLElement
+    expect(sheet.getAttribute("aria-modal")).toBe("true")
+    expect(document.body.querySelector('[data-testid="chat-privacy-full"]')?.textContent).toBe(FULL)
+    document.body.querySelector<HTMLButtonElement>('[data-testid="sheet-close"]')!.click()
+    await nextTick()
+    expect(document.body.querySelector('[data-testid="chat-privacy-full"]')).toBeNull()
+  })
+
+  it("enables send only with text and submits through the same path", async () => {
+    submitTurn.mockResolvedValue(undefined)
+    const bar = mountBar({ mobile: true })
+    const send = bar.get('[data-testid="chat-send"]')
+    await send.trigger("submit")
+    await bar.get("form").trigger("submit")
+    expect(submitTurn).not.toHaveBeenCalled()
+    await input(bar).setValue("Add standup")
+    expect(send.attributes("aria-disabled")).toBe("false")
+    expect(send.classes()).toContain("send-btn--ready")
+    await bar.get("form").trigger("submit")
+    expect(submitTurn).toHaveBeenCalledWith("Add standup", bar.props("pushUndo"))
+  })
+
+  it("returns focus to ⓘ when the privacy sheet closes", async () => {
+    const bar = mountBar({ mobile: true })
+    const info = bar.get('[data-testid="chat-privacy-info"]')
+    await info.trigger("click")
+    document.body.querySelector<HTMLButtonElement>('[data-testid="sheet-close"]')!.click()
+    await nextTick()
+    expect(document.activeElement).toBe(info.element)
+  })
+
+  it("submits from a real tap on send: pointerdown is cancelled but click still fires", async () => {
+    submitTurn.mockResolvedValue(undefined)
+    const bar = mountBar({ mobile: true })
+    await input(bar).setValue("Add standup")
+    const send = bar.get('[data-testid="chat-send"]')
+    const down = new Event("pointerdown", { bubbles: true, cancelable: true })
+    send.element.dispatchEvent(down)
+    expect(down.defaultPrevented).toBe(true)
+    await send.trigger("click")
+    expect(submitTurn).toHaveBeenCalledTimes(1)
+    expect(submitTurn).toHaveBeenCalledWith("Add standup", bar.props("pushUndo"))
+  })
+
+  it("keeps an open AI question visible at rest, and Clear while focused", async () => {
+    messages.value = [{ role: "assistant", content: "Which day?", ask: "Which day?", explanation: null, ts: 1 }]
+    pendingAsk.value = "Which day?"
+    const bar = mountBar({ mobile: true })
+    expect(bar.get('[data-testid="chat-thread"]').text()).toContain("Which day?")
+    await input(bar).trigger("focus")
+    expect(bar.find('[data-testid="chat-clear"]').exists()).toBe(true)
+  })
+
+  it("leaves the desktop dock unchanged without the mobile prop", () => {
+    const bar = mountBar()
+    expect(bar.get('[data-testid="chat-privacy-hint"]').text()).toBe(FULL)
+    expect(bar.find('[data-testid="chat-privacy-info"]').exists()).toBe(false)
+    expect(bar.find('[data-testid="chat-send"]').exists()).toBe(false)
+    expect(bar.find(".prompt-marker").exists()).toBe(true)
+    expect(bar.find(".command-bar--mobile").exists()).toBe(false)
+  })
+})
+

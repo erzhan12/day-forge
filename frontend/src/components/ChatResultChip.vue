@@ -7,11 +7,14 @@ withDefaults(
     showSuggestions?: boolean
     suggestions?: string[]
     disabled?: boolean
+    /** Dark 4a phone (feature 0113): one scrolling row of 32px chips. */
+    mobile?: boolean
   }>(),
   {
     showSuggestions: false,
     suggestions: () => [],
     disabled: false,
+    mobile: false,
   },
 )
 const emit = defineEmits<{ suggestion: [text: string] }>()
@@ -21,6 +24,7 @@ const emit = defineEmits<{ suggestion: [text: string] }>()
   <div
     v-if="result?.length || (showSuggestions && suggestions.length)"
     class="chat-result-chip"
+    :class="{ 'chat-result-chip--mobile': mobile }"
     data-testid="chat-result-chip"
   >
     <template v-if="result && result.length">
@@ -35,6 +39,7 @@ const emit = defineEmits<{ suggestion: [text: string] }>()
         :key="index"
         type="button"
         :disabled="disabled"
+        @pointerdown="mobile && $event.preventDefault()"
         @click="emit('suggestion', suggestion)"
       >
         {{ suggestion }}
@@ -53,5 +58,37 @@ button:disabled { cursor:not-allowed; opacity:0.55; }
 /* Dark 4a text floor (feature 0106): nothing below 13 px. */
 html[data-theme="dark_4a"] .chat-result-chip {
   font-size: 13px;
+}
+
+/* Dark 4a phone chip row (feature 0113, SPEC 11.5). pointerdown is cancelled
+ * in the template so a tap keeps focus in the chat field and the row stays. */
+@media (max-width: 640px) {
+  html[data-theme="dark_4a"] .chat-result-chip.chat-result-chip--mobile {
+    flex-wrap: nowrap;
+    margin: 0;
+    padding: 8px 16px 0;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+
+  html[data-theme="dark_4a"] .chat-result-chip--mobile .suggestions {
+    flex-wrap: nowrap;
+    gap: 8px;
+  }
+
+  html[data-theme="dark_4a"] .chat-result-chip--mobile .suggestions button {
+    flex: 0 0 auto;
+    height: 32px;
+    padding: 0 12px;
+    border: 1px solid #34363B;
+    border-radius: 16px;
+    background: #232428;
+    color: #E5E7EB;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1;
+    white-space: nowrap;
+  }
 }
 </style>

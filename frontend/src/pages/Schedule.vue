@@ -647,6 +647,7 @@ defineExpose({
       :push-undo="pushUndo"
       :focus-token="chatFocusToken"
       variant="dock"
+      :mobile="mobileLayout"
       @height-change="chatDockHeight = $event"
       @focus-handled="clearChatFocusRequest"
     />

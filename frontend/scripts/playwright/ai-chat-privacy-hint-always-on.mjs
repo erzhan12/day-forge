@@ -22,6 +22,13 @@
 //        - hint visible immediately, before any input
 //   6. Style check: 11px, italic, centred. Colour varies by theme.
 //      Check single-line rendering manually because browser zoom can change it.
+//   7. Phone (feature 0113, Dark 4a at 390x844): the hint is moved, never
+//      removed.
+//        - rest: the full text is NOT on the panel; the ⓘ control is visible
+//          with a 44x44 hit area and opens the full text in a dialog
+//        - focused: the one-line short form is visible above the field
+//        - after blur the short form is gone and ⓘ is still there
+//      The desktop checks above stay on the 1280x800 context.
 //
 // Run from frontend/:
 //   node scripts/playwright/ai-chat-privacy-hint-always-on.mjs
@@ -42,7 +49,9 @@ import {
   cleanupSchedules,
   login,
   makeFailAggregator,
+  pinTheme,
   preflight,
+  restoreTheme,
   seed,
 } from "./test-utils.mjs"
 
@@ -52,6 +61,7 @@ await preflight()
 const { failures, fail } = makeFailAggregator()
 
 let browser
+let previousTheme
 try {
   console.log("→ Seeding empty draft schedule…")
   seed("seed_schedule", {
@@ -199,6 +209,69 @@ try {
     fail("State D: chat-thread rendered immediately after reload (no per-tab persistence expected)")
   }
 
+  // ─── State E: phone, Dark 4a (feature 0113) ─────────────────────────
+  console.log("→ State E: phone at 390x844 in Dark 4a…")
+  previousTheme = pinTheme("dark_4a")
+  const phoneContext = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    hasTouch: true,
+    isMobile: true,
+  })
+  const phone = await phoneContext.newPage()
+  await login(phone)
+  await phone.goto(`${BASE}/schedule/${SCHEDULE_DATE}/`, { waitUntil: "networkidle" })
+
+  const FULL_TEXT = "Messages and schedule context may be sent to the AI provider. Clear before discussing sensitive data."
+  const SHORT_TEXT = "Messages may be sent to the AI provider."
+  const info = phone.locator('[data-testid="chat-privacy-info"]')
+  const shortHint = phone.locator('[data-testid="chat-privacy-hint-short"]')
+  const phoneInput = phone.locator('[data-testid="chat-input"]')
+
+  if ((await phone.locator('[data-testid="chat-privacy-hint"]').count()) > 0) {
+    fail("State E: the desktop full hint is rendered on the phone panel at rest")
+  }
+  if (!(await info.isVisible())) {
+    fail("State E: ⓘ is not visible at rest")
+  } else {
+    const box = await info.boundingBox()
+    if (!box || box.width < 44 || box.height < 44) {
+      fail(`State E: ⓘ hit area is ${box?.width}x${box?.height}, want at least 44x44`)
+    }
+  }
+  if ((await shortHint.count()) > 0) fail("State E: short hint is shown at rest")
+
+  await info.tap()
+  const sheetText = (await phone.locator('[data-testid="chat-privacy-full"]').textContent().catch(() => "")) || ""
+  if (sheetText.trim() !== FULL_TEXT) {
+    fail(`State E: ⓘ sheet text unexpected: ${sheetText.slice(0, 80)}`)
+  }
+  await phone.locator('[data-testid="sheet-close"]').tap()
+  if ((await phone.locator('[data-testid="chat-privacy-full"]').count()) > 0) {
+    fail("State E: ⓘ sheet did not close")
+  }
+
+  await phoneInput.tap()
+  await shortHint.waitFor({ timeout: UI_RESPONSE_TIMEOUT_MS }).catch(() => {})
+  const shortText = ((await shortHint.textContent().catch(() => "")) || "").trim()
+  if (shortText !== SHORT_TEXT) {
+    fail(`State E: focused short hint unexpected: ${shortText.slice(0, 80)}`)
+  }
+  const shortStyle = await shortHint.evaluate((el) => {
+    const s = getComputedStyle(el)
+    return { fontSize: s.fontSize, height: el.getBoundingClientRect().height }
+  }).catch(() => null)
+  if (!shortStyle || shortStyle.fontSize !== "13px") {
+    fail(`State E: short hint font-size expected 13px, got ${shortStyle?.fontSize}`)
+  } else if (shortStyle.height > 20) {
+    fail(`State E: short hint wraps at 390px (height ${shortStyle.height}px)`)
+  }
+
+  await phoneInput.evaluate((el) => el.blur())
+  await page.waitForTimeout(WAIT_FOR_UI_TICK_MS)
+  if ((await shortHint.count()) > 0) fail("State E: short hint stays after blur")
+  if (!(await info.isVisible())) fail("State E: ⓘ disappeared after blur")
+  await phoneContext.close()
+
   // ─── Verdict ────────────────────────────────────────────────────────
   console.log("\n=== Computed styles on privacy hint ===")
   console.log(`  font-size: ${styles.fontSize}`)
@@ -207,7 +280,7 @@ try {
 
   console.log("\n=== Verdict ===")
   if (failures.length === 0) {
-    console.log("✅ PASS — Test 6: privacy hint is always visible across A/B/C/D and styled correctly")
+    console.log("✅ PASS — Test 6: privacy hint is always visible across A–D, and moved (not removed) behind ⓘ on the phone (E)")
     process.exitCode = 0
   } else {
     console.log("❌ FAIL —")
@@ -220,5 +293,6 @@ try {
   process.exitCode = 2
 } finally {
   await browser?.close()
+  restoreTheme(previousTheme)
   cleanupSchedules([SCHEDULE_DATE])
 }

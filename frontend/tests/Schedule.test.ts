@@ -1791,6 +1791,20 @@ describe("Schedule.vue Dark 4a mobile header (0113)", () => {
     expect(classic.find('[data-testid="timeline-mobile"]').exists()).toBe(false)
   })
 
+  it("gives the phone the one-row chat dock and keeps the other layouts on the old dock", async () => {
+    const mobile = mountMobile("dark_4a", true)
+    await flushPromises()
+    expect(mobile.findComponent(CommandBar).props("mobile")).toBe(true)
+    mobile.unmount()
+    for (const [theme, narrow] of [["dark_4a", false], ["classic", true]] as const) {
+      const other = mountMobile(theme, narrow)
+      await flushPromises()
+      const bar = other.findComponent(CommandBar)
+      if (bar.exists()) expect(bar.props("mobile")).toBe(false)
+      other.unmount()
+    }
+  })
+
   it("moves the calendar panel into the gear menu's Calendars sheet and keeps polling", async () => {
     const w = mountMobile("dark_4a", true)
     await flushPromises()
