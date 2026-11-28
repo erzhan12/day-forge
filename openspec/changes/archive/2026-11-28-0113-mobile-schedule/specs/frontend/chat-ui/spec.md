@@ -1,8 +1,8 @@
 ## ADDED Requirements
 
 ### Requirement: Mobile privacy hint sits behind the info control
-At 640 px and below in Dark 4a the chat panel SHALL hide the full privacy text in rest state behind an ⓘ control that opens it, SHALL show a one-line short form while the field is focused, and SHALL never remove the hint. Desktop and the tablet dock SHALL keep the hint visible before the first keystroke.
-Enforced: frontend/src/components/CommandBar.vue::chat-privacy-hint-short, frontend/scripts/playwright/ai-chat-privacy-hint-always-on.mjs::State E
+At 640 px and below in Dark 4a the chat panel SHALL replace the privacy line with an ⓘ control that stays on the input row in every state and opens the full text, and SHALL never remove the hint. Desktop and the tablet dock SHALL keep the hint visible before the first keystroke.
+Enforced: frontend/src/components/CommandBar.vue::chat-privacy-info, frontend/scripts/playwright/ai-chat-privacy-hint-always-on.mjs::State E
 
 #### Scenario: Rest state
 - **WHEN** the mobile panel is idle
@@ -12,9 +12,9 @@ Tests: frontend/tests/CommandBar.test.ts::CommandBar on the phone (feature 0113)
 
 #### Scenario: Focused field
 - **WHEN** the mobile field is focused
-- **THEN** a one-line `Messages may be sent to the AI provider.` appears above it
+- **THEN** the chips appear, no extra hint line appears, and ⓘ still opens the full text
 
-Tests: frontend/tests/CommandBar.test.ts::CommandBar on the phone (feature 0113)::shows the chips and the one-line disclaimer only while the field is focused
+Tests: frontend/tests/CommandBar.test.ts::CommandBar on the phone (feature 0113)::shows the chips while the field is focused and keeps ⓘ as the only privacy control
 
 ### Requirement: Mobile chat panel
 At 640 px and below in Dark 4a the chat dock SHALL rest as one 52 px row (ⓘ, a 16 px field, a 36 px send button muted and `aria-disabled` while empty), show a row of 32 px chips only while the field is focused, ride above the keyboard, and keep an open AI question visible at rest.

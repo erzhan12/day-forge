@@ -16,7 +16,7 @@
 - [x] `TimelineMobile`, `MobileBlockRow` 52 px, `MobileGapRow` 48 px, `buildMobileRows`; no axis or now line
 - [x] `TimeBlock` `mobile` prop: completion via `useBlockCompletion`, × deletes without dialog (Undo entry kept), inert grip, floating error
 - [x] Update `dark4a-day-fit.mjs` 390 px checks
-- [ ] Real-browser pass at 390×844 and 375×667 (`dark4a-day-fit.mjs`; needs Django, Vite, test user)
+- [x] Real-browser pass at 390×844 and 375×667 (`dark4a-day-fit.mjs`, `mobile-day-fit.mjs`)
 
 ## 4. Sheets and FAB (PR4)
 - [x] `BottomSheet`, Add Block sheet, title-only edit sheet (time and category: issue #333), FAB
@@ -32,7 +32,7 @@
 - [ ] Touch drag with 400 ms long press on the handle (not scheduled)
 
 ## 8. Close-out (PR8)
-- [ ] `mobile-day-fit.mjs` at 390×844 and 375×667; `make e2e`
-- [ ] Add anchors for the mobile-schedule layout requirements
-- [ ] Run `make check`, `make spec-check` and `make frontend-build`
-- [ ] Archive the change on the last feature branch before merge
+- [x] `mobile-day-fit.mjs` at 390×844 and 375×667; `make e2e` (LLM- and Todoist-dependent scripts need keys)
+- [x] Add anchors for the mobile-schedule layout requirements
+- [x] Run `make check`, `make spec-check` and `make frontend-build`
+- [x] Archive the change on the last feature branch before merge

@@ -50,7 +50,8 @@ const rows = computed(() => buildMobileRows(props.blocks, props.window))
     flex-direction: column;
     gap: 8px;
     margin: 0;
-    padding: 12px 16px;
+    /* Bottom: the last row scrolls clear of the 56px FAB and its 16px offset. */
+    padding: 12px 16px calc(56px + 16px + 8px);
     list-style: none;
   }
 }

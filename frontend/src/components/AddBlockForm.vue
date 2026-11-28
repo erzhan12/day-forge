@@ -258,6 +258,17 @@ html[data-theme="dark_4a"] .time-row label {
 
 /* Phone: the form lives in a sheet; the empty wrapper must not leave a gap. */
 @media (max-width: 640px) {
+  /* Start and End share a row; Category takes its own so a 375px sheet does
+   * not clip the time fields. The form is teleported out of .add-block, so
+   * these selectors cannot hang off that wrapper. */
+  html[data-theme="dark_4a"] .time-row label {
+    flex: 1 1 calc(50% - 6px);
+  }
+
+  html[data-theme="dark_4a"] .time-row label:nth-child(3) {
+    flex-basis: 100%;
+  }
+
   html[data-theme="dark_4a"] .add-block.add-block--mobile {
     padding: 0;
   }

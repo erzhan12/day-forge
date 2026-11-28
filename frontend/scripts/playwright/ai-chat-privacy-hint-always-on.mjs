@@ -26,8 +26,9 @@
 //      removed.
 //        - rest: the full text is NOT on the panel; the ⓘ control is visible
 //          with a 44x44 hit area and opens the full text in a dialog
-//        - focused: the one-line short form is visible above the field
-//        - after blur the short form is gone and ⓘ is still there
+//        - focused: no extra hint line; ⓘ is still on the row and opens the
+//          same full text
+//        - after blur ⓘ is still there
 //      The desktop checks above stay on the 1280x800 context.
 //
 // Run from frontend/:
@@ -222,9 +223,7 @@ try {
   await phone.goto(`${BASE}/schedule/${SCHEDULE_DATE}/`, { waitUntil: "networkidle" })
 
   const FULL_TEXT = "Messages and schedule context may be sent to the AI provider. Clear before discussing sensitive data."
-  const SHORT_TEXT = "Messages may be sent to the AI provider."
   const info = phone.locator('[data-testid="chat-privacy-info"]')
-  const shortHint = phone.locator('[data-testid="chat-privacy-hint-short"]')
   const phoneInput = phone.locator('[data-testid="chat-input"]')
 
   if ((await phone.locator('[data-testid="chat-privacy-hint"]').count()) > 0) {
@@ -238,7 +237,9 @@ try {
       fail(`State E: ⓘ hit area is ${box?.width}x${box?.height}, want at least 44x44`)
     }
   }
-  if ((await shortHint.count()) > 0) fail("State E: short hint is shown at rest")
+  if (((await phone.locator('[data-testid="command-bar"]').textContent()) || "").includes("may be sent to the AI provider")) {
+    fail("State E: a privacy line is rendered on the phone panel at rest")
+  }
 
   await info.tap()
   const sheetText = (await phone.locator('[data-testid="chat-privacy-full"]').textContent().catch(() => "")) || ""
@@ -251,24 +252,20 @@ try {
   }
 
   await phoneInput.tap()
-  await shortHint.waitFor({ timeout: UI_RESPONSE_TIMEOUT_MS }).catch(() => {})
-  const shortText = ((await shortHint.textContent().catch(() => "")) || "").trim()
-  if (shortText !== SHORT_TEXT) {
-    fail(`State E: focused short hint unexpected: ${shortText.slice(0, 80)}`)
+  await phone.waitForTimeout(WAIT_FOR_UI_TICK_MS)
+  if (((await phone.locator('[data-testid="command-bar"]').textContent()) || "").includes("may be sent to the AI provider")) {
+    fail("State E: a privacy line is rendered on the focused phone panel")
   }
-  const shortStyle = await shortHint.evaluate((el) => {
-    const s = getComputedStyle(el)
-    return { fontSize: s.fontSize, height: el.getBoundingClientRect().height }
-  }).catch(() => null)
-  if (!shortStyle || shortStyle.fontSize !== "13px") {
-    fail(`State E: short hint font-size expected 13px, got ${shortStyle?.fontSize}`)
-  } else if (shortStyle.height > 20) {
-    fail(`State E: short hint wraps at 390px (height ${shortStyle.height}px)`)
+  if (!(await info.isVisible())) fail("State E: ⓘ is not visible while the field is focused")
+  await info.tap()
+  const focusedSheetText = (await phone.locator('[data-testid="chat-privacy-full"]').textContent().catch(() => "")) || ""
+  if (focusedSheetText.trim() !== FULL_TEXT) {
+    fail(`State E: ⓘ sheet text while focused unexpected: ${focusedSheetText.slice(0, 80)}`)
   }
+  await phone.locator('[data-testid="sheet-close"]').tap()
 
   await phoneInput.evaluate((el) => el.blur())
-  await page.waitForTimeout(WAIT_FOR_UI_TICK_MS)
-  if ((await shortHint.count()) > 0) fail("State E: short hint stays after blur")
+  await phone.waitForTimeout(WAIT_FOR_UI_TICK_MS)
   if (!(await info.isVisible())) fail("State E: ⓘ disappeared after blur")
   await phoneContext.close()
 

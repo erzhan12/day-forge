@@ -18,7 +18,8 @@
 //   - the empty-day state shows both actions (stacked at 390 px);
 //   - the Add Block form and every Settings topic use 36 px fields with the
 //     field background and control border, and the root color-scheme is dark;
-//   - the chat input uses the body font, 14 px, grey text and placeholder;
+//   - the chat input uses the body font, 14 px (16 px, #E5E7EB text at 390),
+//     grey placeholder;
 //   - Log out is absent from Schedule and present in Settings;
 //   - no horizontal scroll at 390 px;
 //   - every visible text node is >= 13 px with >= 4.5:1 composited contrast
@@ -328,12 +329,13 @@ try {
       placeholder: getComputedStyle(input, "::placeholder").color,
     }
   })
-  function checkChat(chat, where) {
+  // The phone dock (feature 0113) types 16 px #E5E7EB so iOS does not zoom.
+  function checkChat(chat, where, { size = "14px", color = SECONDARY_TEXT } = {}) {
     if (!chat) return fail(`${where}: chat input not rendered`)
     check(!/mono|Menlo|SFMono/i.test(chat.font), `${where}: chat input font is monospace (${chat.font})`)
-    check(chat.size === "14px", `${where}: chat input ${chat.size}, want 14px`)
-    check(chat.color === SECONDARY_TEXT && chat.placeholder === SECONDARY_TEXT,
-      `${where}: chat text ${chat.color} / placeholder ${chat.placeholder}, want ${SECONDARY_TEXT}`)
+    check(chat.size === size, `${where}: chat input ${chat.size}, want ${size}`)
+    check(chat.color === color && chat.placeholder === SECONDARY_TEXT,
+      `${where}: chat text ${chat.color} / placeholder ${chat.placeholder}, want ${color} / ${SECONDARY_TEXT}`)
   }
   checkChat(chatWide, "1440 sidebar")
   check(chatWide?.variant.includes("variant-sidebar"), `1440 chat variant ${chatWide?.variant}, want sidebar`)
@@ -411,7 +413,7 @@ try {
     const cs = getComputedStyle(input)
     return { variant: input.className, font: cs.fontFamily, size: cs.fontSize, color: cs.color, placeholder: getComputedStyle(input, "::placeholder").color }
   })
-  checkChat(chatNarrow, "390 dock")
+  checkChat(chatNarrow, "390 dock", { size: "16px", color: "rgb(229, 231, 235)" })
   check(chatNarrow?.variant.includes("variant-dock"), `390 chat variant ${chatNarrow?.variant}, want dock`)
 
   await page.evaluate(() => window.scrollTo(0, 0))
